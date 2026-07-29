@@ -1,5 +1,18 @@
 # Agent Coordination Framework — Initial Idea
 
+## Wayfinder destination
+
+A clear, agreed product design for the first usable version of the agent
+coordination framework, detailed enough to turn into a software specification,
+without choosing the implementation yet.
+
+## First-version scope decisions
+
+- The first usable version supports one human user. Multi-user accounts,
+  permissions, and human collaboration are outside this first version.
+- The framework runs locally on the user's machine. Hosting it as a service is
+  not planned.
+
 ## Problem
 
 Working with coding agents currently requires frequent human involvement. The
@@ -14,6 +27,16 @@ through the same kind of visible work-management tools used by software teams:
 boards, columns, tasks, comments, and mentions. Agents should communicate
 through this shared work record rather than through direct agent-to-agent
 conversation.
+
+The coordination framework is an added layer around an existing coding-agent
+runtime such as Codex. Agents should keep the runtime's full development
+capabilities, including filesystem and shell tools, and gain board tools and
+board-specific instructions. The framework should not reimplement the coding
+tools supplied by the agent runtime.
+
+Current Codex documentation shows that a local application can control Codex
+threads through the Codex SDK or App Server, and that MCP can add board tools to
+Codex. The exact integration should be researched and chosen later.
 
 The framework watches board activity:
 
@@ -74,6 +97,11 @@ The framework must not hardcode the process. Boards, columns, agents, roles, and
 the assignment of agents to columns should be freely configurable so the
 process can be tested and refined over time.
 
+The process definition is stored as version-controlled files in the project
+repository. It contains the boards, columns, agents, roles, instructions, and
+coordination rules. Live board state, including tasks and comments, remains in
+shared framework-owned storage outside task workspaces.
+
 One shared process spans all of its boards. This gives implementation agents
 enough context about earlier requirements work, for example, to know when a
 product or requirements agent may help. The process configuration describes
@@ -95,11 +123,53 @@ A task never moves from one board to another. A handoff creates one or more new
 tasks on the destination board. The new tasks may refer back to the source task,
 including through ordinary text when no dedicated relationship is needed.
 
+## Project workspace
+
+The framework operates as another layer on top of the existing local project
+workflow. It operates on a local Git repository. Active tasks cannot all share
+one mutable working tree.
+
+The same configured agent may have several runs active at once. For example,
+two tasks entering its column may start two concurrent runs. Parallelism occurs
+across tasks; one task has at most one active agent run.
+
+The framework creates an isolated Git workspace for each task so its file
+changes do not interfere with other tasks. The workspace follows the task as it
+moves between agents, and the framework removes it when it is no longer needed.
+The first version uses one fixed Git-based workspace method rather than a
+configurable workspace abstraction.
+
+Board state must be shared by all runs and therefore lives outside those
+repository workspaces in local framework-owned storage. All runs interact with
+that single board state through the framework.
+
+Tasks have generated IDs that agents can use in references to external
+resources, including Git branch names when a process uses Git.
+
+Git is a framework requirement because it supplies the task-workspace
+isolation. Other branch, commit, and merge behavior may still be controlled by
+process instructions. For example, the agent handling the first working column
+may create a branch using the task ID, later agents may assume that branch
+exists, and a merge agent may integrate it near the end of the process.
+
+In a Git-based process, a merge must finish before the task enters the last
+column. Otherwise the task would be considered complete and its dependents
+would reactivate before its branch was integrated. The agreed example process
+uses a `Ready to Merge` column watched by the merge agent, followed by an
+unwatched final `Done` column.
+
+We have not yet decided when task workspaces are created and removed.
+
 ## Agent-managed context
 
 Agents should judge whether they can finish a task within their available
 context. If a task is too large, an agent may split it into child tasks. The
 framework therefore needs parent-child relationships between tasks.
+
+Whether child tasks require human review is defined by the process, not by the
+framework. Agent instructions may direct child tasks through the normal review
+column or let them skip that column and move directly to the last column. The
+framework does not give child tasks a fixed review policy.
 
 ## Task relationships and dependencies
 
