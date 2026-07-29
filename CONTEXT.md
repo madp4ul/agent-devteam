@@ -28,7 +28,8 @@ The local Git repository whose work is coordinated by a process.
 
 **Task workspace**:
 An isolated Git working tree created for one task and reused by its successive
-agent runs.
+agent runs. It does not prescribe the branches agents create or where those
+branches are later merged.
 _Avoid_: Agent workspace, project workspace
 
 **Column**:

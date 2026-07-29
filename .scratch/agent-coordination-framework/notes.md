@@ -147,10 +147,17 @@ Tasks have generated IDs that agents can use in references to external
 resources, including Git branch names when a process uses Git.
 
 Git is a framework requirement because it supplies the task-workspace
-isolation. Other branch, commit, and merge behavior may still be controlled by
-process instructions. For example, the agent handling the first working column
-may create a branch using the task ID, later agents may assume that branch
-exists, and a merge agent may integrate it near the end of the process.
+isolation. Branch creation, branch ancestry, commits, and merge targets are
+controlled by process instructions rather than the framework. For example, the
+agent handling the first working column may create a branch using the task ID,
+later agents may assume that branch exists, and a merge agent may integrate it
+near the end of the process.
+
+This is important for child tasks: a process may branch a child from its
+parent's branch and later merge it back into that parent, or choose another
+branch structure. The framework does not impose one branch topology. More
+automatic branch management can be added later if real use reveals a common
+rule worth enforcing.
 
 In a Git-based process, a merge must finish before the task enters the last
 column. Otherwise the task would be considered complete and its dependents
