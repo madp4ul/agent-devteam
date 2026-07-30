@@ -24,6 +24,10 @@ without choosing the implementation yet.
 
 ## Decisions so far
 
+- [Define the First Usable Workflow and Success Criteria](./issues/01-define-first-usable-workflow.md)
+  — Use an architecture-led implementation workflow with independent design
+  and verification agents, visible rework, cross-stage consultation, and
+  explicit human approval before an agent merges the result.
 - [Determine the Codex Integration Boundary](./issues/02-determine-codex-integration-boundary.md)
   — Use the TypeScript Codex SDK for task threads and streamed run events, with
   a project-scoped MCP server for board tools; reserve direct App Server use
@@ -41,8 +45,6 @@ without choosing the implementation yet.
 - How process-definition changes affect tasks and agent runs already in
   progress.
 - How completed task workspaces and branches are cleaned up safely.
-- What example software-development process should ship with the first usable
-  version.
 - What end-to-end prototype or evaluation should validate the finished product
   design before specification.
 

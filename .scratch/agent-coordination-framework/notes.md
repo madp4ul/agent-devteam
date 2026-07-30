@@ -51,6 +51,16 @@ The framework watches board activity:
 - Mentioning an agent in a task comment activates that agent to inspect the
   task and decide whether it has work to do.
 
+Every activation includes its reason and a pointer to the event that caused it.
+The agent run can use that pointer to start at the relevant information instead
+of searching the whole task blindly. Examples include:
+
+- the column the task entered;
+- the comment that mentioned the agent;
+- the relationship and related task that became complete;
+- the child task whose completion unblocked its parent; or
+- the user's manual reactivation request.
+
 ## Guided but flexible processes
 
 A configured process should encourage the normal path through the columns, but

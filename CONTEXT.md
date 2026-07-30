@@ -35,6 +35,8 @@ _Avoid_: Agent workspace, project workspace
 **Column**:
 A stage on a board that may be watched by an agent. A task entering a watched
 column activates its agent; a task in an unwatched column simply remains there.
+Moving a task to another watched column transfers primary responsibility to
+that column's agent.
 
 **Task**:
 A described unit of work that moves through a board and carries the comments
@@ -59,6 +61,14 @@ by relevant board activity and contributes its concern to the shared task.
 **Agent run**:
 One active execution of an agent for a task. Several runs of the same agent may
 work on different tasks concurrently, but a task has at most one active run.
+
+**Activation**:
+A request for an agent to inspect and act on a task because a relevant event
+occurred.
+
+**Activation reason**:
+The event and source location that caused an activation, supplied to the agent
+run so it can begin with the relevant context.
 
 **User**:
 The human overseeing the process. Agents can involve the user when they need
@@ -88,7 +98,8 @@ roles, instructions, and coordination rules. They exclude live board state.
 
 **Mention**:
 A reference to an agent or the user in a task comment that asks that participant
-to inspect the task and respond as needed.
+to inspect the task and respond as needed. A mention requests assistance without
+transferring primary responsibility, so it does not move the task.
 
 **Parent task**:
 A task whose work has been divided into smaller child tasks.
