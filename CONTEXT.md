@@ -38,8 +38,8 @@ column activates its agent; a task in an unwatched column simply remains there.
 
 **Task**:
 A described unit of work that moves through a board and carries the comments
-and relationships needed to coordinate its progress. A task belongs to one
-board and cannot be moved to another board.
+and relationships needed to coordinate its progress. A task is on one board at
+a time.
 
 **Task ID**:
 A generated identifier used to refer to a task from comments and external
@@ -112,5 +112,5 @@ task. It may happen automatically when a blocking relationship is satisfied or
 manually when the user requests it.
 
 **Board handoff**:
-The creation of one or more tasks on another board as a result of work on a
-source task. The source task itself stays on its original board.
+A transition in which work on one board leads to work on another, normally by
+creating one or more new tasks while the source task stays in place.

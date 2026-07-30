@@ -12,6 +12,8 @@ without choosing the implementation yet.
   permissions, and human collaboration are outside this first version.
 - The framework runs locally on the user's machine. Hosting it as a service is
   not planned.
+- A local Docker Compose deployment using one or more containers is preferred
+  over installing application runtimes directly on the host.
 
 ## Problem
 
@@ -119,9 +121,13 @@ board may cover early product and requirements work, for example. Its result
 may be several implementation tasks on another board. A one-to-many handoff is
 a natural place to separate processes into different boards.
 
-A task never moves from one board to another. A handoff creates one or more new
-tasks on the destination board. The new tasks may refer back to the source task,
-including through ordinary text when no dedicated relationship is needed.
+The preferred handoff creates one or more new tasks on the destination board.
+The new tasks may refer back to the source task, including through ordinary
+text when no dedicated relationship is needed.
+
+This is process guidance rather than a framework restriction. The framework
+does not need to prevent a user or agent from moving a task to another board
+when improvisation makes that useful.
 
 ## Project workspace
 
