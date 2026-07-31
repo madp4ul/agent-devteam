@@ -36,7 +36,10 @@ _Avoid_: Agent workspace, project workspace
 A stage on a board that may be watched by an agent. A task entering a watched
 column activates its agent; a task in an unwatched column simply remains there.
 Moving a task to another watched column transfers primary responsibility to
-that column's agent.
+that column's agent. Every entry creates an activation, including creation in a
+watched column, re-entry into a column, and entry into a column watched by the
+currently active agent. Processes are responsible for avoiding unintended
+self-handoff loops.
 
 **Task**:
 A described unit of work that moves through a board and carries the comments
@@ -51,6 +54,12 @@ resources.
 A compact description used when viewing a board so agents can judge which tasks
 may be relevant without loading every full task.
 
+**Task activity history**:
+The chronological record of immutable framework events that affect a task,
+including movements, relationship changes, activations, and run outcomes.
+Comments are authored communication rather than framework events, even if an
+interface later presents both in one timeline.
+
 **Completed task**:
 A task that has reached the last column on its board.
 
@@ -61,14 +70,46 @@ by relevant board activity and contributes its concern to the shared task.
 **Agent run**:
 One active execution of an agent for a task. Several runs of the same agent may
 work on different tasks concurrently, but a task has at most one active run.
+Each run handles one activation so it can focus on that activation's distinct
+expectation. Moving the task during a run does not end that run; any activation
+caused by the move waits in the task's activation order until the current run
+finishes. Successful completion has no implicit workflow effect: the task stays
+where the agent left it, and the next queued activation may begin. A failed run
+pauses activation processing for that task and preserves all later activations
+in their existing order until the failure is explicitly resolved.
 
 **Activation**:
 A request for an agent to inspect and act on a task because a relevant event
-occurred.
+occurred. Activations for a task are handled individually in strict
+chronological order; an activation waits while that task already has an active
+run. The coordination framework does not reprioritize, cancel, or supersede
+queued activations when later events change the task. The addressed agent
+receives the current task state and decides whether the original request still
+requires action. Its target agent is fixed when the activation is created and
+is not re-resolved when the run begins.
 
 **Activation reason**:
-The event and source location that caused an activation, supplied to the agent
-run so it can begin with the relevant context.
+The typed cause of an activation together with an immutable pointer to the
+exact source event, supplied to the agent run alongside the task's current
+state. The coordination framework preserves this provenance without generating
+its own interpretation of the expected work.
+
+**Activation retry**:
+A new run attempt for a failed activation. It retains the activation's original
+reason and source location while reading the task's current state, including
+comments added since the failure. Retrying does not create a new activation.
+Only technical failures reported by the agent runtime are eligible for automatic
+retry; the coordination framework does not interpret a normally completed run
+to judge whether its process outcome was adequate. Each activation receives one
+framework-wide retry policy of three total automatic attempts with capped
+exponential backoff. This operational policy is not process-configurable. Each
+explicit user retry begins a fresh cycle of up to three attempts for the same
+activation.
+
+**Activation dismissal**:
+An explicit user decision to abandon a failed activation. Dismissal records that
+its expectation was not fulfilled and allows the task's preserved activation
+order to continue.
 
 **User**:
 The human overseeing the process. Agents can involve the user when they need
@@ -99,7 +140,15 @@ roles, instructions, and coordination rules. They exclude live board state.
 **Mention**:
 A reference to an agent or the user in a task comment that asks that participant
 to inspect the task and respond as needed. A mention requests assistance without
-transferring primary responsibility, so it does not move the task.
+transferring primary responsibility, so the mention itself does not move the
+task. During the resulting run, the mentioned agent may change the task,
+including moving it, when the process calls for that action. The coordination
+framework does not enforce role-specific restrictions on those capabilities.
+A comment creates at most one activation for each agent it mentions; when it
+mentions several agents, their activations enter the task's order by textual
+mention order. Mentioning the user creates a notification rather than an agent
+activation. An agent mention creates an activation regardless of whether the
+task's current column is watched, unwatched, or final.
 
 **Parent task**:
 A task whose work has been divided into smaller child tasks.
@@ -115,12 +164,17 @@ depended on reaches the last column on its board.
 
 **Blocking relationship**:
 A task relationship whose unresolved condition prevents a task from
-continuing.
+continuing. Satisfying one blocking relationship is recorded in the task
+activity history but does not activate the task while another blocking
+relationship remains unresolved.
 
 **Reactivation**:
 The activation of the agent watching a task's current column without moving the
-task. It may happen automatically when a blocking relationship is satisfied or
-manually when the user requests it.
+task. It happens automatically when the task transitions from blocked to fully
+unblocked, or manually when the user requests it. Manual reactivation creates a
+fresh activation for an idle task; it is distinct from retrying a failed
+activation. It is available only when the task is in a watched column, has no
+active or queued activation, and is not paused on a failed activation.
 
 **Board handoff**:
 A transition in which work on one board leads to work on another, normally by

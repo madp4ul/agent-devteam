@@ -8,9 +8,11 @@ instructions, and observe completion or failure without reimplementing Codex?
 
 ## Recommendation
 
-Use the **Codex SDK as the coordinator's primary integration surface**. Run one
-Codex thread for each active task workspace, store the returned thread ID with
-the task, and resume that thread when the task is reactivated.
+Use the **Codex SDK as the coordinator's primary integration surface**. Start a
+fresh Codex thread for each activation so distinct agents and expectations do
+not inherit hidden conversation context. Store the thread ID with the
+activation and continue that thread for retry attempts when possible, falling
+back to a fresh thread if a failed thread is unusable.
 
 Add the board as a **project-scoped MCP server** so Codex agents can inspect and
 change board state through tools. Keep stable project-wide working agreements
@@ -104,7 +106,8 @@ Source:
 The coordination framework owns:
 
 - board state, triggers, scheduling, and the one-active-run-per-task rule;
-- the mapping from task to isolated working directory and Codex thread ID;
+- the mapping from task to isolated working directory and from activation to
+  Codex thread ID;
 - composing each turn's role, task, and trigger prompt;
 - translating SDK completion or failure events into board behavior;
 - the MCP server that exposes board tools.
@@ -120,7 +123,9 @@ Codex owns:
 ## First-version decision
 
 Build against the TypeScript Codex SDK and its streamed event API. Configure the
-board MCP server at project scope. Persist the Codex thread ID beside the task's
-runtime state, not in the repository. Treat direct App Server integration as a
-later option only if the user interface needs richer Codex-native interaction
-than the SDK exposes.
+board MCP server at project scope. Persist each activation's Codex thread ID in
+framework runtime state, not in the repository. Distinct activations start
+fresh threads; retries continue the activation's thread when possible and use a
+fresh-thread fallback otherwise. Treat direct App Server integration as a later
+option only if the user interface needs richer Codex-native interaction than
+the SDK exposes.

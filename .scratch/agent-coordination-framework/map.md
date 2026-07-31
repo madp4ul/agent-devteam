@@ -29,9 +29,9 @@ without choosing the implementation yet.
   and verification agents, visible rework, cross-stage consultation, and
   explicit human approval before an agent merges the result.
 - [Determine the Codex Integration Boundary](./issues/02-determine-codex-integration-boundary.md)
-  — Use the TypeScript Codex SDK for task threads and streamed run events, with
-  a project-scoped MCP server for board tools; reserve direct App Server use
-  for a later need for richer Codex-native UI.
+  — Use the TypeScript Codex SDK with one fresh thread per activation,
+  best-effort thread reuse for its retries, and a project-scoped MCP server for
+  board tools; reserve direct App Server use for richer Codex-native UI.
 - [Determine the Board UI Foundation](./issues/03-determine-board-ui-foundation.md)
   — Start from Kanboard behind a framework-owned adapter and narrow plugin,
   with a focused spike and a custom Pragmatic Drag and Drop UI as fallback.
@@ -39,13 +39,15 @@ without choosing the implementation yet.
   — Define processes as schema-backed YAML plus referenced Markdown instruction
   files, edited with existing tools and checked by location-aware validation;
   build no dedicated authoring UI or VS Code extension in the first version.
+- [Define the Agent Activation and Run Lifecycle](./issues/05-define-agent-run-lifecycle.md)
+  — Queue one immutable, targeted activation per trigger in strict chronological
+  order; use explicit inert completion, bounded technical retries, user recovery,
+  activity history, and fresh Codex context between distinct activations.
 
 ## Not yet specified
 
 - How users are notified when they are mentioned or when work reaches an
   unwatched column.
-- What history, diagnostics, and controls are needed to understand stalled or
-  failed automation.
 - How completed task workspaces and branches are cleaned up safely.
 - What end-to-end prototype or evaluation should validate the finished product
   design before specification.
