@@ -35,6 +35,10 @@ without choosing the implementation yet.
 - [Determine the Board UI Foundation](./issues/03-determine-board-ui-foundation.md)
   — Start from Kanboard behind a framework-owned adapter and narrow plugin,
   with a focused spike and a custom Pragmatic Drag and Drop UI as fallback.
+- [Define the Process Authoring Experience](./issues/04-define-process-authoring-experience.md)
+  — Define processes as schema-backed YAML plus referenced Markdown instruction
+  files, edited with existing tools and checked by location-aware validation;
+  build no dedicated authoring UI or VS Code extension in the first version.
 
 ## Not yet specified
 
@@ -42,8 +46,6 @@ without choosing the implementation yet.
   unwatched column.
 - What history, diagnostics, and controls are needed to understand stalled or
   failed automation.
-- How process-definition changes affect tasks and agent runs already in
-  progress.
 - How completed task workspaces and branches are cleaned up safely.
 - What end-to-end prototype or evaluation should validate the finished product
   design before specification.
