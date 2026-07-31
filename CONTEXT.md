@@ -50,9 +50,10 @@ a time.
 A generated identifier used to refer to a task from comments and external
 resources.
 
-**Task summary**:
-A compact description used when viewing a board so agents can judge which tasks
-may be relevant without loading every full task.
+**Task overview**:
+A compact read projection of a task's title, column, blocking state,
+relationships, and run state. Board views and agent tools use it to provide
+orientation without loading the task's full content.
 
 **Task activity history**:
 The chronological record of immutable framework events that affect a task,
@@ -115,6 +116,11 @@ order to continue.
 The human overseeing the process. Agents can involve the user when they need
 clarification, a decision, or help.
 
+**Needs attention**:
+A task condition requiring explicit user action because the user was mentioned
+or an agent run failed and awaits recovery. Being in an unwatched column alone
+does not create this condition.
+
 **Role**:
 The configurable responsibility given to an agent within a process.
 
@@ -149,6 +155,11 @@ mentions several agents, their activations enter the task's order by textual
 mention order. Mentioning the user creates a notification rather than an agent
 activation. An agent mention creates an activation regardless of whether the
 task's current column is watched, unwatched, or final.
+
+**Attention reason**:
+A typed cause of a task needing user attention, currently a user mention or a
+failed agent run. Each reason is resolved independently through an explicit
+action appropriate to its cause.
 
 **Parent task**:
 A task whose work has been divided into smaller child tasks.

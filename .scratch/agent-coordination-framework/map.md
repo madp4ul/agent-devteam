@@ -43,11 +43,13 @@ without choosing the implementation yet.
   — Queue one immutable, targeted activation per trigger in strict chronological
   order; use explicit inert completion, bounded technical retries, user recovery,
   activity history, and fresh Codex context between distinct activations.
+- [Define Board and Task Interactions](./issues/06-define-board-interactions.md)
+  — Use a board-first user experience with integrated explicit attention,
+  direct full-task pages, contextual actions, a unified timeline, and full
+  assigned-task context behind compact agent-facing task overviews.
 
 ## Not yet specified
 
-- How users are notified when they are mentioned or when work reaches an
-  unwatched column.
 - How completed task workspaces and branches are cleaned up safely.
 - What end-to-end prototype or evaluation should validate the finished product
   design before specification.
