@@ -171,6 +171,13 @@ A user-controlled hold that prevents a task's preserved activation order from
 advancing. Interrupting an active run creates this hold; only an explicit user
 action continues the interrupted activation.
 
+**Process automation pause**:
+A process-wide hold that prevents new agent attempts from starting across all
+boards while allowing attempts already running to finish. A process is paused
+only after every running attempt has finished, and application startup begins
+paused until the user explicitly resumes automation. It is distinct from a
+task automation suspension and creates no per-task continuation work.
+
 **Activation retry**:
 A new run attempt for a failed activation. It retains the activation's original
 reason and source location while reading the task's current state, including

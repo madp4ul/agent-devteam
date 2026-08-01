@@ -66,10 +66,13 @@ without choosing the implementation yet.
   state, preserve framework-owned completion, and require user approval before
   stale activations continue under the current process.
 
-## Not yet specified
+- [Define Automation Observability and Recovery](./issues/11-define-automation-observability-and-recovery.md)
+  — Keep the board primary with an on-demand process-wide live-run menu, put
+  history and contextual recovery on task details, use a pragmatic transcript
+  overlay, and make process pause a startup-default drain rather than an
+  interruption.
 
-- What end-to-end prototype or evaluation should validate the finished product
-  design before specification.
+## Not yet specified
 
 ## Out of scope
 
