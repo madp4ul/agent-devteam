@@ -7,10 +7,10 @@ Parent: ../map.md
 
 ## Question
 
-How should column entry, mentions, relationship completion, and manual
-reactivation create or queue agent runs; what activation reason and event
-pointer must each run receive; and what should happen when a run finishes,
-fails, or receives another trigger while the task is already active?
+How should column entry, mentions, and relationship completion create or queue
+agent runs; what activation reason and event pointer must each run receive; and
+what should happen when a run finishes, fails, or receives another trigger
+while the task is already active?
 
 ## Answer
 
@@ -34,7 +34,7 @@ waited. The framework does not generate a natural-language interpretation that
 could distort the source event, and it does not retarget queued work after a
 column or process-definition change.
 
-The first version creates activations for four reasons:
+The first version creates activations for three reasons:
 
 1. **Column entry.** Creating a task in a watched column or moving it into one
    activates the agent assigned when the entry occurs. Every entry counts,
@@ -53,11 +53,6 @@ The first version creates activations for four reasons:
    run can inspect the task's current relationships and preceding activity to
    see how all blockers were resolved. No activation is created if the current
    column is unwatched.
-4. **Manual reactivation.** The user may create a fresh activation for the agent
-   watching the current column without moving the task. This action is available
-   only when the task is in a watched column, has no active or queued activation,
-   and is not paused on a failed activation.
-
 Only the mention itself leaves primary responsibility unchanged. The mentioned
 agent nevertheless has the task's sole active run while responding and retains
 the same board capabilities as any other agent. It may comment, edit shared
@@ -69,8 +64,9 @@ Successful run completion has no implicit workflow effect. The framework does
 not interpret the response, move the task, or reactivate an agent. It records
 completion and starts the next queued activation, if one exists; otherwise the
 task becomes idle exactly where the agent left it. A normally completed run
-that forgot a handoff is recovered with manual reactivation, not automatic
-failure handling.
+that forgot a handoff is recovered by a user comment that mentions the
+appropriate agent and explains what should happen next, not by automatic
+failure handling or a separate reactivation action.
 
 Only technical failures reported by the agent runtime are automatically
 retried. Every activation receives the same framework-wide policy: three total
@@ -84,7 +80,8 @@ and requires the user. **Retry** starts a fresh cycle of up to three attempts fo
 the same activation, retaining its reason and source pointer while reading
 current task state, including comments the user added after failure. **Dismiss**
 records that the activation's expectation was abandoned and allows the preserved
-queue to continue. Retry and dismissal are distinct from manual reactivation.
+queue to continue. A new mention activation cannot bypass the failed activation
+at the head of the queue.
 
 Deliberate user interruption is not a technical failure or a retry. It preserves
 the current activation and suspends further automation for the task until the

@@ -120,8 +120,9 @@ Tasks and their complete coordination history have no automatic age-based
 retention limit. The first version provides no permanent task deletion. An idle
 task may instead be archived, including immediately after mistaken creation;
 tasks with active or queued work, a failed activation awaiting recovery, or
-suspended automation cannot be archived. Completion remains reaching the final
-column, rejection remains a process-specific unwatched column, and neither
-implicitly archives the task. Completed tasks remain visible until the user
+suspended automation cannot be archived. Completion remains entering the
+framework-owned, permanently final and unwatched Completion column; rejection
+remains a process-specific unwatched workflow column, and neither implicitly
+archives the task. Completed tasks remain visible until the user
 archives them individually or in bulk. Archiving preserves the task, its column,
 and its history while removing it from normal board views and agent listings.

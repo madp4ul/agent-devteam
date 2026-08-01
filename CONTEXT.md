@@ -22,7 +22,15 @@ permissions per agent, role, or process.
 
 **Board**:
 A configurable workflow containing columns and tasks. Different parts of the
-software-development process may use different boards.
+software-development process may use different boards. The process definition
+supplies its workflow columns, and the framework appends its Completion column.
+
+**Retired board**:
+A previously used board whose stable ID is absent from the applied process
+definition. It accepts no new tasks and has no active watchers. Its completed
+tasks remain in its framework-owned Completion column and stay inspectable;
+other tasks are unmapped. Restoring the same board ID restores the board and
+matching workflow-column identities without creating activations.
 
 **Board state**:
 The shared current state of boards, tasks, comments, relationships, and
@@ -53,6 +61,13 @@ watched column, re-entry into a column, and entry into a column watched by the
 currently active agent. Processes are responsible for avoiding unintended
 self-handoff loops.
 
+**Completion column**:
+The framework-owned final column present on every board. It has a stable
+identity, cannot be deleted, reordered, or watched by an agent, and is not part
+of the editable process definition. A task in this column is completed and
+remains there across process-definition changes. Agents may deliberately query
+and inspect its tasks through the board tools.
+
 **Task**:
 A described unit of work that moves through a board and carries the comments
 and relationships needed to coordinate its progress. A task is on one board at
@@ -80,6 +95,13 @@ A task that has reached the last column on its board.
 A task retained with its complete coordination history but omitted from normal
 board views and agent task listings. Archiving is independent of the task's
 workflow column and is not deletion or completion.
+
+**Unmapped task**:
+A task whose saved column no longer exists in the applied process definition.
+The user interface presents unmapped tasks in a system-owned holding area, but
+that area is not a process column. Unmapped tasks are excluded from agent board
+queries, cannot have agent runs, and can be moved back to a defined column only
+by the user.
 
 **Agent**:
 An autonomous participant with a focused responsibility. An agent is activated
@@ -115,6 +137,15 @@ queued activations when later events change the task. The addressed agent
 receives the current task state and decides whether the original request still
 requires action. Its target agent is fixed when the activation is created and
 is not re-resolved when the run begins.
+
+**Stale activation**:
+An activation created under a different process-definition version from the
+one currently applied. It does not start or retry automatically. The user may
+dismiss it or approve it to run under the current definition while preserving
+its original reason, source event, and target agent identity. If the activation
+already has a usable Codex conversation, an approved attempt may resume that
+conversation with the current instructions supplied as authoritative context;
+the framework does not retain the old process definition for execution.
 
 **Activation reason**:
 The typed cause of an activation together with an immutable pointer to the
@@ -186,7 +217,21 @@ deviations.
 
 **Process definition**:
 The version-controlled project files that define boards, columns, agents,
-roles, instructions, and coordination rules. They exclude live board state.
+roles, instructions, and coordination rules. They define only the workflow
+columns preceding each framework-owned Completion column and exclude live board
+state.
+
+**Process entity ID**:
+The explicit stable identity of a board, column, or agent within a process
+definition, independent of its editable display name. Tasks and activations
+refer to these identities. Changing an ID removes one process entity and adds
+another; it is not a rename.
+
+**Process definition version**:
+An automatically derived fingerprint of the complete validated process
+definition, including referenced agent instructions. It changes when effective
+process content changes but ignores non-semantic YAML differences such as
+formatting, comments, and key ordering.
 
 **Mention**:
 A reference to an agent or the user in a task comment that asks that participant
@@ -199,7 +244,8 @@ A comment creates at most one activation for each agent it mentions; when it
 mentions several agents, their activations enter the task's order by textual
 mention order. Mentioning the user creates a notification rather than an agent
 activation. An agent mention creates an activation regardless of whether the
-task's current column is watched, unwatched, or final.
+task's current column is watched, unwatched, or final. An agent mention on an
+unmapped task remains authored text but creates no activation.
 
 **Attention reason**:
 A typed cause of a task needing user attention, currently a user mention or a
@@ -223,14 +269,6 @@ A task relationship whose unresolved condition prevents a task from
 continuing. Satisfying one blocking relationship is recorded in the task
 activity history but does not activate the task while another blocking
 relationship remains unresolved.
-
-**Reactivation**:
-The activation of the agent watching a task's current column without moving the
-task. It happens automatically when the task transitions from blocked to fully
-unblocked, or manually when the user requests it. Manual reactivation creates a
-fresh activation for an idle task; it is distinct from retrying a failed
-activation. It is available only when the task is in a watched column, has no
-active or queued activation, and is not paused on a failed activation.
 
 **Board handoff**:
 A transition in which work on one board leads to work on another, normally by

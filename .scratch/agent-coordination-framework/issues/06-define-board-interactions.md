@@ -37,8 +37,9 @@ view.
   on the board so the user can retain the workflow context and drag the task.
   A separate **Open details** action bypasses that step. Selecting a board card
   also opens the full task directly; there is no intermediate summary screen.
-- Completion remains reaching the final column, while rejection is represented
-  by a process-specific unwatched column. Completed and rejected tasks stay
+- Completion remains entering the framework-owned Completion column that is
+  permanently last and unwatched, while rejection is represented by a
+  process-specific unwatched workflow column. Completed and rejected tasks stay
   visible until explicitly archived. Archiving preserves the task and its
   complete history but removes it from normal board views. The user can archive
   eligible tasks individually or bulk-archive completed tasks; the first version
@@ -54,9 +55,10 @@ view.
   together in one chronological timeline. Do not add a comments-only filter
   until real activity volume demonstrates the need.
 - Actions live with the information they affect: edit beside the title; add a
-  relationship and create a child in Relationships; retry, dismiss, and mark
-  addressed with the relevant attention reason; and manual reactivation in the
-  run/status area only when it is eligible.
+  relationship and create a child in Relationships; and retry, dismiss, and
+  mark addressed with the relevant attention reason. When a completed agent
+  run needs another response, the user leaves a comment that mentions the agent
+  and explains what should happen next; there is no separate Reactivate action.
 - Archiving is available on an idle eligible task. It is unavailable while the
   task has active or queued work, a failed activation awaiting recovery, or
   suspended automation.
@@ -75,8 +77,9 @@ view.
   continuation cursor. There is no implicit all-columns listing. A Task overview
   contains title, column, blocking state, relationship status, and run state.
   Archived tasks are excluded unless explicitly requested through history or
-  search tools. Agents can deliberately page through completed or archived work
-  and can directly inspect a related task regardless of its completion or
+  search tools. The Completion column remains an ordinary explicit listing
+  target for agents. Agents can deliberately page through completed or archived
+  work and can directly inspect a related task regardless of its completion or
   archive state.
 - Every activation starts with the activated agent's full instructions and
   role, relevant process and board guidance, collaborator names and summaries,

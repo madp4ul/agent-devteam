@@ -18,8 +18,9 @@ The first usable workflow is:
 `Backlog -> Architecture Design -> Implementation -> Code Review ->
 Architecture Verification -> Awaiting User Approval -> Ready to Merge -> Done`
 
-`Backlog`, `Awaiting User Approval`, and `Done` are unwatched. Five distinct
-agents watch the active columns:
+`Backlog` and `Awaiting User Approval` are process-defined unwatched columns.
+`Done` is the framework-owned, permanently unwatched Completion column. Five
+distinct agents watch the active columns:
 
 - The Architecture Designer creates the architecture plan.
 - The Implementation Agent implements it.

@@ -61,6 +61,11 @@ without choosing the implementation yet.
   process permissions, and turn unresolved approval requirements into explicit
   user-attention blocks rather than automatic retries.
 
+- [Define Process Definition Evolution and Reloading](./issues/10-define-process-definition-evolution.md)
+  — Load one validated semantic definition at startup; quarantine unmapped live
+  state, preserve framework-owned completion, and require user approval before
+  stale activations continue under the current process.
+
 ## Not yet specified
 
 - What end-to-end prototype or evaluation should validate the finished product
