@@ -14,6 +14,12 @@ The existing coding-agent system that provides models, sessions, context, and
 development tools. The coordination framework uses this runtime rather than
 reimplementing it.
 
+**Agent permission policy**:
+The user-controlled policy of the agent runtime that determines agents'
+technical capabilities and when user approval is required. The coordination
+framework reuses this shared policy for every agent run rather than defining
+permissions per agent, role, or process.
+
 **Board**:
 A configurable workflow containing columns and tasks. Different parts of the
 software-development process may use different boards.
@@ -89,6 +95,16 @@ finishes. Successful completion has no implicit workflow effect: the task stays
 where the agent left it, and the next queued activation may begin. A failed run
 pauses activation processing for that task and preserves all later activations
 in their existing order until the failure is explicitly resolved.
+
+**Agent run transcript**:
+The inspectable record of an agent run's conversation and tool activity from
+the agent runtime. It lets the user evaluate agent behavior and refine the
+process, and is distinct from task activity history and authored task comments.
+
+**Permission block**:
+An agent run outcome in which the agent runtime's permission policy prevents a
+required action and no interactive approval channel is available. It requires
+user attention and explicit continuation rather than automatic retry.
 
 **Activation**:
 A request for an agent to inspect and act on a task because a relevant event

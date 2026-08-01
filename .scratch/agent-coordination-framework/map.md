@@ -56,6 +56,11 @@ without choosing the implementation yet.
   it across that task's runs, leave branch topology to the process, and remove
   it only through guarded archival cleanup.
 
+- [Define Agent Permissions and Approval Boundaries](./issues/09-define-safety-boundaries.md)
+  — Reuse one user-controlled Codex policy for all agents; add no framework or
+  process permissions, and turn unresolved approval requirements into explicit
+  user-attention blocks rather than automatic retries.
+
 ## Not yet specified
 
 - What end-to-end prototype or evaluation should validate the finished product
