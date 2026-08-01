@@ -27,10 +27,16 @@ the same state.
 The local Git repository whose work is coordinated by a process.
 
 **Task workspace**:
-An isolated Git working tree created for one task and reused by its successive
-agent runs. It does not prescribe the branches agents create or where those
-branches are later merged.
+An isolated Git working tree provisioned by the coordination framework for one
+task and reused by all of its agent runs until archival. The process, not the
+framework or agent runtime, controls branches, ancestry, commits, and merge
+targets.
 _Avoid_: Agent workspace, project workspace
+
+**Task workspace starting ref**:
+A process-defined Git reference that the coordination framework resolves when
+provisioning a task workspace. The workspace starts detached at that commit so
+the referenced branch remains available to other working trees.
 
 **Column**:
 A stage on a board that may be watched by an agent. A task entering a watched

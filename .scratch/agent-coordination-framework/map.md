@@ -51,6 +51,10 @@ without choosing the implementation yet.
   — Keep authoritative current state and immutable activity together with
   atomic conflict-safe commands, durable at-least-once activation recovery,
   explicit user interruption and continuation, and preserved archived history.
+- [Define the Git Task-Workspace Lifecycle](./issues/08-define-git-workspace-lifecycle.md)
+  — Provision one framework-owned detached Git worktree lazily per task, reuse
+  it across that task's runs, leave branch topology to the process, and remove
+  it only through guarded archival cleanup.
 
 ## Not yet specified
 
