@@ -76,6 +76,11 @@ without choosing the implementation yet.
   — Add opt-in, best-effort desktop notifications for new attention reasons
   while keeping acknowledgement and resolution exclusively on the board.
 
+- [Validate the End-to-End Product Design](./issues/13-validate-end-to-end-product-design.md)
+  — Skip a broad interactive prototype because credible coverage would cost
+  too much and narrow coverage would mislead; use specification synthesis as
+  the next consistency check and reserve prototypes for focused uncertainties.
+
 ## Not yet specified
 
 ## Out of scope
