@@ -72,6 +72,10 @@ without choosing the implementation yet.
   overlay, and make process pause a startup-default drain rather than an
   interruption.
 
+- [Define User Notification and Attention Delivery](./issues/12-define-user-notification-delivery.md)
+  — Add opt-in, best-effort desktop notifications for new attention reasons
+  while keeping acknowledgement and resolution exclusively on the board.
+
 ## Not yet specified
 
 ## Out of scope

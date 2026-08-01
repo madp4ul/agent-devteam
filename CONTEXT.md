@@ -259,6 +259,23 @@ A typed cause of a task needing user attention, currently a user mention or a
 failed agent run. Each reason is resolved independently through an explicit
 action appropriate to its cause.
 
+**Desktop notification**:
+An optional local operating-system signal that tells the user a new attention
+reason exists and links them to the affected task. It is not an authoritative
+record of attention state; the board remains the source of truth. The first
+version emits one for each new attention reason unless the user is actively
+viewing the affected task, and provides no email, chat, or mobile notification
+delivery. Opening it navigates to the affected task and attention reason;
+opening or dismissing it does not resolve that reason. Delivery is best-effort:
+the framework does not retry, queue for later delivery, or create another
+attention reason when operating-system notification delivery is unavailable or
+fails. Desktop notifications are disabled by default; the framework requests
+operating-system permission only after the user explicitly enables them. A
+notification identifies the process or board, task ID and title, and attention
+reason type, but does not expose comment text, failure diagnostics, or other
+task content. Enabling notification delivery or restarting the application does
+not replay notifications for attention reasons that already exist.
+
 **Parent task**:
 A task whose work has been divided into smaller child tasks.
 
