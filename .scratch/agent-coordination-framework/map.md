@@ -45,12 +45,15 @@ without choosing the implementation yet.
   activity history, and fresh Codex context between distinct activations.
 - [Define Board and Task Interactions](./issues/06-define-board-interactions.md)
   — Use a board-first user experience with integrated explicit attention,
-  direct full-task pages, contextual actions, a unified timeline, and full
-  assigned-task context behind compact agent-facing task overviews.
+  direct full-task pages, contextual actions, a unified timeline, and bounded
+  summary-first agent discovery through explicit, paginated column queries.
+- [Define Durable Board State and Recovery](./issues/07-define-durable-board-state.md)
+  — Keep authoritative current state and immutable activity together with
+  atomic conflict-safe commands, durable at-least-once activation recovery,
+  explicit user interruption and continuation, and preserved archived history.
 
 ## Not yet specified
 
-- How completed task workspaces and branches are cleaned up safely.
 - What end-to-end prototype or evaluation should validate the finished product
   design before specification.
 

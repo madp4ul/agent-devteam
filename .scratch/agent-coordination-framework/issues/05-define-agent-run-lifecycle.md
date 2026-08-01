@@ -86,6 +86,12 @@ current task state, including comments the user added after failure. **Dismiss**
 records that the activation's expectation was abandoned and allows the preserved
 queue to continue. Retry and dismissal are distinct from manual reactivation.
 
+Deliberate user interruption is not a technical failure or a retry. It preserves
+the current activation and suspends further automation for the task until the
+user explicitly continues it. The durable interruption, attempt-context, and
+continuation semantics are recorded in
+**[Define Durable Board State and Recovery](./07-define-durable-board-state.md)**.
+
 Each activation starts with a fresh Codex thread so unrelated activations and
 agent roles do not inherit hidden conversation context. Retry attempts continue
 the activation's thread when Codex permits, because partial context may help the
@@ -96,7 +102,8 @@ from an accumulating model conversation.
 
 Framework facts form an immutable task activity history. It records task moves,
 relationship changes, activations, run attempts, completion, failure, retry,
-and dismissal. Comments remain authored communication even if the interface
-later presents comments and activity together. The precise history,
-diagnostics, statuses, and recovery controls shown to the user are delegated to
-the follow-up decision **Define Automation Observability and Recovery**.
+dismissal, user interruption, suspension, and continuation. Comments remain
+authored communication even if the interface later presents comments and
+activity together. The precise history, diagnostics, statuses, and recovery
+controls shown to the user are delegated to the follow-up decision **Define
+Automation Observability and Recovery**.

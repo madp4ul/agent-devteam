@@ -64,6 +64,11 @@ interface later presents both in one timeline.
 **Completed task**:
 A task that has reached the last column on its board.
 
+**Archived task**:
+A task retained with its complete coordination history but omitted from normal
+board views and agent task listings. Archiving is independent of the task's
+workflow column and is not deletion or completion.
+
 **Agent**:
 An autonomous participant with a focused responsibility. An agent is activated
 by relevant board activity and contributes its concern to the shared task.
@@ -94,6 +99,24 @@ The typed cause of an activation together with an immutable pointer to the
 exact source event, supplied to the agent run alongside the task's current
 state. The coordination framework preserves this provenance without generating
 its own interpretation of the expected work.
+
+**Attempt context**:
+Framework-supplied facts about a run attempt, including its sequence number,
+whether it follows an interruption or failure, the preceding outcome, whether
+its Codex thread was resumed or replaced, and any continuation message from the
+user. It does not change the activation reason. When an interrupted activation
+is continued without a user message, it tells the agent to reassess the current
+task and workspace state before proceeding.
+
+**User interruption**:
+The deliberate termination of an active run attempt by the user. It preserves
+the activation for later continuation, suspends further automation for the
+task, and does not count as a technical failure or automatic retry attempt.
+
+**Task automation suspension**:
+A user-controlled hold that prevents a task's preserved activation order from
+advancing. Interrupting an active run creates this hold; only an explicit user
+action continues the interrupted activation.
 
 **Activation retry**:
 A new run attempt for a failed activation. It retains the activation's original

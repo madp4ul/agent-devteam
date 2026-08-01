@@ -37,6 +37,12 @@ view.
   on the board so the user can retain the workflow context and drag the task.
   A separate **Open details** action bypasses that step. Selecting a board card
   also opens the full task directly; there is no intermediate summary screen.
+- Completion remains reaching the final column, while rejection is represented
+  by a process-specific unwatched column. Completed and rejected tasks stay
+  visible until explicitly archived. Archiving preserves the task and its
+  complete history but removes it from normal board views. The user can archive
+  eligible tasks individually or bulk-archive completed tasks; the first version
+  provides no permanent task deletion.
 
 ### Full task page
 
@@ -51,6 +57,9 @@ view.
   relationship and create a child in Relationships; retry, dismiss, and mark
   addressed with the relevant attention reason; and manual reactivation in the
   run/status area only when it is eligible.
+- Archiving is available on an idle eligible task. It is unavailable while the
+  task has active or queued work, a failed activation awaiting recovery, or
+  suspended automation.
 - The task can also be moved from its detail page. The destination chooser
   lists every column in board order, marks the current, previous, and next
   positions, disables the current column, and allows any other destination.
@@ -59,10 +68,16 @@ view.
 
 ### Agent interface and context
 
-- Agents use structured board tools rather than a visual "agent view." A
-  **Task overview** is the compact read projection used for board orientation:
-  title, column, blocking state, relationship status, and run state. An agent
-  explicitly opens any other task whose title appears relevant or ambiguous.
+- Agents use structured board tools rather than a visual "agent view." Board
+  discovery is two-step: a summary returns ordered columns, watching agents, and
+  task counts without task payloads; a listing tool then requires one or more
+  explicit columns and returns a capped page of **Task overviews** plus a
+  continuation cursor. There is no implicit all-columns listing. A Task overview
+  contains title, column, blocking state, relationship status, and run state.
+  Archived tasks are excluded unless explicitly requested through history or
+  search tools. Agents can deliberately page through completed or archived work
+  and can directly inspect a related task regardless of its completion or
+  archive state.
 - Every activation starts with the activated agent's full instructions and
   role, relevant process and board guidance, collaborator names and summaries,
   the activation reason and exact source event, current task metadata and
@@ -71,10 +86,13 @@ view.
 - Do not silently omit task context to save tokens. If real usage later shows
   excessive context cost, optimize from evidence; if the required task context
   cannot fit, fail the activation visibly rather than silently truncating it.
-- Board tools let agents inspect board task overviews, inspect a full task, add
-  comments and mentions, move a task, create child tasks, manage dependencies,
-  and discover collaborators. Later safety decisions may constrain when those
-  actions require approval without changing these interaction shapes.
+- Board tools let agents inspect the board summary, page through explicitly
+  selected columns, search historical tasks, inspect a full task, add comments
+  and mentions, move a task, create child tasks, manage dependencies, and
+  discover collaborators. Process instructions guide which columns matter; the
+  framework does not impose role-specific visibility restrictions. Later safety
+  decisions may constrain when actions require approval without changing these
+  interaction shapes.
 
 The final contextual-action refinement is represented by the Codex inline
 prototype named `refined-board-task-flow` from the decision session.
