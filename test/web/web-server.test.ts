@@ -107,3 +107,97 @@ boards: []
   assert.match(html, /Correction:/);
   assert.doesNotMatch(html, /Resume automation/);
 });
+
+test("resume explains unavailable runtime dispatch while keeping automation paused", async (t) => {
+  const fixture = await createWatchedFixture("unavailable-runtime");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => application.close());
+  const server = await startWebServer(application, { host: "127.0.0.1", port: 0 });
+  t.after(() => server.close());
+
+  const response = await fetch(`${server.baseUrl}/automation/resume`, { method: "POST" });
+  const html = await response.text();
+
+  assert.equal(response.status, 409);
+  assert.match(html, /role="alert"/);
+  assert.match(html, /no agent runtime is configured/i);
+  assert.match(html, /Automation paused/);
+  assert.match(html, /Resume automation/);
+});
+
+test("resume reports dispatch startup failure and returns the process to paused", async (t) => {
+  const fixture = await createWatchedFixture("dispatch-failure");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: join(fixture.directory, "missing-repository"),
+      taskWorkspaceRoot: join(fixture.directory, "workspaces"),
+      agentRuntime: {
+        run: async () => ({ status: "completed", summary: "Should not start." }),
+      },
+    },
+  });
+  t.after(() => application.close());
+  application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Fail before dispatch",
+    description: "The project repository is unavailable.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "create-dispatch-failure",
+  });
+  const server = await startWebServer(application, { host: "127.0.0.1", port: 0 });
+  t.after(() => server.close());
+
+  const response = await fetch(`${server.baseUrl}/automation/resume`, { method: "POST" });
+  const html = await response.text();
+
+  assert.equal(response.status, 409);
+  assert.match(html, /dispatch could not start/i);
+  assert.match(html, /Automation paused/);
+  assert.deepEqual(application.queryAutomation(), {
+    state: "paused",
+    attemptsMayStart: false,
+  });
+});
+
+async function createWatchedFixture(name: string): Promise<{
+  directory: string;
+  definitionPath: string;
+  databasePath: string;
+}> {
+  const directory = await mkdtemp(join(tmpdir(), `coordination-web-${name}-`));
+  await writeFile(join(directory, "agent.md"), "Handle the current task.\n");
+  const definitionPath = join(directory, "process.yaml");
+  await writeFile(
+    definitionPath,
+    `schemaVersion: 1
+name: Watched web process
+defaultTaskWorkspaceStartingRef: main
+coordinationGuidance: Keep dispatch visible.
+agents:
+  - id: implementer
+    name: Implementation Agent
+    role: Implements tasks
+    summary: Builds changes.
+    instructions: ./agent.md
+boards:
+  - id: delivery
+    name: Delivery
+    guidance: Deliver changes.
+    columns:
+      - id: implementation
+        name: Implementation
+        watchingAgent: implementer
+`,
+  );
+  return {
+    directory,
+    definitionPath,
+    databasePath: join(directory, "coordination.sqlite3"),
+  };
+}

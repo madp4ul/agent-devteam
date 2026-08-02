@@ -40,14 +40,14 @@ an undeclared ID and validate again. Restore the value before continuing.
 ## 4. Start the local application
 
 ```sh
-pnpm start -- --process examples/software-delivery/process.yaml
+pnpm start -- --process examples/software-delivery/process.yaml --project .
 ```
 
 The default database is `.data/coordination.sqlite3` and the default address is
 `http://127.0.0.1:3000`. Override them when needed:
 
 ```sh
-pnpm start -- --process examples/software-delivery/process.yaml --database .data/tutorial.sqlite3 --host 127.0.0.1 --port 3100
+pnpm start -- --process examples/software-delivery/process.yaml --database .data/tutorial.sqlite3 --project . --task-workspaces ../agent-devteam-task-workspaces --host 127.0.0.1 --port 3100
 ```
 
 The page shows `Automation paused`, the process fingerprint, all configured
@@ -64,3 +64,21 @@ configuration is invalid.
 Pointer drag-and-drop is intentionally deferred. Task details retain a labeled
 destination selector and **Move task** button as the permanent keyboard- and
 assistive-technology-friendly movement path.
+
+## 5. Resume Codex automation
+
+`--project` selects the Git repository whose task worktrees Codex will change.
+`--task-workspaces` selects the framework-owned root for those detached
+worktrees and should be outside the selected checkout. If omitted, it defaults
+to a sibling named `<project>-task-workspaces`.
+
+The application uses the installed Codex SDK and the user's existing Codex
+authentication, sandbox, and approval configuration. Process roles provide
+behavioral instructions only; they do not grant additional technical access.
+When **Resume automation** is accepted, the header changes to Automation
+running. If the runtime is unavailable or a worktree cannot be provisioned,
+the page remains paused and displays an actionable error.
+
+Each activation starts a fresh Codex thread in its task worktree. The agent can
+inspect only its current task, add an idempotent authored comment, and move that
+task through the initial project-scoped MCP surface.

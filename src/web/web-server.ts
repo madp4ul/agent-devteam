@@ -7,10 +7,12 @@ import {
   type BoardView,
   type TaskQueryResult,
 } from "../application/coordination-application.ts";
+import type { AgentToolScopeRegistry } from "../mcp/agent-tool-scope.ts";
 
 export interface WebServerOptions {
   host: string;
   port: number;
+  agentToolScopes?: AgentToolScopeRegistry;
 }
 
 export interface RunningWebServer {
@@ -23,7 +25,7 @@ export async function startWebServer(
   options: WebServerOptions,
 ): Promise<RunningWebServer> {
   const server = createServer((request, response) => {
-    void handleRequest(application, request, response).catch((error: unknown) => {
+    void handleRequest(application, options, request, response).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : "Unexpected server error";
       sendHtml(response, 500, page("Server error", `<h1>Server error</h1><p>${escapeHtml(message)}</p>`));
     });
@@ -44,18 +46,28 @@ export async function startWebServer(
 
 async function handleRequest(
   application: CoordinationApplication,
+  options: WebServerOptions,
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<void> {
   const method = request.method ?? "GET";
   const url = new URL(request.url ?? "/", "http://local.invalid");
+  if (url.pathname.startsWith("/agent-api/")) {
+    await handleAgentApi(application, options.agentToolScopes, request, response, method, url);
+    return;
+  }
   if (method === "GET" && url.pathname === "/") {
     sendHtml(response, 200, renderBoardPage(application));
     return;
   }
   if (method === "POST" && url.pathname === "/automation/resume") {
     const result = await application.resumeAutomation();
-    sendHtml(response, result.accepted ? 200 : 409, renderBoardPage(application));
+    const feedback = result.accepted ? "Automation is running." : resumeRejection(result);
+    sendHtml(
+      response,
+      result.accepted ? 200 : 409,
+      renderBoardPage(application, feedback, result.accepted ? "status" : "alert"),
+    );
     return;
   }
 
@@ -84,7 +96,61 @@ async function handleRequest(
   sendHtml(response, 404, page("Not found", "<h1>Not found</h1>"));
 }
 
-function renderBoardPage(application: CoordinationApplication): string {
+async function handleAgentApi(
+  application: CoordinationApplication,
+  scopes: AgentToolScopeRegistry | undefined,
+  request: IncomingMessage,
+  response: ServerResponse,
+  method: string,
+  url: URL,
+): Promise<void> {
+  const authorization = request.headers.authorization ?? "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const scope = scopes?.resolve(token);
+  if (scope === undefined) {
+    sendJson(response, 401, { error: "invalid-agent-tool-scope" });
+    return;
+  }
+  if (method === "GET" && url.pathname === "/agent-api/current-task") {
+    const result = application.queryTask(scope.taskId);
+    if (!result.available) {
+      sendJson(response, result.reason === "not-found" ? 404 : 409, result);
+      return;
+    }
+    sendJson(response, 200, result.task);
+    return;
+  }
+  if (method === "POST" && url.pathname === "/agent-api/current-task/comments") {
+    const body = await readJsonBody(request);
+    const result = application.addTaskComment({
+      taskId: scope.taskId,
+      body: stringField(body, "body"),
+      idempotencyKey: stringField(body, "idempotencyKey"),
+      actor: { kind: "agent", id: scope.agentId },
+    });
+    sendJson(response, result.accepted ? 200 : 409, result);
+    return;
+  }
+  if (method === "POST" && url.pathname === "/agent-api/current-task/move") {
+    const body = await readJsonBody(request);
+    const result = application.moveTask({
+      taskId: scope.taskId,
+      destinationColumnId: stringField(body, "destinationColumnId"),
+      expectedRevision: numberField(body, "expectedRevision"),
+      idempotencyKey: stringField(body, "idempotencyKey"),
+      actor: { kind: "agent", id: scope.agentId },
+    });
+    sendJson(response, result.accepted ? 200 : 409, result);
+    return;
+  }
+  sendJson(response, 404, { error: "unknown-agent-tool" });
+}
+
+function renderBoardPage(
+  application: CoordinationApplication,
+  feedback?: string,
+  feedbackRole: "status" | "alert" = "status",
+): string {
   const startup = application.queryStartup();
   if (startup.mode === "configuration-error") {
     const diagnostics = startup.diagnostics
@@ -120,11 +186,24 @@ function renderBoardPage(application: CoordinationApplication): string {
     `<header>
        <p class="eyebrow">${escapeHtml(startup.processName)}</p>
        <h1>${automationLabel}</h1>
+       ${feedback === undefined ? "" : `<p role="${feedbackRole}">${escapeHtml(feedback)}</p>`}
        <p>Process definition <code>${startup.processDefinitionVersion}</code></p>
        ${resume}
      </header>
      <main>${boardMarkup}</main>`,
   );
+}
+
+function resumeRejection(
+  result: Exclude<Awaited<ReturnType<CoordinationApplication["resumeAutomation"]>>, { accepted: true }>,
+): string {
+  if (result.reason === "runtime-unavailable") {
+    return "Automation remains paused because no agent runtime is configured. Start the application with the Codex runtime and try again.";
+  }
+  if (result.reason === "runtime-start-failed") {
+    return `Automation remains paused because dispatch could not start: ${result.diagnostic}`;
+  }
+  return "Automation remains blocked until the process configuration errors are corrected.";
 }
 
 function renderBoard(board: BoardView): string {
@@ -206,6 +285,35 @@ async function readBody(request: IncomingMessage): Promise<string> {
     chunks.push(buffer);
   }
   return Buffer.concat(chunks).toString("utf8");
+}
+
+async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const parsed = JSON.parse(await readBody(request)) as unknown;
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Expected a JSON object");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function stringField(body: Record<string, unknown>, name: string): string {
+  const value = body[name];
+  if (typeof value !== "string") throw new Error(`${name} must be a string`);
+  return value;
+}
+
+function numberField(body: Record<string, unknown>, name: string): number {
+  const value = body[name];
+  if (typeof value !== "number") throw new Error(`${name} must be a number`);
+  return value;
+}
+
+function sendJson(response: ServerResponse, status: number, value: unknown): void {
+  const body = JSON.stringify(value);
+  response.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "content-length": Buffer.byteLength(body),
+  });
+  response.end(body);
 }
 
 function sendHtml(response: ServerResponse, status: number, html: string): void {

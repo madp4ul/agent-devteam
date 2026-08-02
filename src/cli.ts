@@ -1,10 +1,13 @@
 import { mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   CoordinationApplication,
   type ProcessDiagnostic,
 } from "./application/coordination-application.ts";
+import { AgentToolScopeRegistry } from "./mcp/agent-tool-scope.ts";
+import { CodexAgentRuntime } from "./runtime/codex-agent-runtime.ts";
 import { startWebServer } from "./web/web-server.ts";
 
 await run(process.argv.slice(2));
@@ -40,6 +43,11 @@ async function run(arguments_: string[]): Promise<void> {
     const databasePath = resolve(
       readOption(arguments_, "--database") ?? ".data/coordination.sqlite3",
     );
+    const projectRepositoryPath = resolve(readOption(arguments_, "--project") ?? process.cwd());
+    const taskWorkspaceRoot = resolve(
+      readOption(arguments_, "--task-workspaces") ??
+        join(dirname(projectRepositoryPath), `${basename(projectRepositoryPath)}-task-workspaces`),
+    );
     const host = readOption(arguments_, "--host") ?? "127.0.0.1";
     const port = Number(readOption(arguments_, "--port") ?? "3000");
     if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -48,13 +56,63 @@ async function run(arguments_: string[]): Promise<void> {
       return;
     }
     await mkdir(dirname(databasePath), { recursive: true });
+    const agentToolScopes = new AgentToolScopeRegistry();
+    const activationTokens = new Map<string, string>();
+    let agentApiBaseUrl: string | undefined;
+    const mcpServerPath = fileURLToPath(new URL("./mcp/stdio-server.ts", import.meta.url));
+    const agentRuntime = new CodexAgentRuntime({
+      mcpServer: {
+        command: process.execPath,
+        args: (request) => {
+          if (agentApiBaseUrl === undefined) {
+            throw new Error("The agent tool endpoint is not ready");
+          }
+          const token = agentToolScopes.issue({
+            taskId: request.task.id,
+            agentId: request.agent.id,
+          });
+          activationTokens.set(request.activationId, token);
+          return [
+            "--experimental-strip-types",
+            mcpServerPath,
+          ];
+        },
+        environment: (request) => {
+          const token = activationTokens.get(request.activationId);
+          if (agentApiBaseUrl === undefined || token === undefined) {
+            throw new Error("The agent tool scope is not ready");
+          }
+          return {
+            COORDINATION_AGENT_API_BASE_URL: agentApiBaseUrl,
+            COORDINATION_AGENT_TOOL_TOKEN: token,
+          };
+        },
+        release: (request) => {
+          const token = activationTokens.get(request.activationId);
+          if (token !== undefined) agentToolScopes.revoke(token);
+          activationTokens.delete(request.activationId);
+        },
+      },
+    });
     const application = await CoordinationApplication.start({
       processDefinitionPath: definitionPath,
       databasePath,
+      runtimeDispatch: {
+        projectRepositoryPath,
+        taskWorkspaceRoot,
+        agentRuntime,
+      },
     });
-    const server = await startWebServer(application, { host, port });
+    const server = await startWebServer(application, {
+      host,
+      port,
+      agentToolScopes,
+    });
+    agentApiBaseUrl = server.baseUrl;
     console.log(`Coordination application listening at ${server.baseUrl}`);
     console.log(`Startup mode: ${application.queryStartup().mode}`);
+    console.log(`Project repository: ${projectRepositoryPath}`);
+    console.log(`Task workspaces: ${taskWorkspaceRoot}`);
 
     const close = async (): Promise<void> => {
       await server.close();
@@ -66,7 +124,7 @@ async function run(arguments_: string[]): Promise<void> {
   }
 
   console.error(
-    "Usage:\n  coordination validate <process-definition.yaml>\n  coordination start [--process path] [--database path] [--host address] [--port number]",
+    "Usage:\n  coordination validate <process-definition.yaml>\n  coordination start [--process path] [--database path] [--project repository] [--task-workspaces path] [--host address] [--port number]",
   );
   process.exitCode = 2;
 }

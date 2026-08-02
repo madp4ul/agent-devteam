@@ -1,0 +1,270 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import type { AgentRunRequest } from "../../src/application/coordination-application.ts";
+import {
+  CodexAgentRuntime,
+  type CodexClientLike,
+  type CodexClientOptionsLike,
+  type CodexEventLike,
+  type CodexThreadLike,
+  type CodexThreadOptionsLike,
+} from "../../src/runtime/codex-agent-runtime.ts";
+
+test("each activation starts a fresh streamed Codex thread without overriding user permissions", async () => {
+  const clients: FakeCodexClient[] = [];
+  const runtime = new CodexAgentRuntime({
+    mcpServer: {
+      command: "node",
+      args: (request) => ["coordination-mcp.ts", "--task", request.task.id],
+      environment: (request) => ({ CURRENT_TASK: request.task.id }),
+    },
+    createClient: (options) => {
+      const client = new FakeCodexClient(options, `thread-${clients.length + 1}`);
+      clients.push(client);
+      return client;
+    },
+  });
+
+  const first = await runtime.run(request("activation-1", "T-0001"), { started() {} });
+  const second = await runtime.run(request("activation-2", "T-0002"), { started() {} });
+
+  assert.deepEqual(first, {
+    status: "completed",
+    summary: "Handoff completed.",
+    threadId: "thread-1",
+  });
+  assert.equal(second.threadId, "thread-2");
+  assert.equal(clients.length, 2);
+  for (const client of clients) {
+    assert.deepEqual(client.threadOptions, { workingDirectory: "C:\\tasks\\worktree" });
+    assert.equal("sandboxMode" in client.threadOptions, false);
+    assert.equal("approvalPolicy" in client.threadOptions, false);
+  }
+  assert.deepEqual(clients[0]?.options, {
+    config: {
+      mcp_servers: {
+        coordination: {
+          command: "node",
+          args: ["coordination-mcp.ts", "--task", "T-0001"],
+          env: { CURRENT_TASK: "T-0001" },
+          required: true,
+        },
+      },
+    },
+  });
+  const prompt = clients[0]?.prompt ?? "";
+  assert.match(prompt, /Implementation Agent/);
+  assert.match(prompt, /Implement the requested task in full\./);
+  assert.match(prompt, /Keep handoffs explicit\./);
+  assert.match(prompt, /Move finished work to review\./);
+  assert.match(prompt, /source-event-1/);
+  assert.match(prompt, /FULL-DESCRIPTION-END/);
+  assert.match(prompt, /Earlier authored comment\./);
+  assert.match(prompt, /dependency/);
+  assert.match(prompt, /attempt number: 1/i);
+});
+
+test("streamed Codex failures become failed attempt outcomes with retained thread identity", async () => {
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => new FailingCodexClient(),
+  });
+
+  assert.deepEqual(await runtime.run(request("activation-failure", "T-0003"), { started() {} }), {
+    status: "failed",
+    summary: "Codex could not complete the activation: model stream disconnected",
+    threadId: "thread-failure",
+  });
+});
+
+test("an exception after thread startup becomes an inspectable failed outcome", async () => {
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({ events: interruptedEvents() }),
+      }),
+    }),
+  });
+  let startedThreadId: string | undefined;
+
+  assert.deepEqual(
+    await runtime.run(request("activation-interrupted", "T-0004"), {
+      started: (threadId) => {
+        startedThreadId = threadId;
+      },
+    }),
+    {
+      status: "failed",
+      summary: "Codex could not complete the activation: connection dropped",
+      threadId: "thread-interrupted",
+    },
+  );
+  assert.equal(startedThreadId, "thread-interrupted");
+});
+
+test("a stream that ends without turn.completed is a failed outcome", async () => {
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-truncated" },
+            {
+              type: "item.completed",
+              item: { type: "agent_message", text: "This was not confirmed complete." },
+            },
+          ),
+        }),
+      }),
+    }),
+  });
+
+  assert.deepEqual(
+    await runtime.run(request("activation-truncated", "T-0005"), { started() {} }),
+    {
+      status: "failed",
+      summary: "Codex could not complete the activation: the stream ended before turn.completed",
+      threadId: "thread-truncated",
+    },
+  );
+});
+
+class FakeCodexClient implements CodexClientLike {
+  threadOptions: CodexThreadOptionsLike = {};
+  prompt = "";
+  readonly options: CodexClientOptionsLike;
+  readonly threadId: string;
+
+  constructor(options: CodexClientOptionsLike, threadId: string) {
+    this.options = options;
+    this.threadId = threadId;
+  }
+
+  startThread(options: CodexThreadOptionsLike): CodexThreadLike {
+    this.threadOptions = options;
+    return {
+      runStreamed: async (prompt) => {
+        this.prompt = prompt;
+        return {
+          events: events(
+            { type: "thread.started", thread_id: this.threadId },
+            {
+              type: "item.completed",
+              item: { id: "message-1", type: "agent_message", text: "Handoff completed." },
+            },
+            { type: "turn.completed" },
+          ),
+        };
+      },
+    };
+  }
+}
+
+class FailingCodexClient implements CodexClientLike {
+  startThread(): CodexThreadLike {
+    return {
+      runStreamed: async () => ({
+        events: events(
+          { type: "thread.started", thread_id: "thread-failure" },
+          { type: "turn.failed", error: { message: "model stream disconnected" } },
+        ),
+      }),
+    };
+  }
+}
+
+async function* events(...values: CodexEventLike[]): AsyncGenerator<CodexEventLike> {
+  for (const value of values) yield value;
+}
+
+async function* interruptedEvents(): AsyncGenerator<CodexEventLike> {
+  yield { type: "thread.started", thread_id: "thread-interrupted" };
+  throw new Error("connection dropped");
+}
+
+function request(activationId: string, taskId: string): AgentRunRequest {
+  return {
+    activationId,
+    agent: {
+      id: "implementer",
+      name: "Implementation Agent",
+      role: "Implements changes",
+      summary: "Builds requested changes.",
+      instructions: "Implement the requested task in full.",
+    },
+    process: {
+      name: "Delivery process",
+      guidance: "Keep handoffs explicit.",
+      definitionVersion: "process-version-1",
+    },
+    board: {
+      id: "delivery",
+      name: "Delivery",
+      guidance: "Move finished work to review.",
+      columns: [
+        {
+          id: "implementation",
+          name: "Implementation",
+          watchingAgentId: "implementer",
+          frameworkOwned: false,
+        },
+      ],
+    },
+    collaborators: [
+      {
+        id: "reviewer",
+        name: "Code Reviewer",
+        role: "Reviews changes",
+        summary: "Checks implementation quality.",
+      },
+    ],
+    reason: { type: "column-entry", sourceEventId: "source-event-1" },
+    sourceEvent: {
+      id: "source-event-1",
+      type: "task.moved",
+      actor: { kind: "user", id: "paul" },
+      occurredAt: "2026-08-02T12:00:00.000Z",
+      details: { fromColumnId: "backlog", toColumnId: "implementation" },
+    },
+    task: {
+      id: taskId,
+      title: "Complete the minimal handoff",
+      description: `A complete task description. ${"context ".repeat(2_000)}FULL-DESCRIPTION-END`,
+      boardId: "delivery",
+      columnId: "implementation",
+      revision: 3,
+      comments: [
+        {
+          id: "comment-1",
+          body: "Earlier authored comment.",
+          actor: { kind: "user", id: "paul" },
+          occurredAt: "2026-08-02T11:00:00.000Z",
+        },
+      ],
+      relationships: [
+        {
+          id: "relationship-1",
+          type: "dependency",
+          sourceTaskId: taskId,
+          targetTaskId: "T-0000",
+        },
+      ],
+      activity: [],
+      activations: [],
+    },
+    workspace: {
+      path: "C:\\tasks\\worktree",
+      startingRef: "main",
+      commit: "abc123",
+    },
+    attempt: {
+      number: 1,
+      precedingOutcome: null,
+      thread: "fresh",
+      continuationMessage: null,
+    },
+  };
+}

@@ -3,6 +3,8 @@ import { DatabaseSync } from "node:sqlite";
 
 import type {
   ActivationView,
+  AddTaskCommentCommand,
+  AddTaskCommentResult,
   Actor,
   AgentRunAgent,
   AgentRunOutcome,
@@ -18,6 +20,33 @@ import type {
   AgentInstructionContent,
   ProcessDefinition,
 } from "./process-definition.ts";
+
+const ACTIVATIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS activations (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL UNIQUE,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    target_agent_id TEXT NOT NULL REFERENCES agents(id),
+    reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry')),
+    source_activity_id TEXT NOT NULL UNIQUE REFERENCES activity_ledger(id),
+    status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
+    created_at TEXT NOT NULL
+  );
+`;
+
+const ATTEMPTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS attempts (
+    id TEXT PRIMARY KEY,
+    activation_id TEXT NOT NULL REFERENCES activations(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+    workspace_path TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    outcome_status TEXT CHECK (outcome_status IN ('completed', 'failed')),
+    outcome_summary TEXT,
+    thread_id TEXT
+  );
+`;
 
 export class RelationalCoordinationStore {
   readonly #database: DatabaseSync;
@@ -101,31 +130,22 @@ export class RelationalCoordinationStore {
         occurred_at TEXT NOT NULL,
         details_json TEXT NOT NULL
       );
-      CREATE TABLE IF NOT EXISTS activations (
-        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-        id TEXT NOT NULL UNIQUE,
-        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-        target_agent_id TEXT NOT NULL REFERENCES agents(id),
-        reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry')),
-        source_activity_id TEXT NOT NULL UNIQUE REFERENCES activity_ledger(id),
-        status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed')),
-        created_at TEXT NOT NULL
-      );
+      ${ACTIVATIONS_TABLE_SQL}
       CREATE TABLE IF NOT EXISTS task_workspaces (
         task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
         path TEXT NOT NULL UNIQUE,
         starting_ref TEXT NOT NULL,
         commit_id TEXT NOT NULL
       );
-      CREATE TABLE IF NOT EXISTS attempts (
-        id TEXT PRIMARY KEY,
-        activation_id TEXT NOT NULL REFERENCES activations(id) ON DELETE CASCADE,
-        status TEXT NOT NULL CHECK (status IN ('running', 'completed')),
-        workspace_path TEXT NOT NULL,
-        started_at TEXT NOT NULL,
-        completed_at TEXT,
-        outcome_status TEXT CHECK (outcome_status IN ('completed')),
-        outcome_summary TEXT
+      ${ATTEMPTS_TABLE_SQL}
+      CREATE TABLE IF NOT EXISTS task_comments (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT NOT NULL UNIQUE,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent')),
+        actor_id TEXT NOT NULL,
+        occurred_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS command_responses (
         command_type TEXT NOT NULL,
@@ -134,6 +154,13 @@ export class RelationalCoordinationStore {
         PRIMARY KEY (command_type, idempotency_key)
       );
     `);
+    migrateFailedRunOutcomes(database);
+    const attemptColumns = database.prepare("PRAGMA table_info(attempts)").all() as Array<{
+      name: string;
+    }>;
+    if (!attemptColumns.some((column) => column.name === "thread_id")) {
+      database.exec("ALTER TABLE attempts ADD COLUMN thread_id TEXT");
+    }
     database.exec(`
       INSERT OR IGNORE INTO activity_ledger
         (id, task_id, type, actor_kind, actor_id, occurred_at, details_json)
@@ -231,6 +258,12 @@ export class RelationalCoordinationStore {
       .run();
   }
 
+  pauseAutomation(): void {
+    this.#database
+      .prepare("UPDATE runtime SET automation_state = 'paused' WHERE singleton = 1")
+      .run();
+  }
+
   hasWatchedColumns(): boolean {
     return (
       this.#database
@@ -312,6 +345,8 @@ export class RelationalCoordinationStore {
       boardId: row.board_id,
       columnId: row.column_id,
       revision: row.revision,
+      comments: this.readTaskComments(taskId),
+      relationships: [],
       activity: activity.map((event) => ({
         id: event.id,
         type: event.type,
@@ -427,7 +462,10 @@ export class RelationalCoordinationStore {
       .run(taskId, workspace.path, workspace.startingRef, workspace.commit);
   }
 
-  startAttempt(activationId: string, workspacePath: string): string {
+  startAttempt(
+    activationId: string,
+    workspacePath: string,
+  ): { id: string; number: number; runStartActivityId: string } {
     return this.transaction(() => {
       const activation = this.#database
         .prepare(
@@ -440,6 +478,9 @@ export class RelationalCoordinationStore {
         | undefined;
       if (activation === undefined) throw new Error(`Activation ${activationId} is not runnable`);
       const attemptId = randomUUID();
+      const priorAttempts = this.#database
+        .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
+        .get(activationId) as { count: number };
       const occurredAt = new Date().toISOString();
       this.#database
         .prepare("UPDATE activations SET status = 'running' WHERE id = ?")
@@ -451,14 +492,35 @@ export class RelationalCoordinationStore {
            VALUES (?, ?, 'running', ?, ?)`,
         )
         .run(attemptId, activationId, workspacePath, occurredAt);
-      this.appendActivity(
+      const runStartActivityId = this.appendActivity(
         activation.task_id,
         "attempt.started",
         { kind: "agent", id: activation.target_agent_id },
         { activationId, attemptId },
         occurredAt,
       );
-      return attemptId;
+      return { id: attemptId, number: priorAttempts.count + 1, runStartActivityId };
+    });
+  }
+
+  recordAttemptThreadId(attemptId: string, runStartActivityId: string, threadId: string): void {
+    this.transaction(() => {
+      const result = this.#database
+        .prepare("UPDATE attempts SET thread_id = ? WHERE id = ? AND status = 'running'")
+        .run(threadId, attemptId);
+      if (result.changes !== 1) throw new Error(`Attempt ${attemptId} is not running`);
+      const activity = this.#database
+        .prepare(
+          `SELECT details_json
+           FROM activity_ledger
+           WHERE id = ? AND type = 'attempt.started'`,
+        )
+        .get(runStartActivityId) as { details_json: string } | undefined;
+      if (activity === undefined) throw new Error(`Run-start activity ${runStartActivityId} is missing`);
+      const details = JSON.parse(activity.details_json) as Record<string, string>;
+      this.#database
+        .prepare("UPDATE activity_ledger SET details_json = ? WHERE id = ?")
+        .run(JSON.stringify({ ...details, threadId }), runStartActivityId);
     });
   }
 
@@ -479,13 +541,21 @@ export class RelationalCoordinationStore {
       this.#database
         .prepare(
           `UPDATE attempts
-           SET status = 'completed', completed_at = ?, outcome_status = ?, outcome_summary = ?
+           SET status = ?, completed_at = ?, outcome_status = ?, outcome_summary = ?,
+               thread_id = COALESCE(?, thread_id)
            WHERE id = ?`,
         )
-        .run(occurredAt, outcome.status, outcome.summary, attemptId);
+        .run(
+          outcome.status,
+          occurredAt,
+          outcome.status,
+          outcome.summary,
+          outcome.threadId ?? null,
+          attemptId,
+        );
       this.#database
-        .prepare("UPDATE activations SET status = 'completed' WHERE id = ?")
-        .run(attempt.activation_id);
+        .prepare("UPDATE activations SET status = ? WHERE id = ?")
+        .run(outcome.status, attempt.activation_id);
       this.appendActivity(
         attempt.task_id,
         "attempt.completed",
@@ -537,7 +607,8 @@ export class RelationalCoordinationStore {
 
   moveTask(command: MoveTaskCommand): BoardMutationResult {
     return this.transaction(() => {
-      const prior = this.readCommandResponse("move-task", command.idempotencyKey);
+      const commandType = `move-task:${command.taskId}`;
+      const prior = this.readCommandResponse(commandType, command.idempotencyKey);
       if (prior !== undefined) return prior;
       const currentTask = this.readTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
@@ -575,7 +646,47 @@ export class RelationalCoordinationStore {
       const task = this.readTask(command.taskId);
       if (task === undefined) throw new Error("Moved task could not be read back");
       const result: BoardMutationResult = { accepted: true, task };
-      this.storeCommandResponse("move-task", command.idempotencyKey, result);
+      this.storeCommandResponse(commandType, command.idempotencyKey, result);
+      return result;
+    });
+  }
+
+  addTaskComment(command: AddTaskCommentCommand): AddTaskCommentResult {
+    return this.transaction(() => {
+      const commandType = `add-task-comment:${command.taskId}`;
+      const prior = this.readCommentCommandResponse(commandType, command.idempotencyKey);
+      if (prior !== undefined) return prior;
+      const task = this.readTask(command.taskId);
+      if (task === undefined) return { accepted: false, reason: "not-found" };
+      if (command.body.trim().length === 0) {
+        return { accepted: false, reason: "empty-comment" };
+      }
+      const comment = {
+        id: randomUUID(),
+        body: command.body,
+        actor: command.actor,
+        occurredAt: new Date().toISOString(),
+      };
+      this.#database
+        .prepare(
+          `INSERT INTO task_comments
+            (id, task_id, body, actor_kind, actor_id, occurred_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          comment.id,
+          command.taskId,
+          comment.body,
+          comment.actor.kind,
+          comment.actor.id,
+          comment.occurredAt,
+        );
+      const updated = this.readTask(command.taskId);
+      if (updated === undefined) throw new Error("Commented task could not be read back");
+      const result: AddTaskCommentResult = { accepted: true, task: updated, comment };
+      this.#database
+        .prepare("INSERT INTO command_responses VALUES (?, ?, ?)")
+        .run(commandType, command.idempotencyKey, JSON.stringify(result));
       return result;
     });
   }
@@ -666,12 +777,12 @@ export class RelationalCoordinationStore {
          ORDER BY sequence`,
       )
       .all(taskId) as Array<{
-      id: string;
-      target_agent_id: string;
-      reason_type: ActivationView["reason"]["type"];
-      source_activity_id: string;
-      status: ActivationView["status"];
-    }>;
+        id: string;
+        target_agent_id: string;
+        reason_type: ActivationView["reason"]["type"];
+        source_activity_id: string;
+        status: ActivationView["status"];
+      }>;
     return rows.map((row) => ({
       id: row.id,
       targetAgentId: row.target_agent_id,
@@ -685,20 +796,21 @@ export class RelationalCoordinationStore {
     const rows = this.#database
       .prepare(
         `SELECT id, status, workspace_path, started_at, completed_at,
-                outcome_status, outcome_summary
+                outcome_status, outcome_summary, thread_id
          FROM attempts
          WHERE activation_id = ?
          ORDER BY rowid`,
       )
       .all(activationId) as Array<{
-      id: string;
-      status: "running" | "completed";
-      workspace_path: string;
-      started_at: string;
-      completed_at: string | null;
-      outcome_status: "completed" | null;
-      outcome_summary: string | null;
-    }>;
+        id: string;
+        status: "running" | "completed" | "failed";
+        workspace_path: string;
+        started_at: string;
+        completed_at: string | null;
+        outcome_status: "completed" | "failed" | null;
+        outcome_summary: string | null;
+        thread_id: string | null;
+      }>;
     return rows.map((row) => ({
       id: row.id,
       status: row.status,
@@ -709,7 +821,45 @@ export class RelationalCoordinationStore {
         row.outcome_status === null
           ? null
           : { status: row.outcome_status, summary: row.outcome_summary ?? "" },
+      threadId: row.thread_id,
     }));
+  }
+
+  private readTaskComments(taskId: string): TaskView["comments"] {
+    const rows = this.#database
+      .prepare(
+        `SELECT id, body, actor_kind, actor_id, occurred_at
+         FROM task_comments
+         WHERE task_id = ?
+         ORDER BY sequence`,
+      )
+      .all(taskId) as Array<{
+      id: string;
+      body: string;
+      actor_kind: Actor["kind"];
+      actor_id: string;
+      occurred_at: string;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      body: row.body,
+      actor: { kind: row.actor_kind, id: row.actor_id },
+      occurredAt: row.occurred_at,
+    }));
+  }
+
+  private readCommentCommandResponse(
+    commandType: string,
+    idempotencyKey: string,
+  ): AddTaskCommentResult | undefined {
+    const row = this.#database
+      .prepare(
+        "SELECT response_json FROM command_responses WHERE command_type = ? AND idempotency_key = ?",
+      )
+      .get(commandType, idempotencyKey) as { response_json: string } | undefined;
+    return row === undefined
+      ? undefined
+      : (JSON.parse(row.response_json) as AddTaskCommentResult);
   }
 
   private readSourceEvent(id: string): TaskActivityView | undefined {
@@ -762,5 +912,44 @@ export class RelationalCoordinationStore {
     this.#database
       .prepare("INSERT INTO command_responses VALUES (?, ?, ?)")
       .run(commandType, idempotencyKey, JSON.stringify(result));
+  }
+}
+
+function migrateFailedRunOutcomes(database: DatabaseSync): void {
+  const activationSchema = database
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activations'")
+    .get() as { sql: string };
+  if (activationSchema.sql.includes("'failed'")) return;
+  const attemptColumns = database.prepare("PRAGMA table_info(attempts)").all() as Array<{
+    name: string;
+  }>;
+  const threadIdProjection = attemptColumns.some((column) => column.name === "thread_id")
+    ? "thread_id"
+    : "NULL";
+  database.exec("PRAGMA foreign_keys = OFF");
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+      ALTER TABLE attempts RENAME TO attempts_before_failed_outcomes;
+      ALTER TABLE activations RENAME TO activations_before_failed_outcomes;
+      ${ACTIVATIONS_TABLE_SQL}
+      ${ATTEMPTS_TABLE_SQL}
+      INSERT INTO activations
+        SELECT sequence, id, task_id, target_agent_id, reason_type,
+               source_activity_id, status, created_at
+        FROM activations_before_failed_outcomes;
+      INSERT INTO attempts
+        SELECT id, activation_id, status, workspace_path, started_at,
+               completed_at, outcome_status, outcome_summary, ${threadIdProjection}
+        FROM attempts_before_failed_outcomes;
+      DROP TABLE attempts_before_failed_outcomes;
+      DROP TABLE activations_before_failed_outcomes;
+      COMMIT;
+    `);
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  } finally {
+    database.exec("PRAGMA foreign_keys = ON");
   }
 }

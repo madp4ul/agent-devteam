@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import {
   type AgentRunOutcome,
   type AgentRunRequest,
+  type AgentRunLifecycle,
   type AgentRuntime,
   CoordinationApplication,
 } from "../../src/application/coordination-application.ts";
@@ -205,6 +206,78 @@ test("a process with watched columns cannot resume without a configured runtime"
   });
 });
 
+test("a runtime startup failure leaves automation paused with an actionable result", async (t) => {
+  const fixture = await createFixture("runtime-start-failure");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: {
+        run: () => Promise.reject(new Error("Codex executable could not start")),
+      },
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Report startup failures",
+    description: "Resume should not claim the runtime started.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-before-startup-failure",
+  });
+  assert.equal(created.accepted, true);
+
+  assert.deepEqual(await application.resumeAutomation(), {
+    accepted: false,
+    reason: "runtime-start-failed",
+    diagnostic: "Codex executable could not start",
+  });
+  assert.deepEqual(application.queryAutomation(), {
+    state: "paused",
+    attemptsMayStart: false,
+  });
+  const failed = created.accepted ? application.queryTask(created.task.id) : undefined;
+  assert.equal(failed?.available, true);
+  if (failed?.available) assert.equal(failed.task.activations[0]?.status, "failed");
+});
+
+test("a failed outcome before thread startup preserves the runtime diagnostic", async (t) => {
+  const fixture = await createFixture("runtime-pre-thread-failure");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: {
+        run: () =>
+          Promise.resolve({
+            status: "failed",
+            summary: "Codex rejected the MCP server configuration",
+          }),
+      },
+    },
+  });
+  t.after(() => application.close());
+  application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Preserve the runtime diagnostic",
+    description: "A pre-thread failure should remain actionable.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-before-pre-thread-failure",
+  });
+
+  assert.deepEqual(await application.resumeAutomation(), {
+    accepted: false,
+    reason: "runtime-start-failed",
+    diagnostic: "Codex rejected the MCP server configuration",
+  });
+});
+
 test("resuming runs the queued activation in a just-in-time detached task workspace", async (t) => {
   const fixture = await createFixture("first-run");
   const runtime = new ControlledAgentRuntime();
@@ -234,6 +307,15 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
   await application.resumeAutomation();
 
   assert.equal(runtime.requests.length, 1);
+  const running = application.queryTask(created.task.id);
+  assert.equal(running.available, true);
+  if (running.available) {
+    assert.equal(running.task.activations[0]?.attempts[0]?.threadId, "controlled-thread");
+    assert.equal(
+      running.task.activity.find((activity) => activity.type === "attempt.started")?.details.threadId,
+      "controlled-thread",
+    );
+  }
   const request = runtime.requests[0];
   assert.ok(request);
   assert.deepEqual(request.agent, {
@@ -520,8 +602,9 @@ class ControlledAgentRuntime implements AgentRuntime {
     resolve: (request: AgentRunRequest) => void;
   }> = [];
 
-  run(request: AgentRunRequest): Promise<AgentRunOutcome> {
+  run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
     this.requests.push(request);
+    lifecycle.started("controlled-thread");
     for (const waiter of this.#requestWaiters.splice(0)) {
       if (this.requests.length >= waiter.count) {
         waiter.resolve(this.requests[waiter.count - 1] as AgentRunRequest);
@@ -552,8 +635,9 @@ class ControlledAgentRuntime implements AgentRuntime {
 class CompletingAgentRuntime implements AgentRuntime {
   readonly requests: AgentRunRequest[] = [];
 
-  run(request: AgentRunRequest): Promise<AgentRunOutcome> {
+  run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
     this.requests.push(request);
+    lifecycle.started();
     return Promise.resolve({ status: "completed", summary: "Completed under control." });
   }
 }

@@ -51,7 +51,7 @@ Validate the example process, then start the development server:
 
 ```powershell
 pnpm validate:example
-pnpm start -- --process examples/software-delivery/process.yaml
+pnpm start -- --process examples/software-delivery/process.yaml --project .
 ```
 
 Open <http://127.0.0.1:3000>. Stop the server with `Ctrl+C`.
@@ -62,6 +62,17 @@ Before changing code, it is useful to verify the checkout:
 pnpm typecheck
 pnpm test
 ```
+
+The normal suite uses a controlled runtime and never calls a live model. To run
+the opt-in real Codex SDK handoff proof after Codex authentication is available:
+
+```powershell
+$env:COORDINATION_RUN_CODEX_INTEGRATION = "1"
+node --experimental-strip-types --test --test-reporter=spec test/integration/real-codex-handoff.test.ts
+```
+
+Remove the environment variable afterward with
+`Remove-Item Env:COORDINATION_RUN_CODEX_INTEGRATION`.
 
 ## Troubleshooting
 

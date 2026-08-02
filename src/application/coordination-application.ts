@@ -63,17 +63,18 @@ export interface ActivationReasonView {
 
 export interface AttemptView {
   id: string;
-  status: "running" | "completed";
+  status: "running" | "completed" | "failed";
   workspacePath: string;
   startedAt: string;
   completedAt: string | null;
   outcome: AgentRunOutcome | null;
+  threadId: string | null;
 }
 
 export interface ActivationView {
   id: string;
   targetAgentId: string;
-  status: "queued" | "running" | "completed";
+  status: "queued" | "running" | "completed" | "failed";
   reason: ActivationReasonView;
   attempts: AttemptView[];
 }
@@ -95,19 +96,61 @@ export interface TaskWorkspaceView {
 export interface AgentRunRequest {
   activationId: string;
   agent: AgentRunAgent;
+  process: {
+    name: string;
+    guidance: string;
+    definitionVersion: string;
+  };
+  board: ProcessBoardView;
+  collaborators: Array<Pick<AgentRunAgent, "id" | "name" | "role" | "summary">>;
   reason: ActivationReasonView;
   sourceEvent: TaskActivityView;
   task: TaskView;
   workspace: TaskWorkspaceView;
+  attempt: AttemptContextView;
 }
 
 export interface AgentRunOutcome {
-  status: "completed";
+  status: "completed" | "failed";
   summary: string;
+  threadId?: string;
+}
+
+export interface AttemptContextView {
+  number: number;
+  precedingOutcome: AgentRunOutcome | null;
+  thread: "fresh";
+  continuationMessage: string | null;
+}
+
+export interface TaskCommentView {
+  id: string;
+  body: string;
+  actor: Actor;
+  occurredAt: string;
+}
+
+export interface TaskRelationshipView {
+  id: string;
+  type: "parent-child" | "dependency";
+  sourceTaskId: string;
+  targetTaskId: string;
+}
+
+interface ProcessRunContext {
+  name: string;
+  guidance: string;
+  definitionVersion: string;
+  boards: ProcessBoardView[];
+  collaborators: Array<Pick<AgentRunAgent, "id" | "name" | "role" | "summary">>;
 }
 
 export interface AgentRuntime {
-  run(request: AgentRunRequest): Promise<AgentRunOutcome>;
+  run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome>;
+}
+
+export interface AgentRunLifecycle {
+  started(threadId?: string): void;
 }
 
 export interface TaskView {
@@ -117,6 +160,8 @@ export interface TaskView {
   boardId: string;
   columnId: string;
   revision: number;
+  comments: TaskCommentView[];
+  relationships: TaskRelationshipView[];
   activity: TaskActivityView[];
   activations: ActivationView[];
 }
@@ -167,7 +212,8 @@ export type ResumeAutomationResult =
       reason: "configuration-error";
       diagnostics: ProcessDiagnostic[];
     }
-  | { accepted: false; reason: "runtime-unavailable" };
+  | { accepted: false; reason: "runtime-unavailable" }
+  | { accepted: false; reason: "runtime-start-failed"; diagnostic: string };
 
 export type BoardsQueryResult =
   | { available: true; boards: BoardView[] }
@@ -195,6 +241,13 @@ export interface MoveTaskCommand {
   idempotencyKey: string;
 }
 
+export interface AddTaskCommentCommand {
+  taskId: string;
+  body: string;
+  actor: Actor;
+  idempotencyKey: string;
+}
+
 export type BoardMutationResult =
   | { accepted: true; task: TaskView }
   | {
@@ -205,6 +258,15 @@ export type BoardMutationResult =
   | { accepted: false; reason: "not-found" | "invalid-destination" }
   | { accepted: false; reason: "revision-conflict"; currentTask: TaskView };
 
+export type AddTaskCommentResult =
+  | { accepted: true; task: TaskView; comment: TaskCommentView }
+  | {
+      accepted: false;
+      reason: "configuration-error";
+      diagnostics: ProcessDiagnostic[];
+    }
+  | { accepted: false; reason: "not-found" | "empty-comment" };
+
 export class CoordinationApplication {
   readonly #store: RelationalCoordinationStore;
   readonly #startup: StartupView;
@@ -212,6 +274,7 @@ export class CoordinationApplication {
     | { agentRuntime: AgentRuntime; workspaceManager: GitTaskWorkspaceManager }
     | undefined;
   readonly #startingRef: string | undefined;
+  readonly #processContext: ProcessRunContext | undefined;
   #automation: AutomationView;
   #automationWork: Promise<void> = Promise.resolve();
   #automationPumpRunning = false;
@@ -224,12 +287,14 @@ export class CoordinationApplication {
       workspaceManager: GitTaskWorkspaceManager;
     },
     startingRef?: string,
+    processContext?: ProcessRunContext,
   ) {
     this.#store = store;
     this.#startup = startup;
     this.#automation = startup.automation;
     this.#runtimeDispatch = runtimeDispatch;
     this.#startingRef = startingRef;
+    this.#processContext = processContext;
   }
 
   static async validateProcessDefinition(path: string): Promise<ProcessValidationResult> {
@@ -276,6 +341,18 @@ export class CoordinationApplication {
       },
       runtimeDispatch,
       definition.defaultTaskWorkspaceStartingRef,
+      {
+        name: definition.name,
+        guidance: definition.coordinationGuidance,
+        definitionVersion: version,
+        boards: store.readBoards(),
+        collaborators: definition.agents.map((agent) => ({
+          id: agent.id,
+          name: agent.name,
+          role: agent.role,
+          summary: agent.summary,
+        })),
+      },
     );
   }
 
@@ -311,7 +388,18 @@ export class CoordinationApplication {
           this.#automationPumpRunning = false;
         },
       );
-      await Promise.race([firstDispatchStarted, this.#automationWork]);
+      try {
+        await Promise.race([firstDispatchStarted, this.#automationWork]);
+      } catch (error) {
+        this.#store.pauseAutomation();
+        this.#automation = { state: "paused", attemptsMayStart: false };
+        this.#automationWork = Promise.resolve();
+        return {
+          accepted: false,
+          reason: "runtime-start-failed",
+          diagnostic: error instanceof Error ? error.message : "Agent runtime dispatch failed",
+        };
+      }
     }
     return { accepted: true, automation: this.#automation };
   }
@@ -383,6 +471,17 @@ export class CoordinationApplication {
     return result;
   }
 
+  addTaskComment(command: AddTaskCommentCommand): AddTaskCommentResult {
+    if (this.#startup.mode === "configuration-error") {
+      return {
+        accepted: false,
+        reason: "configuration-error",
+        diagnostics: this.#startup.diagnostics,
+      };
+    }
+    return this.#store.addTaskComment(command);
+  }
+
   close(): void {
     this.#store.close();
   }
@@ -402,23 +501,69 @@ export class CoordinationApplication {
       if (priorWorkspace === undefined) {
         this.#store.saveTaskWorkspace(runnable.task.id, workspace);
       }
-      const attemptId = this.#store.startAttempt(runnable.activation.id, workspace.path);
+      const attempt = this.#store.startAttempt(runnable.activation.id, workspace.path);
       const currentTask = this.#store.readTask(runnable.task.id);
       if (currentTask === undefined) throw new Error("Runnable task disappeared before dispatch");
+      const process = this.#processContext;
+      if (process === undefined) throw new Error("Runnable activation has no process context");
+      const board = process.boards.find((candidate) => candidate.id === currentTask.boardId);
+      if (board === undefined) throw new Error("Runnable task has no applied board context");
+      let dispatchStarted = false;
       const outcomePromise = this.#runtimeDispatch.agentRuntime.run({
         activationId: runnable.activation.id,
         agent: runnable.agent,
+        process: {
+          name: process.name,
+          guidance: process.guidance,
+          definitionVersion: process.definitionVersion,
+        },
+        board,
+        collaborators: process.collaborators,
         reason: runnable.activation.reason,
         sourceEvent: runnable.sourceEvent,
         task: currentTask,
         workspace,
+        attempt: {
+          number: attempt.number,
+          precedingOutcome: null,
+          thread: "fresh",
+          continuationMessage: null,
+        },
+      }, {
+        started: (threadId) => {
+          dispatchStarted = true;
+          if (threadId !== undefined) {
+            this.#store.recordAttemptThreadId(attempt.id, attempt.runStartActivityId, threadId);
+          }
+          if (first) {
+            first = false;
+            onFirstDispatch();
+          }
+        },
       });
-      if (first) {
-        first = false;
-        onFirstDispatch();
+      let outcome: AgentRunOutcome;
+      try {
+        outcome = await outcomePromise;
+      } catch (error) {
+        this.#store.completeAttempt(attempt.id, {
+          status: "failed",
+          summary: error instanceof Error ? error.message : "Agent runtime dispatch failed",
+        });
+        throw error;
       }
-      const outcome = await outcomePromise;
-      this.#store.completeAttempt(attemptId, outcome);
+      if (!dispatchStarted) {
+        const failedOutcome: AgentRunOutcome =
+          outcome.status === "failed"
+            ? outcome
+            : {
+                status: "failed",
+                summary: "Agent runtime completed without reporting that dispatch started",
+              };
+        this.#store.completeAttempt(attempt.id, failedOutcome);
+        const error = new Error(failedOutcome.summary);
+        throw error;
+      }
+      this.#store.completeAttempt(attempt.id, outcome);
     }
   }
 
