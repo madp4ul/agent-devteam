@@ -1,407 +1,47 @@
 import { RelationalCoordinationStore } from "./internal/coordination-store.ts";
-import { GitTaskWorkspaceManager } from "./internal/git-task-workspace.ts";
+import { AutomationCoordinator } from "./internal/automation-coordinator.ts";
 import { loadProcessDefinition } from "./internal/process-definition.ts";
+import { TaskDiscovery } from "./internal/task-discovery.ts";
+import type {
+  AddTaskCommentCommand,
+  AddTaskCommentResult,
+  AutomationView,
+  BoardMutationResult,
+  BoardSummariesQueryResult,
+  BoardsQueryResult,
+  CollaboratorsQueryResult,
+  CreateTaskCommand,
+  MoveTaskCommand,
+  ProcessValidationResult,
+  ResumeAutomationResult,
+  StartApplicationOptions,
+  StartupView,
+  TaskActivityQueryResult,
+  TaskAttachmentsQueryResult,
+  TaskInspectionQueryResult,
+  TaskOverviewsQuery,
+  TaskOverviewsQueryResult,
+  TaskQueryResult,
+} from "./coordination-contract.ts";
 
-export interface StartApplicationOptions {
-  processDefinitionPath: string;
-  databasePath: string;
-  runtimeDispatch?: RuntimeDispatchOptions;
-}
-
-export interface RuntimeDispatchOptions {
-  projectRepositoryPath: string;
-  taskWorkspaceRoot: string;
-  agentRuntime: AgentRuntime;
-}
-
-export interface ProcessDiagnostic {
-  file: string;
-  line: number;
-  column: number;
-  invalidValue: unknown;
-  rule: string;
-  consequence: string;
-  correction?: string;
-}
-
-export interface ProcessColumnView {
-  id: string;
-  name: string;
-  watchingAgentId: string | null;
-  frameworkOwned: boolean;
-}
-
-export interface ProcessBoardView {
-  id: string;
-  name: string;
-  guidance: string;
-  columns: ProcessColumnView[];
-}
-
-export interface BoardSummaryColumnView {
-  id: string;
-  name: string;
-  watchingAgent: Pick<AgentRunAgent, "id" | "name" | "summary"> | null;
-  frameworkOwned: boolean;
-  taskCount: number;
-}
-
-export interface BoardSummaryView {
-  id: string;
-  name: string;
-  columns: BoardSummaryColumnView[];
-}
-
-export interface Actor {
-  kind: "user" | "agent";
-  id: string;
-}
-
-export interface TaskActivityView {
-  id: string;
-  type:
-    | "task.created"
-    | "task.moved"
-    | "activation.created"
-    | "attempt.started"
-    | "attempt.completed";
-  actor: Actor | { kind: "framework"; id: "coordination" };
-  occurredAt: string;
-  details: Record<string, string>;
-}
-
-export interface ActivationReasonView {
-  type: "column-entry";
-  sourceEventId: string;
-}
-
-export interface AttemptView {
-  id: string;
-  status: "running" | "completed" | "failed";
-  workspacePath: string;
-  startedAt: string;
-  completedAt: string | null;
-  outcome: AgentRunOutcome | null;
-  threadId: string | null;
-}
-
-export interface ActivationView {
-  id: string;
-  targetAgentId: string;
-  status: "queued" | "running" | "completed" | "failed";
-  reason: ActivationReasonView;
-  attempts: AttemptView[];
-}
-
-export interface AgentRunAgent {
-  id: string;
-  name: string;
-  role: string;
-  summary: string;
-  instructions: string;
-}
-
-export interface TaskWorkspaceView {
-  path: string;
-  startingRef: string;
-  commit: string;
-}
-
-export interface AgentRunRequest {
-  activationId: string;
-  agent: AgentRunAgent;
-  process: {
-    name: string;
-    guidance: string;
-    definitionVersion: string;
-  };
-  board: ProcessBoardView;
-  collaborators: Array<Pick<AgentRunAgent, "id" | "name" | "role" | "summary">>;
-  reason: ActivationReasonView;
-  sourceEvent: TaskActivityView;
-  task: TaskView;
-  workspace: TaskWorkspaceView;
-  attempt: AttemptContextView;
-}
-
-export interface AgentRunOutcome {
-  status: "completed" | "failed";
-  summary: string;
-  threadId?: string;
-}
-
-export interface AttemptContextView {
-  number: number;
-  precedingOutcome: AgentRunOutcome | null;
-  thread: "fresh";
-  continuationMessage: string | null;
-}
-
-export interface TaskCommentView {
-  id: string;
-  body: string;
-  actor: Actor;
-  occurredAt: string;
-}
-
-export interface TaskRelationshipView {
-  id: string;
-  type: "parent-child" | "dependency";
-  sourceTaskId: string;
-  targetTaskId: string;
-}
-
-export interface TaskOverviewView {
-  id: string;
-  title: string;
-  boardId: string;
-  column: { id: string; name: string };
-  revision: number;
-  blocking: { blocked: boolean; blockerTaskIds: string[] };
-  relationships: TaskRelationshipView[];
-  run: {
-    status: "idle" | "queued" | "running" | "failed";
-    activeAgentId: string | null;
-    queuedActivationCount: number;
-    failedActivationCount: number;
-  };
-}
-
-export interface TaskOverviewsQuery {
-  boardId: string;
-  columnIds: string[];
-  pageSize?: number;
-  cursor?: string;
-}
-
-export interface TaskInspectionView {
-  id: string;
-  title: string;
-  description: string;
-  boardId: string;
-  column: { id: string; name: string };
-  revision: number;
-  comments: TaskCommentView[];
-  relationships: TaskRelationshipView[];
-  blocking: TaskOverviewView["blocking"];
-  run: TaskOverviewView["run"];
-  unresolvedAttention: TaskAttentionView[];
-  onDemand: { activity: true; attachments: true };
-}
-
-export interface TaskAttentionView {
-  id: string;
-  type: "user-mention" | "failed-run";
-}
-
-export interface TaskAttachmentView {
-  id: string;
-  fileName: string;
-  mediaType: string;
-  sizeBytes: number;
-}
-
-export interface CollaboratorView {
-  id: string;
-  name: string;
-  summary: string;
-}
-
-interface ProcessRunContext {
-  name: string;
-  guidance: string;
-  definitionVersion: string;
-  boards: ProcessBoardView[];
-  collaborators: Array<Pick<AgentRunAgent, "id" | "name" | "role" | "summary">>;
-}
-
-export interface AgentRuntime {
-  run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome>;
-}
-
-export interface AgentRunLifecycle {
-  started(threadId?: string): void;
-}
-
-export interface TaskView {
-  id: string;
-  title: string;
-  description: string;
-  boardId: string;
-  columnId: string;
-  revision: number;
-  comments: TaskCommentView[];
-  relationships: TaskRelationshipView[];
-  activity: TaskActivityView[];
-  activations: ActivationView[];
-}
-
-export interface BoardColumnView extends ProcessColumnView {
-  tasks: TaskView[];
-}
-
-export interface BoardView extends Omit<ProcessBoardView, "columns"> {
-  columns: BoardColumnView[];
-}
-
-export interface PausedStartup {
-  mode: "paused";
-  processName: string;
-  processDefinitionVersion: string;
-  automation: {
-    state: "paused";
-    attemptsMayStart: false;
-  };
-  boards: ProcessBoardView[];
-}
-
-export interface ConfigurationErrorStartup {
-  mode: "configuration-error";
-  diagnostics: ProcessDiagnostic[];
-  automation: {
-    state: "blocked";
-    attemptsMayStart: false;
-  };
-}
-
-export type StartupView = PausedStartup | ConfigurationErrorStartup;
-
-export type ProcessValidationResult =
-  | { valid: true; processDefinitionVersion: string }
-  | { valid: false; diagnostics: ProcessDiagnostic[] };
-
-export type AutomationView =
-  | { state: "paused"; attemptsMayStart: false }
-  | { state: "running"; attemptsMayStart: true }
-  | { state: "blocked"; attemptsMayStart: false };
-
-export type ResumeAutomationResult =
-  | { accepted: true; automation: Extract<AutomationView, { state: "running" }> }
-  | {
-      accepted: false;
-      reason: "configuration-error";
-      diagnostics: ProcessDiagnostic[];
-    }
-  | { accepted: false; reason: "runtime-unavailable" }
-  | { accepted: false; reason: "runtime-start-failed"; diagnostic: string };
-
-export type BoardsQueryResult =
-  | { available: true; boards: BoardView[] }
-  | { available: false; diagnostics: ProcessDiagnostic[] };
-
-export type BoardSummariesQueryResult =
-  | { available: true; boards: BoardSummaryView[] }
-  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
-
-export type TaskQueryResult =
-  | { available: true; task: TaskView; board: BoardView }
-  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { available: false; reason: "not-found" };
-
-export type TaskOverviewsQueryResult =
-  | { available: true; tasks: TaskOverviewView[]; nextCursor: string | null }
-  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | {
-      available: false;
-      reason:
-        | "board-not-found"
-        | "columns-required"
-        | "duplicate-column"
-        | "invalid-page-size"
-        | "invalid-cursor";
-    }
-  | { available: false; reason: "column-not-found"; columnId: string };
-
-export type TaskInspectionQueryResult =
-  | { available: true; task: TaskInspectionView }
-  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { available: false; reason: "not-found" };
-
-export type TaskActivityQueryResult =
-  | { available: true; activity: TaskActivityView[] }
-  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { available: false; reason: "not-found" };
-
-export type TaskAttachmentsQueryResult =
-  | { available: true; attachments: TaskAttachmentView[] }
-  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { available: false; reason: "not-found" };
-
-export type CollaboratorsQueryResult =
-  | { available: true; collaborators: CollaboratorView[] }
-  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
-
-export interface CreateTaskCommand {
-  boardId: string;
-  columnId: string;
-  title: string;
-  description: string;
-  actor: Actor;
-  idempotencyKey: string;
-}
-
-export interface MoveTaskCommand {
-  taskId: string;
-  destinationColumnId: string;
-  expectedRevision: number;
-  actor: Actor;
-  idempotencyKey: string;
-}
-
-export interface AddTaskCommentCommand {
-  taskId: string;
-  body: string;
-  actor: Actor;
-  idempotencyKey: string;
-}
-
-export type BoardMutationResult =
-  | { accepted: true; task: TaskView }
-  | {
-      accepted: false;
-      reason: "configuration-error";
-      diagnostics: ProcessDiagnostic[];
-    }
-  | { accepted: false; reason: "not-found" | "invalid-destination" }
-  | { accepted: false; reason: "revision-conflict"; currentTask: TaskView };
-
-export type AddTaskCommentResult =
-  | { accepted: true; task: TaskView; comment: TaskCommentView }
-  | {
-      accepted: false;
-      reason: "configuration-error";
-      diagnostics: ProcessDiagnostic[];
-    }
-  | { accepted: false; reason: "not-found" | "empty-comment" };
+export * from "./coordination-contract.ts";
 
 export class CoordinationApplication {
   readonly #store: RelationalCoordinationStore;
   readonly #startup: StartupView;
-  readonly #runtimeDispatch:
-    | { agentRuntime: AgentRuntime; workspaceManager: GitTaskWorkspaceManager }
-    | undefined;
-  readonly #startingRef: string | undefined;
-  readonly #processContext: ProcessRunContext | undefined;
-  #automation: AutomationView;
-  #automationWork: Promise<void> = Promise.resolve();
-  #automationPumpRunning = false;
+  readonly #automation: AutomationCoordinator;
+  readonly #discovery: TaskDiscovery;
 
   private constructor(
     store: RelationalCoordinationStore,
     startup: StartupView,
-    runtimeDispatch?: {
-      agentRuntime: AgentRuntime;
-      workspaceManager: GitTaskWorkspaceManager;
-    },
-    startingRef?: string,
-    processContext?: ProcessRunContext,
+    automation: AutomationCoordinator,
+    discovery: TaskDiscovery,
   ) {
     this.#store = store;
     this.#startup = startup;
-    this.#automation = startup.automation;
-    this.#runtimeDispatch = runtimeDispatch;
-    this.#startingRef = startingRef;
-    this.#processContext = processContext;
+    this.#automation = automation;
+    this.#discovery = discovery;
   }
 
   static async validateProcessDefinition(path: string): Promise<ProcessValidationResult> {
@@ -415,51 +55,58 @@ export class CoordinationApplication {
     const validation = await loadProcessDefinition(options.processDefinitionPath);
     const store = RelationalCoordinationStore.open(options.databasePath);
     if (!validation.valid) {
+      const startup: StartupView = {
+        mode: "configuration-error",
+        diagnostics: validation.diagnostics,
+        automation: { state: "blocked", attemptsMayStart: false },
+      };
       return new CoordinationApplication(
         store,
-        {
-          mode: "configuration-error",
-          diagnostics: validation.diagnostics,
-          automation: { state: "blocked", attemptsMayStart: false },
-        },
+        startup,
+        new AutomationCoordinator({ store, startup }),
+        new TaskDiscovery(store, startup),
       );
     }
 
     const { definition, instructionContents, version } = validation.loaded;
     store.applyDefinition(definition, instructionContents, version);
-    const runtimeDispatch =
-      options.runtimeDispatch === undefined
-        ? undefined
-        : {
-            agentRuntime: options.runtimeDispatch.agentRuntime,
-            workspaceManager: new GitTaskWorkspaceManager(
-              options.runtimeDispatch.projectRepositoryPath,
-              options.runtimeDispatch.taskWorkspaceRoot,
-            ),
-          };
+    const boards = store.readBoards();
+    const startup: StartupView = {
+      mode: "paused",
+      processName: definition.name,
+      processDefinitionVersion: version,
+      automation: { state: "paused", attemptsMayStart: false },
+      boards,
+    };
+    const collaborators = definition.agents.map(({ id, name, summary }) => ({
+      id,
+      name,
+      summary,
+    }));
     return new CoordinationApplication(
       store,
-      {
-        mode: "paused",
-        processName: definition.name,
-        processDefinitionVersion: version,
-        automation: { state: "paused", attemptsMayStart: false },
-        boards: store.readBoards(),
-      },
-      runtimeDispatch,
-      definition.defaultTaskWorkspaceStartingRef,
-      {
-        name: definition.name,
-        guidance: definition.coordinationGuidance,
-        definitionVersion: version,
-        boards: store.readBoards(),
-        collaborators: definition.agents.map((agent) => ({
-          id: agent.id,
-          name: agent.name,
-          role: agent.role,
-          summary: agent.summary,
-        })),
-      },
+      startup,
+      new AutomationCoordinator({
+        store,
+        startup,
+        ...(options.runtimeDispatch === undefined
+          ? {}
+          : { runtimeDispatch: options.runtimeDispatch }),
+        startingRef: definition.defaultTaskWorkspaceStartingRef,
+        processContext: {
+          name: definition.name,
+          guidance: definition.coordinationGuidance,
+          definitionVersion: version,
+          boards,
+          collaborators: definition.agents.map(({ id, name, role, summary }) => ({
+            id,
+            name,
+            role,
+            summary,
+          })),
+        },
+      }),
+      new TaskDiscovery(store, startup, collaborators),
     );
   }
 
@@ -468,51 +115,15 @@ export class CoordinationApplication {
   }
 
   queryAutomation(): AutomationView {
-    return this.#automation;
+    return this.#automation.query();
   }
 
   async resumeAutomation(): Promise<ResumeAutomationResult> {
-    if (this.#startup.mode === "configuration-error") {
-      return {
-        accepted: false,
-        reason: "configuration-error",
-        diagnostics: this.#startup.diagnostics,
-      };
-    }
-    if (this.#runtimeDispatch === undefined && this.#store.hasWatchedColumns()) {
-      return { accepted: false, reason: "runtime-unavailable" };
-    }
-    this.#store.resumeAutomation();
-    this.#automation = { state: "running", attemptsMayStart: true };
-    if (this.#runtimeDispatch !== undefined) {
-      let markFirstDispatchStarted: (() => void) | undefined;
-      const firstDispatchStarted = new Promise<void>((resolve) => {
-        markFirstDispatchStarted = resolve;
-      });
-      this.#automationPumpRunning = true;
-      this.#automationWork = this.runQueuedActivations(() => markFirstDispatchStarted?.()).finally(
-        () => {
-          this.#automationPumpRunning = false;
-        },
-      );
-      try {
-        await Promise.race([firstDispatchStarted, this.#automationWork]);
-      } catch (error) {
-        this.#store.pauseAutomation();
-        this.#automation = { state: "paused", attemptsMayStart: false };
-        this.#automationWork = Promise.resolve();
-        return {
-          accepted: false,
-          reason: "runtime-start-failed",
-          diagnostic: error instanceof Error ? error.message : "Agent runtime dispatch failed",
-        };
-      }
-    }
-    return { accepted: true, automation: this.#automation };
+    return this.#automation.resume();
   }
 
   async waitForAutomationIdle(): Promise<void> {
-    await this.#automationWork;
+    await this.#automation.waitForIdle();
   }
 
   queryBoards(): BoardsQueryResult {
@@ -532,135 +143,27 @@ export class CoordinationApplication {
   }
 
   queryBoardSummaries(): BoardSummariesQueryResult {
-    if (this.#startup.mode === "configuration-error") {
-      return {
-        available: false,
-        reason: "configuration-error",
-        diagnostics: this.#startup.diagnostics,
-      };
-    }
-    return { available: true, boards: this.#store.readBoardSummaries() };
+    return this.#discovery.queryBoardSummaries();
   }
 
   queryTaskOverviews(query: TaskOverviewsQuery): TaskOverviewsQueryResult {
-    if (this.#startup.mode === "configuration-error") {
-      return {
-        available: false,
-        reason: "configuration-error",
-        diagnostics: this.#startup.diagnostics,
-      };
-    }
-    if (query.columnIds.length === 0) {
-      return { available: false, reason: "columns-required" };
-    }
-    if (new Set(query.columnIds).size !== query.columnIds.length) {
-      return { available: false, reason: "duplicate-column" };
-    }
-    const board = this.#store.readBoards().find((candidate) => candidate.id === query.boardId);
-    if (board === undefined) {
-      return { available: false, reason: "board-not-found" };
-    }
-    const missingColumnId = query.columnIds.find(
-      (columnId) => !board.columns.some((column) => column.id === columnId),
-    );
-    if (missingColumnId !== undefined) {
-      return { available: false, reason: "column-not-found", columnId: missingColumnId };
-    }
-    const pageSize = query.pageSize ?? 20;
-    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
-      return { available: false, reason: "invalid-page-size" };
-    }
-    const canonicalColumnIds = board.columns
-      .filter((column) => query.columnIds.includes(column.id))
-      .map((column) => column.id);
-    const cursor =
-      query.cursor === undefined
-        ? undefined
-        : decodeTaskOverviewCursor(query.cursor, query.boardId, canonicalColumnIds);
-    if (query.cursor !== undefined && cursor === undefined) {
-      return { available: false, reason: "invalid-cursor" };
-    }
-    const records = this.#store
-      .readTaskOverviewRecords(query.boardId, canonicalColumnIds)
-      .filter((record) => cursor === undefined || record.sequence > cursor.taskSequence);
-    const page = records.slice(0, pageSize);
-    const lastRecord = page.at(-1);
-    return {
-      available: true,
-      tasks: page.map((record) => record.task),
-      nextCursor:
-        records.length > pageSize && lastRecord !== undefined
-          ? encodeTaskOverviewCursor({
-              boardId: query.boardId,
-              columnIds: canonicalColumnIds,
-              taskSequence: lastRecord.sequence,
-            })
-          : null,
-    };
+    return this.#discovery.queryTaskOverviews(query);
   }
 
   queryTaskInspection(taskId: string): TaskInspectionQueryResult {
-    const loaded = this.readTaskForQuery(taskId);
-    if (!loaded.available) return loaded;
-    const { task } = loaded;
-    const board = this.#store.readBoards().find((candidate) => candidate.id === task.boardId);
-    const column = board?.columns.find((candidate) => candidate.id === task.columnId);
-    const overview = this.#store
-      .readTaskOverviewRecords(task.boardId, [task.columnId])
-      .map((record) => record.task)
-      .find((candidate) => candidate.id === task.id);
-    if (column === undefined || overview === undefined) {
-      return { available: false, reason: "not-found" };
-    }
-    return {
-      available: true,
-      task: {
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        boardId: task.boardId,
-        column: { id: column.id, name: column.name },
-        revision: task.revision,
-        comments: task.comments,
-        relationships: task.relationships,
-        blocking: overview.blocking,
-        run: overview.run,
-        unresolvedAttention: this.#store.readUnresolvedAttention(task.id),
-        onDemand: { activity: true, attachments: true },
-      },
-    };
+    return this.#discovery.queryTaskInspection(taskId);
   }
 
   queryTaskActivity(taskId: string): TaskActivityQueryResult {
-    const loaded = this.readTaskForQuery(taskId);
-    return loaded.available
-      ? { available: true, activity: loaded.task.activity }
-      : loaded;
+    return this.#discovery.queryTaskActivity(taskId);
   }
 
   queryTaskAttachments(taskId: string): TaskAttachmentsQueryResult {
-    const loaded = this.readTaskForQuery(taskId);
-    if (!loaded.available) return loaded;
-    return { available: true, attachments: this.#store.readTaskAttachments(taskId) };
+    return this.#discovery.queryTaskAttachments(taskId);
   }
 
   queryCollaborators(): CollaboratorsQueryResult {
-    if (this.#startup.mode === "configuration-error" || this.#processContext === undefined) {
-      return {
-        available: false,
-        reason: "configuration-error",
-        diagnostics:
-          this.#startup.mode === "configuration-error" ? this.#startup.diagnostics : [],
-      };
-    }
-    return {
-      available: true,
-      collaborators: this.#processContext.collaborators.map(({ id, name, summary }) => ({
-        id,
-        name,
-        summary,
-      })),
-    };
+    return this.#discovery.queryCollaborators();
   }
 
   queryTask(taskId: string): TaskQueryResult {
@@ -693,7 +196,7 @@ export class CoordinationApplication {
       result.accepted &&
       result.task.activations.some((activation) => activation.status === "queued")
     ) {
-      this.kickAutomation();
+      this.#automation.kick();
     }
     return result;
   }
@@ -705,7 +208,7 @@ export class CoordinationApplication {
       result.accepted &&
       result.task.activations.some((activation) => activation.status === "queued")
     ) {
-      this.kickAutomation();
+      this.#automation.kick();
     }
     return result;
   }
@@ -725,101 +228,6 @@ export class CoordinationApplication {
     this.#store.close();
   }
 
-  private async runQueuedActivations(onFirstDispatch: () => void): Promise<void> {
-    if (this.#runtimeDispatch === undefined) return;
-    let first = true;
-    while (this.#automation.state === "running") {
-      const runnable = this.#store.readNextRunnableActivation();
-      if (runnable === undefined) return;
-      const priorWorkspace = this.#store.readTaskWorkspace(runnable.task.id);
-      const workspace = await this.#runtimeDispatch.workspaceManager.provision(
-        runnable.task.id,
-        this.#startingRef ?? "",
-        priorWorkspace,
-      );
-      if (priorWorkspace === undefined) {
-        this.#store.saveTaskWorkspace(runnable.task.id, workspace);
-      }
-      const attempt = this.#store.startAttempt(runnable.activation.id, workspace.path);
-      const currentTask = this.#store.readTask(runnable.task.id);
-      if (currentTask === undefined) throw new Error("Runnable task disappeared before dispatch");
-      const process = this.#processContext;
-      if (process === undefined) throw new Error("Runnable activation has no process context");
-      const board = process.boards.find((candidate) => candidate.id === currentTask.boardId);
-      if (board === undefined) throw new Error("Runnable task has no applied board context");
-      let dispatchStarted = false;
-      const outcomePromise = this.#runtimeDispatch.agentRuntime.run({
-        activationId: runnable.activation.id,
-        agent: runnable.agent,
-        process: {
-          name: process.name,
-          guidance: process.guidance,
-          definitionVersion: process.definitionVersion,
-        },
-        board,
-        collaborators: process.collaborators,
-        reason: runnable.activation.reason,
-        sourceEvent: runnable.sourceEvent,
-        task: currentTask,
-        workspace,
-        attempt: {
-          number: attempt.number,
-          precedingOutcome: null,
-          thread: "fresh",
-          continuationMessage: null,
-        },
-      }, {
-        started: (threadId) => {
-          dispatchStarted = true;
-          if (threadId !== undefined) {
-            this.#store.recordAttemptThreadId(attempt.id, attempt.runStartActivityId, threadId);
-          }
-          if (first) {
-            first = false;
-            onFirstDispatch();
-          }
-        },
-      });
-      let outcome: AgentRunOutcome;
-      try {
-        outcome = await outcomePromise;
-      } catch (error) {
-        this.#store.completeAttempt(attempt.id, {
-          status: "failed",
-          summary: error instanceof Error ? error.message : "Agent runtime dispatch failed",
-        });
-        throw error;
-      }
-      if (!dispatchStarted) {
-        const failedOutcome: AgentRunOutcome =
-          outcome.status === "failed"
-            ? outcome
-            : {
-                status: "failed",
-                summary: "Agent runtime completed without reporting that dispatch started",
-              };
-        this.#store.completeAttempt(attempt.id, failedOutcome);
-        const error = new Error(failedOutcome.summary);
-        throw error;
-      }
-      this.#store.completeAttempt(attempt.id, outcome);
-    }
-  }
-
-  private kickAutomation(): void {
-    if (
-      this.#automation.state !== "running" ||
-      this.#runtimeDispatch === undefined ||
-      this.#automationPumpRunning
-    ) {
-      return;
-    }
-    this.#automationPumpRunning = true;
-    this.#automationWork = this.runQueuedActivations(() => {}).finally(() => {
-      this.#automationPumpRunning = false;
-    });
-  }
-
   private configurationErrorRejection(): BoardMutationResult | undefined {
     if (this.#startup.mode !== "configuration-error") return undefined;
     return {
@@ -827,65 +235,5 @@ export class CoordinationApplication {
       reason: "configuration-error",
       diagnostics: this.#startup.diagnostics,
     };
-  }
-
-  private readTaskForQuery(
-    taskId: string,
-  ):
-    | { available: true; task: TaskView }
-    | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-    | { available: false; reason: "not-found" } {
-    if (this.#startup.mode === "configuration-error") {
-      return {
-        available: false,
-        reason: "configuration-error",
-        diagnostics: this.#startup.diagnostics,
-      };
-    }
-    const task = this.#store.readTask(taskId);
-    return task === undefined
-      ? { available: false, reason: "not-found" }
-      : { available: true, task };
-  }
-}
-
-interface TaskOverviewCursor {
-  boardId: string;
-  columnIds: string[];
-  taskSequence: number;
-}
-
-function encodeTaskOverviewCursor(cursor: TaskOverviewCursor): string {
-  return Buffer.from(JSON.stringify({ version: 1, ...cursor }), "utf8").toString("base64url");
-}
-
-function decodeTaskOverviewCursor(
-  value: string,
-  boardId: string,
-  columnIds: string[],
-): TaskOverviewCursor | undefined {
-  try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as unknown;
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
-    const candidate = parsed as Record<string, unknown>;
-    if (
-      candidate.version !== 1 ||
-      candidate.boardId !== boardId ||
-      !Array.isArray(candidate.columnIds) ||
-      candidate.columnIds.some((columnId) => typeof columnId !== "string") ||
-      candidate.columnIds.length !== columnIds.length ||
-      candidate.columnIds.some((columnId, index) => columnId !== columnIds[index]) ||
-      !Number.isInteger(candidate.taskSequence) ||
-      (candidate.taskSequence as number) < 1
-    ) {
-      return undefined;
-    }
-    return {
-      boardId,
-      columnIds,
-      taskSequence: candidate.taskSequence as number,
-    };
-  } catch {
-    return undefined;
   }
 }

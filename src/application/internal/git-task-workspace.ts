@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import type { TaskWorkspaceView } from "../coordination-application.ts";
+import type { TaskWorkspaceView } from "../coordination-contract.ts";
 
 export class GitTaskWorkspaceManager {
   readonly projectRepositoryPath: string;
