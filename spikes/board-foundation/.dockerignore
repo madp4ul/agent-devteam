@@ -1,0 +1,4 @@
+.spike-data
+__pycache__
+*.pyc
+tests

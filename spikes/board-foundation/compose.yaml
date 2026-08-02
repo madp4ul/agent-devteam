@@ -1,0 +1,42 @@
+name: board-foundation-spike
+
+services:
+  coordination:
+    build:
+      context: .
+    ports:
+      - "8088:8080"
+    environment:
+      COORDINATION_DATABASE: /coordination/data/coordination.sqlite3
+      PROJECT_REPOSITORY_PATH: /coordination/mounts/project
+      TASK_WORKSPACES_PATH: /coordination/mounts/workspaces
+      CODEX_HOME_PATH: /coordination/mounts/codex
+      PROJECT_CONTAINER_NETWORK: coordination-net
+      PROJECT_CONTAINER_ENDPOINT: http://project-tool:8090
+    volumes:
+      - coordination-data:/coordination/data
+      - ${PROJECT_REPOSITORY_PATH:-../..}:/coordination/mounts/project:rw
+      - ${TASK_WORKSPACES_PATH:-./.spike-data/workspaces}:/coordination/mounts/workspaces:rw
+      - ${CODEX_HOME_PATH:-./.spike-data/codex}:/coordination/mounts/codex:ro
+    networks:
+      - coordination-net
+    depends_on:
+      project-tool:
+        condition: service_started
+
+  # A stand-in for a project's own service containers. The shared network is
+  # the supported path for coordinator-to-container access in this spike.
+  project-tool:
+    image: python:3.13.5-alpine3.22
+    command: ["python", "-m", "http.server", "8090"]
+    expose:
+      - "8090"
+    networks:
+      - coordination-net
+
+volumes:
+  coordination-data:
+
+networks:
+  coordination-net:
+    name: board-foundation-coordination-net

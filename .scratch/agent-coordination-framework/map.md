@@ -81,6 +81,11 @@ without choosing the implementation yet.
   too much and narrow coverage would mislead; use specification synthesis as
   the next consistency check and reserve prototypes for focused uncertainties.
 
+- [Establish the Board Foundation](./issues/14-establish-board-foundation.md)
+  — Select the product-owned custom board after the Kanboard spike failed the
+  authoritative transaction and actor-provenance gates; preserve the accessible
+  move path and add Pragmatic Drag and Drop at the same boundary later.
+
 ## Not yet specified
 
 ## Out of scope

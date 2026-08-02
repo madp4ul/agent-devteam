@@ -10,6 +10,23 @@ and permits no board mutation.
 
 **Status:** ready-for-agent
 
+## Production starting point
+
+Implement this ticket as the first production TypeScript vertical slice; do not
+extend the ticket-14 Python spike as the product. Preserve the spike's proven
+behavioral contracts while replacing its server, routes, templates, schema,
+placeholder authentication, and demo fixtures as described in the
+[ticket-15 handoff](../../../spikes/board-foundation/HANDOFF.md) and
+[ADR 0001](../../../docs/adr/0001-product-owned-board-and-authoritative-coordination-state.md).
+
+Place validation, semantic fingerprinting, startup mode, board construction,
+and mutation gating behind one deep application module at the logical
+command-and-query seam. The web UI and future MCP and Codex-runtime adapters
+must use that same interface. Its startup result is either Paused with a valid
+applied process or Configuration error with actionable diagnostics and no
+dispatch or board mutation. Keep accessible non-drag movement; Pragmatic Drag
+and Drop and production visual design remain deferred.
+
 - [ ] Schema-backed structured definitions describe boards, workflow columns,
   agents, roles, stable entity IDs, coordination guidance, and a default task
   workspace starting ref while referencing long-form agent instructions.
@@ -28,4 +45,3 @@ and permits no board mutation.
   author and validate a definition with ordinary editor tooling.
 - [ ] Application-boundary tests cover valid startup, invalid startup, stable
   identities, Completion-column invariants, and semantic version calculation.
-
