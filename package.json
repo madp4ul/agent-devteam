@@ -1,0 +1,25 @@
+{
+  "name": "agent-coordination-framework",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test --test-reporter=spec \"test/**/*.test.ts\"",
+    "test:application": "node --experimental-strip-types --test --test-reporter=spec test/application/coordination-application.test.ts",
+    "validate:example": "node --experimental-strip-types src/cli.ts validate examples/software-delivery/process.yaml",
+    "start": "node --experimental-strip-types src/cli.ts start"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.2"
+  }
+}

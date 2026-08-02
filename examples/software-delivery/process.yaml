@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=../../schemas/process-definition.schema.json
+schemaVersion: 1
+name: Software Delivery
+defaultTaskWorkspaceStartingRef: main
+coordinationGuidance: >-
+  Keep primary responsibility visible through board position. Record outcomes
+  on the task and use explicit handoffs; user approval is required before merge.
+agents:
+  - id: architecture-designer
+    name: Architecture Designer
+    role: Designs implementation boundaries before coding begins
+    summary: Produces an explicit architecture plan and answers design consultations.
+    instructions: ./agents/architecture-designer.md
+  - id: implementation-agent
+    name: Implementation Agent
+    role: Implements approved plans and requested revisions
+    summary: Builds scoped changes with tests and records the verified result.
+    instructions: ./agents/implementation-agent.md
+  - id: code-reviewer
+    name: Code Reviewer
+    role: Reviews implementation correctness and repository standards
+    summary: Independently reviews code and returns concrete findings or approval.
+    instructions: ./agents/code-reviewer.md
+  - id: architecture-verifier
+    name: Architecture Verifier
+    role: Verifies the result against the intended architecture
+    summary: Checks boundaries and future-change assumptions after code review.
+    instructions: ./agents/architecture-verifier.md
+  - id: merge-agent
+    name: Merge Agent
+    role: Integrates only user-approved work
+    summary: Verifies approval and integration before completing the task.
+    instructions: ./agents/merge-agent.md
+boards:
+  - id: delivery
+    name: Delivery
+    guidance: >-
+      Work moves through independent design, implementation, review,
+      architecture verification, explicit user approval, and merge.
+    columns:
+      - id: backlog
+        name: Backlog
+      - id: architecture-design
+        name: Architecture Design
+        watchingAgent: architecture-designer
+      - id: implementation
+        name: Implementation
+        watchingAgent: implementation-agent
+      - id: code-review
+        name: Code Review
+        watchingAgent: code-reviewer
+      - id: architecture-verification
+        name: Architecture Verification
+        watchingAgent: architecture-verifier
+      - id: awaiting-user-approval
+        name: Awaiting User Approval
+      - id: ready-to-merge
+        name: Ready to Merge
+        watchingAgent: merge-agent
