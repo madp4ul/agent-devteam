@@ -80,3 +80,7 @@ and return to the same board context.
 - ADR 0003 records React and Vite as the selected browser stack. Ticket 17 keeps
   the temporary server-rendered UI deliberately small; this ticket owns the
   migration so the product does not maintain two growing UI implementations.
+- Resolving this ticket opens ticket 29, the persistence-decomposition
+  maintenance gate. Complete that gate before beginning tickets 20–22 so their
+  new command, attention, relationship, and concurrency behavior does not
+  accumulate in the existing all-purpose coordination store.

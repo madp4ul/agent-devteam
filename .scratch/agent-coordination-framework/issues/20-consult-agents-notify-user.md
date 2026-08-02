@@ -5,7 +5,8 @@ mentions without transferring primary responsibility, while mentions of the
 user become durable, independently resolvable attention reasons with optional
 privacy-safe desktop notification delivery.
 
-**Blocked by:** 18 — Let Agents Discover Shared Work; 19 — Inspect and Control a Task
+**Blocked by:** 18 — Let Agents Discover Shared Work; 19 — Inspect and Control a Task;
+29 — Decompose Coordination Persistence by Behavior
 
 **Status:** ready-for-agent
 
@@ -30,4 +31,3 @@ privacy-safe desktop notification delivery.
   and reason type; selecting it highlights the reason without resolving it.
 - [ ] Controlled notification and browser tests cover delivery failure,
   suppression, privacy, navigation, grouping, and independent resolution.
-

@@ -4,7 +4,8 @@
 typed dependencies, inspect relationship state, and rely on automatic
 reactivation exactly when a task's final blocker becomes satisfied.
 
-**Blocked by:** 18 — Let Agents Discover Shared Work; 19 — Inspect and Control a Task
+**Blocked by:** 18 — Let Agents Discover Shared Work; 19 — Inspect and Control a Task;
+29 — Decompose Coordination Persistence by Behavior
 
 **Status:** ready-for-agent
 
@@ -25,4 +26,3 @@ reactivation exactly when a task's final blocker becomes satisfied.
   Completion column and does not require a process-specific completion stage.
 - [ ] Behavioral tests cover multiple blockers, child completion, dependency
   completion, task-specific starting refs, and unwatched-column behavior.
-
