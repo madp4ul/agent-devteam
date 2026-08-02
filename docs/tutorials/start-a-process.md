@@ -7,10 +7,12 @@ require users to install this development toolchain.
 
 ## 1. Install the TypeScript application dependencies
 
-From the repository root, use Node.js 24 or later:
+First complete the [development setup](../development-setup.md) to install and
+verify Node.js 24 LTS and pnpm 11.9.0. Then, from the repository root, install
+the locked dependencies:
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
 ## 2. Copy or inspect the example

@@ -5,13 +5,14 @@ local Agent Coordination Framework. It loads a version-controlled YAML process,
 validates it, constructs product-owned boards in SQLite, appends each board's
 framework-owned Completion column, and starts with automation paused.
 
-Development from source requires Node.js 24 or later and pnpm. The planned
-production distribution is a self-contained host-native application; users will
-not need the TypeScript development toolchain. See
+Development from source requires Node.js 24 or later and pnpm 11.9.0. Follow the
+[development setup guide](docs/development-setup.md) when preparing a machine.
+The planned production distribution is a self-contained host-native
+application; users will not need the TypeScript development toolchain. See
 [ADR 0002](docs/adr/0002-self-contained-host-native-distribution.md).
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm validate:example
 pnpm start -- --process examples/software-delivery/process.yaml
 ```
