@@ -172,6 +172,13 @@ visually coherent instead of wrapping into misleading rows.
 - The coordination framework extends Codex rather than reimplementing agent
   conversation, coding tools, shell and filesystem access, sandboxing,
   approvals, skills, plugins, or project-instruction discovery.
+- The initial server-rendered interface remains intentionally small through the
+  minimal Codex handoff. Starting with the interactive task-and-board slice, the
+  browser UI is a TypeScript React application built with Vite and served by the
+  existing localhost Node host. It translates through a narrow HTTP/JSON adapter
+  to the shared application command-and-query seam; it does not own coordination
+  rules or authoritative state. See
+  [ADR 0003](../../docs/adr/0003-adopt-react-and-vite-for-the-interactive-board-ui.md).
 - Kanboard is the default human-facing board foundation, isolated behind a
   framework-owned adapter and a narrow plugin. A focused integration spike must
   prove that it can support the final task-detail, attention, event-provenance,

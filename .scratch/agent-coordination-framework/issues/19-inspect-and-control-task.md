@@ -9,6 +9,13 @@ and return to the same board context.
 
 **Status:** ready-for-agent
 
+- [ ] The temporary server-rendered board is replaced by a TypeScript React
+  application built with Vite. The existing Node host serves its production
+  assets and a narrow HTTP/JSON adapter rather than adding a second application
+  server or a full-stack rendering framework.
+- [ ] React remains a UI adapter at the application command-and-query seam:
+  queries provide authoritative projections, commands preserve idempotency and
+  optimistic revisions, and client state does not duplicate coordination rules.
 - [ ] Board cards show task ID, outcome-oriented title, blocking, unresolved
   attention, queued or failed activations, and the active agent without showing
   ordinary idle state.
@@ -70,3 +77,6 @@ and return to the same board context.
   the workflow sequence. This slice replaces wrapping with one horizontally
   scrollable lane while retaining usable column widths and board-context
   restoration.
+- ADR 0003 records React and Vite as the selected browser stack. Ticket 17 keeps
+  the temporary server-rendered UI deliberately small; this ticket owns the
+  migration so the product does not maintain two growing UI implementations.
