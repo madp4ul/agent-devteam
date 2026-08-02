@@ -8,11 +8,16 @@ import type {
   Actor,
   AgentRunAgent,
   AgentRunOutcome,
+  BoardSummaryView,
   BoardMutationResult,
   CreateTaskCommand,
   MoveTaskCommand,
   ProcessBoardView,
+  TaskAttachmentView,
+  TaskAttentionView,
   TaskActivityView,
+  TaskOverviewView,
+  TaskRelationshipView,
   TaskWorkspaceView,
   TaskView,
 } from "../coordination-application.ts";
@@ -47,6 +52,11 @@ const ATTEMPTS_TABLE_SQL = `
     thread_id TEXT
   );
 `;
+
+export interface StoredTaskOverview {
+  sequence: number;
+  task: TaskOverviewView;
+}
 
 export class RelationalCoordinationStore {
   readonly #database: DatabaseSync;
@@ -97,6 +107,7 @@ export class RelationalCoordinationStore {
       );
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
+        sequence INTEGER NOT NULL UNIQUE,
         board_id TEXT NOT NULL,
         column_id TEXT NOT NULL,
         title TEXT NOT NULL,
@@ -147,6 +158,26 @@ export class RelationalCoordinationStore {
         actor_id TEXT NOT NULL,
         occurred_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS task_relationships (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL CHECK (type IN ('parent-child', 'dependency')),
+        source_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        target_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        CHECK (source_task_id <> target_task_id)
+      );
+      CREATE TABLE IF NOT EXISTS attention_reasons (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('user-mention', 'failed-run')),
+        resolved_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS task_attachments (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        file_name TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0)
+      );
       CREATE TABLE IF NOT EXISTS command_responses (
         command_type TEXT NOT NULL,
         idempotency_key TEXT NOT NULL,
@@ -154,6 +185,14 @@ export class RelationalCoordinationStore {
         PRIMARY KEY (command_type, idempotency_key)
       );
     `);
+    const taskColumns = database.prepare("PRAGMA table_info(tasks)").all() as Array<{
+      name: string;
+    }>;
+    if (!taskColumns.some((column) => column.name === "sequence")) {
+      database.exec("ALTER TABLE tasks ADD COLUMN sequence INTEGER");
+      database.exec("UPDATE tasks SET sequence = CAST(SUBSTR(id, 3) AS INTEGER)");
+      database.exec("CREATE UNIQUE INDEX tasks_sequence_unique ON tasks(sequence)");
+    }
     migrateFailedRunOutcomes(database);
     const attemptColumns = database.prepare("PRAGMA table_info(attempts)").all() as Array<{
       name: string;
@@ -307,6 +346,52 @@ export class RelationalCoordinationStore {
     }));
   }
 
+  readBoardSummaries(): BoardSummaryView[] {
+    const boardRows = this.#database
+      .prepare("SELECT id, name FROM boards WHERE applied = 1 ORDER BY position")
+      .all() as Array<{ id: string; name: string }>;
+    const selectColumns = this.#database.prepare(`
+      SELECT c.id, c.name, c.framework_owned,
+             a.id AS agent_id, a.name AS agent_name, a.summary AS agent_summary,
+             COUNT(t.id) AS task_count
+      FROM columns c
+      LEFT JOIN agents a ON a.id = c.watching_agent_id
+      LEFT JOIN tasks t ON t.board_id = c.board_id AND t.column_id = c.id
+      WHERE c.board_id = ? AND c.applied = 1
+      GROUP BY c.id, c.name, c.framework_owned, c.position,
+               a.id, a.name, a.summary
+      ORDER BY c.position
+    `);
+    return boardRows.map((board) => ({
+      id: board.id,
+      name: board.name,
+      columns: (
+        selectColumns.all(board.id) as Array<{
+          id: string;
+          name: string;
+          framework_owned: number;
+          agent_id: string | null;
+          agent_name: string | null;
+          agent_summary: string | null;
+          task_count: number;
+        }>
+      ).map((column) => ({
+        id: column.id,
+        name: column.name,
+        watchingAgent:
+          column.agent_id === null || column.agent_name === null || column.agent_summary === null
+            ? null
+            : {
+                id: column.agent_id,
+                name: column.agent_name,
+                summary: column.agent_summary,
+              },
+        frameworkOwned: column.framework_owned === 1,
+        taskCount: column.task_count,
+      })),
+    }));
+  }
+
   readTask(taskId: string): TaskView | undefined {
     const row = this.#database
       .prepare(
@@ -346,7 +431,7 @@ export class RelationalCoordinationStore {
       columnId: row.column_id,
       revision: row.revision,
       comments: this.readTaskComments(taskId),
-      relationships: [],
+      relationships: this.readTaskRelationships(taskId),
       activity: activity.map((event) => ({
         id: event.id,
         type: event.type,
@@ -369,6 +454,143 @@ export class RelationalCoordinationStore {
       const task = this.readTask(row.id);
       return task === undefined ? [] : [task];
     });
+  }
+
+  readTaskOverviewRecords(boardId: string, columnIds: string[]): StoredTaskOverview[] {
+    const placeholders = columnIds.map(() => "?").join(", ");
+    const rows = this.#database
+      .prepare(
+        `SELECT t.id, t.sequence, t.title, t.board_id, t.column_id, t.revision,
+                c.name AS column_name,
+                SUM(CASE WHEN a.status = 'queued' THEN 1 ELSE 0 END) AS queued_count,
+                SUM(CASE WHEN a.status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+                SUM(CASE WHEN a.status = 'running' THEN 1 ELSE 0 END) AS running_count,
+                MAX(CASE WHEN a.status = 'running' THEN a.target_agent_id END) AS active_agent_id
+         FROM tasks t
+         JOIN columns c ON c.board_id = t.board_id AND c.id = t.column_id
+         LEFT JOIN activations a ON a.task_id = t.id
+         WHERE t.board_id = ? AND t.column_id IN (${placeholders})
+         GROUP BY t.id, t.sequence, t.title, t.board_id, t.column_id, t.revision, c.name
+         ORDER BY t.sequence`,
+      )
+      .all(boardId, ...columnIds) as Array<{
+      id: string;
+      sequence: number;
+      title: string;
+      board_id: string;
+      column_id: string;
+      revision: number;
+      column_name: string;
+      queued_count: number;
+      failed_count: number;
+      running_count: number;
+      active_agent_id: string | null;
+    }>;
+    return rows.map((row) => {
+      const blockerTaskIds = this.readBlockingTaskIds(row.id);
+      return {
+        sequence: row.sequence,
+        task: {
+          id: row.id,
+          title: row.title,
+          boardId: row.board_id,
+          column: { id: row.column_id, name: row.column_name },
+          revision: row.revision,
+          blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
+          relationships: this.readTaskRelationships(row.id),
+          run: {
+            status:
+              row.running_count > 0
+                ? "running"
+                : row.failed_count > 0
+                  ? "failed"
+                  : row.queued_count > 0
+                    ? "queued"
+                    : "idle",
+            activeAgentId: row.active_agent_id,
+            queuedActivationCount: row.queued_count,
+            failedActivationCount: row.failed_count,
+          },
+        },
+      };
+    });
+  }
+
+  readUnresolvedAttention(taskId: string): TaskAttentionView[] {
+    return this.#database
+      .prepare(
+        `SELECT id, type
+         FROM attention_reasons
+         WHERE task_id = ? AND resolved_at IS NULL
+         ORDER BY rowid`,
+      )
+      .all(taskId)
+      .map((row) => {
+        const typed = row as { id: string; type: TaskAttentionView["type"] };
+        return { id: typed.id, type: typed.type };
+      });
+  }
+
+  readTaskAttachments(taskId: string): TaskAttachmentView[] {
+    return (
+      this.#database
+        .prepare(
+          `SELECT id, file_name, media_type, size_bytes
+           FROM task_attachments
+           WHERE task_id = ?
+           ORDER BY rowid`,
+        )
+        .all(taskId) as Array<{
+        id: string;
+        file_name: string;
+        media_type: string;
+        size_bytes: number;
+      }>
+    ).map((attachment) => ({
+      id: attachment.id,
+      fileName: attachment.file_name,
+      mediaType: attachment.media_type,
+      sizeBytes: attachment.size_bytes,
+    }));
+  }
+
+  private readTaskRelationships(taskId: string): TaskRelationshipView[] {
+    return (
+      this.#database
+        .prepare(
+          `SELECT id, type, source_task_id, target_task_id
+           FROM task_relationships
+           WHERE source_task_id = ? OR target_task_id = ?
+           ORDER BY rowid`,
+        )
+        .all(taskId, taskId) as Array<{
+        id: string;
+        type: TaskRelationshipView["type"];
+        source_task_id: string;
+        target_task_id: string;
+      }>
+    ).map((relationship) => ({
+      id: relationship.id,
+      type: relationship.type,
+      sourceTaskId: relationship.source_task_id,
+      targetTaskId: relationship.target_task_id,
+    }));
+  }
+
+  private readBlockingTaskIds(taskId: string): string[] {
+    return (
+      this.#database
+        .prepare(
+          `SELECT relationship.target_task_id
+           FROM task_relationships relationship
+           JOIN tasks blocker ON blocker.id = relationship.target_task_id
+           WHERE relationship.type = 'dependency'
+             AND relationship.source_task_id = ?
+             AND blocker.column_id <> 'completion'
+           ORDER BY relationship.rowid`,
+        )
+        .all(taskId) as Array<{ target_task_id: string }>
+    ).map((row) => row.target_task_id);
   }
 
   readNextRunnableActivation():
@@ -578,13 +800,15 @@ export class RelationalCoordinationStore {
       }
 
       const sequence = this.#database.prepare("INSERT INTO task_numbers DEFAULT VALUES").run();
-      const taskId = `T-${String(sequence.lastInsertRowid).padStart(4, "0")}`;
+      const taskSequence = Number(sequence.lastInsertRowid);
+      const taskId = `T-${String(taskSequence).padStart(4, "0")}`;
       this.#database
         .prepare(
-          "INSERT INTO tasks (id, board_id, column_id, title, description, revision) VALUES (?, ?, ?, ?, ?, 1)",
+          "INSERT INTO tasks (id, sequence, board_id, column_id, title, description, revision) VALUES (?, ?, ?, ?, ?, ?, 1)",
         )
         .run(
           taskId,
+          taskSequence,
           command.boardId,
           command.columnId,
           command.title,

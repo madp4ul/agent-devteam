@@ -111,13 +111,55 @@ async function handleAgentApi(
     sendJson(response, 401, { error: "invalid-agent-tool-scope" });
     return;
   }
+  if (method === "GET" && url.pathname === "/agent-api/boards/summary") {
+    sendAgentQuery(response, application.queryBoardSummaries());
+    return;
+  }
+  if (method === "POST" && url.pathname === "/agent-api/tasks/query") {
+    const body = await readJsonBody(request);
+    sendAgentQuery(
+      response,
+      application.queryTaskOverviews({
+        boardId: stringField(body, "boardId"),
+        columnIds: stringArrayField(body, "columnIds"),
+        ...(body.pageSize === undefined ? {} : { pageSize: numberField(body, "pageSize") }),
+        ...(body.cursor === undefined ? {} : { cursor: stringField(body, "cursor") }),
+      }),
+    );
+    return;
+  }
+  const taskActivityMatch = /^\/agent-api\/tasks\/([^/]+)\/activity$/.exec(url.pathname);
+  if (method === "GET" && taskActivityMatch?.[1] !== undefined) {
+    sendAgentQuery(
+      response,
+      application.queryTaskActivity(decodeURIComponent(taskActivityMatch[1])),
+    );
+    return;
+  }
+  const taskAttachmentsMatch = /^\/agent-api\/tasks\/([^/]+)\/attachments$/.exec(url.pathname);
+  if (method === "GET" && taskAttachmentsMatch?.[1] !== undefined) {
+    sendAgentQuery(
+      response,
+      application.queryTaskAttachments(decodeURIComponent(taskAttachmentsMatch[1])),
+    );
+    return;
+  }
+  const taskInspectionMatch = /^\/agent-api\/tasks\/([^/]+)$/.exec(url.pathname);
+  if (method === "GET" && taskInspectionMatch?.[1] !== undefined) {
+    sendAgentQuery(
+      response,
+      application.queryTaskInspection(decodeURIComponent(taskInspectionMatch[1])),
+    );
+    return;
+  }
+  if (method === "GET" && url.pathname === "/agent-api/collaborators") {
+    sendAgentQuery(response, application.queryCollaborators());
+    return;
+  }
   if (method === "GET" && url.pathname === "/agent-api/current-task") {
-    const result = application.queryTask(scope.taskId);
-    if (!result.available) {
-      sendJson(response, result.reason === "not-found" ? 404 : 409, result);
-      return;
-    }
-    sendJson(response, 200, result.task);
+    const result = application.queryTaskInspection(scope.taskId);
+    if (!result.available) sendAgentQuery(response, result);
+    else sendJson(response, 200, result.task);
     return;
   }
   if (method === "POST" && url.pathname === "/agent-api/current-task/comments") {
@@ -305,6 +347,39 @@ function numberField(body: Record<string, unknown>, name: string): number {
   const value = body[name];
   if (typeof value !== "number") throw new Error(`${name} must be a number`);
   return value;
+}
+
+function stringArrayField(body: Record<string, unknown>, name: string): string[] {
+  const value = body[name];
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+    throw new Error(`${name} must be an array of strings`);
+  }
+  return value;
+}
+
+function sendAgentQuery(
+  response: ServerResponse,
+  result:
+    | ReturnType<CoordinationApplication["queryBoardSummaries"]>
+    | ReturnType<CoordinationApplication["queryTaskOverviews"]>
+    | ReturnType<CoordinationApplication["queryTaskInspection"]>
+    | ReturnType<CoordinationApplication["queryTaskActivity"]>
+    | ReturnType<CoordinationApplication["queryTaskAttachments"]>
+    | ReturnType<CoordinationApplication["queryCollaborators"]>,
+): void {
+  if (result.available) {
+    sendJson(response, 200, result);
+    return;
+  }
+  const status =
+    result.reason === "configuration-error"
+      ? 409
+      : result.reason === "not-found" ||
+          result.reason === "board-not-found" ||
+          result.reason === "column-not-found"
+        ? 404
+        : 400;
+  sendJson(response, status, result);
 }
 
 function sendJson(response: ServerResponse, status: number, value: unknown): void {

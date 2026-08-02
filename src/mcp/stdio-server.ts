@@ -15,13 +15,78 @@ const token = requiredOptionOrEnvironment(
 
 const server = new McpServer(
   {
-    name: "agent-coordination-current-task",
+    name: "agent-coordination-project",
     version: "0.1.0",
   },
   {
     instructions:
-      "These tools are scoped to the activation's current task. Inspect current state before acting. Add comments and moves idempotently. A tool never accepts a different task ID.",
+      "Use summaries and explicit-column pages to discover only relevant work. Read tools can inspect shared project tasks. Mutations remain scoped to the activation's current task and must be idempotent.",
   },
+);
+
+server.registerTool(
+  "summarize_boards",
+  {
+    description:
+      "List boards with ordered columns, watching agents, and task counts without task payloads.",
+    inputSchema: {},
+  },
+  async () => callAgentApi("GET", "/agent-api/boards/summary"),
+);
+
+server.registerTool(
+  "list_tasks",
+  {
+    description:
+      "List a bounded page of compact task overviews from one or more explicit columns.",
+    inputSchema: {
+      boardId: z.string().min(1),
+      columnIds: z.array(z.string().min(1)).min(1),
+      pageSize: z.number().int().min(1).max(50).optional(),
+      cursor: z.string().min(1).optional(),
+    },
+  },
+  async (arguments_) => callAgentApi("POST", "/agent-api/tasks/query", arguments_),
+);
+
+server.registerTool(
+  "inspect_task",
+  {
+    description:
+      "Inspect a complete task description, comments, relationships, and current coordination state.",
+    inputSchema: { taskId: z.string().min(1) },
+  },
+  async ({ taskId }) =>
+    callAgentApi("GET", `/agent-api/tasks/${encodeURIComponent(taskId)}`),
+);
+
+server.registerTool(
+  "list_task_activity",
+  {
+    description: "Read a task's immutable framework activity on demand.",
+    inputSchema: { taskId: z.string().min(1) },
+  },
+  async ({ taskId }) =>
+    callAgentApi("GET", `/agent-api/tasks/${encodeURIComponent(taskId)}/activity`),
+);
+
+server.registerTool(
+  "list_task_attachments",
+  {
+    description: "Read a task's attachments on demand.",
+    inputSchema: { taskId: z.string().min(1) },
+  },
+  async ({ taskId }) =>
+    callAgentApi("GET", `/agent-api/tasks/${encodeURIComponent(taskId)}/attachments`),
+);
+
+server.registerTool(
+  "list_collaborators",
+  {
+    description: "List collaborator names and summaries without loading their instructions.",
+    inputSchema: {},
+  },
+  async () => callAgentApi("GET", "/agent-api/collaborators"),
 );
 
 server.registerTool(

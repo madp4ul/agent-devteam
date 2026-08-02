@@ -24,7 +24,9 @@ startup details.
 
 Every startup remains paused until the user explicitly resumes automation.
 Each distinct activation starts a fresh Codex thread with the user's existing
-sandbox and approval policy. The initial project-scoped MCP surface is limited
-to current-task inspection, authored comments, and movement. Retries and
-drag-and-drop remain deferred; task movement keeps the permanent accessible
-select-and-submit interaction.
+sandbox and approval policy. The project-scoped MCP surface provides summary-
+first board discovery, explicit-column paginated task overviews, full task and
+on-demand history inspection, and collaborator summaries. Authored comments
+and movement remain scoped to the activation's current task. Retries and drag-
+and-drop remain deferred; task movement keeps the permanent accessible select-
+and-submit interaction.

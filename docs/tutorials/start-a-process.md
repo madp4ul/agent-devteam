@@ -80,5 +80,7 @@ running. If the runtime is unavailable or a worktree cannot be provisioned,
 the page remains paused and displays an actionable error.
 
 Each activation starts a fresh Codex thread in its task worktree. The agent can
-inspect only its current task, add an idempotent authored comment, and move that
-task through the initial project-scoped MCP surface.
+orient through board summaries, page through explicitly selected columns,
+inspect shared tasks and collaborator summaries, and load task activity or
+attachments on demand. Idempotent comments and movement stay scoped to the
+activation's current task.

@@ -7,23 +7,34 @@ instructions into context.
 
 **Blocked by:** 17 — Complete a Minimal Codex Handoff
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A board summary returns ordered columns, watching agents, and task counts
+- [x] A board summary returns ordered columns, watching agents, and task counts
   without returning task payloads.
-- [ ] Task listing requires one or more explicit columns, returns a capped page
+- [x] Task listing requires one or more explicit columns, returns a capped page
   of Task overviews, and supplies a stable continuation cursor.
-- [ ] A Task overview exposes title, column, blocking state, relationship state,
+- [x] A Task overview exposes title, column, blocking state, relationship state,
   and run state without a separately authored summary.
-- [ ] There is no implicit all-column listing; the Completion column remains an
+- [x] There is no implicit all-column listing; the Completion column remains an
   ordinary explicit target.
-- [ ] Full task inspection returns the complete description, comments,
+- [x] Full task inspection returns the complete description, comments,
   relationships, current state, and unresolved attention while keeping activity
   and attachments available on demand.
-- [ ] Collaborator discovery returns agent names and summaries without exposing
+- [x] Collaborator discovery returns agent names and summaries without exposing
   every collaborator's full instructions.
-- [ ] MCP schemas, pagination, error behavior, and application-command mapping
+- [x] MCP schemas, pagination, error behavior, and application-command mapping
   have focused contract tests.
-- [ ] Behavioral tests demonstrate bounded discovery on a board large enough to
+- [x] Behavioral tests demonstrate bounded discovery on a board large enough to
   require pagination.
 
+## Answer
+
+Implemented summary-first board discovery, explicit-column paginated Task
+overviews, stable sequence-based continuation cursors, full shared-task
+inspection, on-demand activity and attachment queries, and collaborator
+discovery through the application boundary and project-scoped MCP adapter.
+Durable read projections cover relationships, blocking, unresolved attention,
+attachments, and run state while current-task mutations remain scoped and
+idempotent. Focused application and MCP contract tests cover bounded payloads,
+non-empty coordination state, Completion, schemas, pagination, and error
+mapping.
