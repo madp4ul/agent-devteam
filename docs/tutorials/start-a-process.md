@@ -1,7 +1,9 @@
 # Tutorial: author, validate, and start a process
 
-This tutorial starts from the supplied software-delivery example and ends with
-a visible, paused local board.
+This developer tutorial runs the TypeScript application from source. It starts
+from the supplied software-delivery example and ends with a visible, paused
+local board. The planned production distribution is self-contained and will not
+require users to install this development toolchain.
 
 ## 1. Install the TypeScript application dependencies
 

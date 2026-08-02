@@ -158,9 +158,11 @@ make the automation understandable and safe to operate locally.
 ### Product and deployment boundary
 
 - The first version is a local, single-user application for one Git project and
-  one shared process. A local Docker Compose deployment using one or more
-  containers is preferred over installing application runtimes directly on the
-  host.
+  one shared process. Its primary distribution is a self-contained host-native
+  program that serves the interface on localhost and does not require users to
+  install the TypeScript development toolchain. Docker may remain an optional
+  development or deployment adapter but does not determine application paths or
+  interfaces. See [ADR 0002](../../docs/adr/0002-self-contained-host-native-distribution.md).
 - The coordination framework extends Codex rather than reimplementing agent
   conversation, coding tools, shell and filesystem access, sandboxing,
   approvals, skills, plugins, or project-instruction discovery.

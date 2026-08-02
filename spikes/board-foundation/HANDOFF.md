@@ -1,5 +1,11 @@
 # Ticket 15 handoff
 
+Deployment note: [ADR 0002](../../docs/adr/0002-self-contained-host-native-distribution.md)
+supersedes this handoff's container-specific production assumption. Preserve
+application access to the repository, task workspaces, Codex authentication,
+and project containers, but provide that access through the self-contained
+host-native application rather than requiring a container boundary.
+
 Ticket 14 answered the board-foundation feasibility question. It did not create
 the production application. Ticket 15 should use this spike as executable
 evidence for the coordination contract and establish the real TypeScript
@@ -16,7 +22,7 @@ Preserve these decisions and observable behaviors:
 - stable process entity IDs, framework-owned Completion columns, retired boards,
   unmapped tasks, and user-only remapping;
 - linkable task details and accessible non-drag movement;
-- container access to the project repository, task workspaces, Codex
+- application access to the project repository, task workspaces, Codex
   authentication, and project containers; and
 - the behavioral scenarios captured by the spike's integration tests.
 
