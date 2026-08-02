@@ -340,7 +340,7 @@ boards:
     state: "paused",
     attemptsMayStart: false,
   });
-  assert.deepEqual(firstApplication.resumeAutomation(), {
+  assert.deepEqual(await firstApplication.resumeAutomation(), {
     accepted: true,
     automation: { state: "running", attemptsMayStart: true },
   });
@@ -449,6 +449,10 @@ boards:
     [
       { type: "task.created", actor: { kind: "user", id: "paul" } },
       { type: "task.moved", actor: { kind: "user", id: "paul" } },
+      {
+        type: "activation.created",
+        actor: { kind: "framework", id: "coordination" },
+      },
     ],
   );
 });
@@ -517,7 +521,7 @@ boards:
   });
   assert.equal(rejectedCreate.accepted, false);
   if (!rejectedCreate.accepted) assert.equal(rejectedCreate.reason, "configuration-error");
-  assert.equal(invalidApplication.resumeAutomation().accepted, false);
+  assert.equal((await invalidApplication.resumeAutomation()).accepted, false);
   invalidApplication.close();
 
   await writeFile(definitionPath, validDefinition);

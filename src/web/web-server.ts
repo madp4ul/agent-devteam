@@ -54,7 +54,7 @@ async function handleRequest(
     return;
   }
   if (method === "POST" && url.pathname === "/automation/resume") {
-    const result = application.resumeAutomation();
+    const result = await application.resumeAutomation();
     sendHtml(response, result.accepted ? 200 : 409, renderBoardPage(application));
     return;
   }

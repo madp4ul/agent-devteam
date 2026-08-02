@@ -1,9 +1,17 @@
 import { RelationalCoordinationStore } from "./internal/coordination-store.ts";
+import { GitTaskWorkspaceManager } from "./internal/git-task-workspace.ts";
 import { loadProcessDefinition } from "./internal/process-definition.ts";
 
 export interface StartApplicationOptions {
   processDefinitionPath: string;
   databasePath: string;
+  runtimeDispatch?: RuntimeDispatchOptions;
+}
+
+export interface RuntimeDispatchOptions {
+  projectRepositoryPath: string;
+  taskWorkspaceRoot: string;
+  agentRuntime: AgentRuntime;
 }
 
 export interface ProcessDiagnostic {
@@ -37,9 +45,69 @@ export interface Actor {
 
 export interface TaskActivityView {
   id: string;
-  type: "task.created" | "task.moved";
-  actor: Actor;
+  type:
+    | "task.created"
+    | "task.moved"
+    | "activation.created"
+    | "attempt.started"
+    | "attempt.completed";
+  actor: Actor | { kind: "framework"; id: "coordination" };
   occurredAt: string;
+  details: Record<string, string>;
+}
+
+export interface ActivationReasonView {
+  type: "column-entry";
+  sourceEventId: string;
+}
+
+export interface AttemptView {
+  id: string;
+  status: "running" | "completed";
+  workspacePath: string;
+  startedAt: string;
+  completedAt: string | null;
+  outcome: AgentRunOutcome | null;
+}
+
+export interface ActivationView {
+  id: string;
+  targetAgentId: string;
+  status: "queued" | "running" | "completed";
+  reason: ActivationReasonView;
+  attempts: AttemptView[];
+}
+
+export interface AgentRunAgent {
+  id: string;
+  name: string;
+  role: string;
+  summary: string;
+  instructions: string;
+}
+
+export interface TaskWorkspaceView {
+  path: string;
+  startingRef: string;
+  commit: string;
+}
+
+export interface AgentRunRequest {
+  activationId: string;
+  agent: AgentRunAgent;
+  reason: ActivationReasonView;
+  sourceEvent: TaskActivityView;
+  task: TaskView;
+  workspace: TaskWorkspaceView;
+}
+
+export interface AgentRunOutcome {
+  status: "completed";
+  summary: string;
+}
+
+export interface AgentRuntime {
+  run(request: AgentRunRequest): Promise<AgentRunOutcome>;
 }
 
 export interface TaskView {
@@ -50,6 +118,7 @@ export interface TaskView {
   columnId: string;
   revision: number;
   activity: TaskActivityView[];
+  activations: ActivationView[];
 }
 
 export interface BoardColumnView extends ProcessColumnView {
@@ -97,7 +166,8 @@ export type ResumeAutomationResult =
       accepted: false;
       reason: "configuration-error";
       diagnostics: ProcessDiagnostic[];
-    };
+    }
+  | { accepted: false; reason: "runtime-unavailable" };
 
 export type BoardsQueryResult =
   | { available: true; boards: BoardView[] }
@@ -138,12 +208,28 @@ export type BoardMutationResult =
 export class CoordinationApplication {
   readonly #store: RelationalCoordinationStore;
   readonly #startup: StartupView;
+  readonly #runtimeDispatch:
+    | { agentRuntime: AgentRuntime; workspaceManager: GitTaskWorkspaceManager }
+    | undefined;
+  readonly #startingRef: string | undefined;
   #automation: AutomationView;
+  #automationWork: Promise<void> = Promise.resolve();
+  #automationPumpRunning = false;
 
-  private constructor(store: RelationalCoordinationStore, startup: StartupView) {
+  private constructor(
+    store: RelationalCoordinationStore,
+    startup: StartupView,
+    runtimeDispatch?: {
+      agentRuntime: AgentRuntime;
+      workspaceManager: GitTaskWorkspaceManager;
+    },
+    startingRef?: string,
+  ) {
     this.#store = store;
     this.#startup = startup;
     this.#automation = startup.automation;
+    this.#runtimeDispatch = runtimeDispatch;
+    this.#startingRef = startingRef;
   }
 
   static async validateProcessDefinition(path: string): Promise<ProcessValidationResult> {
@@ -157,22 +243,40 @@ export class CoordinationApplication {
     const validation = await loadProcessDefinition(options.processDefinitionPath);
     const store = RelationalCoordinationStore.open(options.databasePath);
     if (!validation.valid) {
-      return new CoordinationApplication(store, {
-        mode: "configuration-error",
-        diagnostics: validation.diagnostics,
-        automation: { state: "blocked", attemptsMayStart: false },
-      });
+      return new CoordinationApplication(
+        store,
+        {
+          mode: "configuration-error",
+          diagnostics: validation.diagnostics,
+          automation: { state: "blocked", attemptsMayStart: false },
+        },
+      );
     }
 
     const { definition, instructionContents, version } = validation.loaded;
     store.applyDefinition(definition, instructionContents, version);
-    return new CoordinationApplication(store, {
-      mode: "paused",
-      processName: definition.name,
-      processDefinitionVersion: version,
-      automation: { state: "paused", attemptsMayStart: false },
-      boards: store.readBoards(),
-    });
+    const runtimeDispatch =
+      options.runtimeDispatch === undefined
+        ? undefined
+        : {
+            agentRuntime: options.runtimeDispatch.agentRuntime,
+            workspaceManager: new GitTaskWorkspaceManager(
+              options.runtimeDispatch.projectRepositoryPath,
+              options.runtimeDispatch.taskWorkspaceRoot,
+            ),
+          };
+    return new CoordinationApplication(
+      store,
+      {
+        mode: "paused",
+        processName: definition.name,
+        processDefinitionVersion: version,
+        automation: { state: "paused", attemptsMayStart: false },
+        boards: store.readBoards(),
+      },
+      runtimeDispatch,
+      definition.defaultTaskWorkspaceStartingRef,
+    );
   }
 
   queryStartup(): StartupView {
@@ -183,7 +287,7 @@ export class CoordinationApplication {
     return this.#automation;
   }
 
-  resumeAutomation(): ResumeAutomationResult {
+  async resumeAutomation(): Promise<ResumeAutomationResult> {
     if (this.#startup.mode === "configuration-error") {
       return {
         accepted: false,
@@ -191,9 +295,29 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
+    if (this.#runtimeDispatch === undefined && this.#store.hasWatchedColumns()) {
+      return { accepted: false, reason: "runtime-unavailable" };
+    }
     this.#store.resumeAutomation();
     this.#automation = { state: "running", attemptsMayStart: true };
+    if (this.#runtimeDispatch !== undefined) {
+      let markFirstDispatchStarted: (() => void) | undefined;
+      const firstDispatchStarted = new Promise<void>((resolve) => {
+        markFirstDispatchStarted = resolve;
+      });
+      this.#automationPumpRunning = true;
+      this.#automationWork = this.runQueuedActivations(() => markFirstDispatchStarted?.()).finally(
+        () => {
+          this.#automationPumpRunning = false;
+        },
+      );
+      await Promise.race([firstDispatchStarted, this.#automationWork]);
+    }
     return { accepted: true, automation: this.#automation };
+  }
+
+  async waitForAutomationIdle(): Promise<void> {
+    await this.#automationWork;
   }
 
   queryBoards(): BoardsQueryResult {
@@ -237,16 +361,79 @@ export class CoordinationApplication {
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
     const gated = this.configurationErrorRejection();
-    return gated ?? this.#store.createTask(command);
+    const result = gated ?? this.#store.createTask(command);
+    if (
+      result.accepted &&
+      result.task.activations.some((activation) => activation.status === "queued")
+    ) {
+      this.kickAutomation();
+    }
+    return result;
   }
 
   moveTask(command: MoveTaskCommand): BoardMutationResult {
     const gated = this.configurationErrorRejection();
-    return gated ?? this.#store.moveTask(command);
+    const result = gated ?? this.#store.moveTask(command);
+    if (
+      result.accepted &&
+      result.task.activations.some((activation) => activation.status === "queued")
+    ) {
+      this.kickAutomation();
+    }
+    return result;
   }
 
   close(): void {
     this.#store.close();
+  }
+
+  private async runQueuedActivations(onFirstDispatch: () => void): Promise<void> {
+    if (this.#runtimeDispatch === undefined) return;
+    let first = true;
+    while (this.#automation.state === "running") {
+      const runnable = this.#store.readNextRunnableActivation();
+      if (runnable === undefined) return;
+      const priorWorkspace = this.#store.readTaskWorkspace(runnable.task.id);
+      const workspace = await this.#runtimeDispatch.workspaceManager.provision(
+        runnable.task.id,
+        this.#startingRef ?? "",
+        priorWorkspace,
+      );
+      if (priorWorkspace === undefined) {
+        this.#store.saveTaskWorkspace(runnable.task.id, workspace);
+      }
+      const attemptId = this.#store.startAttempt(runnable.activation.id, workspace.path);
+      const currentTask = this.#store.readTask(runnable.task.id);
+      if (currentTask === undefined) throw new Error("Runnable task disappeared before dispatch");
+      const outcomePromise = this.#runtimeDispatch.agentRuntime.run({
+        activationId: runnable.activation.id,
+        agent: runnable.agent,
+        reason: runnable.activation.reason,
+        sourceEvent: runnable.sourceEvent,
+        task: currentTask,
+        workspace,
+      });
+      if (first) {
+        first = false;
+        onFirstDispatch();
+      }
+      const outcome = await outcomePromise;
+      this.#store.completeAttempt(attemptId, outcome);
+    }
+  }
+
+  private kickAutomation(): void {
+    if (
+      this.#automation.state !== "running" ||
+      this.#runtimeDispatch === undefined ||
+      this.#automationPumpRunning
+    ) {
+      return;
+    }
+    this.#automationPumpRunning = true;
+    this.#automationWork = this.runQueuedActivations(() => {}).finally(() => {
+      this.#automationPumpRunning = false;
+    });
   }
 
   private configurationErrorRejection(): BoardMutationResult | undefined {

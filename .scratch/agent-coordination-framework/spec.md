@@ -152,6 +152,12 @@ make the automation understandable and safe to operate locally.
 103. As a user, I want the example task to complete a revision loop through implementation, code review, and architecture verification, so that the proof covers rework rather than only a happy path.
 104. As a user, I want the example Code Reviewer and Architecture Designer to complete a mention round-trip without moving the task, so that the proof demonstrates cross-stage consultation.
 105. As a user, I want automation to stop for explicit approval before merge, so that agents cannot integrate a change until I have reviewed the task history and repository result.
+106. As a user, I want every board column to offer task creation with that
+column already selected, so that I can start work exactly where it belongs
+without using an internal API or test fixture.
+107. As a user, I want board columns to remain in one left-to-right workflow
+lane with horizontal scrolling when needed, so that the process order stays
+visually coherent instead of wrapping into misleading rows.
 
 ## Implementation Decisions
 
@@ -218,6 +224,13 @@ make the automation understandable and safe to operate locally.
 
 - The Kanban board is the primary user overview. Cards show task ID, title, and
   exceptional coordination state. Column headers identify watching agents.
+- Columns preserve process order in one non-wrapping horizontal lane with
+  usable widths. Narrow viewports scroll the lane horizontally rather than
+  wrapping later workflow stages beneath earlier ones.
+- Every column exposes a consistently placed Create task action with that
+  column preselected. Creation collects the outcome-oriented title and complete
+  description and translates through the same application command boundary as
+  other user and agent operations.
 - A Needs attention area groups unresolved user mentions and agent-run failures
   by task. Unwatched columns, including human review stages, do not create
   attention.
