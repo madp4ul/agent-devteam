@@ -97,6 +97,7 @@ async function run(arguments_: string[]): Promise<void> {
     const application = await CoordinationApplication.start({
       processDefinitionPath: definitionPath,
       databasePath,
+      transcriptAccess: agentRuntime,
       runtimeDispatch: {
         projectRepositoryPath,
         taskWorkspaceRoot,

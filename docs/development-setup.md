@@ -51,6 +51,7 @@ Validate the example process, then start the development server:
 
 ```powershell
 pnpm validate:example
+pnpm build
 pnpm start -- --process examples/software-delivery/process.yaml --project .
 ```
 
@@ -61,6 +62,9 @@ Before changing code, it is useful to verify the checkout:
 ```powershell
 pnpm typecheck
 pnpm test
+pnpm build
+pnpm exec playwright install chromium
+pnpm test:browser
 ```
 
 The normal suite uses a controlled runtime and never calls a live model. To run

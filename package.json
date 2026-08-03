@@ -8,21 +8,31 @@
     "node": ">=24"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit",
+    "build": "vite build",
     "test": "node --experimental-strip-types --test --test-reporter=spec \"test/**/*.test.ts\"",
     "test:application": "node --experimental-strip-types --test --test-reporter=spec test/application/coordination-application.test.ts",
+    "test:browser": "playwright test",
     "validate:example": "node --experimental-strip-types src/cli.ts validate examples/software-delivery/process.yaml",
     "start": "node --experimental-strip-types src/cli.ts start"
   },
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^2.0.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/codex-sdk": "^0.146.0",
     "ajv": "^8.17.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "yaml": "^2.8.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^24.0.0",
-    "typescript": "^5.9.2"
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "typescript": "^5.9.2",
+    "vite": "^8.2.0"
   }
 }

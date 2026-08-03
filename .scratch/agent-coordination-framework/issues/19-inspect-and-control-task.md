@@ -7,58 +7,58 @@ and return to the same board context.
 
 **Blocked by:** 17 — Complete a Minimal Codex Handoff
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The temporary server-rendered board is replaced by a TypeScript React
+- [x] The temporary server-rendered board is replaced by a TypeScript React
   application built with Vite. The existing Node host serves its production
   assets and a narrow HTTP/JSON adapter rather than adding a second application
   server or a full-stack rendering framework.
-- [ ] React remains a UI adapter at the application command-and-query seam:
+- [x] React remains a UI adapter at the application command-and-query seam:
   queries provide authoritative projections, commands preserve idempotency and
   optimistic revisions, and client state does not duplicate coordination rules.
-- [ ] Board cards show task ID, outcome-oriented title, blocking, unresolved
+- [x] Board cards show task ID, outcome-oriented title, blocking, unresolved
   attention, queued or failed activations, and the active agent without showing
   ordinary idle state.
-- [ ] Every defined column, including Completion, provides a visible Create task
+- [x] Every defined column, including Completion, provides a visible Create task
   action positioned consistently with its task list. It opens creation with
   that column preselected while still accepting an outcome-oriented title and
   complete description; success shows the generated task ID and card in the
   chosen column without requiring an internal API or fixture.
-- [ ] Task creation translates through the shared idempotent application command
+- [x] Task creation translates through the shared idempotent application command
   boundary, reports validation or configuration errors in context, and cannot
   duplicate a task when a submission is retried.
-- [ ] Each column header identifies its watching agent, and selecting a card
+- [x] Each column header identifies its watching agent, and selecting a card
   opens a dedicated linkable full task page without an intermediate summary.
-- [ ] Returning from task details restores the previous board position and
+- [x] Returning from task details restores the previous board position and
   filters.
-- [ ] Task details expose description, column, relationships, run state,
+- [x] Task details expose description, column, relationships, run state,
   unresolved attention, and actions beside the information they affect.
-- [ ] Authored comments and immutable framework events appear in one
+- [x] Authored comments and immutable framework events appear in one
   chronological timeline while retaining their distinct record types.
-- [ ] Each attempt has a separate entry with timing, outcome, diagnostic, and
+- [x] Each attempt has a separate entry with timing, outcome, diagnostic, and
   expandable thread information when available.
-- [ ] A large read-only transcript overlay renders useful Codex messages, tool
+- [x] A large read-only transcript overlay renders useful Codex messages, tool
   activity, diagnostics, and truncated command output and reports unavailable
   transcripts honestly.
-- [ ] The move chooser lists every defined column in board order, marks current,
+- [x] The move chooser lists every defined column in board order, marks current,
   previous, and next, disables only the current column, and allows any other
   destination.
-- [ ] Board cards can be moved between columns with Atlassian Pragmatic Drag and
+- [x] Board cards can be moved between columns with Atlassian Pragmatic Drag and
   Drop as progressive enhancement. A drop invokes the same revision-checked,
   idempotent move command as the detail-page chooser, so activity and activation
   behavior cannot diverge between interaction styles.
-- [ ] Drag handles, drop targets, pending state, revision conflicts, rejected
+- [x] Drag handles, drop targets, pending state, revision conflicts, rejected
   moves, and successful placement are visually understandable; card links remain
   usable, and the labeled non-drag move chooser remains the permanent keyboard
   and assistive-technology path.
-- [ ] Board columns remain in process order on one non-wrapping horizontal lane.
+- [x] Board columns remain in process order on one non-wrapping horizontal lane.
   When the viewport cannot show every column at a usable width, the board uses a
   clear horizontal scrollbar instead of placing later workflow stages beneath
   earlier ones; keyboard focus and restored board position remain usable while
   horizontally scrolled.
-- [ ] Open in Codex appears only when documented navigation is supported; the
+- [x] Open in Codex appears only when documented navigation is supported; the
   thread ID remains copyable regardless.
-- [ ] Browser-level tests cover task creation, direct opening, contextual
+- [x] Browser-level tests cover task creation, direct opening, contextual
   actions, timeline rendering, pointer drag-and-drop, the non-drag move path,
   transcript access, conflict feedback, one-lane horizontal overflow at a
   narrow viewport, and board-context restoration.
@@ -84,3 +84,22 @@ and return to the same board context.
   maintenance gate. Complete that gate before beginning tickets 20–22 so their
   new command, attention, relationship, and concurrency behavior does not
   accumulate in the existing all-purpose coordination store.
+
+## Answer
+
+Replaced the temporary server-rendered board with a production-built React and
+Vite application served by the existing Node host through a narrow HTTP/JSON
+adapter. The board now supports per-column creation, direct task navigation,
+context restoration, independent coordination signals, accessible contextual
+movement, and Atlassian Pragmatic Drag and Drop on a non-wrapping horizontal
+lane. Task details provide editing, authoritative conflict recovery,
+relationships, automation state, a unified history, per-attempt evidence,
+copyable thread IDs, and on-demand runtime-owned transcript presentation.
+
+Application, adapter, runtime, and browser coverage preserve idempotency,
+optimistic revisions, atomic activation behavior, direct linkability, narrow
+viewport overflow, pointer and non-drag movement, and honest transcript
+unavailability. Type-checking, the production build, the full automated suite,
+the browser acceptance suite, visual browser inspection, `git diff --check`,
+and parallel Standards and Spec reviews all pass. Persistence decomposition
+remains intentionally deferred to ticket 29.

@@ -1,11 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { extname, isAbsolute, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   CoordinationApplication,
-  type BoardView,
-  type TaskQueryResult,
+  type TaskOverviewView,
 } from "../application/coordination-application.ts";
 import type { AgentToolScopeRegistry } from "../mcp/agent-tool-scope.ts";
 
@@ -13,6 +14,7 @@ export interface WebServerOptions {
   host: string;
   port: number;
   agentToolScopes?: AgentToolScopeRegistry;
+  assetDirectory?: string;
 }
 
 export interface RunningWebServer {
@@ -26,20 +28,24 @@ export async function startWebServer(
 ): Promise<RunningWebServer> {
   const server = createServer((request, response) => {
     void handleRequest(application, options, request, response).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : "Unexpected server error";
-      sendHtml(response, 500, page("Server error", `<h1>Server error</h1><p>${escapeHtml(message)}</p>`));
+      const diagnostic = error instanceof Error ? error.message : "Unexpected server error";
+      if ((request.url ?? "").startsWith("/api/") || (request.url ?? "").startsWith("/agent-api/")) {
+        sendJson(response, 400, { error: "invalid-request", diagnostic });
+      } else {
+        sendText(response, 500, diagnostic);
+      }
     });
   });
-  await new Promise<void>((resolve, reject) => {
+  await new Promise<void>((resolveListen, reject) => {
     server.once("error", reject);
-    server.listen(options.port, options.host, resolve);
+    server.listen(options.port, options.host, resolveListen);
   });
   const address = server.address() as AddressInfo;
   return {
     baseUrl: `http://${options.host}:${address.port}`,
     close: () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => (error === undefined ? resolve() : reject(error)));
+      new Promise<void>((resolveClose, reject) => {
+        server.close((error) => (error === undefined ? resolveClose() : reject(error)));
       }),
   };
 }
@@ -56,44 +62,206 @@ async function handleRequest(
     await handleAgentApi(application, options.agentToolScopes, request, response, method, url);
     return;
   }
-  if (method === "GET" && url.pathname === "/") {
-    sendHtml(response, 200, renderBoardPage(application));
+  if (url.pathname.startsWith("/api/")) {
+    await handleBrowserApi(application, request, response, method, url);
     return;
   }
-  if (method === "POST" && url.pathname === "/automation/resume") {
+  if (method !== "GET" && method !== "HEAD") {
+    sendJson(response, 405, { error: "method-not-allowed" });
+    return;
+  }
+  await serveBrowserAsset(options.assetDirectory ?? defaultAssetDirectory(), url.pathname, response, method);
+}
+
+async function handleBrowserApi(
+  application: CoordinationApplication,
+  request: IncomingMessage,
+  response: ServerResponse,
+  method: string,
+  url: URL,
+): Promise<void> {
+  if (method === "GET" && url.pathname === "/api/board") {
+    const startup = application.queryStartup();
+    const automation = application.queryAutomation();
+    if (startup.mode === "configuration-error") {
+      sendJson(response, 409, { startup, automation, boards: [] });
+      return;
+    }
+    const summaries = application.queryBoardSummaries();
+    if (!summaries.available) {
+      sendJson(response, 409, { startup, automation, boards: [] });
+      return;
+    }
+    const boards = summaries.boards.map((board) => ({
+      ...board,
+      columns: board.columns.map((column) => ({
+        ...column,
+        tasks: readAllColumnTaskOverviews(application, board.id, column.id),
+      })),
+    }));
+    sendJson(response, 200, { startup, automation, boards });
+    return;
+  }
+  if (method === "POST" && url.pathname === "/api/automation/resume") {
     const result = await application.resumeAutomation();
-    const feedback = result.accepted ? "Automation is running." : resumeRejection(result);
-    sendHtml(
-      response,
-      result.accepted ? 200 : 409,
-      renderBoardPage(application, feedback, result.accepted ? "status" : "alert"),
-    );
+    sendJson(response, result.accepted ? 200 : 409, result);
     return;
   }
-
-  const taskMatch = /^\/tasks\/([^/]+)$/.exec(url.pathname);
-  if (method === "GET" && taskMatch?.[1] !== undefined) {
-    renderTaskResponse(application, response, decodeURIComponent(taskMatch[1]));
-    return;
-  }
-  const moveMatch = /^\/tasks\/([^/]+)\/move$/.exec(url.pathname);
-  if (method === "POST" && moveMatch?.[1] !== undefined) {
-    const taskId = decodeURIComponent(moveMatch[1]);
-    const form = new URLSearchParams(await readBody(request));
-    const expectedRevision = Number(form.get("expectedRevision"));
-    const destinationColumnId = form.get("destinationColumnId") ?? "";
-    const result = application.moveTask({
-      taskId,
-      destinationColumnId,
-      expectedRevision,
+  if (method === "POST" && url.pathname === "/api/tasks") {
+    const body = await readJsonBody(request);
+    const result = application.createTask({
+      boardId: stringField(body, "boardId"),
+      columnId: stringField(body, "columnId"),
+      title: stringField(body, "title"),
+      description: stringField(body, "description"),
+      idempotencyKey: stringField(body, "idempotencyKey"),
       actor: { kind: "user", id: "local-user" },
-      idempotencyKey: form.get("idempotencyKey") ?? randomUUID(),
     });
-    renderTaskResponse(application, response, taskId, result.accepted ? 200 : 409);
+    sendMutation(response, result, 201);
     return;
   }
+  const transcriptMatch = /^\/api\/attempts\/([^/]+)\/transcript$/.exec(url.pathname);
+  if (method === "GET" && transcriptMatch?.[1] !== undefined) {
+    const result = await application.queryAttemptTranscript(decodeURIComponent(transcriptMatch[1]));
+    const status = result.available
+      ? 200
+      : result.reason === "not-found"
+        ? 404
+        : result.reason === "configuration-error"
+          ? 409
+          : 503;
+    sendJson(response, status, result);
+    return;
+  }
+  const taskMatch = /^\/api\/tasks\/([^/]+)$/.exec(url.pathname);
+  if (method === "GET" && taskMatch?.[1] !== undefined) {
+    const taskId = decodeURIComponent(taskMatch[1]);
+    const result = application.queryTask(taskId);
+    const inspection = application.queryTaskInspection(taskId);
+    if (result.available && inspection.available) {
+      sendJson(response, 200, { ...result, inspection: inspection.task });
+    } else {
+      const reason = !result.available ? result.reason : "not-found";
+      sendJson(response, reason === "not-found" ? 404 : 409, !result.available ? result : inspection);
+    }
+    return;
+  }
+  if (method === "PATCH" && taskMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.editTask({
+      taskId: decodeURIComponent(taskMatch[1]),
+      title: stringField(body, "title"),
+      description: stringField(body, "description"),
+      expectedRevision: numberField(body, "expectedRevision"),
+      idempotencyKey: stringField(body, "idempotencyKey"),
+      actor: { kind: "user", id: "local-user" },
+    });
+    sendMutation(response, result);
+    return;
+  }
+  const moveMatch = /^\/api\/tasks\/([^/]+)\/move$/.exec(url.pathname);
+  if (method === "POST" && moveMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.moveTask({
+      taskId: decodeURIComponent(moveMatch[1]),
+      destinationColumnId: stringField(body, "destinationColumnId"),
+      expectedRevision: numberField(body, "expectedRevision"),
+      idempotencyKey: stringField(body, "idempotencyKey"),
+      actor: { kind: "user", id: "local-user" },
+    });
+    sendMutation(response, result);
+    return;
+  }
+  sendJson(response, 404, { error: "unknown-browser-api" });
+}
 
-  sendHtml(response, 404, page("Not found", "<h1>Not found</h1>"));
+function readAllColumnTaskOverviews(
+  application: CoordinationApplication,
+  boardId: string,
+  columnId: string,
+): TaskOverviewView[] {
+  const tasks = [];
+  let cursor: string | undefined;
+  do {
+    const page = application.queryTaskOverviews({
+      boardId,
+      columnIds: [columnId],
+      pageSize: 50,
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    if (!page.available) throw new Error(`Could not project column ${columnId}`);
+    tasks.push(...page.tasks);
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor !== undefined);
+  return tasks;
+}
+
+function sendMutation(
+  response: ServerResponse,
+  result: ReturnType<CoordinationApplication["createTask"]>,
+  acceptedStatus = 200,
+): void {
+  if (result.accepted) {
+    sendJson(response, acceptedStatus, result);
+    return;
+  }
+  const status =
+    result.reason === "empty-title" ||
+    result.reason === "empty-description" ||
+    result.reason === "invalid-destination"
+      ? 400
+      : result.reason === "not-found"
+        ? 404
+        : 409;
+  sendJson(response, status, result);
+}
+
+async function serveBrowserAsset(
+  assetDirectory: string,
+  pathname: string,
+  response: ServerResponse,
+  method: string,
+): Promise<void> {
+  const requested = pathname.startsWith("/assets/")
+    ? resolve(assetDirectory, `.${pathname}`)
+    : resolve(assetDirectory, "index.html");
+  const fromRoot = relative(resolve(assetDirectory), requested);
+  if (fromRoot.startsWith("..") || isAbsolute(fromRoot)) {
+    sendText(response, 404, "Not found");
+    return;
+  }
+  try {
+    const body = await readFile(requested);
+    response.writeHead(200, {
+      "content-type": contentType(requested),
+      "content-length": body.byteLength,
+      ...(pathname.startsWith("/assets/")
+        ? { "cache-control": "public, max-age=31536000, immutable" }
+        : { "cache-control": "no-cache" }),
+    });
+    response.end(method === "HEAD" ? undefined : body);
+  } catch {
+    sendText(response, 404, "Browser application assets are unavailable. Run the production build.");
+  }
+}
+
+function defaultAssetDirectory(): string {
+  return fileURLToPath(new URL("../../dist/web/", import.meta.url));
+}
+
+function contentType(path: string): string {
+  switch (extname(path)) {
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".js":
+      return "text/javascript; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".svg":
+      return "image/svg+xml";
+    default:
+      return "application/octet-stream";
+  }
 }
 
 async function handleAgentApi(
@@ -117,39 +285,27 @@ async function handleAgentApi(
   }
   if (method === "POST" && url.pathname === "/agent-api/tasks/query") {
     const body = await readJsonBody(request);
-    sendAgentQuery(
-      response,
-      application.queryTaskOverviews({
-        boardId: stringField(body, "boardId"),
-        columnIds: stringArrayField(body, "columnIds"),
-        ...(body.pageSize === undefined ? {} : { pageSize: numberField(body, "pageSize") }),
-        ...(body.cursor === undefined ? {} : { cursor: stringField(body, "cursor") }),
-      }),
-    );
+    sendAgentQuery(response, application.queryTaskOverviews({
+      boardId: stringField(body, "boardId"),
+      columnIds: stringArrayField(body, "columnIds"),
+      ...(body.pageSize === undefined ? {} : { pageSize: numberField(body, "pageSize") }),
+      ...(body.cursor === undefined ? {} : { cursor: stringField(body, "cursor") }),
+    }));
     return;
   }
-  const taskActivityMatch = /^\/agent-api\/tasks\/([^/]+)\/activity$/.exec(url.pathname);
-  if (method === "GET" && taskActivityMatch?.[1] !== undefined) {
-    sendAgentQuery(
-      response,
-      application.queryTaskActivity(decodeURIComponent(taskActivityMatch[1])),
-    );
+  const activityMatch = /^\/agent-api\/tasks\/([^/]+)\/activity$/.exec(url.pathname);
+  if (method === "GET" && activityMatch?.[1] !== undefined) {
+    sendAgentQuery(response, application.queryTaskActivity(decodeURIComponent(activityMatch[1])));
     return;
   }
-  const taskAttachmentsMatch = /^\/agent-api\/tasks\/([^/]+)\/attachments$/.exec(url.pathname);
-  if (method === "GET" && taskAttachmentsMatch?.[1] !== undefined) {
-    sendAgentQuery(
-      response,
-      application.queryTaskAttachments(decodeURIComponent(taskAttachmentsMatch[1])),
-    );
+  const attachmentsMatch = /^\/agent-api\/tasks\/([^/]+)\/attachments$/.exec(url.pathname);
+  if (method === "GET" && attachmentsMatch?.[1] !== undefined) {
+    sendAgentQuery(response, application.queryTaskAttachments(decodeURIComponent(attachmentsMatch[1])));
     return;
   }
-  const taskInspectionMatch = /^\/agent-api\/tasks\/([^/]+)$/.exec(url.pathname);
-  if (method === "GET" && taskInspectionMatch?.[1] !== undefined) {
-    sendAgentQuery(
-      response,
-      application.queryTaskInspection(decodeURIComponent(taskInspectionMatch[1])),
-    );
+  const inspectionMatch = /^\/agent-api\/tasks\/([^/]+)$/.exec(url.pathname);
+  if (method === "GET" && inspectionMatch?.[1] !== undefined) {
+    sendAgentQuery(response, application.queryTaskInspection(decodeURIComponent(inspectionMatch[1])));
     return;
   }
   if (method === "GET" && url.pathname === "/agent-api/collaborators") {
@@ -188,135 +344,6 @@ async function handleAgentApi(
   sendJson(response, 404, { error: "unknown-agent-tool" });
 }
 
-function renderBoardPage(
-  application: CoordinationApplication,
-  feedback?: string,
-  feedbackRole: "status" | "alert" = "status",
-): string {
-  const startup = application.queryStartup();
-  if (startup.mode === "configuration-error") {
-    const diagnostics = startup.diagnostics
-      .map(
-        (diagnostic) => `<li>
-          <p><strong>${escapeHtml(diagnostic.file)}:${diagnostic.line}:${diagnostic.column}</strong></p>
-          <p>Invalid value: <code>${escapeHtml(formatValue(diagnostic.invalidValue))}</code></p>
-          <p>Rule: ${escapeHtml(diagnostic.rule)}</p>
-          <p>Consequence: ${escapeHtml(diagnostic.consequence)}</p>
-          ${diagnostic.correction === undefined ? "" : `<p>Correction: ${escapeHtml(diagnostic.correction)}</p>`}
-        </li>`,
-      )
-      .join("");
-    return page(
-      "Configuration error",
-      `<header><h1>Configuration error</h1><p>Automation and board mutation are blocked.</p></header>
-       <main><ol class="diagnostics">${diagnostics}</ol></main>`,
-    );
-  }
-
-  const automation = application.queryAutomation();
-  const boards = application.queryBoards();
-  const boardMarkup = boards.available
-    ? boards.boards.map(renderBoard).join("")
-    : "";
-  const automationLabel = automation.state === "running" ? "Automation running" : "Automation paused";
-  const resume =
-    automation.state === "paused"
-      ? '<form method="post" action="/automation/resume"><button type="submit">Resume automation</button></form>'
-      : "";
-  return page(
-    startup.processName,
-    `<header>
-       <p class="eyebrow">${escapeHtml(startup.processName)}</p>
-       <h1>${automationLabel}</h1>
-       ${feedback === undefined ? "" : `<p role="${feedbackRole}">${escapeHtml(feedback)}</p>`}
-       <p>Process definition <code>${startup.processDefinitionVersion}</code></p>
-       ${resume}
-     </header>
-     <main>${boardMarkup}</main>`,
-  );
-}
-
-function resumeRejection(
-  result: Exclude<Awaited<ReturnType<CoordinationApplication["resumeAutomation"]>>, { accepted: true }>,
-): string {
-  if (result.reason === "runtime-unavailable") {
-    return "Automation remains paused because no agent runtime is configured. Start the application with the Codex runtime and try again.";
-  }
-  if (result.reason === "runtime-start-failed") {
-    return `Automation remains paused because dispatch could not start: ${result.diagnostic}`;
-  }
-  return "Automation remains blocked until the process configuration errors are corrected.";
-}
-
-function renderBoard(board: BoardView): string {
-  return `<section aria-labelledby="board-${escapeHtml(board.id)}">
-    <h2 id="board-${escapeHtml(board.id)}">${escapeHtml(board.name)}</h2>
-    <p>${escapeHtml(board.guidance)}</p>
-    <div class="board">
-      ${board.columns
-        .map(
-          (column) => `<section class="column" aria-labelledby="column-${escapeHtml(board.id)}-${escapeHtml(column.id)}">
-            <h3 id="column-${escapeHtml(board.id)}-${escapeHtml(column.id)}">${escapeHtml(column.name)}</h3>
-            <p>${column.watchingAgentId === null ? "Unwatched" : `Watched by ${escapeHtml(column.watchingAgentId)}`}</p>
-            <ul>${column.tasks
-              .map(
-                (task) => `<li><a href="/tasks/${encodeURIComponent(task.id)}"><strong>${escapeHtml(task.id)}</strong> ${escapeHtml(task.title)}</a></li>`,
-              )
-              .join("")}</ul>
-          </section>`,
-        )
-        .join("")}
-    </div>
-  </section>`;
-}
-
-function renderTaskResponse(
-  application: CoordinationApplication,
-  response: ServerResponse,
-  taskId: string,
-  successStatus = 200,
-): void {
-  const result = application.queryTask(taskId);
-  if (!result.available) {
-    const status = result.reason === "not-found" ? 404 : 409;
-    sendHtml(response, status, page("Task unavailable", "<h1>Task unavailable</h1>"));
-    return;
-  }
-  sendHtml(response, successStatus, renderTaskPage(result));
-}
-
-function renderTaskPage(result: Extract<TaskQueryResult, { available: true }>): string {
-  const { task, board } = result;
-  const currentColumn = board.columns.find((column) => column.id === task.columnId);
-  const destinations = board.columns.filter((column) => column.id !== task.columnId);
-  return page(
-    `${task.id} ${task.title}`,
-    `<nav><a href="/">Back to board</a></nav>
-     <main>
-       <article>
-         <p class="eyebrow">${escapeHtml(task.id)}</p>
-         <h1>${escapeHtml(task.title)}</h1>
-         <p>${escapeHtml(task.description)}</p>
-         <p>Current column: <strong>${escapeHtml(currentColumn?.name ?? task.columnId)}</strong></p>
-         <form method="post" action="/tasks/${encodeURIComponent(task.id)}/move">
-           <label>Destination
-             <select name="destinationColumnId" aria-label="Move task to column">
-               ${destinations
-                 .map(
-                   (column) => `<option value="${escapeHtml(column.id)}">${escapeHtml(column.name)}</option>`,
-                 )
-                 .join("")}
-             </select>
-           </label>
-           <input type="hidden" name="expectedRevision" value="${task.revision}">
-           <input type="hidden" name="idempotencyKey" value="${randomUUID()}">
-           <button type="submit">Move task</button>
-         </form>
-       </article>
-     </main>`,
-  );
-}
-
 async function readBody(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   let length = 0;
@@ -330,7 +357,8 @@ async function readBody(request: IncomingMessage): Promise<string> {
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {
-  const parsed = JSON.parse(await readBody(request)) as unknown;
+  const text = await readBody(request);
+  const parsed = JSON.parse(text.length === 0 ? "{}" : text) as unknown;
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Expected a JSON object");
   }
@@ -345,7 +373,7 @@ function stringField(body: Record<string, unknown>, name: string): string {
 
 function numberField(body: Record<string, unknown>, name: string): number {
   const value = body[name];
-  if (typeof value !== "number") throw new Error(`${name} must be a number`);
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${name} must be a number`);
   return value;
 }
 
@@ -371,14 +399,11 @@ function sendAgentQuery(
     sendJson(response, 200, result);
     return;
   }
-  const status =
-    result.reason === "configuration-error"
-      ? 409
-      : result.reason === "not-found" ||
-          result.reason === "board-not-found" ||
-          result.reason === "column-not-found"
-        ? 404
-        : 400;
+  const status = result.reason === "configuration-error"
+    ? 409
+    : result.reason === "not-found" || result.reason === "board-not-found" || result.reason === "column-not-found"
+      ? 404
+      : 400;
   sendJson(response, status, result);
 }
 
@@ -391,44 +416,10 @@ function sendJson(response: ServerResponse, status: number, value: unknown): voi
   response.end(body);
 }
 
-function sendHtml(response: ServerResponse, status: number, html: string): void {
+function sendText(response: ServerResponse, status: number, body: string): void {
   response.writeHead(status, {
-    "content-type": "text/html; charset=utf-8",
-    "content-length": Buffer.byteLength(html),
+    "content-type": "text/plain; charset=utf-8",
+    "content-length": Buffer.byteLength(body),
   });
-  response.end(html);
-}
-
-function page(title: string, body: string): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(title)}</title>
-  <style>
-    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-    body { margin: 0 auto; max-width: 90rem; padding: 2rem; }
-    .board { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
-    .column, article, .diagnostics li { border: 1px solid ButtonBorder; border-radius: .5rem; padding: 1rem; }
-    .eyebrow { font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-    code { overflow-wrap: anywhere; }
-    button, select { font: inherit; padding: .5rem; }
-  </style>
-</head>
-<body>${body}</body>
-</html>`;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function formatValue(value: unknown): string {
-  return JSON.stringify(value) ?? "undefined";
+  response.end(body);
 }

@@ -92,6 +92,7 @@ export function openCoordinationDatabase(path: string): DatabaseSync {
       type TEXT NOT NULL CHECK (
         type IN (
           'task.created',
+          'task.edited',
           'task.moved',
           'activation.created',
           'attempt.started',
@@ -150,8 +151,53 @@ export function openCoordinationDatabase(path: string): DatabaseSync {
   migrateTaskSequence(database);
   migrateFailedRunOutcomes(database);
   migrateAttemptThreadId(database);
+  migrateTranscriptOwnership(database);
   migrateActivityLedger(database);
+  migrateTaskEditedActivity(database);
   return database;
+}
+
+function migrateTaskEditedActivity(database: DatabaseSync): void {
+  const schema = database
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activity_ledger'")
+    .get() as { sql: string };
+  if (schema.sql.includes("'task.edited'")) return;
+  database.exec("PRAGMA foreign_keys = OFF");
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+      CREATE TABLE activity_ledger_with_task_edits (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT NOT NULL UNIQUE,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (
+          type IN (
+            'task.created',
+            'task.edited',
+            'task.moved',
+            'activation.created',
+            'attempt.started',
+            'attempt.completed'
+          )
+        ),
+        actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
+        actor_id TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        details_json TEXT NOT NULL
+      );
+      INSERT INTO activity_ledger_with_task_edits
+        SELECT sequence, id, task_id, type, actor_kind, actor_id, occurred_at, details_json
+        FROM activity_ledger;
+      DROP TABLE activity_ledger;
+      ALTER TABLE activity_ledger_with_task_edits RENAME TO activity_ledger;
+      COMMIT;
+    `);
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  } finally {
+    database.exec("PRAGMA foreign_keys = ON");
+  }
 }
 
 function migrateTaskSequence(database: DatabaseSync): void {
@@ -209,6 +255,15 @@ function migrateAttemptThreadId(database: DatabaseSync): void {
   }>;
   if (!attemptColumns.some((column) => column.name === "thread_id")) {
     database.exec("ALTER TABLE attempts ADD COLUMN thread_id TEXT");
+  }
+}
+
+function migrateTranscriptOwnership(database: DatabaseSync): void {
+  const attemptColumns = database.prepare("PRAGMA table_info(attempts)").all() as Array<{
+    name: string;
+  }>;
+  if (attemptColumns.some((column) => column.name === "transcript_json")) {
+    database.exec("ALTER TABLE attempts DROP COLUMN transcript_json");
   }
 }
 

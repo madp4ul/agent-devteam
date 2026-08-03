@@ -5,6 +5,8 @@ import type {
   AgentRunRequest,
   AgentRunLifecycle,
   AgentRuntime,
+  AttemptTranscriptAccess,
+  AttemptTranscriptItem,
 } from "../application/coordination-application.ts";
 
 type CodexConfigValue = string | number | boolean | CodexConfigValue[] | CodexConfigObject;
@@ -49,8 +51,9 @@ export interface CodexAgentRuntimeOptions {
   createClient?: (options: CodexClientOptionsLike) => CodexClientLike;
 }
 
-export class CodexAgentRuntime implements AgentRuntime {
+export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess {
   readonly #options: CodexAgentRuntimeOptions;
+  readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
 
   constructor(options: CodexAgentRuntimeOptions) {
     this.#options = options;
@@ -72,6 +75,7 @@ export class CodexAgentRuntime implements AgentRuntime {
       },
     };
     let threadId: string | undefined;
+    const transcript: AttemptTranscriptItem[] = [];
     try {
       const client = (this.#options.createClient ?? createCodexClient)(clientOptions);
       const thread = client.startThread({ workingDirectory: request.workspace.path });
@@ -88,10 +92,16 @@ export class CodexAgentRuntime implements AgentRuntime {
           typeof event.item.text === "string"
         ) {
           finalResponse = event.item.text;
+          transcript.push({ kind: "message", role: "agent", text: event.item.text });
+        } else if (event.type === "item.completed") {
+          transcript.push(toolTranscriptItem(event.item));
         } else if (event.type === "turn.completed") {
           turnCompleted = true;
         } else if (event.type === "turn.failed" || event.type === "error") {
           const diagnostic = event.type === "turn.failed" ? event.error.message : event.message;
+          if (threadId !== undefined) {
+            this.#remember(threadId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
+          }
           return {
             status: "failed",
             summary: `Codex could not complete the activation: ${diagnostic}`,
@@ -106,12 +116,17 @@ export class CodexAgentRuntime implements AgentRuntime {
         };
       }
       if (!turnCompleted) {
+        this.#remember(threadId, [
+          ...transcript,
+          { kind: "diagnostic", text: "The Codex stream ended before turn.completed." },
+        ]);
         return {
           status: "failed",
           summary: "Codex could not complete the activation: the stream ended before turn.completed",
           threadId,
         };
       }
+      this.#remember(threadId, transcript);
       return {
         status: "completed",
         summary: finalResponse,
@@ -119,17 +134,63 @@ export class CodexAgentRuntime implements AgentRuntime {
       };
     } catch (error) {
       if (threadId === undefined) throw error;
+      const diagnostic = error instanceof Error ? error.message : "the streamed run failed";
+      this.#remember(threadId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
       return {
         status: "failed",
-        summary: `Codex could not complete the activation: ${
-          error instanceof Error ? error.message : "the streamed run failed"
-        }`,
+        summary: `Codex could not complete the activation: ${diagnostic}`,
         threadId,
       };
     } finally {
       this.#options.mcpServer.release?.(request);
     }
   }
+
+  async read(threadId: string): Promise<AttemptTranscriptItem[] | null> {
+    const transcript = this.#transcripts.get(threadId);
+    return transcript === undefined ? null : structuredClone(transcript);
+  }
+
+  #remember(threadId: string, transcript: AttemptTranscriptItem[]): void {
+    this.#transcripts.set(threadId, structuredClone(transcript));
+  }
+}
+
+function toolTranscriptItem(item: { type: string; [key: string]: unknown }): AttemptTranscriptItem {
+  if (item.type === "error") {
+    const text = typeof item.message === "string"
+      ? item.message
+      : typeof item.text === "string"
+        ? item.text
+        : "Codex reported an item-level error without a diagnostic message.";
+    return { kind: "diagnostic", text };
+  }
+  const status = typeof item.status === "string" ? item.status : "completed";
+  const command = typeof item.command === "string" ? item.command : undefined;
+  const exitCode = typeof item.exit_code === "number" ? item.exit_code : undefined;
+  const summary = command === undefined
+    ? readableToolSummary(item)
+    : `${command}${exitCode === undefined ? "" : ` (exit ${exitCode})`}`;
+  const rawOutput = [item.aggregated_output, item.output, item.result]
+    .find((value) => typeof value === "string") as string | undefined;
+  return {
+    kind: "tool",
+    name: item.type,
+    status,
+    summary,
+    ...(rawOutput === undefined ? {} : { output: truncateOutput(rawOutput) }),
+  };
+}
+
+function readableToolSummary(item: { type: string; [key: string]: unknown }): string {
+  const tool = typeof item.tool === "string" ? item.tool : typeof item.name === "string" ? item.name : undefined;
+  const server = typeof item.server === "string" ? item.server : undefined;
+  if (tool !== undefined && server !== undefined) return `${server}.${tool}`;
+  return tool ?? item.type.replaceAll("_", " ");
+}
+
+function truncateOutput(output: string): string {
+  return output.length <= 4_000 ? output : `${output.slice(0, 4_000)}\n… output truncated`;
 }
 
 export function composeActivationPrompt(request: AgentRunRequest): string {

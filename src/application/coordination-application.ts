@@ -6,11 +6,14 @@ import type {
   AddTaskCommentCommand,
   AddTaskCommentResult,
   AutomationView,
+  AttemptTranscriptAccess,
+  AttemptTranscriptQueryResult,
   BoardMutationResult,
   BoardSummariesQueryResult,
   BoardsQueryResult,
   CollaboratorsQueryResult,
   CreateTaskCommand,
+  EditTaskCommand,
   MoveTaskCommand,
   ProcessValidationResult,
   ResumeAutomationResult,
@@ -31,17 +34,20 @@ export class CoordinationApplication {
   readonly #startup: StartupView;
   readonly #automation: AutomationCoordinator;
   readonly #discovery: TaskDiscovery;
+  readonly #transcriptAccess: AttemptTranscriptAccess | undefined;
 
   private constructor(
     store: RelationalCoordinationStore,
     startup: StartupView,
     automation: AutomationCoordinator,
     discovery: TaskDiscovery,
+    transcriptAccess?: AttemptTranscriptAccess,
   ) {
     this.#store = store;
     this.#startup = startup;
     this.#automation = automation;
     this.#discovery = discovery;
+    this.#transcriptAccess = transcriptAccess;
   }
 
   static async validateProcessDefinition(path: string): Promise<ProcessValidationResult> {
@@ -65,6 +71,7 @@ export class CoordinationApplication {
         startup,
         new AutomationCoordinator({ store, startup }),
         new TaskDiscovery(store, startup),
+        options.transcriptAccess,
       );
     }
 
@@ -107,6 +114,7 @@ export class CoordinationApplication {
         },
       }),
       new TaskDiscovery(store, startup, collaborators),
+      options.transcriptAccess,
     );
   }
 
@@ -162,6 +170,25 @@ export class CoordinationApplication {
     return this.#discovery.queryTaskAttachments(taskId);
   }
 
+  async queryAttemptTranscript(attemptId: string): Promise<AttemptTranscriptQueryResult> {
+    if (this.#startup.mode === "configuration-error") {
+      return {
+        available: false,
+        reason: "configuration-error",
+        diagnostics: this.#startup.diagnostics,
+      };
+    }
+    const attempt = this.#store.readAttemptTranscriptReference(attemptId);
+    if (attempt === undefined) return { available: false, reason: "not-found" };
+    if (attempt.threadId === null || this.#transcriptAccess === undefined) {
+      return { available: false, reason: "unavailable" };
+    }
+    const items = await this.#transcriptAccess.read(attempt.threadId);
+    return items === null
+      ? { available: false, reason: "unavailable" }
+      : { available: true, threadId: attempt.threadId, items };
+  }
+
   queryCollaborators(): CollaboratorsQueryResult {
     return this.#discovery.queryCollaborators();
   }
@@ -199,6 +226,11 @@ export class CoordinationApplication {
       this.#automation.kick();
     }
     return result;
+  }
+
+  editTask(command: EditTaskCommand): BoardMutationResult {
+    const gated = this.configurationErrorRejection();
+    return gated ?? this.#store.editTask(command);
   }
 
   moveTask(command: MoveTaskCommand): BoardMutationResult {

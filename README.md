@@ -14,6 +14,7 @@ application; users will not need the TypeScript development toolchain. See
 ```sh
 pnpm install --frozen-lockfile
 pnpm validate:example
+pnpm build
 pnpm start -- --process examples/software-delivery/process.yaml --project .
 ```
 
@@ -26,7 +27,8 @@ Every startup remains paused until the user explicitly resumes automation.
 Each distinct activation starts a fresh Codex thread with the user's existing
 sandbox and approval policy. The project-scoped MCP surface provides summary-
 first board discovery, explicit-column paginated task overviews, full task and
-on-demand history inspection, and collaborator summaries. Authored comments
-and movement remain scoped to the activation's current task. Retries and drag-
-and-drop remain deferred; task movement keeps the permanent accessible select-
-and-submit interaction.
+on-demand history inspection, and collaborator summaries. The React board
+supports task creation, linkable task details, unified history, attempt
+transcripts, revision-checked editing and movement, and Atlassian Pragmatic
+Drag and Drop. The contextual non-drag move chooser remains the permanent
+keyboard and assistive-technology path.

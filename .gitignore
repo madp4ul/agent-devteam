@@ -1,3 +1,7 @@
+dist/
+.pnpm-store/
+test-results/
+playwright-report/
 node_modules/
 .data/
 __pycache__/

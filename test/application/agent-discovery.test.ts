@@ -144,8 +144,9 @@ test("task overview cursors remain stable when an earlier task moves within sele
       column: { id: "backlog", name: "Backlog" },
       revision: 1,
       blocking: { blocked: false, blockerTaskIds: [] },
-      relationships: [],
-      run: {
+        relationships: [],
+        unresolvedAttention: [],
+        run: {
         status: "idle",
         activeAgentId: null,
         queuedActivationCount: 0,
@@ -159,8 +160,9 @@ test("task overview cursors remain stable when an earlier task moves within sele
       column: { id: "backlog", name: "Backlog" },
       revision: 1,
       blocking: { blocked: false, blockerTaskIds: [] },
-      relationships: [],
-      run: {
+        relationships: [],
+        unresolvedAttention: [],
+        run: {
         status: "idle",
         activeAgentId: null,
         queuedActivationCount: 0,

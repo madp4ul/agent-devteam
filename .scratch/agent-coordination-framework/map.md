@@ -86,6 +86,12 @@ without choosing the implementation yet.
   authoritative transaction and actor-provenance gates; preserve the accessible
   move path and add Pragmatic Drag and Drop at the same boundary later.
 
+- [Inspect and Control a Task](./issues/19-inspect-and-control-task.md)
+  — Replace the temporary board with a React and Vite client at the existing
+  application seam, adding task creation, direct details, unified history,
+  runtime-owned transcript access, accessible movement, and Pragmatic Drag and
+  Drop on a horizontally scrollable workflow lane.
+
 ## Not yet specified
 
 ## Out of scope

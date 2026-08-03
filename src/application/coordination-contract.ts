@@ -2,6 +2,7 @@ export interface StartApplicationOptions {
   processDefinitionPath: string;
   databasePath: string;
   runtimeDispatch?: RuntimeDispatchOptions;
+  transcriptAccess?: AttemptTranscriptAccess;
 }
 
 export interface RuntimeDispatchOptions {
@@ -57,6 +58,7 @@ export interface TaskActivityView {
   id: string;
   type:
     | "task.created"
+    | "task.edited"
     | "task.moved"
     | "activation.created"
     | "attempt.started"
@@ -80,6 +82,17 @@ export interface AttemptView {
   outcome: AgentRunOutcome | null;
   threadId: string | null;
 }
+
+export type AttemptTranscriptItem =
+  | { kind: "message"; role: "agent"; text: string }
+  | {
+      kind: "tool";
+      name: string;
+      status: string;
+      summary: string;
+      output?: string;
+    }
+  | { kind: "diagnostic"; text: string };
 
 export interface ActivationView {
   id: string;
@@ -155,6 +168,7 @@ export interface TaskOverviewView {
   revision: number;
   blocking: { blocked: boolean; blockerTaskIds: string[] };
   relationships: TaskRelationshipView[];
+  unresolvedAttention: TaskAttentionView[];
   run: {
     status: "idle" | "queued" | "running" | "failed";
     activeAgentId: string | null;
@@ -205,6 +219,10 @@ export interface CollaboratorView {
 
 export interface AgentRuntime {
   run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome>;
+}
+
+export interface AttemptTranscriptAccess {
+  read(threadId: string): Promise<AttemptTranscriptItem[] | null>;
 }
 
 export interface AgentRunLifecycle {
@@ -315,6 +333,11 @@ export type TaskAttachmentsQueryResult =
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { available: false; reason: "not-found" };
 
+export type AttemptTranscriptQueryResult =
+  | { available: true; threadId: string; items: AttemptTranscriptItem[] }
+  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
+  | { available: false; reason: "not-found" | "unavailable" };
+
 export type CollaboratorsQueryResult =
   | { available: true; collaborators: CollaboratorView[] }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
@@ -336,6 +359,15 @@ export interface MoveTaskCommand {
   idempotencyKey: string;
 }
 
+export interface EditTaskCommand {
+  taskId: string;
+  title: string;
+  description: string;
+  expectedRevision: number;
+  actor: Actor;
+  idempotencyKey: string;
+}
+
 export interface AddTaskCommentCommand {
   taskId: string;
   body: string;
@@ -350,7 +382,14 @@ export type BoardMutationResult =
       reason: "configuration-error";
       diagnostics: ProcessDiagnostic[];
     }
-  | { accepted: false; reason: "not-found" | "invalid-destination" }
+  | {
+      accepted: false;
+      reason:
+        | "not-found"
+        | "invalid-destination"
+        | "empty-title"
+        | "empty-description";
+    }
   | { accepted: false; reason: "revision-conflict"; currentTask: TaskView };
 
 export type AddTaskCommentResult =

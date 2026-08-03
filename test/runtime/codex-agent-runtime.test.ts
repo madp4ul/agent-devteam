@@ -34,6 +34,9 @@ test("each activation starts a fresh streamed Codex thread without overriding us
     summary: "Handoff completed.",
     threadId: "thread-1",
   });
+  assert.deepEqual(await runtime.read("thread-1"), [
+    { kind: "message", role: "agent", text: "Handoff completed." },
+  ]);
   assert.equal(second.threadId, "thread-2");
   assert.equal(clients.length, 2);
   for (const client of clients) {
@@ -76,6 +79,9 @@ test("streamed Codex failures become failed attempt outcomes with retained threa
     summary: "Codex could not complete the activation: model stream disconnected",
     threadId: "thread-failure",
   });
+  assert.deepEqual(await runtime.read("thread-failure"), [
+    { kind: "diagnostic", text: "model stream disconnected" },
+  ]);
 });
 
 test("an exception after thread startup becomes an inspectable failed outcome", async () => {
@@ -102,6 +108,9 @@ test("an exception after thread startup becomes an inspectable failed outcome", 
     },
   );
   assert.equal(startedThreadId, "thread-interrupted");
+  assert.deepEqual(await runtime.read("thread-interrupted"), [
+    { kind: "diagnostic", text: "connection dropped" },
+  ]);
 });
 
 test("a stream that ends without turn.completed is a failed outcome", async () => {
@@ -130,6 +139,55 @@ test("a stream that ends without turn.completed is a failed outcome", async () =
       threadId: "thread-truncated",
     },
   );
+  assert.deepEqual(await runtime.read("thread-truncated"), [
+    { kind: "message", role: "agent", text: "This was not confirmed complete." },
+    { kind: "diagnostic", text: "The Codex stream ended before turn.completed." },
+  ]);
+});
+
+test("transcript capture keeps useful tool activity and truncates large command output", async () => {
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-tools" },
+            {
+              type: "item.completed",
+              item: {
+                type: "command_execution",
+                command: "pnpm test",
+                status: "completed",
+                exit_code: 0,
+                aggregated_output: `useful start\n${"x".repeat(6_000)}`,
+              },
+            },
+            {
+              type: "item.completed",
+              item: { type: "error", message: "Tool output could not be decoded." },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+
+  await runtime.run(request("activation-tools", "T-0006"), { started() {} });
+  const transcript = await runtime.read("thread-tools");
+  assert.equal(transcript?.length, 2);
+  assert.deepEqual(transcript?.[0], {
+    kind: "tool",
+    name: "command_execution",
+    status: "completed",
+    summary: "pnpm test (exit 0)",
+    output: `useful start\n${"x".repeat(3_987)}\n… output truncated`,
+  });
+  assert.deepEqual(transcript?.[1], {
+    kind: "diagnostic",
+    text: "Tool output could not be decoded.",
+  });
 });
 
 class FakeCodexClient implements CodexClientLike {

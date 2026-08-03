@@ -11,6 +11,7 @@ import type {
   BoardSummaryView,
   BoardMutationResult,
   CreateTaskCommand,
+  EditTaskCommand,
   MoveTaskCommand,
   ProcessBoardView,
   TaskAttachmentView,
@@ -331,6 +332,7 @@ export class RelationalCoordinationStore {
           revision: row.revision,
           blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
           relationships: this.readTaskRelationships(row.id),
+          unresolvedAttention: this.readUnresolvedAttention(row.id),
           run: {
             status:
               row.running_count > 0
@@ -625,6 +627,12 @@ export class RelationalCoordinationStore {
     return this.transaction(() => {
       const prior = this.readCommandResponse("create-task", command.idempotencyKey);
       if (prior !== undefined) return prior;
+      if (command.title.trim().length === 0) {
+        return { accepted: false, reason: "empty-title" };
+      }
+      if (command.description.trim().length === 0) {
+        return { accepted: false, reason: "empty-description" };
+      }
       const destination = this.#database
         .prepare("SELECT 1 FROM columns WHERE board_id = ? AND id = ? AND applied = 1")
         .get(command.boardId, command.columnId);
@@ -658,6 +666,43 @@ export class RelationalCoordinationStore {
       if (task === undefined) throw new Error("Created task could not be read back");
       const result: BoardMutationResult = { accepted: true, task };
       this.storeCommandResponse("create-task", command.idempotencyKey, result);
+      return result;
+    });
+  }
+
+  editTask(command: EditTaskCommand): BoardMutationResult {
+    return this.transaction(() => {
+      const commandType = `edit-task:${command.taskId}`;
+      const prior = this.readCommandResponse(commandType, command.idempotencyKey);
+      if (prior !== undefined) return prior;
+      const currentTask = this.readTask(command.taskId);
+      if (currentTask === undefined) return { accepted: false, reason: "not-found" };
+      if (currentTask.revision !== command.expectedRevision) {
+        return { accepted: false, reason: "revision-conflict", currentTask };
+      }
+      if (command.title.trim().length === 0) {
+        return { accepted: false, reason: "empty-title" };
+      }
+      if (command.description.trim().length === 0) {
+        return { accepted: false, reason: "empty-description" };
+      }
+      this.#database
+        .prepare(
+          `UPDATE tasks
+           SET title = ?, description = ?, revision = revision + 1
+           WHERE id = ?`,
+        )
+        .run(command.title.trim(), command.description.trim(), command.taskId);
+      this.appendActivity(
+        command.taskId,
+        "task.edited",
+        command.actor,
+        {},
+      );
+      const task = this.readTask(command.taskId);
+      if (task === undefined) throw new Error("Edited task could not be read back");
+      const result: BoardMutationResult = { accepted: true, task };
+      this.storeCommandResponse(commandType, command.idempotencyKey, result);
       return result;
     });
   }
@@ -880,6 +925,12 @@ export class RelationalCoordinationStore {
           : { status: row.outcome_status, summary: row.outcome_summary ?? "" },
       threadId: row.thread_id,
     }));
+  }
+
+  readAttemptTranscriptReference(attemptId: string): { threadId: string | null } | undefined {
+    return this.#database
+      .prepare("SELECT thread_id AS threadId FROM attempts WHERE id = ?")
+      .get(attemptId) as { threadId: string | null } | undefined;
   }
 
   private readTaskComments(taskId: string): TaskView["comments"] {

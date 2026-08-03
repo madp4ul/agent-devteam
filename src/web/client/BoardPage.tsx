@@ -1,0 +1,418 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  draggable,
+  dropTargetForElements,
+  monitorForElements,
+} from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+
+import type { TaskOverviewView } from "../../application/coordination-contract.ts";
+import {
+  createTask,
+  readBoard,
+  resumeAutomation,
+  type BrowserBoardState,
+  type BrowserColumnView,
+} from "./api.ts";
+import { errorMessage } from "./feedback.ts";
+import { Loading } from "./Loading.tsx";
+import type { Navigate, NavigationState } from "./navigation.ts";
+import { useTaskMovement } from "./task-movement.ts";
+
+export function BoardPage({ navigate }: { navigate: Navigate }): ReactNode {
+  const initialContext = (window.history.state as NavigationState | null)?.boardContext;
+  const [state, setState] = useState<BrowserBoardState>();
+  const [filter, setFilter] = useState(
+    initialContext?.filter ?? new URLSearchParams(location.search).get("q") ?? "",
+  );
+  const [creation, setCreation] = useState<{ boardId: string; columnId: string }>();
+  const laneRefs = useRef(new Map<string, HTMLDivElement>());
+  const refresh = useCallback(async () => setState(await readBoard()), []);
+  const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
+
+  useEffect(() => {
+    void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
+  }, [refresh, setFeedback]);
+  useLayoutEffect(() => {
+    const lane = initialContext === undefined
+      ? undefined
+      : laneRefs.current.get(initialContext.boardId);
+    if (state !== undefined && lane !== undefined && initialContext !== undefined) {
+      lane.scrollLeft = initialContext.scrollLeft;
+    }
+  }, [state, initialContext]);
+
+  const rememberContext = useCallback((boardId: string) => {
+    const boardContext = {
+      boardId,
+      filter,
+      scrollLeft: laneRefs.current.get(boardId)?.scrollLeft ?? 0,
+    };
+    window.history.replaceState(
+      { boardContext },
+      "",
+      filter.length === 0 ? "/" : `/?q=${encodeURIComponent(filter)}`,
+    );
+  }, [filter]);
+  const openTask = useCallback((taskId: string, boardId: string) => {
+    rememberContext(boardId);
+    navigate(`/tasks/${encodeURIComponent(taskId)}`, { returnToBoard: true });
+  }, [navigate, rememberContext]);
+
+  useEffect(
+    () =>
+      monitorForElements({
+        onDrop: ({ source, location }) => {
+          const taskId = source.data.taskId;
+          const columnId = location.current.dropTargets[0]?.data.columnId;
+          const boardId = location.current.dropTargets[0]?.data.boardId;
+          if (
+            typeof taskId !== "string" ||
+            typeof columnId !== "string" ||
+            typeof boardId !== "string" ||
+            state === undefined
+          ) {
+            return;
+          }
+          const task = state.boards
+            .flatMap((board) => board.columns.flatMap((column) => column.tasks))
+            .find((candidate) => candidate.id === taskId);
+          const destination = state.boards
+            .find((board) => board.id === boardId)
+            ?.columns.find((column) => column.id === columnId);
+          if (task !== undefined && task.boardId === boardId && destination !== undefined) {
+            void move(task, destination);
+          }
+        },
+      }),
+    [move, state],
+  );
+
+  if (state === undefined) return <Loading />;
+  if (state.startup.mode === "configuration-error") {
+    return (
+      <main className="configuration-error">
+        <p className="eyebrow">Startup blocked</p>
+        <h1>Configuration error</h1>
+        <p>Automation and board mutation are unavailable until these diagnostics are corrected.</p>
+        <ol>
+          {state.startup.diagnostics.map((diagnostic) => (
+            <li key={`${diagnostic.file}:${diagnostic.line}:${diagnostic.column}`}>
+              <strong>{diagnostic.file}:{diagnostic.line}:{diagnostic.column}</strong>
+              <p>{diagnostic.rule}</p>
+              <p>{diagnostic.consequence}</p>
+              {diagnostic.correction === undefined ? null : <p>{diagnostic.correction}</p>}
+            </li>
+          ))}
+        </ol>
+      </main>
+    );
+  }
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">{state.startup.processName}</p>
+          <h1>Coordination board</h1>
+        </div>
+        <div className="automation-control">
+          <span className={`status-dot ${state.automation.state}`} aria-hidden="true" />
+          <span>Automation {state.automation.state}</span>
+          {state.automation.state === "paused" ? (
+            <button
+              className="secondary"
+              onClick={() =>
+                void resumeAutomation()
+                  .then(refresh)
+                  .catch((error) =>
+                    setFeedback({ role: "alert", text: errorMessage(error) }),
+                  )}
+            >
+              Resume
+            </button>
+          ) : null}
+        </div>
+      </header>
+      <main>
+        <div className="board-toolbar">
+          <label className="filter-field">
+            <span>Filter tasks</span>
+            <input
+              aria-label="Filter tasks"
+              type="search"
+              value={filter}
+              placeholder="ID or outcome"
+              onChange={(event) => setFilter(event.currentTarget.value)}
+            />
+          </label>
+          <p className="lane-hint">Workflow runs left to right · scroll horizontally</p>
+        </div>
+        {feedback === undefined ? null : (
+          <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>
+        )}
+        {state.boards.map((board) => (
+          <section key={board.id} aria-labelledby={`board-${board.id}`}>
+            <div className="board-heading">
+              <div><p className="eyebrow">Board</p><h2 id={`board-${board.id}`}>{board.name}</h2></div>
+            </div>
+            <div
+              className="board-lane"
+              data-testid="board-lane"
+              ref={(element) => {
+                if (element === null) laneRefs.current.delete(board.id);
+                else laneRefs.current.set(board.id, element);
+              }}
+              tabIndex={0}
+              aria-label={`${board.name} workflow columns`}
+            >
+              {board.columns.map((column) => (
+                <BoardColumn
+                  key={column.id}
+                  boardId={board.id}
+                  column={column}
+                  filter={filter}
+                  pendingTaskId={pendingTaskId}
+                  onOpen={(taskId) => openTask(taskId, board.id)}
+                  onCreate={() => setCreation({ boardId: board.id, columnId: column.id })}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+      </main>
+      {creation === undefined ? null : (
+        <CreationDialog
+          initial={creation}
+          columns={state.boards.find((board) => board.id === creation.boardId)?.columns ?? []}
+          onClose={() => setCreation(undefined)}
+          onCreated={async (task, column) => {
+            await refresh();
+            setCreation(undefined);
+            setFeedback({ role: "status", text: `Created ${task.id} in ${column.name}.` });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BoardColumn({
+  boardId,
+  column,
+  filter,
+  pendingTaskId,
+  onOpen,
+  onCreate,
+}: {
+  boardId: string;
+  column: BrowserColumnView;
+  filter: string;
+  pendingTaskId?: string | undefined;
+  onOpen(taskId: string): void;
+  onCreate(): void;
+}): ReactNode {
+  const elementRef = useRef<HTMLElement>(null);
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    const element = elementRef.current;
+    if (element === null) return;
+    return dropTargetForElements({
+      element,
+      getData: () => ({ boardId, columnId: column.id }),
+      onDragEnter: () => setOver(true),
+      onDragLeave: () => setOver(false),
+      onDrop: () => setOver(false),
+    });
+  }, [boardId, column.id]);
+  const needle = filter.trim().toLocaleLowerCase();
+  const tasks = column.tasks.filter(
+    (task) =>
+      needle.length === 0 ||
+      `${task.id} ${task.title}`.toLocaleLowerCase().includes(needle),
+  );
+  const headingId = `column-${boardId}-${column.id}`;
+  return (
+    <section
+      ref={elementRef}
+      data-testid={`column-${column.id}`}
+      className={`board-column${over ? " drop-target" : ""}`}
+      aria-labelledby={headingId}
+    >
+      <header className="column-header">
+        <div>
+          <h3 id={headingId}>{column.name}</h3>
+          <span className="task-count">{tasks.length}</span>
+        </div>
+        <p>
+          {column.watchingAgent === null
+            ? "No watching agent"
+            : `Watched by ${column.watchingAgent.name}`}
+        </p>
+      </header>
+      <ol className="task-list">
+        {tasks.map((task) => (
+          <TaskCard
+            key={task.id}
+            task={task}
+            pending={pendingTaskId === task.id}
+            onOpen={onOpen}
+          />
+        ))}
+      </ol>
+      <button className="create-column" onClick={onCreate}>
+        + Create task in {column.name}
+      </button>
+    </section>
+  );
+}
+
+function TaskCard({
+  task,
+  pending,
+  onOpen,
+}: {
+  task: TaskOverviewView;
+  pending: boolean;
+  onOpen(taskId: string): void;
+}): ReactNode {
+  const cardRef = useRef<HTMLLIElement>(null);
+  const handleRef = useRef<HTMLButtonElement>(null);
+  const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    const element = cardRef.current;
+    const dragHandle = handleRef.current;
+    if (element === null || dragHandle === null) return;
+    return draggable({
+      element,
+      dragHandle,
+      getInitialData: () => ({ taskId: task.id }),
+      onDragStart: () => setDragging(true),
+      onDrop: () => setDragging(false),
+    });
+  }, [task.id]);
+  return (
+    <li
+      ref={cardRef}
+      className={`task-card${pending ? " pending" : ""}${dragging ? " dragging" : ""}`}
+      aria-busy={pending}
+    >
+      <div className="card-topline">
+        <span className="task-id">{task.id}</span>
+        <button
+          ref={handleRef}
+          className="drag-handle"
+          aria-label={`Drag ${task.id}`}
+          title="Drag task"
+        >
+          ⠿
+        </button>
+      </div>
+      <a
+        aria-label={`${task.id} ${task.title}`}
+        href={`/tasks/${encodeURIComponent(task.id)}`}
+        onClick={(event) => {
+          event.preventDefault();
+          onOpen(task.id);
+        }}
+      >
+        <span className="card-title">{task.title}</span>
+      </a>
+      <div className="card-signals">
+        {task.blocking.blocked ? (
+          <span className="signal blocked">Blocked · {task.blocking.blockerTaskIds.join(", ")}</span>
+        ) : null}
+        {task.unresolvedAttention.length > 0 ? (
+          <span className="signal attention">Needs attention · {task.unresolvedAttention.length}</span>
+        ) : null}
+        {task.run.queuedActivationCount > 0 ? (
+          <span className="signal queued">Queued · {task.run.queuedActivationCount}</span>
+        ) : null}
+        {task.run.failedActivationCount > 0 ? (
+          <span className="signal failed">Failed · {task.run.failedActivationCount}</span>
+        ) : null}
+        {task.run.activeAgentId === null ? null : (
+          <span className="signal running">Active · {task.run.activeAgentId}</span>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function CreationDialog({
+  initial,
+  columns,
+  onClose,
+  onCreated,
+}: {
+  initial: { boardId: string; columnId: string };
+  columns: BrowserColumnView[];
+  onClose(): void;
+  onCreated(task: { id: string }, column: BrowserColumnView): Promise<void>;
+}): ReactNode {
+  const [columnId, setColumnId] = useState(initial.columnId);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [error, setError] = useState<string>();
+  const [pending, setPending] = useState(false);
+  const submit = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    setPending(true);
+    setError(undefined);
+    try {
+      const result = await createTask({
+        boardId: initial.boardId,
+        columnId,
+        title,
+        description,
+        idempotencyKey,
+      });
+      const column = columns.find((candidate) => candidate.id === columnId);
+      if (column === undefined) throw new Error("The selected column is unavailable.");
+      await onCreated(result.task, column);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setPending(false);
+    }
+  };
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        className="modal create-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-title"
+      >
+        <div className="modal-heading">
+          <div><p className="eyebrow">New coordination work</p><h2 id="create-title">Create task</h2></div>
+          <button className="icon-button" aria-label="Close task creation" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={(event) => void submit(event)}>
+          <label>
+            Starting column
+            <select
+              aria-label="Starting column"
+              value={columnId}
+              onChange={(event) => setColumnId(event.currentTarget.value)}
+            >
+              {columns.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Outcome-oriented title
+            <input autoFocus value={title} onChange={(event) => setTitle(event.currentTarget.value)} />
+          </label>
+          <label>
+            Complete description
+            <textarea rows={8} value={description} onChange={(event) => setDescription(event.currentTarget.value)} />
+          </label>
+          {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
+          <div className="form-actions">
+            <button type="button" className="secondary" onClick={onClose}>Cancel</button>
+            <button disabled={pending} type="submit">{pending ? "Creating…" : "Create task"}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
