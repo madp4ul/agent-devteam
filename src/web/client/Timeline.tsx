@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type {
   ActivationView,
   AttemptView,
+  ActivationStartupFailureView,
   TaskActivityView,
   TaskCommentView,
   AttemptTranscriptItem,
@@ -19,6 +20,13 @@ type TimelineItem =
       occurredAt: string;
       attempt: AttemptView;
       number: number;
+      agentId: string;
+    }
+  | {
+      key: string;
+      kind: "startup-failure";
+      occurredAt: string;
+      failure: ActivationStartupFailureView;
       agentId: string;
     };
 
@@ -69,6 +77,17 @@ function buildTimeline(
       agentId: activation.targetAgentId,
     })),
   );
+  const startupFailures = activations.flatMap((activation) =>
+    activation.startupFailure === null
+      ? []
+      : [{
+          key: `startup-failure-${activation.id}`,
+          kind: "startup-failure" as const,
+          occurredAt: activation.startupFailure.occurredAt,
+          failure: activation.startupFailure,
+          agentId: activation.targetAgentId,
+        }],
+  );
   return [
     ...comments.map((comment) => ({
       key: `comment-${comment.id}`,
@@ -83,6 +102,7 @@ function buildTimeline(
       activity: entry,
     })),
     ...attempts,
+    ...startupFailures,
   ].sort((left, right) => left.occurredAt.localeCompare(right.occurredAt));
 }
 
@@ -119,6 +139,22 @@ function TimelineEntry({
           </div>
           <p>{activityDescription(entry.activity)}</p>
           <small>Immutable framework event · {entry.activity.actor.id}</small>
+        </article>
+      </li>
+    );
+  }
+  if (entry.kind === "startup-failure") {
+    return (
+      <li className="timeline-entry attempt-entry">
+        <div className="timeline-marker" aria-hidden="true">!</div>
+        <article>
+          <div className="entry-meta">
+            <strong>Startup failed before attempt</strong>
+            <time>{formatDate(entry.occurredAt)}</time>
+          </div>
+          <p>{entry.agentId} Â· Boundary: {entry.failure.boundary}</p>
+          <p className="diagnostic">Diagnostic: {entry.failure.diagnostic}</p>
+          <small>No Codex attempt or thread started. Explicit recovery is required.</small>
         </article>
       </li>
     );

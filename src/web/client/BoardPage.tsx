@@ -334,6 +334,12 @@ function TaskCard({
           <span className="signal running">Active · {task.run.activeAgentId}</span>
         )}
       </div>
+      {task.startupFailure === undefined ? null : (
+        <div className="startup-diagnostic">
+          <strong>Startup failed before attempt · {task.startupFailure.boundary}</strong>
+          <p>{task.startupFailure.diagnostic}</p>
+        </div>
+      )}
     </li>
   );
 }

@@ -278,6 +278,75 @@ test("a failed outcome before thread startup preserves the runtime diagnostic", 
   });
 });
 
+test("a pre-attempt workspace failure is durable, correlated, and visible after restart", async (t) => {
+  const fixture = await createFixture("durable-startup-failure", "missing-starting-ref");
+  const logged: unknown[] = [];
+  const firstApplication = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDiagnostic: (diagnostic) => logged.push(diagnostic),
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: new CompletingAgentRuntime(),
+    },
+  });
+  const created = firstApplication.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Persist workspace startup evidence",
+    description: "A missing starting ref must remain visible after the Resume response is gone.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-durable-startup-failure",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  const resume = await firstApplication.resumeAutomation();
+  assert.equal(resume.accepted, false);
+  if (resume.accepted || resume.reason !== "runtime-start-failed") return;
+  const failed = firstApplication.queryTask(created.task.id);
+  assert.equal(failed.available, true);
+  if (!failed.available) return;
+  const activation = failed.task.activations[0];
+  assert.equal(activation?.status, "failed");
+  assert.deepEqual(activation?.attempts, []);
+  assert.equal(activation?.startupFailure?.boundary, "starting-ref-resolution");
+  assert.equal(activation?.startupFailure?.diagnostic, resume.diagnostic);
+  assert.equal(activation?.startupFailure?.resolvedAt, null);
+  assert.match(activation?.startupFailure?.occurredAt ?? "", /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(logged, [
+    {
+      taskId: created.task.id,
+      activationId: activation?.id,
+      occurredAt: activation?.startupFailure?.occurredAt,
+      boundary: "starting-ref-resolution",
+      diagnostic: resume.diagnostic,
+      resolvedAt: null,
+    },
+  ]);
+  const inspection = firstApplication.queryTaskInspection(created.task.id);
+  assert.equal(inspection.available, true);
+  if (inspection.available) {
+    assert.equal(inspection.task.run.status, "failed");
+    assert.deepEqual(inspection.task.unresolvedAttention.map((reason) => reason.type), ["failed-run"]);
+  }
+  firstApplication.close();
+
+  const restarted = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => restarted.close());
+  const persisted = restarted.queryTask(created.task.id);
+  assert.equal(persisted.available, true);
+  if (!persisted.available) return;
+  assert.deepEqual(
+    persisted.task.activations[0]?.startupFailure,
+    activation?.startupFailure,
+  );
+});
+
 test("resuming runs the queued activation in a just-in-time detached task workspace", async (t) => {
   const fixture = await createFixture("first-run");
   const runtime = new ControlledAgentRuntime();
@@ -366,6 +435,54 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
     ["task.created", "activation.created", "attempt.started", "attempt.completed"],
   );
 });
+
+test(
+  "the Windows source-start identity provisions a registered worktree without changing global Git trust",
+  { skip: process.platform !== "win32" },
+  async (t) => {
+    const fixture = await createFixture("windows-source-identity");
+    const safeDirectoriesBefore = await readGlobalSafeDirectories();
+    const runtime = new CompletingAgentRuntime();
+    const application = await CoordinationApplication.start({
+      processDefinitionPath: fixture.definitionPath,
+      databasePath: fixture.databasePath,
+      runtimeDispatch: {
+        projectRepositoryPath: fixture.repositoryPath,
+        taskWorkspaceRoot: fixture.workspaceRoot,
+        agentRuntime: runtime,
+      },
+    });
+    t.after(() => application.close());
+    const created = application.createTask({
+      boardId: "delivery",
+      columnId: "implementation",
+      title: "Verify Windows source-start permissions",
+      description: "Provision through Git's ordinary worktree registration without trust changes.",
+      actor: { kind: "user", id: "paul" },
+      idempotencyKey: "windows-source-identity-task",
+    });
+    assert.equal(created.accepted, true);
+    if (!created.accepted) return;
+
+    assert.equal((await application.resumeAutomation()).accepted, true);
+    await application.waitForAutomationIdle();
+    const workspacePath = runtime.requests[0]?.workspace.path;
+    assert.ok(workspacePath);
+    const registration = (
+      await execFileAsync("git", [
+        "-C",
+        fixture.repositoryPath,
+        "worktree",
+        "list",
+        "--porcelain",
+      ])
+    ).stdout;
+    assert.ok(
+      registration.toLowerCase().includes(workspacePath.replaceAll("\\", "/").toLowerCase()),
+    );
+    assert.deepEqual(await readGlobalSafeDirectories(), safeDirectoriesBefore);
+  },
+);
 
 test("entering a watched column wakes automation that is already running", async (t) => {
   const fixture = await createFixture("running-entry");
@@ -545,6 +662,15 @@ test("a reused workspace must still be the task worktree registered by the proje
     /registered task worktree/,
   );
   assert.equal(runtime.requests.length, 1);
+  const failed = application.queryTask(created.task.id);
+  assert.equal(failed.available, true);
+  if (failed.available) {
+    const startupFailure = failed.task.activations[1]?.startupFailure;
+    assert.equal(failed.task.activations[1]?.status, "failed");
+    assert.deepEqual(failed.task.activations[1]?.attempts, []);
+    assert.equal(startupFailure?.boundary, "worktree-registration");
+    assert.match(startupFailure?.diagnostic ?? "", /registered task worktree/);
+  }
 });
 
 test("a queued activation survives application restart and remains paused", async (t) => {
@@ -642,7 +768,7 @@ class CompletingAgentRuntime implements AgentRuntime {
   }
 }
 
-async function createFixture(name: string): Promise<{
+async function createFixture(name: string, startingRef = "main"): Promise<{
   definitionPath: string;
   databasePath: string;
   repositoryPath: string;
@@ -671,7 +797,7 @@ async function createFixture(name: string): Promise<{
     definitionPath,
     `schemaVersion: 1
 name: Activation process
-defaultTaskWorkspaceStartingRef: main
+defaultTaskWorkspaceStartingRef: ${startingRef}
 coordinationGuidance: Keep activation provenance exact.
 agents:
   - id: implementer
@@ -697,4 +823,14 @@ boards:
     repositoryPath,
     workspaceRoot: join(directory, "workspaces"),
   };
+}
+
+async function readGlobalSafeDirectories(): Promise<string[]> {
+  try {
+    const result = await execFileAsync("git", ["config", "--global", "--get-all", "safe.directory"]);
+    return result.stdout.split(/\r?\n/).filter((value) => value.length > 0);
+  } catch (error) {
+    if ((error as { code?: number }).code === 1) return [];
+    throw error;
+  }
 }

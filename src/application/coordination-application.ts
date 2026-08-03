@@ -112,6 +112,9 @@ export class CoordinationApplication {
             summary,
           })),
         },
+        ...(options.runtimeDiagnostic === undefined
+          ? {}
+          : { runtimeDiagnostic: options.runtimeDiagnostic }),
       }),
       new TaskDiscovery(store, startup, collaborators),
       options.transcriptAccess,

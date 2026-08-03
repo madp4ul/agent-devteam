@@ -77,6 +77,9 @@ input, textarea, select { width: 100%; border: 1px solid #cbd2cc; border-radius:
 .signal.attention { color: #72500e; background: #f6e5bd; }
 .signal.queued { color: #31516b; background: #dce9f2; }
 .signal.running { color: #145039; background: #d3ecdf; }
+.startup-diagnostic { margin-top: .65rem; border-left: 3px solid #b94a32; padding-left: .55rem; color: #6f2b1d; font-size: .72rem; overflow-wrap: anywhere; }
+.startup-diagnostic strong { display: block; }
+.startup-diagnostic p { margin: .3rem 0 0; line-height: 1.4; }
 .create-column { width: 100%; margin-top: auto; border: 1px dashed #aeb8b1; color: #36453e; background: transparent; padding: .7rem; }
 .create-column:hover:not(:disabled) { border-color: var(--forest); color: var(--forest); background: #dfe7df; }
 

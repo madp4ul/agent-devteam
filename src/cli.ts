@@ -103,6 +103,11 @@ async function run(arguments_: string[]): Promise<void> {
         taskWorkspaceRoot,
         agentRuntime,
       },
+      runtimeDiagnostic: (diagnostic) => {
+        console.error(
+          `[runtime-start-failed] task=${diagnostic.taskId} activation=${diagnostic.activationId} boundary=${diagnostic.boundary} occurredAt=${diagnostic.occurredAt} diagnostic=${diagnostic.diagnostic}`,
+        );
+      },
     });
     const server = await startWebServer(application, {
       host,

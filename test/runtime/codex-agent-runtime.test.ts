@@ -52,6 +52,7 @@ test("each activation starts a fresh streamed Codex thread without overriding us
           args: ["coordination-mcp.ts", "--task", "T-0001"],
           env: { CURRENT_TASK: "T-0001" },
           required: true,
+          default_tools_approval_mode: "approve",
         },
       },
     },
@@ -142,6 +143,61 @@ test("a stream that ends without turn.completed is a failed outcome", async () =
   assert.deepEqual(await runtime.read("thread-truncated"), [
     { kind: "message", role: "agent", text: "This was not confirmed complete." },
     { kind: "diagnostic", text: "The Codex stream ended before turn.completed." },
+  ]);
+});
+
+test("a failed required coordination call makes the attempt fail with actionable evidence", async () => {
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-coordination-failure" },
+            {
+              type: "item.completed",
+              item: {
+                id: "tool-call-1",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "inspect_current_task",
+                status: "failed",
+                error: { message: "user cancelled MCP tool call" },
+              },
+            },
+            {
+              type: "item.completed",
+              item: { type: "agent_message", text: "I could not inspect the task." },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+
+  assert.deepEqual(
+    await runtime.run(request("activation-coordination-failure", "T-0006"), { started() {} }),
+    {
+      status: "failed",
+      summary:
+        "Required coordination tool coordination.inspect_current_task failed: user cancelled MCP tool call; the coordination server was configured with approval mode \"approve\", but Codex supplied no deeper cancellation cause—inspect the retained session and host lifecycle evidence",
+      threadId: "thread-coordination-failure",
+    },
+  );
+  assert.deepEqual(await runtime.read("thread-coordination-failure"), [
+    {
+      kind: "tool",
+      name: "mcp_tool_call",
+      status: "failed",
+      summary: "coordination.inspect_current_task",
+      output: "user cancelled MCP tool call",
+    },
+    { kind: "message", role: "agent", text: "I could not inspect the task." },
+    {
+      kind: "diagnostic",
+      text: "Required coordination tool coordination.inspect_current_task failed: user cancelled MCP tool call; the coordination server was configured with approval mode \"approve\", but Codex supplied no deeper cancellation cause—inspect the retained session and host lifecycle evidence",
+    },
   ]);
 });
 

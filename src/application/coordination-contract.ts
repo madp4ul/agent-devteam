@@ -3,6 +3,7 @@ export interface StartApplicationOptions {
   databasePath: string;
   runtimeDispatch?: RuntimeDispatchOptions;
   transcriptAccess?: AttemptTranscriptAccess;
+  runtimeDiagnostic?(diagnostic: RuntimeStartupDiagnostic): void;
 }
 
 export interface RuntimeDispatchOptions {
@@ -83,6 +84,25 @@ export interface AttemptView {
   threadId: string | null;
 }
 
+export type RuntimeStartupBoundary =
+  | "repository-access"
+  | "starting-ref-resolution"
+  | "workspace-preparation"
+  | "worktree-registration"
+  | "workspace-state-persistence";
+
+export interface ActivationStartupFailureView {
+  occurredAt: string;
+  boundary: RuntimeStartupBoundary;
+  diagnostic: string;
+  resolvedAt: string | null;
+}
+
+export interface RuntimeStartupDiagnostic extends ActivationStartupFailureView {
+  taskId: string;
+  activationId: string;
+}
+
 export type AttemptTranscriptItem =
   | { kind: "message"; role: "agent"; text: string }
   | {
@@ -100,6 +120,7 @@ export interface ActivationView {
   status: "queued" | "running" | "completed" | "failed";
   reason: ActivationReasonView;
   attempts: AttemptView[];
+  startupFailure: ActivationStartupFailureView | null;
 }
 
 export interface AgentRunAgent {
@@ -169,6 +190,7 @@ export interface TaskOverviewView {
   blocking: { blocked: boolean; blockerTaskIds: string[] };
   relationships: TaskRelationshipView[];
   unresolvedAttention: TaskAttentionView[];
+  startupFailure?: ActivationStartupFailureView & { activationId: string };
   run: {
     status: "idle" | "queued" | "running" | "failed";
     activeAgentId: string | null;

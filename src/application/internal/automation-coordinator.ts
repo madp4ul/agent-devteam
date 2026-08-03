@@ -4,10 +4,11 @@ import type {
   AutomationView,
   ProcessBoardView,
   ResumeAutomationResult,
+  RuntimeStartupDiagnostic,
   RuntimeDispatchOptions,
   StartupView,
 } from "../coordination-contract.ts";
-import { GitTaskWorkspaceManager } from "./git-task-workspace.ts";
+import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-workspace.ts";
 import type { RelationalCoordinationStore } from "./coordination-store.ts";
 
 export interface AutomationProcessContext {
@@ -24,6 +25,7 @@ export interface AutomationCoordinatorOptions {
   runtimeDispatch?: RuntimeDispatchOptions;
   startingRef?: string;
   processContext?: AutomationProcessContext;
+  runtimeDiagnostic?(diagnostic: RuntimeStartupDiagnostic): void;
 }
 
 export class AutomationCoordinator {
@@ -37,6 +39,7 @@ export class AutomationCoordinator {
     | undefined;
   readonly #startingRef: string | undefined;
   readonly #processContext: AutomationProcessContext | undefined;
+  readonly #runtimeDiagnostic: ((diagnostic: RuntimeStartupDiagnostic) => void) | undefined;
   #automation: AutomationView;
   #automationWork: Promise<void> = Promise.resolve();
   #automationPumpRunning = false;
@@ -57,6 +60,7 @@ export class AutomationCoordinator {
           };
     this.#startingRef = options.startingRef;
     this.#processContext = options.processContext;
+    this.#runtimeDiagnostic = options.runtimeDiagnostic;
   }
 
   query(): AutomationView {
@@ -128,13 +132,32 @@ export class AutomationCoordinator {
       const runnable = this.#store.readNextRunnableActivation();
       if (runnable === undefined) return;
       const priorWorkspace = this.#store.readTaskWorkspace(runnable.task.id);
-      const workspace = await this.#runtimeDispatch.workspaceManager.provision(
-        runnable.task.id,
-        this.#startingRef ?? "",
-        priorWorkspace,
-      );
-      if (priorWorkspace === undefined) {
-        this.#store.saveTaskWorkspace(runnable.task.id, workspace);
+      let workspace;
+      try {
+        workspace = await this.#runtimeDispatch.workspaceManager.provision(
+          runnable.task.id,
+          this.#startingRef ?? "",
+          priorWorkspace,
+        );
+        if (priorWorkspace === undefined) {
+          try {
+            this.#store.saveTaskWorkspace(runnable.task.id, workspace);
+          } catch (error) {
+            throw new GitTaskWorkspaceError(
+              "workspace-state-persistence",
+              "Could not persist the provisioned task workspace",
+              error,
+            );
+          }
+        }
+      } catch (error) {
+        const failure = this.#store.recordActivationStartupFailure(
+          runnable.activation.id,
+          error instanceof GitTaskWorkspaceError ? error.boundary : "workspace-preparation",
+          completeDiagnostic(error),
+        );
+        this.#runtimeDiagnostic?.(failure);
+        throw new Error(failure.diagnostic, { cause: error });
       }
       const attempt = this.#store.startAttempt(runnable.activation.id, workspace.path);
       const currentTask = this.#store.readTask(runnable.task.id);
@@ -207,4 +230,15 @@ export class AutomationCoordinator {
       this.#store.completeAttempt(attempt.id, outcome);
     }
   }
+}
+
+function completeDiagnostic(error: unknown): string {
+  if (!(error instanceof Error)) return "Task workspace startup failed";
+  const causes: string[] = [error.message];
+  let cause = error.cause;
+  while (cause instanceof Error) {
+    if (!causes.includes(cause.message)) causes.push(cause.message);
+    cause = cause.cause;
+  }
+  return causes.join(": ");
 }

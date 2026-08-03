@@ -2,7 +2,17 @@ import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import type { TaskWorkspaceView } from "../coordination-contract.ts";
+import type { RuntimeStartupBoundary, TaskWorkspaceView } from "../coordination-contract.ts";
+
+export class GitTaskWorkspaceError extends Error {
+  readonly boundary: RuntimeStartupBoundary;
+
+  constructor(boundary: RuntimeStartupBoundary, message: string, cause: unknown) {
+    super(message, { cause });
+    this.name = "GitTaskWorkspaceError";
+    this.boundary = boundary;
+  }
+}
 
 export class GitTaskWorkspaceManager {
   readonly projectRepositoryPath: string;
@@ -26,26 +36,43 @@ export class GitTaskWorkspaceManager {
       return existing;
     }
 
+    await atBoundary(
+      "repository-access",
+      `Could not access project repository ${this.projectRepositoryPath}`,
+      runGit(["-C", this.projectRepositoryPath, "rev-parse", "--git-dir"]),
+    );
     const commit = (
-      await runGit([
+      await atBoundary(
+        "starting-ref-resolution",
+        `Could not resolve task workspace starting ref ${startingRef}`,
+        runGit([
+          "-C",
+          this.projectRepositoryPath,
+          "rev-parse",
+          "--verify",
+          `${startingRef}^{commit}`,
+        ]),
+      )
+    ).trim();
+    await atBoundary(
+      "workspace-preparation",
+      `Could not prepare task workspace root ${this.taskWorkspaceRoot}`,
+      mkdir(this.taskWorkspaceRoot, { recursive: true }),
+    );
+    const path = join(this.taskWorkspaceRoot, taskId);
+    await atBoundary(
+      "worktree-registration",
+      `Could not register task ${taskId} worktree`,
+      runGit([
         "-C",
         this.projectRepositoryPath,
-        "rev-parse",
-        "--verify",
-        `${startingRef}^{commit}`,
-      ])
-    ).trim();
-    await mkdir(this.taskWorkspaceRoot, { recursive: true });
-    const path = join(this.taskWorkspaceRoot, taskId);
-    await runGit([
-      "-C",
-      this.projectRepositoryPath,
-      "worktree",
-      "add",
-      "--detach",
-      path,
-      commit,
-    ]);
+        "worktree",
+        "add",
+        "--detach",
+        path,
+        commit,
+      ]),
+    );
     return { path, startingRef, commit };
   }
 
@@ -74,11 +101,24 @@ export class GitTaskWorkspaceManager {
       ).trim();
       if (entry === undefined || isWorktree !== "true") throw new Error("unexpected registration");
     } catch (error) {
-      throw new Error(
+      throw new GitTaskWorkspaceError(
+        "worktree-registration",
         `Task ${taskId} workspace is not the registered task worktree expected by the project`,
-        { cause: error },
+        error,
       );
     }
+  }
+}
+
+async function atBoundary<T>(
+  boundary: RuntimeStartupBoundary,
+  message: string,
+  work: Promise<T>,
+): Promise<T> {
+  try {
+    return await work;
+  } catch (error) {
+    throw new GitTaskWorkspaceError(boundary, message, error);
   }
 }
 

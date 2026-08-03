@@ -52,6 +52,15 @@ const browserTranscript: AttemptTranscriptItem[] = [
 const application = await CoordinationApplication.start({
   processDefinitionPath: definitionPath,
   databasePath,
+  runtimeDispatch: {
+    projectRepositoryPath: join(directory, "missing-project-repository"),
+    taskWorkspaceRoot: join(directory, "task-workspaces"),
+    agentRuntime: {
+      run: () => {
+        throw new Error("The browser startup-failure fixture must fail before runtime dispatch");
+      },
+    },
+  },
   transcriptAccess: {
     read: async (threadId) => threadId === "thread-browser-123" ? browserTranscript : null,
   },
@@ -88,6 +97,15 @@ const draggable = application.createTask({
   idempotencyKey: "browser-draggable",
 });
 if (!draggable.accepted) throw new Error("Could not create draggable browser fixture");
+const startupFailed = application.createTask({
+  boardId: "delivery",
+  columnId: "implementation",
+  title: "Recover a workspace startup failure",
+  description: "Keep pre-attempt diagnostics visible until explicit recovery.",
+  actor: { kind: "user", id: "local-user" },
+  idempotencyKey: "browser-startup-failed",
+});
+if (!startupFailed.accepted) throw new Error("Could not create startup-failed browser fixture");
 
 const activation = moved.task.activations[0];
 if (activation === undefined) throw new Error("Expected a watched-column activation");
@@ -118,7 +136,14 @@ database.prepare(
 database.prepare(
   "INSERT INTO task_relationships VALUES (?, 'dependency', ?, ?)",
 ).run("browser-relationship", inspected.task.id, draggable.task.id);
+if (startupFailed.task.activations[0] === undefined) {
+  throw new Error("Expected a startup-failure activation");
+}
 database.close();
+const startupFailure = await application.resumeAutomation();
+if (startupFailure.accepted || startupFailure.reason !== "runtime-start-failed") {
+  throw new Error("Expected the browser fixture's pre-attempt repository failure");
+}
 
 const server = await startWebServer(application, { host: "127.0.0.1", port: 4174 });
 console.log(`Browser fixture listening at ${server.baseUrl}`);

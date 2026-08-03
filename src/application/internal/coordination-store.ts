@@ -14,6 +14,8 @@ import type {
   EditTaskCommand,
   MoveTaskCommand,
   ProcessBoardView,
+  RuntimeStartupBoundary,
+  RuntimeStartupDiagnostic,
   TaskAttachmentView,
   TaskAttentionView,
   TaskActivityView,
@@ -322,6 +324,7 @@ export class RelationalCoordinationStore {
     }>;
     return rows.map((row) => {
       const blockerTaskIds = this.readBlockingTaskIds(row.id);
+      const startupFailure = this.readLatestUnresolvedStartupFailure(row.id);
       return {
         sequence: row.sequence,
         task: {
@@ -333,6 +336,7 @@ export class RelationalCoordinationStore {
           blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
           relationships: this.readTaskRelationships(row.id),
           unresolvedAttention: this.readUnresolvedAttention(row.id),
+          ...(startupFailure === undefined ? {} : { startupFailure }),
           run: {
             status:
               row.running_count > 0
@@ -349,6 +353,39 @@ export class RelationalCoordinationStore {
         },
       };
     });
+  }
+
+  private readLatestUnresolvedStartupFailure(
+    taskId: string,
+  ): TaskOverviewView["startupFailure"] {
+    const row = this.#database
+      .prepare(
+        `SELECT failure.activation_id, failure.occurred_at, failure.boundary,
+                failure.diagnostic, failure.resolved_at
+         FROM activation_startup_failures failure
+         JOIN activations activation ON activation.id = failure.activation_id
+         WHERE activation.task_id = ? AND failure.resolved_at IS NULL
+         ORDER BY failure.occurred_at DESC
+         LIMIT 1`,
+      )
+      .get(taskId) as
+      | {
+          activation_id: string;
+          occurred_at: string;
+          boundary: RuntimeStartupBoundary;
+          diagnostic: string;
+          resolved_at: string | null;
+        }
+      | undefined;
+    return row === undefined
+      ? undefined
+      : {
+          activationId: row.activation_id,
+          occurredAt: row.occurred_at,
+          boundary: row.boundary,
+          diagnostic: row.diagnostic,
+          resolvedAt: row.resolved_at,
+        };
   }
 
   readUnresolvedAttention(taskId: string): TaskAttentionView[] {
@@ -557,6 +594,37 @@ export class RelationalCoordinationStore {
         occurredAt,
       );
       return { id: attemptId, number: priorAttempts.count + 1, runStartActivityId };
+    });
+  }
+
+  recordActivationStartupFailure(
+    activationId: string,
+    boundary: RuntimeStartupBoundary,
+    diagnostic: string,
+  ): RuntimeStartupDiagnostic {
+    return this.transaction(() => {
+      const activation = this.#database
+        .prepare("SELECT task_id FROM activations WHERE id = ? AND status = 'queued'")
+        .get(activationId) as { task_id: string } | undefined;
+      if (activation === undefined) throw new Error(`Activation ${activationId} is not queued`);
+      const occurredAt = new Date().toISOString();
+      this.#database
+        .prepare("UPDATE activations SET status = 'failed' WHERE id = ?")
+        .run(activationId);
+      this.#database
+        .prepare(
+          `INSERT INTO activation_startup_failures
+            (activation_id, occurred_at, boundary, diagnostic, resolved_at)
+           VALUES (?, ?, ?, ?, NULL)`,
+        )
+        .run(activationId, occurredAt, boundary, diagnostic);
+      this.#database
+        .prepare(
+          `INSERT INTO attention_reasons (id, task_id, type, resolved_at)
+           VALUES (?, ?, 'failed-run', NULL)`,
+        )
+        .run(randomUUID(), activation.task_id);
+      return { taskId: activation.task_id, activationId, occurredAt, boundary, diagnostic, resolvedAt: null };
     });
   }
 
@@ -891,7 +959,35 @@ export class RelationalCoordinationStore {
       status: row.status,
       reason: { type: row.reason_type, sourceEventId: row.source_activity_id },
       attempts: this.readAttempts(row.id),
+      startupFailure: this.readActivationStartupFailure(row.id),
     }));
+  }
+
+  private readActivationStartupFailure(
+    activationId: string,
+  ): ActivationView["startupFailure"] {
+    const row = this.#database
+      .prepare(
+        `SELECT occurred_at, boundary, diagnostic, resolved_at
+         FROM activation_startup_failures
+         WHERE activation_id = ?`,
+      )
+      .get(activationId) as
+      | {
+          occurred_at: string;
+          boundary: RuntimeStartupBoundary;
+          diagnostic: string;
+          resolved_at: string | null;
+        }
+      | undefined;
+    return row === undefined
+      ? null
+      : {
+          occurredAt: row.occurred_at,
+          boundary: row.boundary,
+          diagnostic: row.diagnostic,
+          resolvedAt: row.resolved_at,
+        };
   }
 
   private readAttempts(activationId: string): ActivationView["attempts"] {

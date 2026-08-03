@@ -150,11 +150,24 @@ export function openCoordinationDatabase(path: string): DatabaseSync {
   `);
   migrateTaskSequence(database);
   migrateFailedRunOutcomes(database);
+  ensureActivationStartupFailures(database);
   migrateAttemptThreadId(database);
   migrateTranscriptOwnership(database);
   migrateActivityLedger(database);
   migrateTaskEditedActivity(database);
   return database;
+}
+
+function ensureActivationStartupFailures(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS activation_startup_failures (
+      activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
+      occurred_at TEXT NOT NULL,
+      boundary TEXT NOT NULL,
+      diagnostic TEXT NOT NULL,
+      resolved_at TEXT
+    );
+  `);
 }
 
 function migrateTaskEditedActivity(database: DatabaseSync): void {

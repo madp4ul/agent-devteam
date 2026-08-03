@@ -92,6 +92,11 @@ without choosing the implementation yet.
   runtime-owned transcript access, accessible movement, and Pragmatic Drag and
   Drop on a horizontally scrollable workflow lane.
 
+- [Make Real-Run Coordination Calls Reliable](./issues/30-make-real-run-coordination-calls-reliable.md)
+  — Auto-approve only the scoped coordination MCP tools for noninteractive Codex
+  runs, fail attempts with unresolved required coordination calls, and persist
+  correlated pre-attempt startup diagnostics across logs, UI, and host restarts.
+
 ## Not yet specified
 
 ## Out of scope

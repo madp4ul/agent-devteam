@@ -66,13 +66,28 @@ test(
     assert.equal(created.accepted, true);
     if (!created.accepted) return;
 
-    assert.equal((await application.resumeAutomation()).accepted, true);
+    const resume = await application.resumeAutomation();
+    assert.equal(resume.accepted, true, JSON.stringify(resume));
     await application.waitForAutomationIdle();
 
     const completed = application.queryTask(created.task.id);
     assert.equal(completed.available, true);
     if (!completed.available) return;
-    assert.equal(completed.task.columnId, "review");
+    const transcripts = await Promise.all(
+      completed.task.activations.map(async (activation) => {
+        const threadId = activation.attempts[0]?.threadId;
+        return {
+          activationId: activation.id,
+          attempt: activation.attempts[0],
+          transcript: threadId == null ? null : await runtime.read(threadId),
+        };
+      }),
+    );
+    assert.equal(
+      completed.task.columnId,
+      "review",
+      JSON.stringify({ comments: completed.task.comments, transcripts }, null, 2),
+    );
     assert.equal(completed.task.comments.length, 1);
     assert.match(completed.task.comments[0]?.body ?? "", /real Codex SDK handoff/i);
     assert.deepEqual(
@@ -84,6 +99,24 @@ test(
     );
     assert.ok(threadIds.every((threadId) => typeof threadId === "string"));
     assert.notEqual(threadIds[0], threadIds[1]);
+    const implementationTranscript = await runtime.read(threadIds[0] as string);
+    assert.deepEqual(
+      implementationTranscript
+        ?.filter((item) => item.kind === "tool")
+        .map((item) => ({ summary: item.summary, status: item.status })),
+      [
+        { summary: "coordination.inspect_current_task", status: "completed" },
+        { summary: "coordination.add_comment", status: "completed" },
+        { summary: "coordination.move_current_task", status: "completed" },
+      ],
+    );
+    const reviewTranscript = await runtime.read(threadIds[1] as string);
+    assert.deepEqual(
+      reviewTranscript
+        ?.filter((item) => item.kind === "tool")
+        .map((item) => ({ summary: item.summary, status: item.status })),
+      [{ summary: "coordination.inspect_current_task", status: "completed" }],
+    );
   },
 );
 

@@ -7,8 +7,16 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import {
+  CoordinationApplication,
+  type AgentRunRequest,
+} from "../../src/application/coordination-application.ts";
 import { AgentToolScopeRegistry } from "../../src/mcp/agent-tool-scope.ts";
+import {
+  CodexAgentRuntime,
+  type CodexClientOptionsLike,
+  type CodexEventLike,
+} from "../../src/runtime/codex-agent-runtime.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
 
 test("the project MCP exposes bounded discovery while mutations stay current-task scoped", async (t) => {
@@ -299,7 +307,196 @@ boards:
       },
     ],
   );
+
+  const runtimeTask = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Drive the assembled runtime and MCP boundary",
+    description: "The controlled Codex adapter must inspect, comment, and move through stdio.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-assembled-runtime-task",
+  });
+  assert.equal(runtimeTask.accepted, true);
+  if (!runtimeTask.accepted) return;
+  const runtime = new CodexAgentRuntime({
+    mcpServer: {
+      command: process.execPath,
+      args: (request) => [
+        "--experimental-strip-types",
+        join(process.cwd(), "src/mcp/stdio-server.ts"),
+        "--base-url",
+        server.baseUrl,
+        "--token",
+        scopes.issue({ taskId: request.task.id, agentId: request.agent.id }),
+      ],
+    },
+    createClient: (options) => controlledMcpClient(options),
+  });
+  const runtimeOutcome = await runtime.run(
+    assembledRequest(runtimeTask.task, directory),
+    { started() {} },
+  );
+  assert.deepEqual(runtimeOutcome, {
+    status: "completed",
+    summary: "Controlled assembled handoff complete.",
+    threadId: "controlled-assembled-thread",
+  });
+  const runtimeUpdated = application.queryTask(runtimeTask.task.id);
+  assert.equal(runtimeUpdated.available, true);
+  if (!runtimeUpdated.available) return;
+  assert.equal(runtimeUpdated.task.columnId, "review");
+  assert.deepEqual(runtimeUpdated.task.comments.map((comment) => comment.body), [
+    "Controlled assembled MCP handoff complete.",
+  ]);
 });
+
+function controlledMcpClient(options: CodexClientOptionsLike) {
+  return {
+    startThread: () => ({
+      runStreamed: async () => {
+        const server = coordinationServerConfig(options);
+        if (server.default_tools_approval_mode !== "approve") {
+          return {
+            events: codexEvents(
+              { type: "thread.started", thread_id: "controlled-assembled-thread" },
+              {
+                type: "item.completed",
+                item: {
+                  type: "mcp_tool_call",
+                  server: "coordination",
+                  tool: "inspect_current_task",
+                  status: "failed",
+                  error: { message: "user cancelled MCP tool call" },
+                },
+              },
+              { type: "turn.completed" },
+            ),
+          };
+        }
+        const transport = new StdioClientTransport({
+          command: server.command,
+          args: server.args,
+          stderr: "pipe",
+        });
+        const client = new Client({ name: "controlled-codex-adapter", version: "1.0.0" });
+        await client.connect(transport);
+        try {
+          const inspected = await client.callTool({ name: "inspect_current_task", arguments: {} });
+          const current = JSON.parse(textContent(inspected.content)) as { revision: number };
+          const commented = await client.callTool({
+            name: "add_comment",
+            arguments: {
+              body: "Controlled assembled MCP handoff complete.",
+              idempotencyKey: "controlled-assembled-comment",
+            },
+          });
+          const moved = await client.callTool({
+            name: "move_current_task",
+            arguments: {
+              destinationColumnId: "review",
+              expectedRevision: current.revision,
+              idempotencyKey: "controlled-assembled-move",
+            },
+          });
+          return {
+            events: codexEvents(
+              { type: "thread.started", thread_id: "controlled-assembled-thread" },
+              completedMcpItem("inspect_current_task", inspected.content),
+              completedMcpItem("add_comment", commented.content),
+              completedMcpItem("move_current_task", moved.content),
+              {
+                type: "item.completed",
+                item: { type: "agent_message", text: "Controlled assembled handoff complete." },
+              },
+              { type: "turn.completed" },
+            ),
+          };
+        } finally {
+          await client.close();
+        }
+      },
+    }),
+  };
+}
+
+function coordinationServerConfig(options: CodexClientOptionsLike): {
+  command: string;
+  args: string[];
+  default_tools_approval_mode?: string;
+} {
+  const config = options.config as unknown as {
+    mcp_servers?: {
+      coordination?: {
+        command?: unknown;
+        args?: unknown;
+        default_tools_approval_mode?: unknown;
+      };
+    };
+  };
+  const server = config.mcp_servers?.coordination;
+  const command = server?.command;
+  const args = server?.args;
+  if (typeof command !== "string" || !Array.isArray(args) || !args.every((value) => typeof value === "string")) {
+    throw new Error("Codex runtime did not configure a valid coordination stdio server");
+  }
+  return {
+    command,
+    args,
+    ...(typeof server?.default_tools_approval_mode === "string"
+      ? { default_tools_approval_mode: server.default_tools_approval_mode }
+      : {}),
+  };
+}
+
+function completedMcpItem(tool: string, result: unknown): CodexEventLike {
+  return {
+    type: "item.completed",
+    item: { type: "mcp_tool_call", server: "coordination", tool, status: "completed", result },
+  };
+}
+
+async function* codexEvents(...events: CodexEventLike[]): AsyncGenerator<CodexEventLike> {
+  for (const event of events) yield event;
+}
+
+function assembledRequest(
+  task: Extract<ReturnType<CoordinationApplication["createTask"]>, { accepted: true }>['task'],
+  directory: string,
+): AgentRunRequest {
+  const sourceEvent = task.activity[0];
+  assert.ok(sourceEvent);
+  return {
+    activationId: "controlled-assembled-activation",
+    agent: {
+      id: "implementer",
+      name: "Implementation Agent",
+      role: "Implements changes",
+      summary: "Builds the current task.",
+      instructions: "Inspect, comment, and move the task.",
+    },
+    process: {
+      name: "MCP process",
+      guidance: "Use the task-scoped tools.",
+      definitionVersion: "controlled-version",
+    },
+    board: {
+      id: "delivery",
+      name: "Delivery",
+      guidance: "Keep movement explicit.",
+      columns: [
+        { id: "implementation", name: "Implementation", watchingAgentId: null, frameworkOwned: false },
+        { id: "review", name: "Review", watchingAgentId: null, frameworkOwned: false },
+        { id: "completion", name: "Completion", watchingAgentId: null, frameworkOwned: true },
+      ],
+    },
+    collaborators: [],
+    reason: { type: "column-entry", sourceEventId: sourceEvent.id },
+    sourceEvent,
+    task,
+    workspace: { path: directory, startingRef: "main", commit: "controlled" },
+    attempt: { number: 1, precedingOutcome: null, thread: "fresh", continuationMessage: null },
+  };
+}
 
 function textContent(content: unknown): string {
   assert.ok(Array.isArray(content));

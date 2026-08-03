@@ -70,6 +70,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
             args: mcpArguments,
             ...(mcpEnvironment === undefined ? {} : { env: mcpEnvironment }),
             required: true,
+            default_tools_approval_mode: "approve",
           },
         },
       },
@@ -82,6 +83,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
       const { events } = await thread.runStreamed(composeActivationPrompt(request));
       let finalResponse = "";
       let turnCompleted = false;
+      const failedCoordinationTools = new Map<string, string>();
       for await (const event of events) {
         if (event.type === "thread.started") {
           threadId = event.thread_id;
@@ -95,6 +97,12 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           transcript.push({ kind: "message", role: "agent", text: event.item.text });
         } else if (event.type === "item.completed") {
           transcript.push(toolTranscriptItem(event.item));
+          const coordinationCall = coordinationToolCall(event.item);
+          if (coordinationCall?.status === "failed") {
+            failedCoordinationTools.set(coordinationCall.name, coordinationCall.diagnostic);
+          } else if (coordinationCall?.status === "completed") {
+            failedCoordinationTools.delete(coordinationCall.name);
+          }
         } else if (event.type === "turn.completed") {
           turnCompleted = true;
         } else if (event.type === "turn.failed" || event.type === "error") {
@@ -125,6 +133,13 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           summary: "Codex could not complete the activation: the stream ended before turn.completed",
           threadId,
         };
+      }
+      if (failedCoordinationTools.size > 0) {
+        const diagnostic = [...failedCoordinationTools]
+          .map(([name, cause]) => `Required coordination tool ${name} failed: ${cause}`)
+          .join("; ");
+        this.#remember(threadId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
+        return { status: "failed", summary: diagnostic, threadId };
       }
       this.#remember(threadId, transcript);
       return {
@@ -171,7 +186,7 @@ function toolTranscriptItem(item: { type: string; [key: string]: unknown }): Att
   const summary = command === undefined
     ? readableToolSummary(item)
     : `${command}${exitCode === undefined ? "" : ` (exit ${exitCode})`}`;
-  const rawOutput = [item.aggregated_output, item.output, item.result]
+  const rawOutput = [item.aggregated_output, item.output, item.result, errorMessage(item.error)]
     .find((value) => typeof value === "string") as string | undefined;
   return {
     kind: "tool",
@@ -180,6 +195,37 @@ function toolTranscriptItem(item: { type: string; [key: string]: unknown }): Att
     summary,
     ...(rawOutput === undefined ? {} : { output: truncateOutput(rawOutput) }),
   };
+}
+
+function coordinationToolCall(item: { type: string; [key: string]: unknown }):
+  | { name: string; status: string; diagnostic: string }
+  | undefined {
+  if (
+    item.type !== "mcp_tool_call" ||
+    item.server !== "coordination" ||
+    typeof item.tool !== "string" ||
+    typeof item.status !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    name: `coordination.${item.tool}`,
+    status: item.status,
+    diagnostic: actionableCoordinationDiagnostic(errorMessage(item.error)),
+  };
+}
+
+function actionableCoordinationDiagnostic(message: string | undefined): string {
+  if (message === undefined) return "Codex reported no underlying cause";
+  if (/cancelled mcp tool call|mcp tool call cancelled|tool call cancelled/i.test(message)) {
+    return `${message}; the coordination server was configured with approval mode "approve", but Codex supplied no deeper cancellation cause—inspect the retained session and host lifecycle evidence`;
+  }
+  return message;
+}
+
+function errorMessage(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("message" in error)) return undefined;
+  return typeof error.message === "string" ? error.message : undefined;
 }
 
 function readableToolSummary(item: { type: string; [key: string]: unknown }): string {

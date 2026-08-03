@@ -72,6 +72,23 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByText(/Moved T-0001 to Completion/)).toBeVisible();
 });
 
+test("pre-attempt startup diagnostics remain discoverable after navigation", async ({ page }) => {
+  await page.goto("/");
+  const failedLink = page.getByRole("link", { name: /T-0003 Recover a workspace startup failure/ });
+  const failedCard = failedLink.locator("..");
+  await expect(failedCard).toContainText(/failed/i);
+  await expect(failedCard).toContainText(/attention/i);
+  await expect(failedCard).toContainText("Startup failed before attempt · repository-access");
+  await expect(failedCard).toContainText(/Could not access project repository/);
+  await failedLink.click();
+  await expect(page.getByText("Startup failed before attempt")).toBeVisible();
+  await expect(page.getByText(/Boundary: repository-access/)).toBeVisible();
+  await expect(page.getByText(/Could not access project repository/)).toBeVisible();
+  await page.getByRole("link", { name: "Back to board" }).click();
+  await page.goto("/tasks/T-0003");
+  await expect(page.getByText(/missing-project-repository/)).toBeVisible();
+});
+
 test("pointer dragging moves through the same command and conflicts stay actionable", async ({ page, request }) => {
   await page.goto("/");
   const handle = page.getByRole("button", { name: "Drag T-0002" });
