@@ -327,8 +327,12 @@ test("discovery projects durable relationships, blockers, attention, and attachm
     .prepare("INSERT INTO task_relationships VALUES (?, ?, ?, ?)")
     .run("R-1", "dependency", "T-0001", "T-0002");
   fixtureDatabase
-    .prepare("INSERT INTO attention_reasons VALUES (?, ?, ?, NULL)")
-    .run("A-1", "T-0001", "user-mention");
+    .prepare(
+      `INSERT INTO attention_reasons
+        (id, task_id, type, source_event_id, created_at, resolved_at)
+       VALUES (?, ?, ?, NULL, ?, NULL)`,
+    )
+    .run("A-1", "T-0001", "user-mention", "2026-08-08T12:00:00.000Z");
   fixtureDatabase
     .prepare("INSERT INTO task_attachments VALUES (?, ?, ?, ?, ?)")
     .run("F-1", "T-0001", "architecture.md", "text/markdown", 512);
@@ -357,7 +361,12 @@ test("discovery projects durable relationships, blockers, attention, and attachm
     },
   ]);
   assert.deepEqual(inspection.task.unresolvedAttention, [
-    { id: "A-1", type: "user-mention" },
+    {
+      id: "A-1",
+      type: "user-mention",
+      sourceEventId: null,
+      createdAt: "2026-08-08T12:00:00.000Z",
+    },
   ]);
   assert.deepEqual(attachments.attachments, [
     {

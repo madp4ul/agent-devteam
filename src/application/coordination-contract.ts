@@ -61,6 +61,8 @@ export interface TaskActivityView {
     | "task.created"
     | "task.edited"
     | "task.moved"
+    | "attention.created"
+    | "attention.resolved"
     | "activation.created"
     | "attempt.started"
     | "attempt.completed";
@@ -70,7 +72,7 @@ export interface TaskActivityView {
 }
 
 export interface ActivationReasonView {
-  type: "column-entry";
+  type: "column-entry" | "agent-mention";
   sourceEventId: string;
 }
 
@@ -148,7 +150,7 @@ export interface AgentRunRequest {
   board: ProcessBoardView;
   collaborators: Array<Pick<AgentRunAgent, "id" | "name" | "role" | "summary">>;
   reason: ActivationReasonView;
-  sourceEvent: TaskActivityView;
+  sourceEvent: TaskActivityView | TaskCommentView;
   task: TaskView;
   workspace: TaskWorkspaceView;
   attempt: AttemptContextView;
@@ -224,7 +226,24 @@ export interface TaskInspectionView {
 export interface TaskAttentionView {
   id: string;
   type: "user-mention" | "failed-run";
+  sourceEventId: string | null;
+  createdAt: string;
 }
+
+export interface NeedsAttentionTaskView {
+  task: {
+    id: string;
+    title: string;
+    boardId: string;
+    boardName: string;
+    columnId: string;
+  };
+  reasons: TaskAttentionView[];
+}
+
+export type NeedsAttentionQueryResult =
+  | { available: true; tasks: NeedsAttentionTaskView[] }
+  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
 export interface TaskAttachmentView {
   id: string;
@@ -397,6 +416,12 @@ export interface AddTaskCommentCommand {
   idempotencyKey: string;
 }
 
+export interface MarkUserMentionAddressedCommand {
+  attentionReasonId: string;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
 export type BoardMutationResult =
   | { accepted: true; task: TaskView }
   | {
@@ -422,3 +447,8 @@ export type AddTaskCommentResult =
       diagnostics: ProcessDiagnostic[];
     }
   | { accepted: false; reason: "not-found" | "empty-comment" };
+
+export type MarkUserMentionAddressedResult =
+  | { accepted: true; attentionReasonId: string; resolvedAt: string }
+  | { accepted: false; reason: "not-found" | "wrong-reason-type" | "already-resolved" }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };

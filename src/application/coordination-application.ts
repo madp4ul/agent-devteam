@@ -15,6 +15,9 @@ import type {
   CreateTaskCommand,
   EditTaskCommand,
   MoveTaskCommand,
+  MarkUserMentionAddressedCommand,
+  MarkUserMentionAddressedResult,
+  NeedsAttentionQueryResult,
   ProcessValidationResult,
   ResumeAutomationResult,
   StartApplicationOptions,
@@ -196,6 +199,17 @@ export class CoordinationApplication {
     return this.#discovery.queryCollaborators();
   }
 
+  queryNeedsAttention(): NeedsAttentionQueryResult {
+    if (this.#startup.mode === "configuration-error") {
+      return {
+        available: false,
+        reason: "configuration-error",
+        diagnostics: this.#startup.diagnostics,
+      };
+    }
+    return { available: true, tasks: this.#store.readNeedsAttention() };
+  }
+
   queryTask(taskId: string): TaskQueryResult {
     if (this.#startup.mode === "configuration-error") {
       return {
@@ -256,7 +270,27 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    return this.#store.addTaskComment(command);
+    const result = this.#store.addTaskComment(command);
+    if (
+      result.accepted &&
+      result.task.activations.some((activation) => activation.status === "queued")
+    ) {
+      this.#automation.kick();
+    }
+    return result;
+  }
+
+  markUserMentionAddressed(
+    command: MarkUserMentionAddressedCommand,
+  ): MarkUserMentionAddressedResult {
+    if (this.#startup.mode === "configuration-error") {
+      return {
+        accepted: false,
+        reason: "configuration-error",
+        diagnostics: this.#startup.diagnostics,
+      };
+    }
+    return this.#store.markUserMentionAddressed(command);
   }
 
   close(): void {

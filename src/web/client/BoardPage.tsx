@@ -14,17 +14,26 @@ import {
   type BrowserColumnView,
 } from "./api.ts";
 import { errorMessage } from "./feedback.ts";
+import { MarkUserMentionAddressed } from "./AttentionReasonAction.tsx";
 import { Loading } from "./Loading.tsx";
+import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import type { Navigate, NavigationState } from "./navigation.ts";
 import { useTaskMovement } from "./task-movement.ts";
 
-export function BoardPage({ navigate }: { navigate: Navigate }): ReactNode {
+export function BoardPage({
+  navigate,
+  notifications,
+}: {
+  navigate: Navigate;
+  notifications: DesktopNotificationControl;
+}): ReactNode {
   const initialContext = (window.history.state as NavigationState | null)?.boardContext;
   const [state, setState] = useState<BrowserBoardState>();
   const [filter, setFilter] = useState(
     initialContext?.filter ?? new URLSearchParams(location.search).get("q") ?? "",
   );
   const [creation, setCreation] = useState<{ boardId: string; columnId: string }>();
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string>();
   const laneRefs = useRef(new Map<string, HTMLDivElement>());
   const refresh = useCallback(async () => setState(await readBoard()), []);
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
@@ -57,6 +66,16 @@ export function BoardPage({ navigate }: { navigate: Navigate }): ReactNode {
     rememberContext(boardId);
     navigate(`/tasks/${encodeURIComponent(taskId)}`, { returnToBoard: true });
   }, [navigate, rememberContext]);
+  const locateTask = useCallback((taskId: string, boardId: string) => {
+    setFilter("");
+    setHighlightedTaskId(taskId);
+    queueMicrotask(() => {
+      const card = document.querySelector<HTMLElement>(`[data-task-id="${CSS.escape(taskId)}"]`);
+      card?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      card?.focus({ preventScroll: true });
+    });
+    rememberContext(boardId);
+  }, [rememberContext]);
 
   useEffect(
     () =>
@@ -131,9 +150,60 @@ export function BoardPage({ navigate }: { navigate: Navigate }): ReactNode {
               Resume
             </button>
           ) : null}
+          {notifications.available ? (
+            <button className="secondary" onClick={() => void notifications.toggle()}>
+              Desktop notifications {notifications.enabled ? "on" : "off"}
+            </button>
+          ) : (
+            <span>Desktop notifications unavailable</span>
+          )}
         </div>
       </header>
       <main>
+        <section className="needs-attention" aria-labelledby="needs-attention-heading">
+          <div className="board-heading">
+            <div>
+              <p className="eyebrow">Explicit action required</p>
+              <h2 id="needs-attention-heading">Needs attention</h2>
+            </div>
+          </div>
+          {state.attention.length === 0 ? (
+            <p className="quiet">No tasks need attention.</p>
+          ) : (
+            <ol className="attention-groups">
+              {state.attention.map(({ task, reasons }) => (
+                <li key={task.id}>
+                  <div>
+                    <strong>{task.id} · {task.title}</strong>
+                    <small>{task.boardName}</small>
+                  </div>
+                  <ul>
+                    {reasons.map((reason) => (
+                      <li
+                        key={reason.id}
+                        className={new URLSearchParams(location.search).get("attention") === reason.id ? "highlighted" : ""}
+                      >
+                        <span>{reason.type.replaceAll("-", " ")}</span>
+                        {reason.type === "user-mention" ? (
+                          <MarkUserMentionAddressed
+                            attentionReasonId={reason.id}
+                            onResolved={refresh}
+                            onError={(error) =>
+                              setFeedback({ role: "alert", text: errorMessage(error) })}
+                          />
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="attention-actions">
+                    <button className="secondary" onClick={() => locateTask(task.id, task.boardId)}>Locate card</button>
+                    <button onClick={() => openTask(task.id, task.boardId)}>Open details</button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
         <div className="board-toolbar">
           <label className="filter-field">
             <span>Filter tasks</span>
@@ -172,6 +242,7 @@ export function BoardPage({ navigate }: { navigate: Navigate }): ReactNode {
                   column={column}
                   filter={filter}
                   pendingTaskId={pendingTaskId}
+                  highlightedTaskId={highlightedTaskId}
                   onOpen={(taskId) => openTask(taskId, board.id)}
                   onCreate={() => setCreation({ boardId: board.id, columnId: column.id })}
                 />
@@ -201,6 +272,7 @@ function BoardColumn({
   column,
   filter,
   pendingTaskId,
+  highlightedTaskId,
   onOpen,
   onCreate,
 }: {
@@ -208,6 +280,7 @@ function BoardColumn({
   column: BrowserColumnView;
   filter: string;
   pendingTaskId?: string | undefined;
+  highlightedTaskId?: string | undefined;
   onOpen(taskId: string): void;
   onCreate(): void;
 }): ReactNode {
@@ -255,6 +328,7 @@ function BoardColumn({
             key={task.id}
             task={task}
             pending={pendingTaskId === task.id}
+            highlighted={highlightedTaskId === task.id}
             onOpen={onOpen}
           />
         ))}
@@ -269,10 +343,12 @@ function BoardColumn({
 function TaskCard({
   task,
   pending,
+  highlighted,
   onOpen,
 }: {
   task: TaskOverviewView;
   pending: boolean;
+  highlighted: boolean;
   onOpen(taskId: string): void;
 }): ReactNode {
   const cardRef = useRef<HTMLLIElement>(null);
@@ -293,7 +369,9 @@ function TaskCard({
   return (
     <li
       ref={cardRef}
-      className={`task-card${pending ? " pending" : ""}${dragging ? " dragging" : ""}`}
+      data-task-id={task.id}
+      tabIndex={-1}
+      className={`task-card${pending ? " pending" : ""}${dragging ? " dragging" : ""}${highlighted ? " highlighted" : ""}`}
       aria-busy={pending}
     >
       <div className="card-topline">

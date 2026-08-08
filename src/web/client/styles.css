@@ -112,6 +112,14 @@ textarea { resize: vertical; line-height: 1.5; }
 .quiet { color: var(--muted); }
 .attention-list, .relationship-list { padding-left: 1.2rem; }
 .attention-list li { color: #7e5510; }
+.needs-attention { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #dfc27d; border-radius: 12px; background: #fffaf0; }
+.attention-groups { display: grid; gap: .75rem; padding: 0; list-style: none; }
+.attention-groups > li { display: grid; gap: .6rem; padding: .85rem; border: 1px solid #ead9ad; border-radius: 10px; background: white; }
+.attention-groups strong, .attention-groups small { display: block; }
+.attention-groups ul { margin: 0; padding-left: 1.2rem; }
+.attention-groups ul li, .attention-list li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.attention-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.highlighted { outline: 3px solid #d79a14; outline-offset: 3px; }
 .move-panel { display: grid; grid-template-columns: minmax(13rem, .7fr) minmax(0, 1.3fr); gap: 2rem; margin-bottom: 1.5rem; }
 .move-panel p { color: var(--muted); }
 .move-chooser { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .55rem; align-content: start; margin: 0; padding: 0; list-style: none; }

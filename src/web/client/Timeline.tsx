@@ -296,6 +296,8 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "task.created": "Task created",
     "task.edited": "Task edited",
     "task.moved": "Task moved",
+    "attention.created": "Attention requested",
+    "attention.resolved": "Attention resolved",
     "activation.created": "Activation queued",
     "attempt.started": "Attempt started",
     "attempt.completed": "Attempt completed",
@@ -313,6 +315,12 @@ function activityDescription(activity: TaskActivityView): string {
     return `Created in ${activity.details.columnId ?? "the selected column"}.`;
   }
   if (activity.type === "task.edited") return "Title or description updated.";
+  if (activity.type === "attention.created") {
+    return `User attention requested for ${activity.details.reasonType ?? "this task"}.`;
+  }
+  if (activity.type === "attention.resolved") {
+    return `Resolved ${activity.details.reasonType ?? "attention"}.`;
+  }
   return `Attempt ${activity.details.attemptId ?? "activity"}.`;
 }
 

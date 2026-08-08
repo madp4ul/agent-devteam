@@ -84,12 +84,12 @@ async function handleBrowserApi(
     const startup = application.queryStartup();
     const automation = application.queryAutomation();
     if (startup.mode === "configuration-error") {
-      sendJson(response, 409, { startup, automation, boards: [] });
+      sendJson(response, 409, { startup, automation, boards: [], attention: [] });
       return;
     }
     const summaries = application.queryBoardSummaries();
     if (!summaries.available) {
-      sendJson(response, 409, { startup, automation, boards: [] });
+      sendJson(response, 409, { startup, automation, boards: [], attention: [] });
       return;
     }
     const boards = summaries.boards.map((board) => ({
@@ -99,7 +99,13 @@ async function handleBrowserApi(
         tasks: readAllColumnTaskOverviews(application, board.id, column.id),
       })),
     }));
-    sendJson(response, 200, { startup, automation, boards });
+    const attention = application.queryNeedsAttention();
+    sendJson(response, 200, {
+      startup,
+      automation,
+      boards,
+      attention: attention.available ? attention.tasks : [],
+    });
     return;
   }
   if (method === "POST" && url.pathname === "/api/automation/resume") {
@@ -170,6 +176,41 @@ async function handleBrowserApi(
       actor: { kind: "user", id: "local-user" },
     });
     sendMutation(response, result);
+    return;
+  }
+  const commentsMatch = /^\/api\/tasks\/([^/]+)\/comments$/.exec(url.pathname);
+  if (method === "POST" && commentsMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.addTaskComment({
+      taskId: decodeURIComponent(commentsMatch[1]),
+      body: stringField(body, "body"),
+      idempotencyKey: stringField(body, "idempotencyKey"),
+      actor: { kind: "user", id: "local-user" },
+    });
+    const status = result.accepted
+      ? 201
+      : result.reason === "not-found"
+        ? 404
+        : result.reason === "empty-comment"
+          ? 400
+          : 409;
+    sendJson(response, status, result);
+    return;
+  }
+  const markAddressedMatch = /^\/api\/attention\/([^/]+)\/mark-addressed$/.exec(url.pathname);
+  if (method === "POST" && markAddressedMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.markUserMentionAddressed({
+      attentionReasonId: decodeURIComponent(markAddressedMatch[1]),
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    const status = result.accepted
+      ? 200
+      : result.reason === "not-found"
+        ? 404
+        : 409;
+    sendJson(response, status, result);
     return;
   }
   sendJson(response, 404, { error: "unknown-browser-api" });

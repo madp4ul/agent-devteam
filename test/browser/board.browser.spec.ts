@@ -89,10 +89,164 @@ test("pre-attempt startup diagnostics remain discoverable after navigation", asy
   await expect(page.getByText(/missing-project-repository/)).toBeVisible();
 });
 
+test("desktop notifications are opt-in, privacy-safe, suppressed on the active task, and navigate without resolving", async ({ page, request }) => {
+  await page.addInitScript(() => {
+    const notifications: Array<{
+      title: string;
+      options: NotificationOptions;
+      onclick: (() => void) | null;
+      close(): void;
+    }> = [];
+    class ControlledNotification {
+      static permission: NotificationPermission = "default";
+      static requestCount = 0;
+      static async requestPermission(): Promise<NotificationPermission> {
+        ControlledNotification.requestCount += 1;
+        ControlledNotification.permission = "granted";
+        return "granted";
+      }
+      readonly title: string;
+      readonly options: NotificationOptions;
+      onclick: (() => void) | null = null;
+      constructor(title: string, options: NotificationOptions = {}) {
+        this.title = title;
+        this.options = options;
+        notifications.push(this);
+      }
+      close(): void {}
+    }
+    Object.defineProperty(window, "Notification", { value: ControlledNotification, configurable: true });
+    Object.assign(window, { __controlledNotifications: notifications, __ControlledNotification: ControlledNotification });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Desktop notifications off" })).toBeVisible();
+  expect(await page.evaluate(() => Notification.permission)).toBe("default");
+  await page.getByRole("button", { name: "Desktop notifications off" }).click();
+  await expect(page.getByRole("button", { name: "Desktop notifications on" })).toBeVisible();
+  await page.waitForTimeout(1_700);
+  expect(await page.evaluate(() => (window as typeof window & { __controlledNotifications: unknown[] }).__controlledNotifications.length)).toBe(0);
+
+  await page.getByRole("link", { name: /T-0002 Drag this task/ }).click();
+  await expect(page).toHaveURL(/\/tasks\/T-0002$/);
+  await page.getByRole("textbox", { name: "Comment" }).fill("@user please inspect this while I am open.");
+  await page.getByRole("button", { name: "Add comment" }).click();
+  await page.waitForTimeout(1_700);
+  expect(await page.evaluate(() => (window as typeof window & { __controlledNotifications: unknown[] }).__controlledNotifications.length)).toBe(0);
+
+  await page.getByRole("link", { name: "Back to board" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await request.post("/api/tasks/T-0001/comments", {
+    data: {
+      body: "@user private comment text must not appear in the desktop notification.",
+      idempotencyKey: "controlled-notification-comment",
+    },
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const controlled = window as typeof window & { __controlledNotifications: unknown[] };
+    return controlled.__controlledNotifications.length;
+  })).toBe(1);
+  const delivered = await page.evaluate(() => {
+    const controlled = window as typeof window & {
+      __controlledNotifications: Array<{ title: string; options: NotificationOptions }>;
+      __ControlledNotification: { requestCount: number };
+    };
+    const notification = controlled.__controlledNotifications[0];
+    return {
+      title: notification?.title,
+      body: notification?.options.body,
+      tag: notification?.options.tag,
+      requestCount: controlled.__ControlledNotification.requestCount,
+    };
+  });
+  expect(delivered.requestCount).toBe(1);
+  expect(delivered.title).toBe("Product delivery · T-0001");
+  expect(delivered.body).toBe("Inspect all coordination evidence · user mention");
+  expect(JSON.stringify(delivered)).not.toContain("private comment text");
+  await page.waitForTimeout(1_700);
+  expect(await page.evaluate(() => (window as typeof window & { __controlledNotifications: unknown[] }).__controlledNotifications.length)).toBe(1);
+  await page.evaluate(() => {
+    const controlled = window as typeof window & {
+      __controlledNotifications: Array<{ onclick: (() => void) | null }>;
+    };
+    controlled.__controlledNotifications[0]?.onclick?.();
+  });
+  await expect(page).toHaveURL(new RegExp(`/tasks/T-0001\\?attention=${delivered.tag}$`));
+  await expect(page.locator(".attention-list .highlighted")).toContainText("user mention");
+});
+
+test("notification delivery failure is attempted once while durable attention remains", async ({ page, request }) => {
+  await page.addInitScript(() => {
+    class FailingNotification {
+      static permission: NotificationPermission = "default";
+      static attempts = 0;
+      static async requestPermission(): Promise<NotificationPermission> {
+        FailingNotification.permission = "granted";
+        return "granted";
+      }
+      constructor() {
+        FailingNotification.attempts += 1;
+        throw new Error("Operating-system notification service is unavailable");
+      }
+    }
+    Object.defineProperty(window, "Notification", { value: FailingNotification, configurable: true });
+    Object.assign(window, { __FailingNotification: FailingNotification });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Desktop notifications off" }).click();
+  await request.post("/api/tasks/T-0002/comments", {
+    data: {
+      body: "@user delivery failure must not lose this reason.",
+      idempotencyKey: "failing-notification-comment",
+    },
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const controlled = window as typeof window & { __FailingNotification: { attempts: number } };
+    return controlled.__FailingNotification.attempts;
+  })).toBe(1);
+  await page.waitForTimeout(1_700);
+  expect(await page.evaluate(() => {
+    const controlled = window as typeof window & { __FailingNotification: { attempts: number } };
+    return controlled.__FailingNotification.attempts;
+  })).toBe(1);
+  const board = await request.get("/api/board");
+  const body = await board.json() as {
+    attention: Array<{ task: { id: string }; reasons: Array<{ type: string }> }>;
+  };
+  expect(body.attention.find((group) => group.task.id === "T-0002")?.reasons)
+    .toContainEqual(expect.objectContaining({ type: "user-mention" }));
+});
+
+test("an unavailable Notification API leaves desktop delivery unavailable without affecting the board", async ({ page }) => {
+  await page.addInitScript(() => {
+    Reflect.deleteProperty(window, "Notification");
+  });
+  await page.goto("/");
+  await expect(page.getByText("Desktop notifications unavailable")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Desktop notifications/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Needs attention" })).toBeVisible();
+});
+
+test("needs attention groups by task, locates the card, opens details, and resolves independently", async ({ page }) => {
+  await page.goto("/");
+  const group = page.locator(".attention-groups > li").filter({ hasText: "T-0001" });
+  await expect(group).toContainText("user mention");
+  await group.getByRole("button", { name: "Locate card" }).click();
+  await expect(page.locator('[data-task-id="T-0001"]')).toHaveClass(/highlighted/);
+  await group.getByRole("button", { name: "Open details" }).click();
+  await expect(page).toHaveURL(/\/tasks\/T-0001$/);
+  const attentionReasons = page.locator(".attention-list li");
+  await expect(attentionReasons.first()).toBeVisible();
+  const before = await attentionReasons.count();
+  expect(before).toBeGreaterThan(0);
+  await attentionReasons.first().getByRole("button", { name: "Mark addressed" }).click();
+  await expect(attentionReasons).toHaveCount(before - 1);
+});
+
 test("pointer dragging moves through the same command and conflicts stay actionable", async ({ page, request }) => {
   await page.goto("/");
   const handle = page.getByRole("button", { name: "Drag T-0002" });
   const destination = page.getByTestId("column-implementation");
+  await handle.scrollIntoViewIfNeeded();
   const sourceBox = await handle.boundingBox();
   const targetBox = await destination.boundingBox();
   expect(sourceBox).not.toBeNull();

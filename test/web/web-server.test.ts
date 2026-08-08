@@ -140,6 +140,66 @@ test("browser commands preserve creation idempotency and revision conflicts", as
   assert.equal((invalid.body as { reason: string }).reason, "empty-title");
 });
 
+test("browser attention projection is grouped and user mentions resolve through their explicit action", async (t) => {
+  const fixture = await createFixture("browser-attention");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Approve the delivery policy",
+    description: "The board must retain the request.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "attention-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  application.addTaskComment({
+    taskId: created.task.id,
+    body: "@user please approve this policy.",
+    actor: { kind: "agent", id: "implementer" },
+    idempotencyKey: "attention-comment",
+  });
+  const server = await startWebServer(application, {
+    host: "127.0.0.1",
+    port: 0,
+    assetDirectory: fixture.assetDirectory,
+  });
+  t.after(() => server.close());
+
+  const board = await fetch(`${server.baseUrl}/api/board`);
+  const projection = (await board.json()) as {
+    attention: Array<{ task: { id: string }; reasons: Array<{ id: string; type: string }> }>;
+  };
+  assert.equal(projection.attention[0]?.task.id, created.task.id);
+  assert.equal(projection.attention[0]?.reasons[0]?.type, "user-mention");
+  const reasonId = projection.attention[0]?.reasons[0]?.id;
+  assert.ok(reasonId);
+
+  const ordinaryComment = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/comments`,
+    { body: "I am investigating without addressing the request.", idempotencyKey: "browser-comment" },
+  );
+  assert.equal(ordinaryComment.response.status, 201);
+  const stillPresent = (await (await fetch(`${server.baseUrl}/api/board`)).json()) as {
+    attention: Array<{ reasons: Array<{ id: string }> }>;
+  };
+  assert.equal(stillPresent.attention[0]?.reasons[0]?.id, reasonId);
+
+  const addressed = await postJson(
+    `${server.baseUrl}/api/attention/${reasonId}/mark-addressed`,
+    { idempotencyKey: "browser-addressed" },
+  );
+  assert.equal(addressed.response.status, 200);
+  const refreshed = (await (await fetch(`${server.baseUrl}/api/board`)).json()) as {
+    attention: unknown[];
+  };
+  assert.deepEqual(refreshed.attention, []);
+});
+
 test("browser state reports configuration errors and resume rejection as JSON", async (t) => {
   const fixture = await createFixture("browser-errors", 7);
   const application = await CoordinationApplication.start({

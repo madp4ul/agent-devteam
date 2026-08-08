@@ -9,6 +9,7 @@ import type {
   TaskInspectionView,
   TaskView,
   AttemptTranscriptQueryResult,
+  NeedsAttentionTaskView,
 } from "../../application/coordination-contract.ts";
 
 export interface BrowserColumnView extends BoardSummaryColumnView {
@@ -23,6 +24,7 @@ export interface BrowserBoardState {
   startup: StartupView;
   automation: AutomationView;
   boards: BrowserBoardView[];
+  attention: NeedsAttentionTaskView[];
 }
 
 export interface BrowserTaskDetail {
@@ -93,6 +95,27 @@ export async function moveTask(
 
 export async function resumeAutomation(): Promise<void> {
   await request("/api/automation/resume", { method: "POST", body: "{}" });
+}
+
+export async function markUserMentionAddressed(
+  attentionReasonId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await request(`/api/attention/${encodeURIComponent(attentionReasonId)}/mark-addressed`, {
+    method: "POST",
+    body: JSON.stringify({ idempotencyKey }),
+  });
+}
+
+export async function addTaskComment(
+  taskId: string,
+  body: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body, idempotencyKey }),
+  });
 }
 
 export async function readAttemptTranscript(

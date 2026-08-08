@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import type { BoardColumnView } from "../../application/coordination-contract.ts";
-import { ApiError, editTask, readTask, type BrowserTaskDetail } from "./api.ts";
+import { addTaskComment, ApiError, editTask, readTask, type BrowserTaskDetail } from "./api.ts";
+import { MarkUserMentionAddressed } from "./AttentionReasonAction.tsx";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
@@ -34,6 +35,7 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
   const { task, board, inspection } = detail;
   const currentIndex = board.columns.findIndex((column) => column.id === task.columnId);
   const currentColumn = board.columns[currentIndex];
+  const highlightedReasonId = new URLSearchParams(window.location.search).get("attention");
 
   const performMove = async (column: BoardColumnView): Promise<void> => {
     await move({ id: task.id, revision: task.revision }, column);
@@ -77,7 +79,20 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
             ) : (
               <ul className="attention-list">
                 {inspection.unresolvedAttention.map((attention) => (
-                  <li key={attention.id}>Needs attention: {attention.type.replaceAll("-", " ")}</li>
+                  <li
+                    key={attention.id}
+                    className={highlightedReasonId === attention.id ? "highlighted" : ""}
+                  >
+                    <span>Needs attention: {attention.type.replaceAll("-", " ")}</span>
+                    {attention.type === "user-mention" ? (
+                      <MarkUserMentionAddressed
+                        attentionReasonId={attention.id}
+                        onResolved={refresh}
+                        onError={(error) =>
+                          setFeedback({ role: "alert", text: errorMessage(error) })}
+                      />
+                    ) : null}
+                  </li>
                 ))}
               </ul>
             )}
@@ -134,6 +149,14 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
           </ol>
         </section>
 
+        <CommentForm
+          taskId={task.id}
+          onCommented={async () => {
+            await refresh();
+            setFeedback({ role: "status", text: `Commented on ${task.id}.` });
+          }}
+        />
+
         <TaskTimeline
           comments={task.comments}
           activity={task.activity}
@@ -157,6 +180,51 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
         />
       ) : null}
     </div>
+  );
+}
+
+function CommentForm({
+  taskId,
+  onCommented,
+}: {
+  taskId: string;
+  onCommented(): Promise<void>;
+}): ReactNode {
+  const [body, setBody] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [error, setError] = useState<string>();
+  const [pending, setPending] = useState(false);
+  const submit = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    setPending(true);
+    setError(undefined);
+    try {
+      await addTaskComment(taskId, body, idempotencyKey);
+      setBody("");
+      setIdempotencyKey(crypto.randomUUID());
+      setPending(false);
+      await onCommented();
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setPending(false);
+    }
+  };
+  return (
+    <section className="detail-panel comment-panel" aria-labelledby="comment-heading">
+      <p className="eyebrow">Authored communication</p>
+      <h2 id="comment-heading">Add comment</h2>
+      <p>Mention a collaborator by stable ID, such as <code>@implementer</code>, or use <code>@user</code> for user attention.</p>
+      <form onSubmit={(event) => void submit(event)}>
+        <label>
+          Comment
+          <textarea rows={5} value={body} onChange={(event) => setBody(event.currentTarget.value)} />
+        </label>
+        {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
+        <button disabled={pending || body.trim().length === 0} type="submit">
+          {pending ? "Commenting…" : "Add comment"}
+        </button>
+      </form>
+    </section>
   );
 }
 
