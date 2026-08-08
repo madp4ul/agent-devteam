@@ -9,6 +9,8 @@ import type {
   AttemptView,
   BoardMutationResult,
   CreateTaskCommand,
+  CreateChildTaskCommand,
+  CreateTaskRelationshipCommand,
   EditTaskCommand,
   MoveTaskCommand,
   MarkUserMentionAddressedCommand,
@@ -20,6 +22,7 @@ import type {
   TaskActivityView,
   TaskOverviewView,
   TaskRelationshipView,
+  TaskRelationshipMutationResult,
   TaskView,
 } from "../coordination-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
@@ -305,7 +308,7 @@ export class CoordinationTaskStore {
           `SELECT relationship.target_task_id
            FROM task_relationships relationship
            JOIN tasks blocker ON blocker.id = relationship.target_task_id
-           WHERE relationship.type = 'dependency'
+           WHERE relationship.type IN ('dependency', 'parent-child')
              AND relationship.source_task_id = ?
              AND blocker.column_id <> 'completion'
            ORDER BY relationship.rowid`,
@@ -321,47 +324,51 @@ export class CoordinationTaskStore {
         command.idempotencyKey,
       );
       if (prior !== undefined) return prior;
-      if (command.title.trim().length === 0) {
-        return { accepted: false, reason: "empty-title" };
-      }
-      if (command.description.trim().length === 0) {
-        return { accepted: false, reason: "empty-description" };
-      }
-      const destination = this.#database
-        .prepare("SELECT 1 FROM columns WHERE board_id = ? AND id = ? AND applied = 1")
-        .get(command.boardId, command.columnId);
-      if (destination === undefined) {
-        return { accepted: false, reason: "invalid-destination" };
-      }
+      const rejection = this.taskCreationRejection(command);
+      if (rejection !== undefined) return rejection;
 
-      const sequence = this.#database.prepare("INSERT INTO task_numbers DEFAULT VALUES").run();
-      const taskSequence = Number(sequence.lastInsertRowid);
-      const taskId = `T-${String(taskSequence).padStart(4, "0")}`;
-      this.#database
-        .prepare(
-          "INSERT INTO tasks (id, sequence, board_id, column_id, title, description, revision) VALUES (?, ?, ?, ?, ?, ?, 1)",
-        )
-        .run(
-          taskId,
-          taskSequence,
-          command.boardId,
-          command.columnId,
-          command.title,
-          command.description,
-        );
-      const sourceEventId = this.appendActivity(
-        taskId,
-        "task.created",
-        command.actor,
-        { boardId: command.boardId, columnId: command.columnId },
-      );
-      this.createColumnEntryActivation(taskId, command.boardId, command.columnId, sourceEventId);
-      const task = this.readTask(taskId);
-      if (task === undefined) throw new Error("Created task could not be read back");
+      const task = this.insertTask(command, {});
       const result: BoardMutationResult = { accepted: true, task };
       this.storeCommandResponse("create-task", command.idempotencyKey, result);
       return result;
     });
+  }
+
+  createChildTask(command: CreateChildTaskCommand): BoardMutationResult {
+    return this.transaction(() => {
+      const prior = this.readStoredResponse<BoardMutationResult>(
+        "create-child-task",
+        command.idempotencyKey,
+      );
+      if (prior !== undefined) return prior;
+      if (this.readTask(command.parentTaskId) === undefined) {
+        return { accepted: false, reason: "not-found" };
+      }
+      const rejection = this.taskCreationRejection(command);
+      if (rejection !== undefined) return rejection;
+      if (command.startingRef !== undefined && command.startingRef.trim().length === 0) {
+        return { accepted: false, reason: "invalid-starting-ref" };
+      }
+
+      const task = this.insertTask(
+        command,
+        { parentTaskId: command.parentTaskId },
+        command.startingRef?.trim(),
+      );
+      this.insertRelationship("parent-child", command.parentTaskId, task.id, command.actor);
+      const updated = this.readTask(task.id);
+      if (updated === undefined) throw new Error("Created child task could not be read back");
+      const result: BoardMutationResult = { accepted: true, task: updated };
+      this.storeCommandResponse("create-child-task", command.idempotencyKey, result);
+      return result;
+    });
+  }
+
+  readTaskStartingRef(taskId: string): string | undefined {
+    const row = this.#database
+      .prepare("SELECT starting_ref FROM task_starting_refs WHERE task_id = ?")
+      .get(taskId) as { starting_ref: string } | undefined;
+    return row?.starting_ref;
   }
 
   editTask(command: EditTaskCommand): BoardMutationResult {
@@ -421,6 +428,15 @@ export class CoordinationTaskStore {
         return { accepted: false, reason: "invalid-destination" };
       }
 
+      const relationshipsSatisfied = command.destinationColumnId === "completion"
+        ? (this.#database
+            .prepare(
+              `SELECT id, source_task_id
+               FROM task_relationships
+               WHERE type IN ('dependency', 'parent-child') AND target_task_id = ?`,
+            )
+            .all(command.taskId) as Array<{ id: string; source_task_id: string }>)
+        : [];
       this.#database
         .prepare("UPDATE tasks SET column_id = ?, revision = revision + 1 WHERE id = ?")
         .run(command.destinationColumnId, command.taskId);
@@ -439,10 +455,76 @@ export class CoordinationTaskStore {
         command.destinationColumnId,
         sourceEventId,
       );
+      for (const relationship of relationshipsSatisfied) {
+        const relationshipEventId = this.appendActivity(
+          relationship.source_task_id,
+          "relationship.satisfied",
+          { kind: "framework", id: "coordination" },
+          { relationshipId: relationship.id, completedTaskId: command.taskId },
+        );
+        this.appendActivity(
+          command.taskId,
+          "relationship.satisfied",
+          { kind: "framework", id: "coordination" },
+          { relationshipId: relationship.id, unblockedTaskId: relationship.source_task_id },
+        );
+        if (this.readBlockingTaskIds(relationship.source_task_id).length === 0) {
+          this.createBlockersClearedActivation(
+            relationship.source_task_id,
+            relationshipEventId,
+          );
+        }
+      }
       const task = this.readTask(command.taskId);
       if (task === undefined) throw new Error("Moved task could not be read back");
       const result: BoardMutationResult = { accepted: true, task };
       this.storeCommandResponse(commandType, command.idempotencyKey, result);
+      return result;
+    });
+  }
+
+  createTaskRelationship(command: CreateTaskRelationshipCommand): TaskRelationshipMutationResult {
+    return this.transaction(() => {
+      const commandType = "create-task-relationship";
+      const prior = this.readStoredResponse<TaskRelationshipMutationResult>(
+        commandType,
+        command.idempotencyKey,
+      );
+      if (prior !== undefined) return prior;
+      const sourceTask = this.readTask(command.sourceTaskId);
+      const targetTask = this.readTask(command.targetTaskId);
+      let result: TaskRelationshipMutationResult;
+      if (sourceTask === undefined || targetTask === undefined) {
+        result = { accepted: false, reason: "not-found" };
+      } else if (command.sourceTaskId === command.targetTaskId) {
+        result = { accepted: false, reason: "self-relationship" };
+      } else {
+        const duplicate = this.#database
+          .prepare(
+            `SELECT 1 FROM task_relationships
+             WHERE type = ? AND source_task_id = ? AND target_task_id = ?`,
+          )
+          .get(command.type, command.sourceTaskId, command.targetTaskId);
+        if (duplicate !== undefined) {
+          result = { accepted: false, reason: "duplicate-relationship" };
+        } else {
+          const relationship = this.insertRelationship(
+            command.type,
+            command.sourceTaskId,
+            command.targetTaskId,
+            command.actor,
+          );
+          result = {
+            accepted: true,
+            relationship,
+            sourceTask: this.readTask(command.sourceTaskId)!,
+            targetTask: this.readTask(command.targetTaskId)!,
+          };
+        }
+      }
+      this.#database
+        .prepare("INSERT INTO command_responses VALUES (?, ?, ?)")
+        .run(commandType, command.idempotencyKey, JSON.stringify(result));
       return result;
     });
   }
@@ -545,6 +627,84 @@ export class CoordinationTaskStore {
     return this.#owner.transaction(operation);
   }
 
+  private insertTask(
+    command: CreateTaskCommand,
+    activityDetails: Record<string, string>,
+    startingRef?: string,
+  ): TaskView {
+    const sequence = this.#database.prepare("INSERT INTO task_numbers DEFAULT VALUES").run();
+    const taskSequence = Number(sequence.lastInsertRowid);
+    const taskId = `T-${String(taskSequence).padStart(4, "0")}`;
+    this.#database
+      .prepare(
+        "INSERT INTO tasks (id, sequence, board_id, column_id, title, description, revision) VALUES (?, ?, ?, ?, ?, ?, 1)",
+      )
+      .run(
+        taskId,
+        taskSequence,
+        command.boardId,
+        command.columnId,
+        command.title,
+        command.description,
+      );
+    if (startingRef !== undefined) {
+      this.#database
+        .prepare("INSERT INTO task_starting_refs (task_id, starting_ref) VALUES (?, ?)")
+        .run(taskId, startingRef);
+    }
+    const sourceEventId = this.appendActivity(taskId, "task.created", command.actor, {
+      boardId: command.boardId,
+      columnId: command.columnId,
+      ...activityDetails,
+      ...(startingRef === undefined ? {} : { startingRef }),
+    });
+    this.createColumnEntryActivation(taskId, command.boardId, command.columnId, sourceEventId);
+    const task = this.readTask(taskId);
+    if (task === undefined) throw new Error("Created task could not be read back");
+    return task;
+  }
+
+  private taskCreationRejection(command: CreateTaskCommand): BoardMutationResult | undefined {
+    if (command.title.trim().length === 0) return { accepted: false, reason: "empty-title" };
+    if (command.description.trim().length === 0) {
+      return { accepted: false, reason: "empty-description" };
+    }
+    const destination = this.#database
+      .prepare("SELECT 1 FROM columns WHERE board_id = ? AND id = ? AND applied = 1")
+      .get(command.boardId, command.columnId);
+    return destination === undefined
+      ? { accepted: false, reason: "invalid-destination" }
+      : undefined;
+  }
+
+  private insertRelationship(
+    type: TaskRelationshipView["type"],
+    sourceTaskId: string,
+    targetTaskId: string,
+    actor: Actor,
+  ): TaskRelationshipView {
+    const relationship: TaskRelationshipView = {
+      id: randomUUID(),
+      type,
+      sourceTaskId,
+      targetTaskId,
+    };
+    this.#database
+      .prepare("INSERT INTO task_relationships VALUES (?, ?, ?, ?)")
+      .run(relationship.id, relationship.type, sourceTaskId, targetTaskId);
+    this.appendActivity(sourceTaskId, "relationship.created", actor, {
+      relationshipId: relationship.id,
+      relationshipType: relationship.type,
+      relatedTaskId: targetTaskId,
+    });
+    this.appendActivity(targetTaskId, "relationship.created", actor, {
+      relationshipId: relationship.id,
+      relationshipType: relationship.type,
+      relatedTaskId: sourceTaskId,
+    });
+    return relationship;
+  }
+
   private appendActivity(
     taskId: string,
     type: TaskActivityView["type"],
@@ -593,6 +753,38 @@ export class CoordinationTaskStore {
         activationId,
         targetAgentId: destination.watching_agent_id,
         reasonType: "column-entry",
+        sourceEventId,
+      },
+      occurredAt,
+    );
+  }
+
+  private createBlockersClearedActivation(taskId: string, sourceEventId: string): void {
+    const task = this.#database
+      .prepare(
+        `SELECT task.board_id, task.column_id, column.watching_agent_id
+         FROM tasks task
+         JOIN columns column ON column.board_id = task.board_id AND column.id = task.column_id
+         WHERE task.id = ? AND column.applied = 1`,
+      )
+      .get(taskId) as { watching_agent_id: string | null } | undefined;
+    if (task?.watching_agent_id == null) return;
+    const occurredAt = new Date().toISOString();
+    const activationId = this.queueActivation(
+      taskId,
+      task.watching_agent_id,
+      "blockers-cleared",
+      sourceEventId,
+      occurredAt,
+    );
+    this.appendActivity(
+      taskId,
+      "activation.created",
+      { kind: "framework", id: "coordination" },
+      {
+        activationId,
+        targetAgentId: task.watching_agent_id,
+        reasonType: "blockers-cleared",
         sourceEventId,
       },
       occurredAt,

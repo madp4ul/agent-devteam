@@ -49,6 +49,7 @@ export class AutomationCoordinator {
   #automation: AutomationView;
   #automationWork: Promise<void> = Promise.resolve();
   #automationPumpRunning = false;
+  #automationKickPending = false;
 
   constructor(options: AutomationCoordinatorOptions) {
     this.#processStore = options.processStore;
@@ -94,7 +95,7 @@ export class AutomationCoordinator {
         markFirstDispatchStarted = resolve;
       });
       this.#automationPumpRunning = true;
-      this.#automationWork = this.runQueuedActivations(() => markFirstDispatchStarted?.()).finally(
+      this.#automationWork = this.runQueuedUntilSettled(() => markFirstDispatchStarted?.()).finally(
         () => {
           this.#automationPumpRunning = false;
         },
@@ -120,21 +121,28 @@ export class AutomationCoordinator {
   }
 
   kick(): void {
-    if (
-      this.#automation.state !== "running" ||
-      this.#runtimeDispatch === undefined ||
-      this.#automationPumpRunning
-    ) {
+    if (this.#automation.state !== "running" || this.#runtimeDispatch === undefined) return;
+    if (this.#automationPumpRunning) {
+      this.#automationKickPending = true;
       return;
     }
     this.#automationPumpRunning = true;
-    this.#automationWork = this.runQueuedActivations(() => {}).finally(() => {
+    this.#automationWork = this.runQueuedUntilSettled(() => {}).finally(() => {
       this.#automationPumpRunning = false;
     });
     void this.#automationWork.catch(() => {
       this.#processStore.pauseAutomation();
       this.#automation = { state: "paused", attemptsMayStart: false };
     });
+  }
+
+  private async runQueuedUntilSettled(onFirstDispatch: () => void): Promise<void> {
+    let firstDispatch = onFirstDispatch;
+    do {
+      this.#automationKickPending = false;
+      await this.runQueuedActivations(firstDispatch);
+      firstDispatch = () => {};
+    } while (this.#automationKickPending && this.#automation.state === "running");
   }
 
   private async runQueuedActivations(onFirstDispatch: () => void): Promise<void> {
@@ -148,7 +156,7 @@ export class AutomationCoordinator {
       try {
         workspace = await this.#runtimeDispatch.workspaceManager.provision(
           runnable.task.id,
-          this.#startingRef ?? "",
+          this.#taskStore.readTaskStartingRef(runnable.task.id) ?? this.#startingRef ?? "",
           priorWorkspace,
         );
         if (priorWorkspace === undefined) {

@@ -110,6 +110,8 @@ boards:
       "inspect_current_task",
       "add_comment",
       "move_current_task",
+      "create_child_task",
+      "add_dependency",
     ],
   );
   const toolByName = new Map(listed.tools.map((tool) => [tool.name, tool]));
@@ -158,8 +160,20 @@ boards:
     "expectedRevision",
     "idempotencyKey",
   ]);
+  assert.deepEqual(Object.keys(toolByName.get("create_child_task")?.inputSchema.properties ?? {}), [
+    "boardId",
+    "columnId",
+    "title",
+    "description",
+    "startingRef",
+    "idempotencyKey",
+  ]);
+  assert.deepEqual(Object.keys(toolByName.get("add_dependency")?.inputSchema.properties ?? {}), [
+    "targetTaskId",
+    "idempotencyKey",
+  ]);
   assert.equal(
-    ["add_comment", "move_current_task"].some(
+    ["add_comment", "move_current_task", "create_child_task", "add_dependency"].some(
       (name) => "taskId" in (toolByName.get(name)?.inputSchema.properties ?? {}),
     ),
     false,
@@ -279,6 +293,22 @@ boards:
   const inspectedTask = JSON.parse(textContent(inspected.content)) as { id: string; revision: number };
   assert.equal(inspectedTask.id, created.task.id);
 
+  const dependencyArguments = { targetTaskId: "T-0002", idempotencyKey: "agent-dependency" };
+  await client.callTool({ name: "add_dependency", arguments: dependencyArguments });
+  await client.callTool({ name: "add_dependency", arguments: dependencyArguments });
+  const childResult = await client.callTool({
+    name: "create_child_task",
+    arguments: {
+      boardId: "delivery",
+      columnId: "implementation",
+      title: "Scoped child",
+      description: "Created by the current-task-scoped agent tool.",
+      startingRef: "main",
+      idempotencyKey: "agent-child",
+    },
+  });
+  assert.match(textContent(childResult.content), /Scoped child/);
+
   const commentArguments = {
     body: "Implementation complete; handing off for review.",
     idempotencyKey: "agent-comment",
@@ -298,6 +328,10 @@ boards:
   assert.equal(updated.available, true);
   if (!updated.available) return;
   assert.equal(updated.task.columnId, "review");
+  assert.deepEqual(updated.task.relationships.map((relationship) => relationship.type), [
+    "dependency",
+    "parent-child",
+  ]);
   assert.deepEqual(
     updated.task.comments.map((comment) => ({ body: comment.body, actor: comment.actor })),
     [

@@ -70,6 +70,31 @@ export async function createTask(input: {
   return mutation("/api/tasks", "POST", input);
 }
 
+export async function createChildTask(
+  parentTaskId: string,
+  input: {
+    boardId: string;
+    columnId: string;
+    title: string;
+    description: string;
+    startingRef?: string;
+    idempotencyKey: string;
+  },
+): Promise<Extract<BoardMutationResult, { accepted: true }>> {
+  return mutation(`/api/tasks/${encodeURIComponent(parentTaskId)}/children`, "POST", input);
+}
+
+export async function addTaskDependency(
+  taskId: string,
+  targetTaskId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/relationships`, {
+    method: "POST",
+    body: JSON.stringify({ type: "dependency", targetTaskId, idempotencyKey }),
+  });
+}
+
 export async function editTask(
   taskId: string,
   input: {

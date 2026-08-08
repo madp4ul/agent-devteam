@@ -101,13 +101,16 @@ without choosing the implementation yet.
   — Let each process agent optionally select a Codex model and reasoning effort,
   snapshot the requested profile on activations and attempts, and preserve the
   launching user's ordinary Codex defaults when either value is omitted.
+- [Split, Relate, and Unblock Work](./issues/21-split-relate-unblock-work.md)
+  — Add typed child and dependency relationships, task-specific child starting
+  refs, immutable blocker history, and reliable reactivation exactly when the
+  final blocker becomes satisfied.
 
 ## Next implementation priority
 
-- [Split, Relate, and Unblock Work](./issues/21-split-relate-unblock-work.md)
-  — Add parent-child and dependency relationships, task-specific child starting
-  refs, immutable blocker history, and exactly one activation when the final
-  blocker becomes satisfied.
+- [Prevent Conflicting and Duplicate Changes](./issues/22-prevent-conflicting-duplicate-changes.md)
+  — Enforce atomic, idempotent, conflict-safe commands and strict per-task run
+  serialization while allowing independent tasks to execute concurrently.
 
 ## Clarified delivery follow-ups
 

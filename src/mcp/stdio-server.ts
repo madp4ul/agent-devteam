@@ -124,6 +124,34 @@ server.registerTool(
   async (arguments_) => callAgentApi("POST", "/agent-api/current-task/move", arguments_),
 );
 
+server.registerTool(
+  "create_child_task",
+  {
+    description: "Create a child of the current task in a chosen board column.",
+    inputSchema: {
+      boardId: z.string().min(1),
+      columnId: z.string().min(1),
+      title: z.string().min(1),
+      description: z.string().min(1),
+      startingRef: z.string().min(1).optional(),
+      idempotencyKey: z.string().min(1),
+    },
+  },
+  async (arguments_) => callAgentApi("POST", "/agent-api/current-task/children", arguments_),
+);
+
+server.registerTool(
+  "add_dependency",
+  {
+    description: "Make the current task depend on another task.",
+    inputSchema: {
+      targetTaskId: z.string().min(1),
+      idempotencyKey: z.string().min(1),
+    },
+  },
+  async (arguments_) => callAgentApi("POST", "/agent-api/current-task/dependencies", arguments_),
+);
+
 await server.connect(new StdioServerTransport());
 
 async function callAgentApi(

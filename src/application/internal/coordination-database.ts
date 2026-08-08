@@ -90,6 +90,8 @@ function initializeCurrentSchema(database: DatabaseSync): void {
           'task.created',
           'task.edited',
           'task.moved',
+          'relationship.created',
+          'relationship.satisfied',
           'attention.created',
           'attention.resolved',
           'activation.created',
@@ -107,7 +109,7 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       id TEXT NOT NULL UNIQUE,
       task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       target_agent_id TEXT NOT NULL REFERENCES agents(id),
-      reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention')),
+      reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention', 'blockers-cleared')),
       source_event_id TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
       created_at TEXT NOT NULL,
@@ -119,6 +121,10 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       path TEXT NOT NULL UNIQUE,
       starting_ref TEXT NOT NULL,
       commit_id TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS task_starting_refs (
+      task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+      starting_ref TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS attempts (
       id TEXT PRIMARY KEY,

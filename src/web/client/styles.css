@@ -111,6 +111,11 @@ textarea { resize: vertical; line-height: 1.5; }
 .facts dd { margin: .25rem 0 0; font-weight: 800; overflow-wrap: anywhere; }
 .quiet { color: var(--muted); }
 .attention-list, .relationship-list { padding-left: 1.2rem; }
+.relationship-actions { margin-top: 1.25rem; border-top: 1px solid #d8ddd9; padding-top: 1rem; }
+.relationship-actions summary { width: fit-content; color: var(--forest); font-weight: 800; cursor: pointer; }
+.relationship-action-content { display: grid; gap: 1rem; margin-top: 1rem; }
+.relationship-actions form { display: grid; gap: .65rem; padding-top: 1rem; border-top: 1px solid #d8ddd9; }
+.relationship-actions h3 { margin: 0; }
 .attention-list li { color: #7e5510; }
 .needs-attention { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #dfc27d; border-radius: 12px; background: #fffaf0; }
 .attention-groups { display: grid; gap: .75rem; padding: 0; list-style: none; }

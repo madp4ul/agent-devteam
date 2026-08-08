@@ -16,6 +16,8 @@ import type {
   BoardsQueryResult,
   CollaboratorsQueryResult,
   CreateTaskCommand,
+  CreateChildTaskCommand,
+  CreateTaskRelationshipCommand,
   EditTaskCommand,
   MoveTaskCommand,
   MarkUserMentionAddressedCommand,
@@ -31,6 +33,7 @@ import type {
   TaskOverviewsQuery,
   TaskOverviewsQueryResult,
   TaskQueryResult,
+  TaskRelationshipMutationResult,
 } from "./coordination-contract.ts";
 
 export * from "./coordination-contract.ts";
@@ -256,6 +259,15 @@ export class CoordinationApplication {
     return result;
   }
 
+  createChildTask(command: CreateChildTaskCommand): BoardMutationResult {
+    const gated = this.configurationErrorRejection();
+    const result = gated ?? this.#persistence.tasks.createChildTask(command);
+    if (result.accepted && result.task.activations.some((activation) => activation.status === "queued")) {
+      this.#automation.kick();
+    }
+    return result;
+  }
+
   editTask(command: EditTaskCommand): BoardMutationResult {
     const gated = this.configurationErrorRejection();
     return gated ?? this.#persistence.tasks.editTask(command);
@@ -264,10 +276,22 @@ export class CoordinationApplication {
   moveTask(command: MoveTaskCommand): BoardMutationResult {
     const gated = this.configurationErrorRejection();
     const result = gated ?? this.#persistence.tasks.moveTask(command);
-    if (
-      result.accepted &&
-      result.task.activations.some((activation) => activation.status === "queued")
-    ) {
+    if (result.accepted) this.#automation.kick();
+    return result;
+  }
+
+  createTaskRelationship(
+    command: CreateTaskRelationshipCommand,
+  ): TaskRelationshipMutationResult {
+    if (this.#startup.mode === "configuration-error") {
+      return {
+        accepted: false,
+        reason: "configuration-error",
+        diagnostics: this.#startup.diagnostics,
+      };
+    }
+    const result = this.#persistence.tasks.createTaskRelationship(command);
+    if (result.accepted && result.sourceTask.activations.some((activation) => activation.status === "queued")) {
       this.#automation.kick();
     }
     return result;

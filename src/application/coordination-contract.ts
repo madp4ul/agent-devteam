@@ -63,6 +63,8 @@ export interface TaskActivityView {
     | "task.created"
     | "task.edited"
     | "task.moved"
+    | "relationship.created"
+    | "relationship.satisfied"
     | "attention.created"
     | "attention.resolved"
     | "activation.created"
@@ -74,7 +76,7 @@ export interface TaskActivityView {
 }
 
 export interface ActivationReasonView {
-  type: "column-entry" | "agent-mention";
+  type: "column-entry" | "agent-mention" | "blockers-cleared";
   sourceEventId: string;
 }
 
@@ -402,10 +404,23 @@ export interface CreateTaskCommand {
   idempotencyKey: string;
 }
 
+export interface CreateChildTaskCommand extends CreateTaskCommand {
+  parentTaskId: string;
+  startingRef?: string;
+}
+
 export interface MoveTaskCommand {
   taskId: string;
   destinationColumnId: string;
   expectedRevision: number;
+  actor: Actor;
+  idempotencyKey: string;
+}
+
+export interface CreateTaskRelationshipCommand {
+  type: "parent-child" | "dependency";
+  sourceTaskId: string;
+  targetTaskId: string;
   actor: Actor;
   idempotencyKey: string;
 }
@@ -444,10 +459,16 @@ export type BoardMutationResult =
       reason:
         | "not-found"
         | "invalid-destination"
+        | "invalid-starting-ref"
         | "empty-title"
         | "empty-description";
     }
   | { accepted: false; reason: "revision-conflict"; currentTask: TaskView };
+
+export type TaskRelationshipMutationResult =
+  | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
+  | { accepted: false; reason: "not-found" | "self-relationship" | "duplicate-relationship" };
 
 export type AddTaskCommentResult =
   | { accepted: true; task: TaskView; comment: TaskCommentView }

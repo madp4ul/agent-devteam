@@ -105,6 +105,29 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByText(/Moved T-0001 to Completion/)).toBeVisible();
 });
 
+test("task details create children and dependencies through contextual controls", async ({ page }) => {
+  await page.goto("/tasks/T-0002");
+
+  await expect(page.getByText("Dependency: T-0001 → T-0002")).toBeVisible();
+  await expect(page.getByLabel("Blocking task ID")).not.toBeVisible();
+  await expect(page.getByLabel("Starting Git ref (optional)")).not.toBeVisible();
+  await page.getByText("Manage relationships", { exact: true }).click();
+
+  const dependencyForm = page.locator("form").filter({ has: page.getByRole("heading", { name: "Add dependency" }) });
+  await dependencyForm.getByLabel("Blocking task ID").fill("T-0003");
+  await dependencyForm.getByRole("button", { name: "Add dependency" }).click();
+  await expect(page.getByText("Blocked by T-0003")).toBeVisible();
+
+  const childForm = page.locator("form").filter({ has: page.getByRole("heading", { name: "Create child task" }) });
+  await childForm.getByLabel("Title").fill("Investigate a focused child outcome");
+  await childForm.getByLabel("Description").fill("Keep the child isolated from dirty parent files.");
+  await childForm.getByLabel("Column").selectOption("backlog");
+  await childForm.getByLabel("Starting Git ref (optional)").fill("main");
+  await childForm.getByRole("button", { name: "Create child" }).click();
+  await expect(page.getByRole("status")).toContainText(/Created child T-\d{4}/);
+  await expect(page.getByText(/Parent \/ child: T-0002/)).toBeVisible();
+});
+
 test("pre-attempt startup diagnostics remain discoverable after navigation", async ({ page }) => {
   await page.goto("/");
   const failedLink = page.getByRole("link", { name: /T-0003 Recover a workspace startup failure/ });

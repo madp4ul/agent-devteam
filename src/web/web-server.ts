@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 
 import {
   CoordinationApplication,
+  type Actor,
+  type CreateChildTaskCommand,
+  type CreateTaskRelationshipCommand,
   type TaskOverviewView,
 } from "../application/coordination-application.ts";
 import type { AgentToolScopeRegistry } from "../mcp/agent-tool-scope.ts";
@@ -178,6 +181,33 @@ async function handleBrowserApi(
     sendMutation(response, result);
     return;
   }
+  const childrenMatch = /^\/api\/tasks\/([^/]+)\/children$/.exec(url.pathname);
+  if (method === "POST" && childrenMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.createChildTask(childTaskCommand(
+      body,
+      decodeURIComponent(childrenMatch[1]),
+      { kind: "user", id: "local-user" },
+    ));
+    sendMutation(response, result, 201);
+    return;
+  }
+  const relationshipsMatch = /^\/api\/tasks\/([^/]+)\/relationships$/.exec(url.pathname);
+  if (method === "POST" && relationshipsMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const relationshipType = stringField(body, "type");
+    if (relationshipType !== "parent-child" && relationshipType !== "dependency") {
+      throw new Error("type must be parent-child or dependency");
+    }
+    const result = application.createTaskRelationship(relationshipCommand(
+      body,
+      relationshipType,
+      decodeURIComponent(relationshipsMatch[1]),
+      { kind: "user", id: "local-user" },
+    ));
+    sendRelationshipMutation(response, result);
+    return;
+  }
   const commentsMatch = /^\/api\/tasks\/([^/]+)\/comments$/.exec(url.pathname);
   if (method === "POST" && commentsMatch?.[1] !== undefined) {
     const body = await readJsonBody(request);
@@ -249,6 +279,7 @@ function sendMutation(
   const status =
     result.reason === "empty-title" ||
     result.reason === "empty-description" ||
+    result.reason === "invalid-starting-ref" ||
     result.reason === "invalid-destination"
       ? 400
       : result.reason === "not-found"
@@ -382,6 +413,27 @@ async function handleAgentApi(
     sendJson(response, result.accepted ? 200 : 409, result);
     return;
   }
+  if (method === "POST" && url.pathname === "/agent-api/current-task/children") {
+    const body = await readJsonBody(request);
+    const result = application.createChildTask(childTaskCommand(
+      body,
+      scope.taskId,
+      { kind: "agent", id: scope.agentId },
+    ));
+    sendJson(response, result.accepted ? 201 : result.reason === "not-found" ? 404 : 409, result);
+    return;
+  }
+  if (method === "POST" && url.pathname === "/agent-api/current-task/dependencies") {
+    const body = await readJsonBody(request);
+    const result = application.createTaskRelationship(relationshipCommand(
+      body,
+      "dependency",
+      scope.taskId,
+      { kind: "agent", id: scope.agentId },
+    ));
+    sendRelationshipMutation(response, result);
+    return;
+  }
   sendJson(response, 404, { error: "unknown-agent-tool" });
 }
 
@@ -424,6 +476,45 @@ function stringArrayField(body: Record<string, unknown>, name: string): string[]
     throw new Error(`${name} must be an array of strings`);
   }
   return value;
+}
+
+function childTaskCommand(
+  body: Record<string, unknown>,
+  parentTaskId: string,
+  actor: Actor,
+): CreateChildTaskCommand {
+  return {
+    parentTaskId,
+    boardId: stringField(body, "boardId"),
+    columnId: stringField(body, "columnId"),
+    title: stringField(body, "title"),
+    description: stringField(body, "description"),
+    ...(body.startingRef === undefined ? {} : { startingRef: stringField(body, "startingRef") }),
+    idempotencyKey: stringField(body, "idempotencyKey"),
+    actor,
+  };
+}
+
+function relationshipCommand(
+  body: Record<string, unknown>,
+  type: CreateTaskRelationshipCommand["type"],
+  sourceTaskId: string,
+  actor: Actor,
+): CreateTaskRelationshipCommand {
+  return {
+    type,
+    sourceTaskId,
+    targetTaskId: stringField(body, "targetTaskId"),
+    idempotencyKey: stringField(body, "idempotencyKey"),
+    actor,
+  };
+}
+
+function sendRelationshipMutation(
+  response: ServerResponse,
+  result: ReturnType<CoordinationApplication["createTaskRelationship"]>,
+): void {
+  sendJson(response, result.accepted ? 201 : result.reason === "not-found" ? 404 : 409, result);
 }
 
 function sendAgentQuery(

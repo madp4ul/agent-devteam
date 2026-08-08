@@ -52,6 +52,19 @@ cooperation, and agent instruction files remain focused on one role.
   an unlabelled final paragraph. This issue turns that incidental text into an
   explicit instruction source and defines its relationship to process guidance,
   role instructions, activation reason, current task state, and attempt context.
+- User testing after issue 21 showed why activation provenance also needs an
+  explicit reassessment rule. An activation is an expectation to evaluate
+  against current task state, not an imperative to repeat the role's normal
+  handoff. Framework instructions should require the agent to inspect the task
+  again and, when later activity has already satisfied the expectation, avoid
+  repeating work, comments, or movement and complete inertly. A controlled
+  scenario should cover a later same-agent activation after an earlier run has
+  already moved the task.
+- Issue 40 separately prevents one deterministic duplicate at the lifecycle
+  level by reusing an untouched queued column-entry activation after unblocking.
+  This instruction remains defense in depth for genuinely distinct activations
+  that become obsolete while waiting; it must not teach agents to ignore an
+  immutable trigger without checking current state and its source event.
 - Run a focused grilling of precedence and upgrade/version behavior before
   marking this issue ready-for-agent. It is required before the assembled
   first-usable-workflow proof, but it is not the next ticket ahead of issue 36.

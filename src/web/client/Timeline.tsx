@@ -299,6 +299,8 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "task.created": "Task created",
     "task.edited": "Task edited",
     "task.moved": "Task moved",
+    "relationship.created": "Relationship created",
+    "relationship.satisfied": "Relationship satisfied",
     "attention.created": "Attention requested",
     "attention.resolved": "Attention resolved",
     "activation.created": "Activation queued",
