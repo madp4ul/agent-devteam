@@ -28,6 +28,13 @@ type TimelineItem =
       occurredAt: string;
       failure: ActivationStartupFailureView;
       agentId: string;
+    }
+  | {
+      key: string;
+      kind: "scheduled-retry";
+      occurredAt: string;
+      nextAttempt: number;
+      agentId: string;
     };
 
 export function TaskTimeline({
@@ -88,6 +95,17 @@ function buildTimeline(
           agentId: activation.targetAgentId,
         }],
   );
+  const scheduledRetries = activations.flatMap((activation) =>
+    activation.recovery?.state !== "scheduled"
+      ? []
+      : [{
+          key: `scheduled-retry-${activation.id}`,
+          kind: "scheduled-retry" as const,
+          occurredAt: activation.recovery.dueAt,
+          nextAttempt: activation.recovery.nextAttempt,
+          agentId: activation.targetAgentId,
+        }],
+  );
   return [
     ...comments.map((comment) => ({
       key: `comment-${comment.id}`,
@@ -103,6 +121,7 @@ function buildTimeline(
     })),
     ...attempts,
     ...startupFailures,
+    ...scheduledRetries,
   ].sort((left, right) => left.occurredAt.localeCompare(right.occurredAt));
 }
 
@@ -159,8 +178,26 @@ function TimelineEntry({
       </li>
     );
   }
+  if (entry.kind === "scheduled-retry") {
+    return (
+      <li className="timeline-entry attempt-entry">
+        <div className="timeline-marker" aria-hidden="true">â†»</div>
+        <article>
+          <div className="entry-meta">
+            <strong>Attempt {entry.nextAttempt} scheduled</strong>
+            <time>{formatDate(entry.occurredAt)}</time>
+          </div>
+          <p>{entry.agentId} Â· waiting for automatic retry</p>
+          <small>Recovery actions become available only if automatic attempts are exhausted.</small>
+        </article>
+      </li>
+    );
+  }
   const diagnostic =
-    entry.attempt.outcome?.status === "failed" ? entry.attempt.outcome.summary : undefined;
+    entry.attempt.outcome?.status === "failed" ||
+      entry.attempt.outcome?.status === "permission-blocked"
+      ? entry.attempt.outcome.summary
+      : undefined;
   return (
     <li className="timeline-entry attempt-entry">
       <div className="timeline-marker" aria-hidden="true">▶</div>

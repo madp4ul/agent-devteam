@@ -14,7 +14,7 @@ import {
   type BrowserColumnView,
 } from "./api.ts";
 import { errorMessage } from "./feedback.ts";
-import { MarkUserMentionAddressed } from "./AttentionReasonAction.tsx";
+import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { Loading } from "./Loading.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import type { Navigate, NavigationState } from "./navigation.ts";
@@ -184,15 +184,12 @@ export function BoardPage({
                         key={reason.id}
                         className={new URLSearchParams(location.search).get("attention") === reason.id ? "highlighted" : ""}
                       >
-                        <span>{reason.type.replaceAll("-", " ")}</span>
-                        {reason.type === "user-mention" ? (
-                          <MarkUserMentionAddressed
-                            attentionReasonId={reason.id}
-                            onResolved={refresh}
-                            onError={(error) =>
-                              setFeedback({ role: "alert", text: errorMessage(error) })}
-                          />
-                        ) : null}
+                        <AttentionReasonResolution
+                          reason={reason}
+                          onResolved={refresh}
+                          onError={(error) =>
+                            setFeedback({ role: "alert", text: errorMessage(error) })}
+                        />
                       </li>
                     ))}
                   </ul>

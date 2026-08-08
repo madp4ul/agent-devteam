@@ -11,6 +11,7 @@ import {
   type AgentRunRequest,
   type AgentRunLifecycle,
   type AgentRuntime,
+  type AutomationClock,
   CoordinationApplication,
 } from "../../src/application/coordination-application.ts";
 
@@ -123,12 +124,13 @@ test("an agent comment and move hand work to the next watched-column agent", asy
   await application.waitForAutomationIdle();
 });
 
-test("a streamed Codex failure remains an inspectable failed attempt and blocks that activation", async (t) => {
+test("a streamed Codex failure remains inspectable while its retry waits at the queue head", async (t) => {
   const fixture = await createFixture();
   const runtime = new ControlledAgentRuntime();
   const application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
+    automationClock: new PausedRetryClock(),
     runtimeDispatch: {
       projectRepositoryPath: fixture.repositoryPath,
       taskWorkspaceRoot: fixture.workspaceRoot,
@@ -162,12 +164,13 @@ test("a streamed Codex failure remains an inspectable failed attempt and blocks 
     summary: "Codex could not complete the activation: model stream disconnected",
     threadId: "thread-failed-handoff",
   });
-  await application.waitForAutomationIdle();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 
   const failed = application.queryTask(created.task.id);
   assert.equal(failed.available, true);
   if (!failed.available) return;
-  assert.equal(failed.task.activations[0]?.status, "failed");
+  assert.equal(failed.task.activations[0]?.status, "queued");
+  assert.equal(failed.task.activations[0]?.recovery?.state, "scheduled");
   const inspection = application.queryTaskInspection(created.task.id);
   assert.equal(inspection.available, true);
   if (inspection.available) {
@@ -292,6 +295,16 @@ class ControlledAgentRuntime implements AgentRuntime {
     assert.ok(this.#complete);
     this.#complete(outcome);
     this.#complete = undefined;
+  }
+}
+
+class PausedRetryClock implements AutomationClock {
+  now(): Date {
+    return new Date("2026-01-01T12:00:00.000Z");
+  }
+
+  waitUntil(): Promise<void> {
+    return new Promise(() => {});
   }
 }
 

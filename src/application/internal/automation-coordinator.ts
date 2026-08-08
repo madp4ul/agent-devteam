@@ -1,6 +1,7 @@
 import type {
   AgentRunAgent,
   AgentRunOutcome,
+  AutomationClock,
   AutomationView,
   ProcessBoardView,
   ResumeAutomationResult,
@@ -30,6 +31,7 @@ export interface AutomationCoordinatorOptions {
   startingRef?: string;
   processContext?: AutomationProcessContext;
   runtimeDiagnostic?(diagnostic: RuntimeStartupDiagnostic): void;
+  clock?: AutomationClock;
 }
 
 export class AutomationCoordinator {
@@ -46,6 +48,7 @@ export class AutomationCoordinator {
   readonly #startingRef: string | undefined;
   readonly #processContext: AutomationProcessContext | undefined;
   readonly #runtimeDiagnostic: ((diagnostic: RuntimeStartupDiagnostic) => void) | undefined;
+  readonly #clock: AutomationClock;
   #automation: AutomationView;
   #automationWork: Promise<void> = Promise.resolve();
   #automationPumpRunning = false;
@@ -71,6 +74,7 @@ export class AutomationCoordinator {
     this.#startingRef = options.startingRef;
     this.#processContext = options.processContext;
     this.#runtimeDiagnostic = options.runtimeDiagnostic;
+    this.#clock = options.clock ?? systemAutomationClock;
   }
 
   query(): AutomationView {
@@ -155,7 +159,8 @@ export class AutomationCoordinator {
     let firstError: unknown;
     const activeRuns = new Set<Promise<void>>();
     while (this.#automation.state === "running") {
-      const runnable = this.#stateStore.readNextRunnableActivation();
+      const now = this.#clock.now().toISOString();
+      const runnable = this.#stateStore.readNextRunnableActivation(now);
       if (runnable !== undefined) {
         const { completion } = await this.dispatch(runnable, () => {
           if (!first) return;
@@ -172,6 +177,17 @@ export class AutomationCoordinator {
       }
       if (activeRuns.size === 0) {
         if (firstError !== undefined) throw firstError;
+        const retryDueAt = this.#stateStore.readNextRetryDueAt(now);
+        if (retryDueAt !== undefined) {
+          let wake: (() => void) | undefined;
+          const nextKick = new Promise<void>((resolve) => {
+            wake = resolve;
+            this.#wakeAutomationPump = resolve;
+          });
+          await Promise.race([this.#clock.waitUntil(retryDueAt), nextKick]);
+          if (this.#wakeAutomationPump === wake) this.#wakeAutomationPump = undefined;
+          continue;
+        }
         return;
       }
       let wake: (() => void) | undefined;
@@ -239,9 +255,11 @@ export class AutomationCoordinator {
     if (process === undefined) throw new Error("Runnable activation has no process context");
     const board = process.boards.find((candidate) => candidate.id === currentTask.boardId);
     if (board === undefined) throw new Error("Runnable task has no applied board context");
-    let dispatchStarted = false;
-    const outcomePromise = runtimeDispatch.agentRuntime.run(
-      {
+    onDispatchStarted();
+    let outcomePromise: Promise<AgentRunOutcome>;
+    try {
+      outcomePromise = runtimeDispatch.agentRuntime.run(
+        {
         activationId: runnable.activation.id,
         agent: runnable.agent,
         process: {
@@ -266,21 +284,22 @@ export class AutomationCoordinator {
             : "resumed",
           continuationMessage: null,
         },
-      },
-      {
-        started: (threadId) => {
-          dispatchStarted = true;
-          if (threadId !== undefined) {
-            this.#stateStore.recordAttemptThreadId(
-              attempt.id,
-              attempt.runStartActivityId,
-              threadId,
-            );
-          }
-          onDispatchStarted();
         },
-      },
-    );
+        {
+          started: (threadId) => {
+            if (threadId !== undefined) {
+              this.#stateStore.recordAttemptThreadId(
+                attempt.id,
+                attempt.runStartActivityId,
+                threadId,
+              );
+            }
+          },
+        },
+      );
+    } catch (error) {
+      outcomePromise = Promise.reject(error);
+    }
     const completion = (async () => {
       let outcome: AgentRunOutcome;
       try {
@@ -289,25 +308,22 @@ export class AutomationCoordinator {
         this.#stateStore.completeAttempt(attempt.id, {
           status: "failed",
           summary: error instanceof Error ? error.message : "Agent runtime dispatch failed",
-        });
-        throw error;
+        }, this.#clock.now());
+        return;
       }
-      if (!dispatchStarted) {
-        const failedOutcome: AgentRunOutcome =
-          outcome.status === "failed"
-            ? outcome
-            : {
-                status: "failed",
-                summary: "Agent runtime completed without reporting that dispatch started",
-              };
-        this.#stateStore.completeAttempt(attempt.id, failedOutcome);
-        throw new Error(failedOutcome.summary);
-      }
-      this.#stateStore.completeAttempt(attempt.id, outcome);
+      this.#stateStore.completeAttempt(attempt.id, outcome, this.#clock.now());
     })();
     return { completion };
   }
 }
+
+const systemAutomationClock: AutomationClock = {
+  now: () => new Date(),
+  waitUntil: async (instant) => {
+    const delay = Math.max(0, Date.parse(instant) - Date.now());
+    await new Promise<void>((resolve) => setTimeout(resolve, delay));
+  },
+};
 
 function completeDiagnostic(error: unknown): string {
   if (!(error instanceof Error)) return "Task workspace startup failed";

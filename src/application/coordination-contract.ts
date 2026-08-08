@@ -6,6 +6,12 @@ export interface StartApplicationOptions {
   runtimeDispatch?: RuntimeDispatchOptions;
   transcriptAccess?: AttemptTranscriptAccess;
   runtimeDiagnostic?(diagnostic: RuntimeStartupDiagnostic): void;
+  automationClock?: AutomationClock;
+}
+
+export interface AutomationClock {
+  now(): Date;
+  waitUntil(instant: string): Promise<void>;
 }
 
 export interface RuntimeDispatchOptions {
@@ -128,10 +134,14 @@ export type AttemptTranscriptItem =
 export interface ActivationView extends AgentExecutionProfile {
   id: string;
   targetAgentId: string;
-  status: "queued" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "completed" | "failed" | "dismissed";
   reason: ActivationReasonView;
   attempts: AttemptView[];
   startupFailure: ActivationStartupFailureView | null;
+  recovery:
+    | { state: "scheduled"; nextAttempt: number; dueAt: string }
+    | { state: "awaiting-retry" | "permission-blocked"; summary: string }
+    | null;
 }
 
 export interface AgentRunAgent {
@@ -169,7 +179,7 @@ export interface AgentRunRequest {
 }
 
 export interface AgentRunOutcome {
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "permission-blocked";
   summary: string;
   threadId?: string;
 }
@@ -241,7 +251,17 @@ export interface TaskAttentionView {
   type: "user-mention" | "failed-run";
   sourceEventId: string | null;
   createdAt: string;
+  recovery?:
+    | {
+        kind: "technical-failure" | "permission-block";
+        summary: string;
+        actions: ActivationRecoveryAction[];
+        explanation?: string;
+      }
+    ;
 }
+
+export type ActivationRecoveryAction = "retry" | "dismiss" | "continue";
 
 export interface NeedsAttentionTaskView {
   task: {
@@ -447,6 +467,20 @@ export interface MarkUserMentionAddressedCommand {
   actor: Actor & { kind: "user" };
   idempotencyKey: string;
 }
+
+export interface ActivationRecoveryCommand {
+  attentionReasonId: string;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
+export type ActivationRecoveryResult =
+  | { accepted: true; activationId: string; resolvedAt: string }
+  | {
+      accepted: false;
+      reason: "not-found" | "wrong-recovery-type" | "already-resolved";
+    }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
 export type BoardMutationResult =
   | { accepted: true; task: TaskView }

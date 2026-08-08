@@ -10,7 +10,7 @@ import {
   readTask,
   type BrowserTaskDetail,
 } from "./api.ts";
-import { MarkUserMentionAddressed } from "./AttentionReasonAction.tsx";
+import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
@@ -107,15 +107,13 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
                     key={attention.id}
                     className={highlightedReasonId === attention.id ? "highlighted" : ""}
                   >
-                    <span>Needs attention: {attention.type.replaceAll("-", " ")}</span>
-                    {attention.type === "user-mention" ? (
-                      <MarkUserMentionAddressed
-                        attentionReasonId={attention.id}
-                        onResolved={refresh}
-                        onError={(error) =>
-                          setFeedback({ role: "alert", text: errorMessage(error) })}
-                      />
-                    ) : null}
+                    <AttentionReasonResolution
+                      reason={attention}
+                      labelPrefix="Needs attention: "
+                      onResolved={refresh}
+                      onError={(error) =>
+                        setFeedback({ role: "alert", text: errorMessage(error) })}
+                    />
                   </li>
                 ))}
               </ul>

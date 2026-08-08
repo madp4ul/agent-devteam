@@ -32,12 +32,14 @@ export class AutomationStateStore {
     this.#taskProjections = taskProjections;
   }
 
-  recoverInterruptedAttempts(): number {
+  recoverInterruptedAttempts(now = new Date()): number {
     return this.#owner.transaction(() => {
       const interrupted = this.#database
         .prepare(
           `SELECT attempt.id, attempt.activation_id, activation.task_id,
-                  activation.target_agent_id
+                  activation.target_agent_id, activation.retry_cycle_start,
+                  (SELECT COUNT(*) FROM attempts counted
+                   WHERE counted.activation_id = activation.id) AS attempt_count
            FROM attempts attempt
            JOIN activations activation ON activation.id = attempt.activation_id
            WHERE attempt.status = 'running' AND activation.status = 'running'
@@ -48,9 +50,11 @@ export class AutomationStateStore {
           activation_id: string;
           task_id: string;
           target_agent_id: string;
+          retry_cycle_start: number;
+          attempt_count: number;
         }>;
       for (const attempt of interrupted) {
-        const occurredAt = new Date().toISOString();
+        const occurredAt = now.toISOString();
         const summary = "The previous host stopped while this attempt was active.";
         this.#database
           .prepare(
@@ -62,9 +66,31 @@ export class AutomationStateStore {
         this.#database
           .prepare("DELETE FROM activation_dispatch_claims WHERE attempt_id = ?")
           .run(attempt.id);
-        this.#database
-          .prepare("UPDATE activations SET status = 'queued' WHERE id = ?")
-          .run(attempt.activation_id);
+        const cycleAttempt = attempt.attempt_count - attempt.retry_cycle_start;
+        if (cycleAttempt < 3) {
+          this.#database
+            .prepare(
+              `UPDATE activations
+               SET status = 'queued', retry_due_at = ?,
+                   failure_kind = 'technical', failure_summary = ?
+               WHERE id = ?`,
+            )
+            .run(
+              retryDueAt(now, cycleAttempt),
+              summary,
+              attempt.activation_id,
+            );
+        } else {
+          this.#database
+            .prepare(
+              `UPDATE activations
+               SET status = 'failed', retry_due_at = NULL,
+                   failure_kind = 'technical', failure_summary = ?
+               WHERE id = ?`,
+            )
+            .run(summary, attempt.activation_id);
+          this.createFailureAttention(attempt.task_id, attempt.activation_id, occurredAt);
+        }
         this.appendActivity(
           attempt.task_id,
           "attempt.completed",
@@ -81,13 +107,14 @@ export class AutomationStateStore {
     });
   }
 
-  readNextRunnableActivation(): RunnableActivation | undefined {
+  readNextRunnableActivation(now: string): RunnableActivation | undefined {
     const row = this.#database
       .prepare(
         `SELECT a.id, a.task_id, a.target_agent_id, a.source_event_id,
                 a.model, a.reasoning_effort
          FROM activations a
          WHERE a.status = 'queued'
+           AND (a.retry_due_at IS NULL OR a.retry_due_at <= ?)
            AND NOT EXISTS (
              SELECT 1
              FROM task_relationships relationship
@@ -106,7 +133,7 @@ export class AutomationStateStore {
          ORDER BY a.sequence
          LIMIT 1`,
       )
-      .get() as
+      .get(now) as
       | {
           id: string;
           task_id: string;
@@ -161,6 +188,23 @@ export class AutomationStateStore {
     };
   }
 
+  readNextRetryDueAt(now: string): string | undefined {
+    const row = this.#database
+      .prepare(
+        `SELECT MIN(a.retry_due_at) AS retry_due_at
+         FROM activations a
+         WHERE a.status = 'queued' AND a.retry_due_at > ?
+           AND NOT EXISTS (
+             SELECT 1 FROM activations earlier
+             WHERE earlier.task_id = a.task_id
+               AND earlier.sequence < a.sequence
+               AND earlier.status <> 'completed'
+           )`,
+      )
+      .get(now) as { retry_due_at: string | null };
+    return row.retry_due_at ?? undefined;
+  }
+
   readTaskWorkspace(taskId: string): TaskWorkspaceView | undefined {
     const row = this.#database
       .prepare(
@@ -211,7 +255,11 @@ export class AutomationStateStore {
   ): { id: string; number: number } | undefined {
     return this.#owner.transaction(() => {
       const result = this.#database
-        .prepare("UPDATE activations SET status = 'running' WHERE id = ? AND status = 'queued'")
+        .prepare(
+          `UPDATE activations
+           SET status = 'running', retry_due_at = NULL
+           WHERE id = ? AND status = 'queued'`,
+        )
         .run(activationId);
       if (result.changes !== 1) return undefined;
       const priorAttempts = this.#database
@@ -287,8 +335,12 @@ export class AutomationStateStore {
       if (activation === undefined) throw new Error(`Activation ${activationId} is not starting`);
       const occurredAt = new Date().toISOString();
       this.#database
-        .prepare("UPDATE activations SET status = 'failed' WHERE id = ?")
-        .run(activationId);
+        .prepare(
+          `UPDATE activations
+           SET status = 'failed', failure_kind = 'technical', failure_summary = ?
+           WHERE id = ?`,
+        )
+        .run(diagnostic, activationId);
       this.#database
         .prepare(
           `DELETE FROM attempts
@@ -352,38 +404,103 @@ export class AutomationStateStore {
     });
   }
 
-  completeAttempt(attemptId: string, outcome: AgentRunOutcome): void {
+  completeAttempt(
+    attemptId: string,
+    outcome: AgentRunOutcome,
+    now: Date,
+    automaticRetry = true,
+  ): void {
     this.#owner.transaction(() => {
       const attempt = this.#database
         .prepare(
-          `SELECT attempt.activation_id, a.task_id, a.target_agent_id
+          `SELECT attempt.activation_id, a.task_id, a.target_agent_id,
+                  a.retry_cycle_start
            FROM attempts attempt
            JOIN activations a ON a.id = attempt.activation_id
            WHERE attempt.id = ? AND attempt.status = 'running'`,
         )
         .get(attemptId) as
-        | { activation_id: string; task_id: string; target_agent_id: string }
+        | {
+            activation_id: string;
+            task_id: string;
+            target_agent_id: string;
+            retry_cycle_start: number;
+          }
         | undefined;
       if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
-      const occurredAt = new Date().toISOString();
+      const occurredAt = now.toISOString();
+      const persistedStatus = outcome.status === "completed" ? "completed" : "failed";
+      const outcomeKind = outcome.status === "permission-blocked" ? "permission" : outcome.status;
       this.#database
         .prepare(
           `UPDATE attempts
            SET status = ?, completed_at = ?, outcome_status = ?, outcome_summary = ?,
-               thread_id = COALESCE(?, thread_id)
+               thread_id = COALESCE(?, thread_id), outcome_kind = ?
            WHERE id = ?`,
         )
         .run(
-          outcome.status,
+          persistedStatus,
           occurredAt,
-          outcome.status,
+          persistedStatus,
           outcome.summary,
           outcome.threadId ?? null,
+          outcomeKind,
           attemptId,
         );
-      this.#database
-        .prepare("UPDATE activations SET status = ? WHERE id = ?")
-        .run(outcome.status, attempt.activation_id);
+      if (outcome.status === "completed") {
+        this.#database
+          .prepare(
+            `UPDATE activations
+             SET status = 'completed', retry_due_at = NULL,
+                 failure_kind = NULL, failure_summary = NULL
+             WHERE id = ?`,
+          )
+          .run(attempt.activation_id);
+      } else if (outcome.status === "permission-blocked") {
+        this.#database
+          .prepare(
+            `UPDATE activations
+             SET status = 'failed', retry_due_at = NULL,
+                 failure_kind = 'permission', failure_summary = ?
+             WHERE id = ?`,
+          )
+          .run(outcome.summary, attempt.activation_id);
+        this.createFailureAttention(attempt.task_id, attempt.activation_id, occurredAt);
+      } else if (!automaticRetry) {
+        this.#database
+          .prepare(
+            `UPDATE activations
+             SET status = 'failed', retry_due_at = NULL,
+                 failure_kind = 'technical', failure_summary = ?
+             WHERE id = ?`,
+          )
+          .run(outcome.summary, attempt.activation_id);
+      } else {
+        const attempts = this.#database
+          .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
+          .get(attempt.activation_id) as { count: number };
+        const cycleAttempt = attempts.count - attempt.retry_cycle_start;
+        if (cycleAttempt < 3) {
+          this.#database
+            .prepare(
+              `UPDATE activations
+               SET status = 'queued', retry_due_at = ?,
+                   failure_kind = 'technical', failure_summary = ?
+               WHERE id = ?`,
+            )
+            .run(retryDueAt(now, cycleAttempt), outcome.summary, attempt.activation_id);
+        } else {
+          this.#database
+            .prepare(
+              `UPDATE activations
+               SET status = 'failed', retry_due_at = NULL,
+                   failure_kind = 'technical', failure_summary = ?
+               WHERE id = ?`,
+            )
+            .run(outcome.summary, attempt.activation_id);
+          this.createFailureAttention(attempt.task_id, attempt.activation_id, occurredAt);
+        }
+      }
       this.appendActivity(
         attempt.task_id,
         "attempt.completed",
@@ -392,6 +509,24 @@ export class AutomationStateStore {
         occurredAt,
       );
     });
+  }
+
+  private createFailureAttention(taskId: string, activationId: string, occurredAt: string): void {
+    const attentionReasonId = randomUUID();
+    this.#database
+      .prepare(
+        `INSERT INTO attention_reasons
+          (id, task_id, type, source_event_id, created_at, resolved_at)
+         VALUES (?, ?, 'failed-run', ?, ?, NULL)`,
+      )
+      .run(attentionReasonId, taskId, activationId, occurredAt);
+    this.appendActivity(
+      taskId,
+      "attention.created",
+      { kind: "framework", id: "coordination" },
+      { attentionReasonId, reasonType: "failed-run", sourceEventId: activationId },
+      occurredAt,
+    );
   }
 
   private appendActivity(
@@ -411,4 +546,9 @@ export class AutomationStateStore {
       .run(id, taskId, type, actor.kind, actor.id, occurredAt, JSON.stringify(details));
     return id;
   }
+}
+
+function retryDueAt(now: Date, cycleAttempt: number): string {
+  const backoffMs = Math.min(5_000 * (2 ** (cycleAttempt - 1)), 30_000);
+  return new Date(now.getTime() + backoffMs).toISOString();
 }

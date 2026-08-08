@@ -9,6 +9,7 @@ import type {
   TaskInspectionView,
   TaskView,
   AttemptTranscriptQueryResult,
+  ActivationRecoveryAction,
   NeedsAttentionTaskView,
 } from "../../application/coordination-contract.ts";
 
@@ -127,6 +128,17 @@ export async function markUserMentionAddressed(
   idempotencyKey: string,
 ): Promise<void> {
   await request(`/api/attention/${encodeURIComponent(attentionReasonId)}/mark-addressed`, {
+    method: "POST",
+    body: JSON.stringify({ idempotencyKey }),
+  });
+}
+
+export async function recoverFailedActivation(
+  attentionReasonId: string,
+  action: ActivationRecoveryAction,
+  idempotencyKey: string,
+): Promise<void> {
+  await request(`/api/attention/${encodeURIComponent(attentionReasonId)}/${action}`, {
     method: "POST",
     body: JSON.stringify({ idempotencyKey }),
   });

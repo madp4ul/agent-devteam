@@ -114,7 +114,7 @@ export class TaskDiscovery {
       return { available: false, reason: "not-found" };
     }
     const currentActivation = task.activations.find(
-      (activation) => activation.status !== "completed",
+      (activation) => activation.status !== "completed" && activation.status !== "dismissed",
     );
     return {
       available: true,

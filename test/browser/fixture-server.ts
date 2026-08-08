@@ -74,12 +74,13 @@ const inspected = application.createTask({
   idempotencyKey: "browser-inspected",
 });
 if (!inspected.accepted) throw new Error("Could not create inspected browser fixture");
-application.addTaskComment({
+const authored = application.addTaskComment({
   taskId: inspected.task.id,
   body: "Please preserve the authored context beside framework history.",
   actor: { kind: "agent", id: "implementer" },
   idempotencyKey: "browser-comment",
 });
+if (!authored.accepted) throw new Error("Could not add authored browser fixture comment");
 const moved = application.moveTask({
   taskId: inspected.task.id,
   destinationColumnId: "implementation",
@@ -135,6 +136,29 @@ database.prepare(
     (id, task_id, type, source_event_id, created_at, resolved_at)
    VALUES (?, ?, 'user-mention', NULL, ?, NULL)`,
 ).run("browser-attention", inspected.task.id, attemptCompletedAt);
+database.prepare(
+  `INSERT INTO activations
+    (id, task_id, target_agent_id, reason_type, source_event_id, status, created_at,
+     model, reasoning_effort, failure_kind, failure_summary)
+   VALUES (?, ?, 'implementer', 'agent-mention', ?, 'failed', ?, NULL, NULL,
+           'permission', ?)`,
+).run(
+  "browser-permission-activation",
+  inspected.task.id,
+  authored.comment.id,
+  attemptCompletedAt,
+  "Writing the protected release file requires user approval.",
+);
+database.prepare(
+  `INSERT INTO attention_reasons
+    (id, task_id, type, source_event_id, created_at, resolved_at)
+   VALUES (?, ?, 'failed-run', ?, ?, NULL)`,
+).run(
+  "browser-permission-attention",
+  inspected.task.id,
+  "browser-permission-activation",
+  attemptCompletedAt,
+);
 database.prepare(
   "INSERT INTO task_relationships VALUES (?, 'dependency', ?, ?)",
 ).run("browser-relationship", inspected.task.id, draggable.task.id);

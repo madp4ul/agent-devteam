@@ -172,6 +172,43 @@ test("streamed Codex failures become failed attempt outcomes with retained threa
   ]);
 });
 
+test("an explicit coordination permission report becomes a permission-blocked outcome", async () => {
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-permission" },
+            {
+              type: "item.completed",
+              item: {
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "report_permission_block",
+                status: "completed",
+                arguments: {
+                  summary: "Writing the protected file requires user approval.",
+                },
+              },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+
+  assert.deepEqual(
+    await runtime.run(request("activation-permission", "T-0004"), { started() {} }),
+    {
+      status: "permission-blocked",
+      summary: "Writing the protected file requires user approval.",
+      threadId: "thread-permission",
+    },
+  );
+});
+
 test("an exception after thread startup becomes an inspectable failed outcome", async () => {
   const runtime = new CodexAgentRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },

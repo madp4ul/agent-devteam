@@ -139,13 +139,37 @@ test("pre-attempt startup diagnostics remain discoverable after navigation", asy
   await failedLink.click();
   await expect(page.getByText("Startup failed before attempt")).toBeVisible();
   await expect(page.getByText(/Boundary: repository-access/)).toBeVisible();
-  await expect(page.getByText(/Could not access project repository/)).toBeVisible();
+  await expect(page.locator(".diagnostic").filter({ hasText: "Could not access project repository" }))
+    .toBeVisible();
   const currentState = page.getByRole("region", { name: "Implementation" });
   await expect(currentState.getByText("Requested model").locator("..")).toContainText("Codex default");
   await expect(currentState.getByText("Requested reasoning").locator("..")).toContainText("Codex default");
   await page.getByRole("link", { name: "Back to board" }).click();
   await page.goto("/tasks/T-0003");
-  await expect(page.getByText(/missing-project-repository/)).toBeVisible();
+  await expect(page.locator(".diagnostic").filter({ hasText: "missing-project-repository" }))
+    .toBeVisible();
+});
+
+test("failed activation recovery is explicit on the current attention reason", async ({ page }) => {
+  await page.goto("/");
+  const recovery = page.locator(".attention-groups > li").filter({
+    hasText: "Recover a workspace startup failure",
+  });
+  await expect(recovery).toContainText(/Could not access project repository/);
+  await expect(recovery.getByRole("button", { name: "Retry" })).toBeVisible();
+  await expect(recovery.getByRole("button", { name: "Dismiss" })).toBeVisible();
+  await recovery.getByRole("button", { name: "Retry" }).click();
+  await expect(recovery).toHaveCount(0);
+});
+
+test("permission attention explains why automatic retry is unavailable", async ({ page }) => {
+  await page.goto("/tasks/T-0001?attention=browser-permission-attention");
+  const reason = page.locator(".attention-list li").filter({
+    hasText: "Writing the protected release file requires user approval.",
+  });
+  await expect(reason).toContainText("Automatic retry is unavailable for permission blocks.");
+  await expect(reason.getByRole("button", { name: "Continue" })).toBeVisible();
+  await expect(reason.getByRole("button", { name: "Retry" })).toHaveCount(0);
 });
 
 test("desktop notifications are opt-in, privacy-safe, suppressed on the active task, and navigate without resolving", async ({ page, request }) => {

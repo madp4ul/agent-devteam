@@ -9,6 +9,8 @@ import { validateTaskWorkspaceConsistency } from "./internal/git-task-workspace.
 import type {
   AddTaskCommentCommand,
   AddTaskCommentResult,
+  ActivationRecoveryCommand,
+  ActivationRecoveryResult,
   AutomationView,
   AttemptTranscriptAccess,
   AttemptTranscriptQueryResult,
@@ -132,7 +134,7 @@ export class CoordinationApplication {
         );
       }
     }
-    automation.recoverInterruptedAttempts();
+    automation.recoverInterruptedAttempts(options.automationClock?.now() ?? new Date());
     process.applyDefinition(definition, instructionContents, version);
     const boards = process.readBoards();
     const startup: StartupView = {
@@ -174,6 +176,7 @@ export class CoordinationApplication {
         ...(options.runtimeDiagnostic === undefined
           ? {}
           : { runtimeDiagnostic: options.runtimeDiagnostic }),
+        ...(options.automationClock === undefined ? {} : { clock: options.automationClock }),
       }),
       new TaskDiscovery(process, taskProjections, startup, collaborators),
       options.transcriptAccess,
@@ -395,6 +398,22 @@ export class CoordinationApplication {
     return this.#persistence.taskCommands.markUserMentionAddressed(command);
   }
 
+  retryFailedActivation(command: ActivationRecoveryCommand): ActivationRecoveryResult {
+    return this.recoverActivation(() => this.#persistence.taskCommands.retryFailedActivation(command));
+  }
+
+  dismissFailedActivation(command: ActivationRecoveryCommand): ActivationRecoveryResult {
+    return this.recoverActivation(() => this.#persistence.taskCommands.dismissFailedActivation(command));
+  }
+
+  continuePermissionBlockedActivation(
+    command: ActivationRecoveryCommand,
+  ): ActivationRecoveryResult {
+    return this.recoverActivation(
+      () => this.#persistence.taskCommands.continuePermissionBlockedActivation(command),
+    );
+  }
+
   close(): void {
     this.#persistence.close();
   }
@@ -406,6 +425,19 @@ export class CoordinationApplication {
       reason: "configuration-error",
       diagnostics: this.#startup.diagnostics,
     };
+  }
+
+  private recoverActivation(operation: () => ActivationRecoveryResult): ActivationRecoveryResult {
+    if (this.#startup.mode === "configuration-error") {
+      return {
+        accepted: false,
+        reason: "configuration-error",
+        diagnostics: this.#startup.diagnostics,
+      };
+    }
+    const result = operation();
+    if (result.accepted) this.#automation.kick();
+    return result;
   }
 }
 

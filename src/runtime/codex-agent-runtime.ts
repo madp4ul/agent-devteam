@@ -116,6 +116,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
       const { events } = streamed;
       let finalResponse = "";
       let turnCompleted = false;
+      let permissionBlockSummary: string | undefined;
       const failedCoordinationTools = new Map<string, string>();
       for await (const event of events) {
         if (event.type === "thread.started") {
@@ -136,6 +137,12 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           } else if (coordinationCall?.status === "completed") {
             failedCoordinationTools.delete(coordinationCall.name);
           }
+          if (
+            coordinationCall?.name === "coordination.report_permission_block" &&
+            coordinationCall.status === "completed"
+          ) {
+            permissionBlockSummary = permissionBlockFrom(event.item);
+          }
         } else if (event.type === "turn.completed") {
           turnCompleted = true;
         } else if (event.type === "turn.failed" || event.type === "error") {
@@ -143,11 +150,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           if (threadId !== undefined) {
             this.#remember(threadId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
           }
-          return {
-            status: "failed",
-            summary: `Codex could not complete the activation: ${diagnostic}`,
-            ...(threadId === undefined ? {} : { threadId }),
-          };
+          return runtimeFailure(diagnostic, threadId);
         }
       }
       if (threadId === undefined) {
@@ -174,6 +177,14 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
         this.#remember(threadId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
         return { status: "failed", summary: diagnostic, threadId };
       }
+      if (permissionBlockSummary !== undefined) {
+        this.#remember(threadId, transcript);
+        return {
+          status: "permission-blocked",
+          summary: permissionBlockSummary,
+          threadId,
+        };
+      }
       this.#remember(threadId, transcript);
       return {
         status: "completed",
@@ -184,11 +195,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
       if (threadId === undefined) throw error;
       const diagnostic = error instanceof Error ? error.message : "the streamed run failed";
       this.#remember(threadId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
-      return {
-        status: "failed",
-        summary: `Codex could not complete the activation: ${diagnostic}`,
-        threadId,
-      };
+      return runtimeFailure(diagnostic, threadId);
     } finally {
       this.#options.mcpServer.release?.(request);
     }
@@ -202,6 +209,28 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
   #remember(threadId: string, transcript: AttemptTranscriptItem[]): void {
     this.#transcripts.set(threadId, structuredClone(transcript));
   }
+}
+
+function runtimeFailure(diagnostic: string, threadId?: string): AgentRunOutcome {
+  return {
+    status: "failed",
+    summary: `Codex could not complete the activation: ${diagnostic}`,
+    ...(threadId === undefined ? {} : { threadId }),
+  };
+}
+
+function permissionBlockFrom(item: { type: string; [key: string]: unknown }): string {
+  const arguments_ = item.arguments;
+  if (
+    typeof arguments_ === "object" &&
+    arguments_ !== null &&
+    "summary" in arguments_ &&
+    typeof arguments_.summary === "string" &&
+    arguments_.summary.trim().length > 0
+  ) {
+    return arguments_.summary.trim();
+  }
+  return "A required action was blocked by the Codex permission policy.";
 }
 
 function replacementRequest(request: AgentRunRequest): AgentRunRequest {
@@ -331,7 +360,7 @@ Thread: ${request.attempt.thread}
 Preceding outcome: ${JSON.stringify(request.attempt.precedingOutcome)}
 Continuation message: ${JSON.stringify(request.attempt.continuationMessage)}
 
-Use the coordination MCP tools to inspect the current task again before changing it, add authored comments, and move only this task. A successful Codex response has no implicit board effect, so perform every process-required comment or movement explicitly.`;
+Use the coordination MCP tools to inspect the current task again before changing it, add authored comments, and move only this task. If the Codex permission policy denies a required action and user action or a policy change is necessary, call coordination.report_permission_block with a concise summary and do not retry the denied action. A successful Codex response has no implicit board effect, so perform every process-required comment or movement explicitly.`;
 }
 
 function createCodexClient(options: CodexClientOptionsLike): CodexClientLike {

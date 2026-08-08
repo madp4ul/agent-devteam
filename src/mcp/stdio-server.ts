@@ -152,6 +152,19 @@ server.registerTool(
   async (arguments_) => callAgentApi("POST", "/agent-api/current-task/dependencies", arguments_),
 );
 
+server.registerTool(
+  "report_permission_block",
+  {
+    description:
+      "Report that the current activation cannot complete because the Codex permission policy blocked a required action. Use only after a required action was denied and user action or a policy change is necessary.",
+    inputSchema: {
+      summary: z.string().min(1),
+    },
+  },
+  async (arguments_) =>
+    callAgentApi("POST", "/agent-api/current-task/permission-block", arguments_),
+);
+
 await server.connect(new StdioServerTransport());
 
 async function callAgentApi(

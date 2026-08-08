@@ -112,6 +112,7 @@ boards:
       "move_current_task",
       "create_child_task",
       "add_dependency",
+      "report_permission_block",
     ],
   );
   const toolByName = new Map(listed.tools.map((tool) => [tool.name, tool]));
@@ -172,12 +173,25 @@ boards:
     "targetTaskId",
     "idempotencyKey",
   ]);
+  assert.deepEqual(
+    Object.keys(toolByName.get("report_permission_block")?.inputSchema.properties ?? {}),
+    ["summary"],
+  );
   assert.equal(
-    ["add_comment", "move_current_task", "create_child_task", "add_dependency"].some(
+    ["add_comment", "move_current_task", "create_child_task", "add_dependency", "report_permission_block"].some(
       (name) => "taskId" in (toolByName.get(name)?.inputSchema.properties ?? {}),
     ),
     false,
   );
+  const permissionReport = await client.callTool({
+    name: "report_permission_block",
+    arguments: { summary: "A required protected action needs user approval." },
+  });
+  assert.deepEqual(JSON.parse(textContent(permissionReport.content)), {
+    accepted: true,
+    taskId: created.task.id,
+    summary: "A required protected action needs user approval.",
+  });
 
   const summary = await client.callTool({ name: "summarize_boards", arguments: {} });
   const summaryValue = JSON.parse(textContent(summary.content)) as {

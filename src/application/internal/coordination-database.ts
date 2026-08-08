@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync } from "node:fs";
 
-const currentSchemaVersion = 1;
+const currentSchemaVersion = 2;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -220,6 +220,12 @@ function initializeCurrentSchema(database: DatabaseSync): void {
     ensureColumn(database, "attempts", "reasoning_effort", "TEXT");
     ensureColumn(database, "activations", "model", "TEXT");
     ensureColumn(database, "activations", "reasoning_effort", "TEXT");
+    ensureColumn(database, "activations", "retry_due_at", "TEXT");
+    ensureColumn(database, "activations", "retry_cycle_start", "INTEGER NOT NULL DEFAULT 0");
+    ensureColumn(database, "activations", "failure_kind", "TEXT");
+    ensureColumn(database, "activations", "failure_summary", "TEXT");
+    ensureColumn(database, "activations", "resolution", "TEXT");
+    ensureColumn(database, "attempts", "outcome_kind", "TEXT");
     database.exec(`PRAGMA user_version = ${currentSchemaVersion}`);
     database.exec("COMMIT");
   } catch (error) {

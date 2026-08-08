@@ -13,6 +13,7 @@ import {
   type AgentRunRequest,
   type AgentRunLifecycle,
   type AgentRuntime,
+  type AutomationClock,
   CoordinationApplication,
 } from "../../src/application/coordination-application.ts";
 
@@ -208,11 +209,12 @@ test("a process with watched columns cannot resume without a configured runtime"
   });
 });
 
-test("a runtime startup failure leaves automation paused with an actionable result", async (t) => {
+test("a rejected runtime attempt enters bounded automatic retry", async (t) => {
   const fixture = await createFixture("runtime-start-failure");
   const application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
+    automationClock: new PausedRetryClock(),
     runtimeDispatch: {
       projectRepositoryPath: fixture.repositoryPath,
       taskWorkspaceRoot: fixture.workspaceRoot,
@@ -232,25 +234,26 @@ test("a runtime startup failure leaves automation paused with an actionable resu
   });
   assert.equal(created.accepted, true);
 
-  assert.deepEqual(await application.resumeAutomation(), {
-    accepted: false,
-    reason: "runtime-start-failed",
-    diagnostic: "Codex executable could not start",
-  });
+  assert.equal((await application.resumeAutomation()).accepted, true);
+  await new Promise<void>((resolve) => setImmediate(resolve));
   assert.deepEqual(application.queryAutomation(), {
-    state: "paused",
-    attemptsMayStart: false,
+    state: "running",
+    attemptsMayStart: true,
   });
   const failed = created.accepted ? application.queryTask(created.task.id) : undefined;
   assert.equal(failed?.available, true);
-  if (failed?.available) assert.equal(failed.task.activations[0]?.status, "failed");
+  if (failed?.available) {
+    assert.equal(failed.task.activations[0]?.status, "queued");
+    assert.equal(failed.task.activations[0]?.recovery?.state, "scheduled");
+  }
 });
 
-test("a failed outcome before thread startup preserves the runtime diagnostic", async (t) => {
+test("a failed outcome without a thread preserves its diagnostic for automatic retry", async (t) => {
   const fixture = await createFixture("runtime-pre-thread-failure");
   const application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
+    automationClock: new PausedRetryClock(),
     runtimeDispatch: {
       projectRepositoryPath: fixture.repositoryPath,
       taskWorkspaceRoot: fixture.workspaceRoot,
@@ -264,7 +267,7 @@ test("a failed outcome before thread startup preserves the runtime diagnostic", 
     },
   });
   t.after(() => application.close());
-  application.createTask({
+  const created = application.createTask({
     boardId: "delivery",
     columnId: "implementation",
     title: "Preserve the runtime diagnostic",
@@ -273,11 +276,17 @@ test("a failed outcome before thread startup preserves the runtime diagnostic", 
     idempotencyKey: "create-before-pre-thread-failure",
   });
 
-  assert.deepEqual(await application.resumeAutomation(), {
-    accepted: false,
-    reason: "runtime-start-failed",
-    diagnostic: "Codex rejected the MCP server configuration",
-  });
+  assert.equal((await application.resumeAutomation()).accepted, true);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const failed = created.accepted ? application.queryTask(created.task.id) : undefined;
+  assert.equal(failed?.available, true);
+  if (failed?.available) {
+    assert.equal(failed.task.activations[0]?.status, "queued");
+    assert.equal(
+      failed.task.activations[0]?.attempts[0]?.outcome?.summary,
+      "Codex rejected the MCP server configuration",
+    );
+  }
 });
 
 test("a pre-attempt workspace failure is durable, correlated, and visible after restart", async (t) => {
@@ -488,15 +497,6 @@ test("retry attempts retain the activation's snapshotted execution profile", asy
   await application.resumeAutomation();
   const first = await runtime.waitForRequest(1);
   runtime.complete({ status: "failed", summary: "Transient runtime failure." });
-  await application.waitForAutomationIdle();
-
-  // Issue 24 owns retry authorization and scheduling. Emulate only its durable
-  // failed-to-queued transition so this ticket can lock down the retry payload.
-  const database = new DatabaseSync(fixture.databasePath);
-  database.prepare("UPDATE activations SET status = 'queued' WHERE id = ?").run(first.activationId);
-  database.close();
-
-  await application.resumeAutomation();
   const retry = await runtime.waitForRequest(2);
   assert.equal(retry.activationId, first.activationId);
   assert.equal(retry.attempt.number, 2);
@@ -1036,6 +1036,16 @@ test("a queued activation survives application restart and remains paused", asyn
   assert.equal(completed.available, true);
   if (completed.available) assert.equal(completed.task.activations[0]?.status, "completed");
 });
+
+class PausedRetryClock implements AutomationClock {
+  now(): Date {
+    return new Date("2026-01-01T12:00:00.000Z");
+  }
+
+  waitUntil(): Promise<void> {
+    return new Promise(() => {});
+  }
+}
 
 class ControlledAgentRuntime implements AgentRuntime {
   readonly requests: AgentRunRequest[] = [];

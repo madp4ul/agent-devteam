@@ -157,10 +157,13 @@ export class TaskProjectionStore {
   readUnresolvedAttention(taskId: string): TaskAttentionView[] {
     return this.#database
       .prepare(
-        `SELECT id, type, source_event_id, created_at
-         FROM attention_reasons
-         WHERE task_id = ? AND resolved_at IS NULL
-         ORDER BY rowid`,
+        `SELECT attention.id, attention.type, attention.source_event_id,
+                attention.created_at, activation.failure_kind,
+                activation.failure_summary
+         FROM attention_reasons attention
+         LEFT JOIN activations activation ON activation.id = attention.source_event_id
+         WHERE attention.task_id = ? AND attention.resolved_at IS NULL
+         ORDER BY attention.rowid`,
       )
       .all(taskId)
       .map((row) => {
@@ -169,12 +172,29 @@ export class TaskProjectionStore {
           type: TaskAttentionView["type"];
           source_event_id: string | null;
           created_at: string;
+          failure_kind: "technical" | "permission" | null;
+          failure_summary: string | null;
         };
         return {
           id: typed.id,
           type: typed.type,
           sourceEventId: typed.source_event_id,
           createdAt: typed.created_at,
+          ...(typed.type !== "failed-run" || typed.failure_summary === null
+            ? {}
+            : { recovery: typed.failure_kind === "permission"
+              ? {
+                  kind: "permission-block",
+                  summary: typed.failure_summary,
+                  actions: ["continue"],
+                  explanation:
+                    "Automatic retry is unavailable for permission blocks. Complete the required action or change Codex policy, then Continue.",
+                }
+              : {
+                  kind: "technical-failure",
+                  summary: typed.failure_summary,
+                  actions: ["retry", "dismiss"],
+                } }),
         };
       });
   }
@@ -372,7 +392,8 @@ export class TaskProjectionStore {
     const rows = this.#database
       .prepare(
         `SELECT id, target_agent_id, reason_type, source_event_id, status,
-                model, reasoning_effort
+                model, reasoning_effort, retry_due_at, retry_cycle_start,
+                failure_kind, failure_summary, resolution
          FROM activations
          WHERE task_id = ?
          ORDER BY sequence`,
@@ -385,17 +406,37 @@ export class TaskProjectionStore {
         status: ActivationView["status"];
         model: string | null;
         reasoning_effort: ActivationView["reasoningEffort"];
+        retry_due_at: string | null;
+        retry_cycle_start: number;
+        failure_kind: "technical" | "permission" | null;
+        failure_summary: string | null;
+        resolution: "dismissed" | null;
       }>;
-    return rows.map((row) => ({
-      id: row.id,
-      targetAgentId: row.target_agent_id,
-      status: row.status,
-      reason: { type: row.reason_type, sourceEventId: row.source_event_id },
-      attempts: this.readAttempts(row.id),
-      startupFailure: this.readActivationStartupFailure(row.id),
-      model: row.model,
-      reasoningEffort: row.reasoning_effort,
-    }));
+    return rows.map((row) => {
+      const attempts = this.readAttempts(row.id);
+      return {
+        id: row.id,
+        targetAgentId: row.target_agent_id,
+        status: row.resolution === "dismissed" ? "dismissed" : row.status,
+        reason: { type: row.reason_type, sourceEventId: row.source_event_id },
+        attempts,
+        startupFailure: this.readActivationStartupFailure(row.id),
+        recovery: row.retry_due_at === null
+          ? row.status !== "failed" || row.failure_summary === null
+            ? null
+            : {
+                state: row.failure_kind === "permission" ? "permission-blocked" : "awaiting-retry",
+                summary: row.failure_summary,
+              }
+          : {
+              state: "scheduled",
+              nextAttempt: attempts.length + 1,
+              dueAt: row.retry_due_at,
+            },
+        model: row.model,
+        reasoningEffort: row.reasoning_effort,
+      } satisfies ActivationView;
+    });
   }
 
   private readActivationStartupFailure(
@@ -429,7 +470,7 @@ export class TaskProjectionStore {
     const rows = this.#database
       .prepare(
         `SELECT id, status, workspace_path, started_at, completed_at,
-                outcome_status, outcome_summary, thread_id, model, reasoning_effort
+                outcome_status, outcome_summary, outcome_kind, thread_id, model, reasoning_effort
          FROM attempts
          WHERE activation_id = ?
            AND NOT EXISTS (
@@ -446,6 +487,7 @@ export class TaskProjectionStore {
         completed_at: string | null;
         outcome_status: "completed" | "failed" | null;
         outcome_summary: string | null;
+        outcome_kind: "completed" | "failed" | "permission" | null;
         thread_id: string | null;
         model: string | null;
         reasoning_effort: AttemptView["reasoningEffort"];
@@ -459,7 +501,10 @@ export class TaskProjectionStore {
       outcome:
         row.outcome_status === null
           ? null
-          : { status: row.outcome_status, summary: row.outcome_summary ?? "" },
+          : {
+              status: row.outcome_kind === "permission" ? "permission-blocked" : row.outcome_status,
+              summary: row.outcome_summary ?? "",
+            },
       threadId: row.thread_id,
       model: row.model,
       reasoningEffort: row.reasoning_effort,

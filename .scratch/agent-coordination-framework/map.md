@@ -109,19 +109,19 @@ without choosing the implementation yet.
 - [Prevent Conflicting and Duplicate Changes](./issues/22-prevent-conflicting-duplicate-changes.md)
   — Enforce atomic, idempotent, conflict-safe commands and strict per-task run
   serialization while allowing independent tasks to execute concurrently.
-
-## Next implementation priority
-
 - [Recover Failed and Permission-Blocked Attempts](./issues/24-recover-failed-permission-blocked-attempts.md)
   — Apply bounded automatic retry to technical failures and explicit user
   recovery to exhausted or permission-blocked activations without bypassing
   the preserved task queue.
 
-## Clarified delivery follow-ups
+## Next implementation priority
 
 - [Interrupt Tasks and Pause the Process](./issues/25-interrupt-tasks-pause-process.md)
   — Show the actual running agent and current-attempt elapsed time consistently
   on the board, task details, transcript, and process-wide live-run menu.
+
+## Clarified delivery follow-ups
+
 - [Archive Tasks Without Losing Work](./issues/27-archive-tasks-without-losing-work.md)
   — Keep detailed transcripts until explicit archival, then discard them with
   the task workspace while retaining concise attempt history.

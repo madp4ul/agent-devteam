@@ -3,6 +3,9 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type {
   ActivationView,
+  ActivationRecoveryCommand,
+  ActivationRecoveryAction,
+  ActivationRecoveryResult,
   AddTaskCommentCommand,
   AddTaskCommentResult,
   Actor,
@@ -332,6 +335,109 @@ export class TaskCommandStore {
     });
   }
 
+  retryFailedActivation(command: ActivationRecoveryCommand): ActivationRecoveryResult {
+    return this.recoverActivation("retry", command, "technical");
+  }
+
+  dismissFailedActivation(command: ActivationRecoveryCommand): ActivationRecoveryResult {
+    return this.recoverActivation("dismiss", command, "technical");
+  }
+
+  continuePermissionBlockedActivation(
+    command: ActivationRecoveryCommand,
+  ): ActivationRecoveryResult {
+    return this.recoverActivation("continue", command, "permission");
+  }
+
+  private recoverActivation(
+    action: ActivationRecoveryAction,
+    command: ActivationRecoveryCommand,
+    expectedFailureKind: "technical" | "permission",
+  ): ActivationRecoveryResult {
+    return this.transaction(() => {
+      const commandType = `${action}-failed-activation`;
+      const prior = this.readStoredResponse<ActivationRecoveryResult>(
+        commandType,
+        command.idempotencyKey,
+      );
+      if (prior !== undefined) return prior;
+      const reason = this.#database
+        .prepare(
+          `SELECT attention.task_id, attention.resolved_at,
+                  activation.id AS activation_id, activation.status,
+                  activation.failure_kind
+           FROM attention_reasons attention
+           LEFT JOIN activations activation ON activation.id = attention.source_event_id
+           WHERE attention.id = ? AND attention.type = 'failed-run'`,
+        )
+        .get(command.attentionReasonId) as
+        | {
+            task_id: string;
+            resolved_at: string | null;
+            activation_id: string | null;
+            status: ActivationView["status"] | null;
+            failure_kind: "technical" | "permission" | null;
+          }
+        | undefined;
+      let result: ActivationRecoveryResult;
+      if (reason === undefined || reason.activation_id === null) {
+        result = { accepted: false, reason: "not-found" };
+      } else if (reason.resolved_at !== null) {
+        result = { accepted: false, reason: "already-resolved" };
+      } else if (reason.status !== "failed" || reason.failure_kind !== expectedFailureKind) {
+        result = { accepted: false, reason: "wrong-recovery-type" };
+      } else {
+        const resolvedAt = new Date().toISOString();
+        this.#database
+          .prepare("UPDATE attention_reasons SET resolved_at = ? WHERE id = ?")
+          .run(resolvedAt, command.attentionReasonId);
+        this.#database
+          .prepare(
+            `UPDATE activation_startup_failures
+             SET resolved_at = ?
+             WHERE activation_id = ? AND resolved_at IS NULL`,
+          )
+          .run(resolvedAt, reason.activation_id);
+        if (action === "dismiss") {
+          this.#database
+            .prepare(
+              `UPDATE activations
+               SET status = 'completed', resolution = 'dismissed',
+                   failure_kind = NULL, failure_summary = NULL, retry_due_at = NULL
+               WHERE id = ?`,
+            )
+            .run(reason.activation_id);
+        } else {
+          const attempts = this.#database
+            .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
+            .get(reason.activation_id) as { count: number };
+          this.#database
+            .prepare(
+              `UPDATE activations
+               SET status = 'queued', retry_cycle_start = ?, retry_due_at = NULL,
+                   failure_kind = NULL, failure_summary = NULL, resolution = NULL
+               WHERE id = ?`,
+            )
+            .run(attempts.count, reason.activation_id);
+        }
+        this.appendActivity(
+          reason.task_id,
+          "attention.resolved",
+          command.actor,
+          {
+            attentionReasonId: command.attentionReasonId,
+            reasonType: "failed-run",
+            recoveryAction: action,
+          },
+          resolvedAt,
+        );
+        result = { accepted: true, activationId: reason.activation_id, resolvedAt };
+      }
+      this.storeCommandResponse(commandType, command.idempotencyKey, result);
+      return result;
+    });
+  }
+
 
   private transaction<Result>(operation: () => Result): Result {
     return this.#owner.transaction(operation);
@@ -633,7 +739,7 @@ export class TaskCommandStore {
   private storeCommandResponse(
     commandType: string,
     idempotencyKey: string,
-    result: BoardMutationResult,
+    result: unknown,
   ): void {
     this.#database
       .prepare("INSERT INTO command_responses VALUES (?, ?, ?)")

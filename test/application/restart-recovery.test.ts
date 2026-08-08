@@ -12,6 +12,7 @@ import {
   type AgentRunOutcome,
   type AgentRunRequest,
   type AgentRuntime,
+  type AutomationClock,
   CoordinationApplication,
 } from "../../src/application/coordination-application.ts";
 
@@ -65,9 +66,11 @@ test("restart records an interrupted attempt and retries its activation at the h
   first.close();
 
   const recoveringRuntime = new RecordingRuntime(true);
+  const recoveryClock = new ControlledClock("2026-01-01T12:00:00.000Z");
   const recovered = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
+    automationClock: recoveryClock,
     runtimeDispatch: {
       projectRepositoryPath: fixture.repositoryPath,
       taskWorkspaceRoot: fixture.workspaceRoot,
@@ -76,7 +79,10 @@ test("restart records an interrupted attempt and retries its activation at the h
   });
   t.after(() => recovered.close());
   assert.equal(recovered.queryStartup().mode, "paused");
-  const resume = await recovered.resumeAutomation();
+  const resumePromise = recovered.resumeAutomation();
+  assert.equal(recoveringRuntime.requestCount, 0);
+  recoveryClock.advanceTo("2026-01-01T12:00:05.000Z");
+  const resume = await resumePromise;
   assert.equal(resume.accepted, true);
   const retry = await recoveringRuntime.waitForRequest();
   assert.equal(retry.activationId, firstRequest.activationId);
@@ -130,6 +136,48 @@ test("restart records an interrupted attempt and retries its activation at the h
   const idleAfterRestart = recovered.queryTask(idle.task.id);
   assert.equal(idleAfterRestart.available, true);
   if (idleAfterRestart.available) assert.deepEqual(idleAfterRestart.task.activations, []);
+});
+
+test("restart interruptions exhaust the same bounded retry cycle", async (t) => {
+  const fixture = await createFixture();
+  const activationId = await startInterruptedHost(
+    fixture,
+    new ControlledClock("2026-01-01T12:00:00.000Z"),
+    true,
+  );
+  await startInterruptedHost(
+    fixture,
+    new ControlledClock("2026-01-01T12:00:00.000Z"),
+    false,
+    "2026-01-01T12:00:05.000Z",
+  );
+  await startInterruptedHost(
+    fixture,
+    new ControlledClock("2026-01-01T12:00:05.000Z"),
+    false,
+    "2026-01-01T12:00:15.000Z",
+  );
+
+  const finalRuntime = new RecordingRuntime(true);
+  const final = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    automationClock: new ControlledClock("2026-01-01T12:00:15.000Z"),
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: finalRuntime,
+    },
+  });
+  t.after(() => final.close());
+  assert.equal((await final.resumeAutomation()).accepted, true);
+  assert.equal(finalRuntime.requestCount, 0);
+  const attention = final.queryNeedsAttention();
+  assert.equal(attention.available, true);
+  if (attention.available) {
+    assert.equal(attention.tasks[0]?.reasons[0]?.sourceEventId, activationId);
+    assert.equal(attention.tasks[0]?.reasons[0]?.recovery?.kind, "technical-failure");
+  }
 });
 
 test("startup reports every durable workspace mismatch before allowing mutation", async (t) => {
@@ -221,7 +269,7 @@ test("startup backs up and verifies durable storage before schema migration", as
   assert.equal((backup.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 0);
   backup.close();
   const current = new DatabaseSync(fixture.databasePath, { readOnly: true });
-  assert.equal((current.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 1);
+  assert.equal((current.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 2);
   current.close();
 });
 
@@ -233,7 +281,7 @@ test("startup rejects a future schema without changing its version", async () =>
   });
   first.close();
   const future = new DatabaseSync(fixture.databasePath);
-  future.exec("PRAGMA user_version = 2");
+  future.exec("PRAGMA user_version = 3");
   future.close();
 
   const rejected = await CoordinationApplication.start({
@@ -243,11 +291,11 @@ test("startup rejects a future schema without changing its version", async () =>
   const startup = rejected.queryStartup();
   assert.equal(startup.mode, "configuration-error");
   if (startup.mode === "configuration-error") {
-    assert.match(JSON.stringify(startup.diagnostics), /schema version 2 is newer than supported version 1/i);
+    assert.match(JSON.stringify(startup.diagnostics), /schema version 3 is newer than supported version 2/i);
   }
   rejected.close();
   const unchanged = new DatabaseSync(fixture.databasePath, { readOnly: true });
-  assert.equal((unchanged.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 2);
+  assert.equal((unchanged.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 3);
   unchanged.close();
 });
 
@@ -373,6 +421,76 @@ test("a complete state-root backup restores task state at the registered absolut
   assert.equal(registrationsAfter.stdout, registrationsBefore.stdout);
 });
 
+class ControlledClock implements AutomationClock {
+  #now: Date;
+  readonly #waiters: Array<{ due: number; resolve(): void }> = [];
+
+  constructor(now: string) {
+    this.#now = new Date(now);
+  }
+
+  now(): Date {
+    return new Date(this.#now);
+  }
+
+  waitUntil(instant: string): Promise<void> {
+    if (Date.parse(instant) <= this.#now.getTime()) return Promise.resolve();
+    return new Promise((resolve) => this.#waiters.push({ due: Date.parse(instant), resolve }));
+  }
+
+  advanceTo(instant: string): void {
+    this.#now = new Date(instant);
+    for (const waiter of this.#waiters.splice(0)) {
+      if (waiter.due <= this.#now.getTime()) waiter.resolve();
+      else this.#waiters.push(waiter);
+    }
+  }
+}
+
+async function startInterruptedHost(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  clock: ControlledClock,
+  createTask: boolean,
+  advanceTo?: string,
+): Promise<string> {
+  const runtime = new RecordingRuntime(false);
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    automationClock: clock,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  let activationId: string;
+  if (createTask) {
+    const created = application.createTask({
+      boardId: "delivery",
+      columnId: "implementation",
+      title: "Exhaust interrupted attempts",
+      description: "Every host interruption counts toward the bounded retry cycle.",
+      actor: { kind: "user", id: "paul" },
+      idempotencyKey: "create-interruption-exhaustion",
+    });
+    assert.equal(created.accepted, true);
+    if (!created.accepted) throw new Error("Expected task creation");
+    activationId = created.task.activations[0]!.id;
+  } else {
+    const task = application.queryTask("T-0001");
+    assert.equal(task.available, true);
+    if (!task.available) throw new Error("Expected retained task");
+    activationId = task.task.activations[0]!.id;
+  }
+  const resume = application.resumeAutomation();
+  if (advanceTo !== undefined) clock.advanceTo(advanceTo);
+  assert.equal((await resume).accepted, true);
+  await runtime.waitForRequest();
+  application.close();
+  return activationId;
+}
+
 class RecordingRuntime implements AgentRuntime {
   readonly #complete: boolean;
   readonly #requests: AgentRunRequest[] = [];
@@ -380,6 +498,10 @@ class RecordingRuntime implements AgentRuntime {
 
   constructor(complete: boolean) {
     this.#complete = complete;
+  }
+
+  get requestCount(): number {
+    return this.#requests.length;
   }
 
   run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
