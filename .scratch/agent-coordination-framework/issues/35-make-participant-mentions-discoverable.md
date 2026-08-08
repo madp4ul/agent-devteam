@@ -48,7 +48,7 @@ comment and activation semantics established by issue 20.
 - The same review found negative prose such as “no implementation defect
   requires return to `@implementation-agent`” visually indistinguishable from a
   deliberate request even though it queued that agent. Highlighting must make
-  the executable token and its consequence obvious; example guidance separately
-  prevents agents from emitting such accidental requests.
+  the executable token and its consequence obvious; framework instructions from
+  issue 38 separately prevent agents from emitting such accidental requests.
 - This ticket improves mention entry only. Timeline freshness after submission
   belongs to issue 32.

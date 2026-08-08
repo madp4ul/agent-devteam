@@ -138,6 +138,9 @@ without choosing the implementation yet.
 - [Structure Task History by Cause and Attempt](./issues/37-structure-task-history-by-cause-and-attempt.md)
   — Prototype a causal timeline that groups attempt work and folds derived
   activation or attention facts into the comment or movement that caused them.
+- [Separate Framework, Process, and Role Instructions](./issues/38-separate-framework-process-role-instructions.md)
+  — Define a product-owned framework-instruction layer and deliberate prompt
+  precedence so process and role authors do not repeat invariant mechanics.
 
 ## Out of scope
 

@@ -5,7 +5,7 @@ architecture-led development process on a real nontrivial repository change,
 including automatic handoffs, visible rework, cross-stage consultation,
 explicit user approval, integration, and Completion.
 
-**Blocked by:** 20 — Consult Agents and Notify the User; 21 — Split, Relate, and Unblock Work; 24 — Recover Failed and Permission-Blocked Attempts; 25 — Interrupt Tasks and Pause the Process; 26 — Evolve Process Definitions Safely; 27 — Archive Tasks Without Losing Work
+**Blocked by:** 20 — Consult Agents and Notify the User; 21 — Split, Relate, and Unblock Work; 24 — Recover Failed and Permission-Blocked Attempts; 25 — Interrupt Tasks and Pause the Process; 26 — Evolve Process Definitions Safely; 27 — Archive Tasks Without Losing Work; 38 — Separate Framework, Process, and Role Instructions
 
 **Status:** ready-for-agent
 

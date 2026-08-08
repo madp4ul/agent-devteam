@@ -52,7 +52,7 @@ technical event or losing the underlying audit evidence.
   reconstruct.
 - Accidental canonical mentions also produced repeated agent and self-agent
   activations, amplifying the visual flood. This ticket presents causal history;
-  preventing accidental requests belongs to process guidance and issue 35's
-  mention interaction.
+  preventing accidental requests belongs to issue 38's framework instructions
+  and issue 35's mention interaction.
 - This is intentionally not the next implementation ticket. It needs the later
   attempt/recovery event shapes and a focused UI prototype before implementation.

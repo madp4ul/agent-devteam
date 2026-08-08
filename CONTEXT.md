@@ -222,8 +222,17 @@ does not create this condition.
 **Role**:
 The configurable responsibility given to an agent within a process.
 
+**Framework instructions**:
+Product-owned invariant guidance supplied to every agent about coordination
+mechanics that behave the same in every process.
+
+**Coordination guidance**:
+Process-authored guidance describing how roles cooperate, route work, and apply
+the outcomes and approval rules of one process.
+
 **Agent instructions**:
-The full guidance an agent receives for carrying out its own role.
+Role-specific guidance describing how one agent applies its responsibility and
+judgment within a process.
 
 **Agent execution profile**:
 The optional Codex model and reasoning effort selected for one process agent.

@@ -194,6 +194,10 @@ see why an agent ran or why the task needs me without searching a wall of text.
 119. As a user, I want task history grouped into causal attempt narratives with
 small derived events folded into their source comment or movement, so that the
 coordination story remains understandable without losing audit evidence.
+120. As a process author, I want invariant framework mechanics supplied to every
+agent separately from process coordination guidance and role instructions, so
+that each instruction source has one clear owner and projects do not repeat
+universal behavior.
 
 ## Implementation Decisions
 
@@ -236,6 +240,10 @@ coordination story remains understandable without losing audit evidence.
   agents, roles, coordination guidance, stable entity IDs, and the default task
   workspace starting ref. Long-form agent instructions live in referenced
   Markdown documents.
+- Product-owned framework instructions define invariant coordination mechanics
+  for every activation. Process coordination guidance defines cooperation and
+  routing for one process, while referenced agent instructions define one role;
+  process files do not duplicate framework mechanics.
 - An agent definition may optionally select a Codex model and reasoning effort.
   Omitted values inherit the launching user's Codex configuration; model choice
   does not alter the shared permission policy.
