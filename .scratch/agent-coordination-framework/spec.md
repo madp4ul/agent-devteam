@@ -158,6 +158,27 @@ without using an internal API or test fixture.
 107. As a user, I want board columns to remain in one left-to-right workflow
 lane with horizontal scrolling when needed, so that the process order stays
 visually coherent instead of wrapping into misleading rows.
+108. As a user, I want one zero-configuration project state root remembered
+across launches, so that forgetting a startup argument cannot split my
+coordination database from its Git task worktrees.
+109. As a user, I want all database workspace records and framework-owned Git
+worktree registrations reconciled during startup, so that inconsistent state is
+visible before I resume automation rather than one task failure at a time.
+110. As a user, I want task details to show whether its workspace exists, where
+it is, and how to open or copy its path, so that agent-created repository files
+are discoverable through my ordinary development tools.
+111. As a user, I want a running attempt transcript to update with current agent
+messages and started, completed, or failed tool activity, so that I can
+understand what an agent is doing without waiting for the attempt to finish.
+112. As a user, I want the actual running agent and current-attempt elapsed time
+on the board card, task details, and transcript, so that mention-triggered work
+and long runs remain visible without inferring responsibility from the column.
+113. As a user, I want every finished attempt's captured transcript to survive
+application restart regardless of its outcome, so that investigating a past
+unarchived task does not depend on one host process.
+114. As a user, I want explicit task archival to discard all detailed attempt
+transcripts together with the task workspace while retaining concise attempt
+history, so that operational evidence has a clear user-controlled lifetime.
 
 ## Implementation Decisions
 
@@ -169,6 +190,12 @@ visually coherent instead of wrapping into misleading rows.
   install the TypeScript development toolchain. Docker may remain an optional
   development or deployment adapter but does not determine application paths or
   interfaces. See [ADR 0002](../../docs/adr/0002-self-contained-host-native-distribution.md).
+- Each project repository clone is bound to one project state root containing
+  its coordination database and task worktrees. The default is the sibling
+  `<repository-name>-agent-coordination-state`; repository-local Git
+  configuration retains the binding without putting machine-specific paths in
+  the process definition. See
+  [ADR 0004](../../docs/adr/0004-bind-projects-to-sibling-coordination-state.md).
 - The coordination framework extends Codex rather than reimplementing agent
   conversation, coding tools, shell and filesystem access, sandboxing,
   approvals, skills, plugins, or project-instruction discovery.
@@ -251,6 +278,11 @@ visually coherent instead of wrapping into misleading rows.
   chronological timeline while preserving their different record types. The
   page owns task editing, relationships, task movement, attention recovery,
   current task automation, archival, and attempt transcript access.
+- Task details include a **Task workspace** section. Before provisioning it
+  explains when the workspace will be created; afterwards it exposes the bound
+  Git worktree's absolute location, starting ref and commit, Copy path, and a
+  supported host-native Open workspace action. Rich live branch/index/file
+  state is a later enhancement rather than part of basic discovery.
 - The task move chooser allows every other defined column, preserves board
   order, and marks current, previous, and next positions. Watching-agent
   information is secondary context and does not restrict movement.
@@ -260,7 +292,10 @@ visually coherent instead of wrapping into misleading rows.
 - Archiving preserves the complete task and coordination history but removes it
   from normal board views and agent listings. There is no permanent task
   deletion. Eligible tasks may be archived individually and completed tasks in
-  bulk.
+  bulk. Detailed attempt transcripts are operational evidence rather than
+  retained archive history: explicit archival deletes them together with the
+  task workspace while preserving attempt timing, outcomes, diagnostics, and
+  thread IDs.
 - Parent-child and dependency relationships are typed. A dependency is
   satisfied when its target enters its Completion column. Only transition from
   blocked to fully unblocked may activate the current column's agent.
@@ -356,8 +391,11 @@ visually coherent instead of wrapping into misleading rows.
   and usable, with a fresh-thread fallback. Distinct activations never share
   hidden conversation context.
 - A thread ID is attached to each attempt and its run-start activity because a
-  later attempt may resume or replace the thread. Codex owns complete transcript
-  persistence; losing a Codex transcript never removes durable board history.
+  later attempt may resume or replace the thread. Live unfinished transcript
+  state may remain runtime-owned, but whenever an attempt ends without a host
+  crash the framework persists its complete captured inspectable transcript
+  regardless of outcome. A host crash may lose unfinished transcript items but
+  never removes durable board history or conceals the interrupted attempt.
 - The framework uses direct App Server integration only in a later version if a
   richer Codex-native client, interactive approvals, or deeper conversation UI
   justifies the additional protocol ownership.
@@ -371,8 +409,10 @@ visually coherent instead of wrapping into misleading rows.
 
 ### Durable coordination state and consistency
 
-- A framework-owned local relational store holds authoritative current state
-  and immutable authored/framework records. The activity ledger explains state
+- A framework-owned local relational store in the bound project state root
+  holds authoritative current state and immutable authored/framework records.
+  The same root contains the project's framework-owned task worktrees. The
+  activity ledger explains state
   but is not used as an event-sourced reconstruction mechanism.
 - Durable state includes applied process identities; tasks, revisions, archive
   state, attachments, comments, relationships, and attention; activity;
@@ -394,9 +434,16 @@ visually coherent instead of wrapping into misleading rows.
 - Delivery is at least once. Atomic and idempotent board commands prevent
   duplicate or half-applied coordination state, while attempt context tells a
   retried agent that workspace or external effects may already exist.
-- Startup validates storage and completes migrations before dispatch. Storage
-  unavailability, inconsistency, or failed migration prevents both agent
-  dispatch and board mutation and never substitutes a new empty store.
+- First initialization records the project state binding in repository-local
+  Git configuration. Startup uses that binding rather than re-resolving an
+  optional command-line location, and never redirects initialized state because
+  a later argument is omitted or changed.
+- Startup validates storage, completes schema migrations, and reconciles every
+  database workspace record with physical directories and framework-owned Git
+  worktree registrations before dispatch. A missing bound root, an unrelated
+  root, an unrecorded registration, a missing registration, or any other
+  inconsistency prevents both agent dispatch and board mutation and never
+  substitutes a new empty store.
 - Schema migration creates a verified backup first. Damaged state is preserved,
   and the first version documents manual backup and restore.
 - Tasks and complete histories have no age-based retention limit. Archival is
@@ -417,10 +464,11 @@ visually coherent instead of wrapping into misleading rows.
 - Process instructions control branch creation, ancestry, commits, merge
   targets, and integration. The framework does not infer or enforce one Git
   topology.
-- Worktrees live at stable paths under a framework-owned workspace root outside
-  the primary checkout. That root is deployment configuration rather than
-  process configuration. Provisioning and removal are serialized per project;
-  normal runs in different task worktrees may remain concurrent.
+- Worktrees live at stable paths under the bound project state root outside the
+  primary checkout. The default state root is its clearly named sibling; a
+  custom initial root remains deployment configuration rather than process
+  configuration. Provisioning and removal are serialized per project; normal
+  runs in different task worktrees may remain concurrent.
 - Before every run, the framework verifies that an existing worktree still
   exists and is registered as expected. Missing or invalid workspaces stop the
   activation for explicit recovery and are never reconstructed automatically.
@@ -441,6 +489,10 @@ visually coherent instead of wrapping into misleading rows.
   Its on-demand menu contains current runs across all boards with agent, task,
   board, column, status, and elapsed time. It is navigation and pause context,
   not a run-history dashboard or recovery surface.
+- Board cards, current-attempt task details, and transcript headers show the
+  actual target agent plus a minutes-and-seconds timer for the current attempt.
+  The timer starts at dispatch, excludes queued time and previous retries, and
+  becomes a fixed duration when that attempt ends.
 - Task details own current automation controls and history. Activations may be
   queued, running, waiting for retry, awaiting recovery, suspended, completed,
   dismissed, or stale. Attempts may be running, interrupting, completed,
@@ -452,7 +504,14 @@ visually coherent instead of wrapping into misleading rows.
   Dismiss controls appear only on the unresolved attention reason.
 - Attempt transcripts open in a large read-only overlay that favors readable
   messages, useful tool activity, available diagnostics, and truncated command
-  output without reproducing the full Codex client.
+  output without reproducing the full Codex client. During a run, newly started
+  tools appear as running and update in place to completed or failed with their
+  final captured output; completed agent messages appear automatically. Token
+  streaming and partial command output are not required.
+- Finished attempt transcripts are durable for every outcome while the task is
+  unarchived. Completion does not remove them; explicit archive removes all
+  transcript content for the task. Incremental durability for unfinished live
+  transcript items across a host crash is not required.
 - The copyable thread ID appears in expanded attempt details and the transcript
   overlay. Open in Codex appears only through documented supported navigation.
 - Desktop notifications are opt-in and emitted once, best-effort, for each new
@@ -520,7 +579,10 @@ visually coherent instead of wrapping into misleading rows.
   optimistic conflicts, idempotent retries, crash recovery, automatic retry,
   Retry and Dismiss, permission blocks, user interruption and continuation,
   process pause and drain, stale activations, unmapped tasks, archive guards,
-  storage failure, and task-workspace verification.
+  storage failure, project state binding and complete startup worktree
+  reconciliation, task-workspace discovery, live transcript progression,
+  finished-transcript restart durability and archival cleanup, elapsed-time
+  surfaces, and task-workspace verification.
 - Focused adapter contract tests verify that the Kanboard plugin/adapter, MCP
   tools, Codex SDK wrapper, transcript access, and desktop notification gateway
   translate their external protocols to and from the shared coordination
@@ -583,6 +645,14 @@ visually coherent instead of wrapping into misleading rows.
   state into child tasks, hidden snapshot commits, framework-controlled branch
   topology, merge inference, merge enforcement, or branch deletion.
 - Automatically restoring a removed workspace when a task is unarchived.
+- Automatic or implicit relocation of an initialized project state root. A
+  future explicit workflow may move the database and worktrees, repair Git's
+  registrations, and update the binding only after destination validation.
+- A project-wide worktree inventory and live task-workspace branch, index,
+  modified-file, untracked-file, or disk-usage dashboard. Basic per-task path
+  discovery and Open workspace remain in scope.
+- Token-by-token agent-message rendering, partial command-output streaming, or
+  crash-durable persistence of unfinished live transcript items.
 - An end-to-end interactive product prototype before implementation. Prototypes
   remain appropriate only for narrow questions with a specific learning goal.
 

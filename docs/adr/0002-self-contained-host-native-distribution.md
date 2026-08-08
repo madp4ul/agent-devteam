@@ -2,6 +2,9 @@
 
 Status: accepted
 
+ADR 0004 supersedes this decision's two storage-location consequences. The
+host-native distribution decision and remaining consequences stay accepted.
+
 The production application will be distributed as a self-contained program
 that runs on the user's host and serves its interface on localhost. It will
 bundle its runtime and application dependencies so using the product does not

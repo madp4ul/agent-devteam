@@ -40,6 +40,21 @@ the same state.
 **Project repository**:
 The local Git repository whose work is coordinated by a process.
 
+**Project state root**:
+The framework-owned directory containing one project repository's durable
+coordination database and task workspaces. Its default is a clearly named
+sibling of the primary checkout rather than a directory inside that checkout.
+
+**Project state binding**:
+The repository-local association from one project repository clone to its
+project state root. It is deployment state stored in local Git metadata, not
+version-controlled process configuration.
+
+**Project state consistency**:
+Agreement between the project state binding, coordination database workspace
+records, physical task-workspace directories, and the project repository's Git
+worktree registrations.
+
 **Task workspace**:
 An isolated Git working tree provisioned by the coordination framework for one
 task and reused by all of its agent runs until archival. The process, not the

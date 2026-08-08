@@ -5,7 +5,7 @@ without deleting their coordination history or losing repository work. Agents
 can deliberately inspect completed and archived work, and unarchiving honestly
 starts any later workspace from the configured ref.
 
-**Blocked by:** 18 — Let Agents Discover Shared Work; 19 — Inspect and Control a Task; 23 — Recover Queued Work After Restart
+**Blocked by:** 18 — Let Agents Discover Shared Work; 19 — Inspect and Control a Task; 23 — Recover Queued Work After Restart; 32 — Observe Running Attempts Live
 
 **Status:** ready-for-agent
 
@@ -25,12 +25,17 @@ starts any later workspace from the configured ref.
 - [ ] Archiving retains task content, final column, comments, relationships,
   attention history, activity, attempts, and thread IDs without an age limit or
   permanent-delete path.
+- [ ] Explicit archival deletes all persisted transcript content for every
+  attempt of the task together with its task workspace. Entering Completion or
+  any other workflow column never deletes a transcript, and archived attempt
+  summaries, outcomes, diagnostics, timing, and thread IDs remain honest when
+  the detailed transcript is no longer available.
 - [ ] Archived tasks leave ordinary board views and default agent listings but
   remain available through explicit history or search and direct related-task
   inspection.
 - [ ] Unarchiving does not restore or remember the removed workspace; a later
   activation provisions a new detached worktree from the current process
-  default starting ref.
+  default starting ref. It does not restore discarded transcripts.
 - [ ] Real-Git and browser tests cover dirty worktrees, missing durable refs,
-  cleanup failure, bulk archive, historical discovery, and unarchive behavior.
-
+  cleanup failure, bulk archive, transcript cleanup, historical discovery, and
+  unarchive behavior.

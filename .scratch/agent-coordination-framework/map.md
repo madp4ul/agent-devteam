@@ -97,7 +97,32 @@ without choosing the implementation yet.
   runs, fail attempts with unresolved required coordination calls, and persist
   correlated pre-attempt startup diagnostics across logs, UI, and host restarts.
 
+## Clarified delivery follow-ups
+
+- [Recover Queued Work After Restart](./issues/23-recover-queued-work-after-restart.md)
+  — Bind each repository clone to one sibling project state root and reconcile
+  its database records with every framework-owned Git worktree at startup.
+- [Interrupt Tasks and Pause the Process](./issues/25-interrupt-tasks-pause-process.md)
+  — Show the actual running agent and current-attempt elapsed time consistently
+  on the board, task details, transcript, and process-wide live-run menu.
+- [Archive Tasks Without Losing Work](./issues/27-archive-tasks-without-losing-work.md)
+  — Keep detailed transcripts until explicit archival, then discard them with
+  the task workspace while retaining concise attempt history.
+- [Expose a Task's Workspace](./issues/31-expose-task-workspace.md)
+  — Add a Task workspace section with lifecycle state, starting point, path,
+  Copy path, and Open workspace without building an embedded Git client.
+- [Observe Running Attempts Live](./issues/32-observe-running-attempts-live.md)
+  — Update started and completed transcript activity during a run and persist
+  every finished attempt's captured transcript until task archival.
+
 ## Not yet specified
+
+- [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
+  — Evaluate a richer automatically updating branch, commit, dirty-file, and
+  optional storage summary after basic workspace discovery proves useful.
+- [Relocate a Project State Root](./issues/34-relocate-project-state-root.md)
+  — Define a lower-priority explicit relocation and Git-registration repair
+  workflow only if usage demonstrates that initialized state must move.
 
 ## Out of scope
 
