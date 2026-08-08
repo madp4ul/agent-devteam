@@ -11,23 +11,23 @@ import type {
   TaskOverviewsQueryResult,
   TaskView,
 } from "../coordination-contract.ts";
-import type { CoordinationTaskStore } from "./coordination-store.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
+import type { TaskProjectionStore } from "./task-projection-store.ts";
 
 export class TaskDiscovery {
   readonly #processStore: ProcessStateStore;
-  readonly #taskStore: CoordinationTaskStore;
+  readonly #taskProjections: TaskProjectionStore;
   readonly #startup: StartupView;
   readonly #collaborators: CollaboratorView[] | undefined;
 
   constructor(
     processStore: ProcessStateStore,
-    taskStore: CoordinationTaskStore,
+    taskProjections: TaskProjectionStore,
     startup: StartupView,
     collaborators?: CollaboratorView[],
   ) {
     this.#processStore = processStore;
-    this.#taskStore = taskStore;
+    this.#taskProjections = taskProjections;
     this.#startup = startup;
     this.#collaborators = collaborators;
   }
@@ -81,7 +81,7 @@ export class TaskDiscovery {
     if (query.cursor !== undefined && cursor === undefined) {
       return { available: false, reason: "invalid-cursor" };
     }
-    const records = this.#taskStore
+    const records = this.#taskProjections
       .readTaskOverviewRecords(query.boardId, canonicalColumnIds)
       .filter((record) => cursor === undefined || record.sequence > cursor.taskSequence);
     const page = records.slice(0, pageSize);
@@ -106,7 +106,7 @@ export class TaskDiscovery {
     const { task } = loaded;
     const board = this.#processStore.readBoards().find((candidate) => candidate.id === task.boardId);
     const column = board?.columns.find((candidate) => candidate.id === task.columnId);
-    const overview = this.#taskStore
+    const overview = this.#taskProjections
       .readTaskOverviewRecords(task.boardId, [task.columnId])
       .map((record) => record.task)
       .find((candidate) => candidate.id === task.id);
@@ -129,7 +129,7 @@ export class TaskDiscovery {
         relationships: task.relationships,
         blocking: overview.blocking,
         run: overview.run,
-        unresolvedAttention: this.#taskStore.readUnresolvedAttention(task.id),
+        unresolvedAttention: this.#taskProjections.readUnresolvedAttention(task.id),
         currentActivation:
           currentActivation === undefined
             ? null
@@ -153,7 +153,7 @@ export class TaskDiscovery {
   queryTaskAttachments(taskId: string): TaskAttachmentsQueryResult {
     const loaded = this.readTask(taskId);
     if (!loaded.available) return loaded;
-    return { available: true, attachments: this.#taskStore.readTaskAttachments(taskId) };
+    return { available: true, attachments: this.#taskProjections.readTaskAttachments(taskId) };
   }
 
   queryCollaborators(): CollaboratorsQueryResult {
@@ -181,7 +181,7 @@ export class TaskDiscovery {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const task = this.#taskStore.readTask(taskId);
+    const task = this.#taskProjections.readTask(taskId);
     return task === undefined
       ? { available: false, reason: "not-found" }
       : { available: true, task };

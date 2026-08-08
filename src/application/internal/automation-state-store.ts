@@ -12,7 +12,7 @@ import type {
   TaskView,
 } from "../coordination-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
-import type { CoordinationTaskStore } from "./coordination-store.ts";
+import type { TaskProjectionStore } from "./task-projection-store.ts";
 
 export interface RunnableActivation {
   activation: ActivationView;
@@ -24,12 +24,12 @@ export interface RunnableActivation {
 export class AutomationStateStore {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
-  readonly #tasks: CoordinationTaskStore;
+  readonly #taskProjections: TaskProjectionStore;
 
-  constructor(database: CoordinationDatabase, tasks: CoordinationTaskStore) {
+  constructor(database: CoordinationDatabase, taskProjections: TaskProjectionStore) {
     this.#owner = database;
     this.#database = database.connection;
-    this.#tasks = tasks;
+    this.#taskProjections = taskProjections;
   }
 
   readNextRunnableActivation(): RunnableActivation | undefined {
@@ -68,7 +68,7 @@ export class AutomationStateStore {
         }
       | undefined;
     if (row === undefined) return undefined;
-    const task = this.#tasks.readTask(row.task_id);
+    const task = this.#taskProjections.readTask(row.task_id);
     const activation = task?.activations.find((candidate) => candidate.id === row.id);
     const agentRow = this.#database
       .prepare(
@@ -85,7 +85,7 @@ export class AutomationStateStore {
           instructions_content: string;
         }
       | undefined;
-    const sourceEvent = this.#tasks.readSourceEvent(row.source_event_id);
+    const sourceEvent = this.#taskProjections.readSourceEvent(row.source_event_id);
     if (
       task === undefined ||
       activation === undefined ||

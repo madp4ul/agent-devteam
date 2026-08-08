@@ -1,22 +1,25 @@
 import { CoordinationDatabase } from "./coordination-database.ts";
-import { CoordinationTaskStore } from "./coordination-store.ts";
+import { TaskCommandStore } from "./task-command-store.ts";
+import { TaskProjectionStore } from "./task-projection-store.ts";
 import { ProcessStateStore } from "./process-state-store.ts";
 import { AutomationStateStore } from "./automation-state-store.ts";
 
 export interface CoordinationPersistence {
   process: ProcessStateStore;
-  tasks: CoordinationTaskStore;
+  taskCommands: TaskCommandStore;
+  taskProjections: TaskProjectionStore;
   automation: AutomationStateStore;
   close(): void;
 }
 
 export function openCoordinationPersistence(path: string): CoordinationPersistence {
   const database = CoordinationDatabase.open(path);
-  const tasks = new CoordinationTaskStore(database);
+  const taskProjections = new TaskProjectionStore(database);
   return {
     process: new ProcessStateStore(database),
-    tasks,
-    automation: new AutomationStateStore(database, tasks),
+    taskCommands: new TaskCommandStore(database, taskProjections),
+    taskProjections,
+    automation: new AutomationStateStore(database, taskProjections),
     close: () => database.close(),
   };
 }

@@ -9,9 +9,9 @@ import type {
   StartupView,
 } from "../coordination-contract.ts";
 import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-workspace.ts";
-import type { CoordinationTaskStore } from "./coordination-store.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
 import type { AutomationStateStore, RunnableActivation } from "./automation-state-store.ts";
+import type { TaskProjectionStore } from "./task-projection-store.ts";
 
 export interface AutomationProcessContext {
   name: string;
@@ -23,7 +23,7 @@ export interface AutomationProcessContext {
 
 export interface AutomationCoordinatorOptions {
   processStore: ProcessStateStore;
-  taskStore: CoordinationTaskStore;
+  taskProjections: TaskProjectionStore;
   automationStore: AutomationStateStore;
   startup: StartupView;
   runtimeDispatch?: RuntimeDispatchOptions;
@@ -34,7 +34,7 @@ export interface AutomationCoordinatorOptions {
 
 export class AutomationCoordinator {
   readonly #processStore: ProcessStateStore;
-  readonly #taskStore: CoordinationTaskStore;
+  readonly #taskProjections: TaskProjectionStore;
   readonly #stateStore: AutomationStateStore;
   readonly #startup: StartupView;
   readonly #runtimeDispatch:
@@ -54,7 +54,7 @@ export class AutomationCoordinator {
 
   constructor(options: AutomationCoordinatorOptions) {
     this.#processStore = options.processStore;
-    this.#taskStore = options.taskStore;
+    this.#taskProjections = options.taskProjections;
     this.#stateStore = options.automationStore;
     this.#startup = options.startup;
     this.#automation = options.startup.automation;
@@ -205,7 +205,7 @@ export class AutomationCoordinator {
     try {
       workspace = await runtimeDispatch.workspaceManager.provision(
         runnable.task.id,
-        this.#taskStore.readTaskStartingRef(runnable.task.id) ?? this.#startingRef ?? "",
+        this.#taskProjections.readTaskStartingRef(runnable.task.id) ?? this.#startingRef ?? "",
         priorWorkspace,
       );
       if (priorWorkspace === undefined) {
@@ -232,7 +232,7 @@ export class AutomationCoordinator {
       ...claimedAttempt,
       ...this.#stateStore.startAttempt(claimedAttempt.id),
     };
-    const currentTask = this.#taskStore.readTask(runnable.task.id);
+    const currentTask = this.#taskProjections.readTask(runnable.task.id);
     if (currentTask === undefined) throw new Error("Runnable task disappeared before dispatch");
     const process = this.#processContext;
     if (process === undefined) throw new Error("Runnable activation has no process context");
