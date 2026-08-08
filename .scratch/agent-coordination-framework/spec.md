@@ -86,7 +86,7 @@ make the automation understandable and safe to operate locally.
 37. As a user, I want mentioning me to create a durable attention reason rather than an agent activation, so that requests for my decision cannot disappear into automation.
 38. As a user, I want attention reasons grouped by task and resolved independently, so that addressing one problem does not hide another.
 39. As a user, I want opening, moving, or commenting on a task not to resolve attention implicitly, so that only an intentional action clears a request.
-40. As a user, I want a Needs attention area above the board, so that mentions and exhausted failures are visible in workflow context.
+40. As a user, I want a Needs attention area above the board, so that mentions, exhausted failures, and user-interrupted task automation awaiting Continue are visible in workflow context.
 41. As a user, I want an attention entry to locate its board card or open task details directly, so that I can choose between board context and immediate investigation.
 42. As a user, I want optional desktop notifications for new attention reasons, so that I can notice important work while viewing another application.
 43. As a user, I want desktop notifications disabled until I enable them, so that the application does not request operating-system permission unexpectedly.
@@ -300,12 +300,15 @@ what changed without reconstructing the call from its name alone.
   column preselected. Creation collects the outcome-oriented title and complete
   description and translates through the same application command boundary as
   other user and agent operations.
-- A Needs attention area groups unresolved user mentions and agent-run failures
-  by task. Unwatched columns, including human review stages, do not create
-  attention.
-- Attention reasons are durable and independently resolved only by an explicit
-  cause-specific action. Board navigation, moves, comments, and operating-system
-  notification actions do not acknowledge them implicitly.
+- A Needs attention area groups unresolved user mentions, agent-run failures,
+  and user-interrupted task automation awaiting Continue by task. Unwatched
+  columns, including human review stages, do not create attention.
+- Attention reasons remain authoritative either as durable records or as
+  projections of durable task state. Each occurrence has stable identity and is
+  independently resolved only by an explicit cause-specific action: Continue
+  clears interrupted-task suspension, while board navigation, moves, comments,
+  and operating-system notification actions do not acknowledge reasons
+  implicitly.
 - Selecting a card opens a dedicated, linkable full task page. Selecting an
   attention entry may instead locate and highlight the card. Returning from
   task details restores board position and filters.

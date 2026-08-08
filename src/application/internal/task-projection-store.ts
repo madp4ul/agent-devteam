@@ -158,7 +158,7 @@ export class TaskProjectionStore {
   }
 
   readUnresolvedAttention(taskId: string): TaskAttentionView[] {
-    return this.#database
+    const recorded = this.#database
       .prepare(
         `SELECT attention.id, attention.type, attention.source_event_id,
                 attention.created_at, activation.failure_kind,
@@ -169,7 +169,7 @@ export class TaskProjectionStore {
          ORDER BY attention.rowid`,
       )
       .all(taskId)
-      .map((row) => {
+      .map((row): TaskAttentionView => {
         const typed = row as {
           id: string;
           type: TaskAttentionView["type"];
@@ -200,17 +200,46 @@ export class TaskProjectionStore {
                 } }),
         };
       });
+    const suspension = this.#database
+      .prepare(
+        `SELECT activity.id AS activity_id, activity.occurred_at
+         FROM tasks task
+         JOIN activity_ledger activity ON activity.id = (
+           SELECT latest.id
+           FROM activity_ledger latest
+           WHERE latest.task_id = task.id AND latest.type = 'automation.suspended'
+           ORDER BY latest.sequence DESC
+           LIMIT 1
+         )
+         WHERE task.id = ? AND task.automation_suspended = 1`,
+      )
+      .get(taskId) as
+      | { activity_id: string; occurred_at: string }
+      | undefined;
+    if (suspension === undefined) return recorded;
+    const suspensionReason: TaskAttentionView = {
+      id: `automation-suspended:${suspension.activity_id}`,
+      type: "automation-suspended",
+      sourceEventId: suspension.activity_id,
+      createdAt: suspension.occurred_at,
+    };
+    return [...recorded, suspensionReason]
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
   readNeedsAttention(): NeedsAttentionTaskView[] {
     const tasks = this.#database
       .prepare(
-        `SELECT DISTINCT task.id, task.title, task.board_id, board.name AS board_name,
-                         task.column_id, task.sequence
-         FROM attention_reasons attention
-         JOIN tasks task ON task.id = attention.task_id
+        `SELECT task.id, task.title, task.board_id, board.name AS board_name,
+                task.column_id, task.sequence
+         FROM tasks task
          JOIN boards board ON board.id = task.board_id
-         WHERE attention.resolved_at IS NULL
+         WHERE task.automation_suspended = 1
+            OR EXISTS (
+              SELECT 1
+              FROM attention_reasons attention
+              WHERE attention.task_id = task.id AND attention.resolved_at IS NULL
+            )
          ORDER BY task.sequence`,
       )
       .all() as Array<{

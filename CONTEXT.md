@@ -216,8 +216,9 @@ clarification, a decision, or help.
 
 **Needs attention**:
 A task condition requiring explicit user action because the user was mentioned
-or an agent run failed and awaits recovery. Being in an unwatched column alone
-does not create this condition.
+or an agent run failed and awaits recovery, or because user-interrupted task
+automation awaits Continue. Being in an unwatched column alone does not create
+this condition.
 
 **Role**:
 The configurable responsibility given to an agent within a process.
@@ -290,9 +291,9 @@ without `@`; an agent must not write a token for itself or for a participant
 whose response is not actually requested.
 
 **Attention reason**:
-A typed cause of a task needing user attention, currently a user mention or a
-failed agent run. Each reason is resolved independently through an explicit
-action appropriate to its cause.
+A typed cause of a task needing user attention: a user mention, a failed agent
+run, or user-interrupted task automation awaiting Continue. Each occurrence is
+resolved independently through an explicit action appropriate to its cause.
 
 **Desktop notification**:
 An optional local operating-system signal that tells the user a new attention

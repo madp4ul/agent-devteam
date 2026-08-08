@@ -258,7 +258,7 @@ export interface TaskInspectionView {
 
 export interface TaskAttentionView {
   id: string;
-  type: "user-mention" | "failed-run";
+  type: "user-mention" | "failed-run" | "automation-suspended";
   sourceEventId: string | null;
   createdAt: string;
   recovery?:

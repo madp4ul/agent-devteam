@@ -67,6 +67,10 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   assert.equal(interrupted.task.activations[0]?.attempts[0]?.outcome?.status, "user-interrupted");
   assert.equal(interrupted.task.activations[0]?.attempts.length, 1);
   assert.deepEqual(interrupted.task.activity.at(-1)?.actor, { kind: "user", id: "paul" });
+  const firstSuspensionActivity = interrupted.task.activity.find(
+    (activity) => activity.type === "automation.suspended",
+  );
+  assert.ok(firstSuspensionActivity);
   const inspection = application.queryTaskInspection(created.task.id);
   assert.equal(inspection.available, true);
   if (inspection.available) assert.equal(inspection.task.automationSuspended, true);
@@ -78,6 +82,15 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   if (suspendedOverview.available) {
     assert.equal(suspendedOverview.tasks[0]?.automationSuspended, true);
     assert.equal(suspendedOverview.tasks[0]?.run.status, "queued");
+  }
+  const suspendedAttention = application.queryNeedsAttention();
+  assert.equal(suspendedAttention.available, true);
+  let firstSuspensionReasonId: string | undefined;
+  if (suspendedAttention.available) {
+    const taskAttention = suspendedAttention.tasks.find(({ task }) => task.id === created.task.id);
+    assert.equal(String(taskAttention?.reasons[0]?.type), "automation-suspended");
+    assert.equal(taskAttention?.reasons[0]?.sourceEventId, firstSuspensionActivity.id);
+    firstSuspensionReasonId = taskAttention?.reasons[0]?.id;
   }
 
   const continued = application.continueInterruptedTask({
@@ -101,6 +114,11 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   if (continuedOverview.available) {
     assert.equal(continuedOverview.tasks[0]?.automationSuspended, false);
   }
+  const continuedAttention = application.queryNeedsAttention();
+  assert.equal(continuedAttention.available, true);
+  if (continuedAttention.available) {
+    assert.equal(continuedAttention.tasks.some(({ task }) => task.id === created.task.id), false);
+  }
   const afterContinue = application.queryTask(created.task.id);
   assert.equal(afterContinue.available, true);
   if (afterContinue.available) {
@@ -116,6 +134,37 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   assert.equal(second.attempt.number, 2);
   assert.equal(second.attempt.precedingOutcome?.status, "user-interrupted");
   assert.match(second.attempt.continuationMessage ?? "", /reassess the current task and workspace/i);
+  const secondInterrupt = application.interruptTask({
+    taskId: created.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "interrupt-continued-attempt",
+  });
+  assert.equal(secondInterrupt.accepted, true);
+  if (!secondInterrupt.accepted) return;
+  await secondInterrupt.confirmed;
+  const twiceInterrupted = application.queryTask(created.task.id);
+  assert.equal(twiceInterrupted.available, true);
+  if (!twiceInterrupted.available) return;
+  const secondSuspensionActivity = twiceInterrupted.task.activity
+    .filter((activity) => activity.type === "automation.suspended")
+    .at(-1);
+  assert.ok(secondSuspensionActivity);
+  const secondSuspendedAttention = application.queryNeedsAttention();
+  assert.equal(secondSuspendedAttention.available, true);
+  if (secondSuspendedAttention.available) {
+    const reason = secondSuspendedAttention.tasks
+      .find(({ task }) => task.id === created.task.id)?.reasons[0];
+    assert.notEqual(reason?.id, firstSuspensionReasonId);
+    assert.equal(reason?.sourceEventId, secondSuspensionActivity.id);
+  }
+  const secondContinue = application.continueInterruptedTask({
+    taskId: created.task.id,
+    message: "Finish after the second interruption.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-second-interruption",
+  });
+  assert.equal(secondContinue.accepted, true);
+  await runtime.waitForRequest(3);
   runtime.complete({ status: "completed", summary: "Continued safely.", threadId: "thread-1" });
   await application.waitForAutomationIdle();
 });

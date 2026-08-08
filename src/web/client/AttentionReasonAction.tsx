@@ -94,7 +94,9 @@ export function AttentionReasonResolution({
   return (
     <>
       <span>
-        {labelPrefix}{reason.type.replaceAll("-", " ")}
+        {labelPrefix}{reason.type === "automation-suspended"
+          ? "automation suspended — Continue required"
+          : reason.type.replaceAll("-", " ")}
         {reason.recovery === undefined ? "" : ` â€” ${reason.recovery.summary}`}
       </span>
       {reason.recovery?.explanation === undefined ? null : (

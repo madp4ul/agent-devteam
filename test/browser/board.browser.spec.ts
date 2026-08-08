@@ -79,6 +79,23 @@ test("task interruption waits for confirmation and offers contextual continuatio
     task.run = interruptionState === "interrupted"
       ? { status: "queued", activeAgentId: null, queuedActivationCount: 1, failedActivationCount: 0 }
       : { status: "running", activeAgentId: "consulting-agent", queuedActivationCount: 0, failedActivationCount: 0 };
+    const suspensionReason = {
+      id: "automation-suspended:activity-suspended-live",
+      type: "automation-suspended",
+      sourceEventId: "activity-suspended-live",
+      createdAt: "2026-08-08T12:00:00.000Z",
+    };
+    task.unresolvedAttention = interruptionState === "interrupted" ? [suspensionReason] : [];
+    body.attention = interruptionState === "interrupted" ? [{
+      task: {
+        id: "T-0002",
+        title: "Drag this task",
+        boardId: "delivery",
+        boardName: "Product delivery",
+        columnId: "backlog",
+      },
+      reasons: [suspensionReason],
+    }] : [];
     await route.fulfill({ response, json: body });
   });
   await page.route("**/api/tasks/T-0002", async (route) => {
@@ -138,8 +155,12 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await expect(page.getByText(/Task automation is suspended/)).toBeVisible();
   await page.getByRole("link", { name: "Back to board" }).click();
   const suspendedCard = page.getByRole("link", { name: /T-0002 Drag this task/ }).locator("..");
-  await expect(suspendedCard).toContainText("Automation suspended · Continue required");
+  await expect(suspendedCard).not.toContainText("Automation suspended");
+  await expect(suspendedCard).toContainText("Needs attention · 1");
   await expect(suspendedCard).toContainText("Queued · 1");
+  const attention = page.locator(".needs-attention");
+  await expect(attention).toContainText("T-0002 · Drag this task");
+  await expect(attention).toContainText("automation suspended — Continue required");
   await page.getByRole("link", { name: /T-0002 Drag this task/ }).click();
   await page.getByLabel("Continuation message (optional)").fill("Continue after checking the workspace.");
   await page.getByRole("button", { name: "Continue interrupted activation" }).click();
@@ -147,6 +168,7 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await page.getByRole("link", { name: "Back to board" }).click();
   await expect(page.getByRole("link", { name: /T-0002 Drag this task/ }).locator(".."))
     .not.toContainText("Automation suspended");
+  await expect(attention).not.toContainText("T-0002 · Drag this task");
 });
 
 test("configuration errors show the invalid value with the actionable diagnostic", async ({ page }) => {

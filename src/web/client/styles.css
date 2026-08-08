@@ -81,7 +81,6 @@ input, textarea, select { width: 100%; border: 1px solid #cbd2cc; border-radius:
 .card-signals { display: grid; gap: .32rem; margin-top: .7rem; }
 .signal { width: fit-content; border-radius: 999px; padding: .25rem .5rem; font-size: .68rem; font-weight: 800; }
 .signal.blocked, .signal.failed { color: #943421; background: #f9ddd5; }
-.signal.suspended { color: #71380a; background: #f7d6a8; }
 .signal.attention { color: #72500e; background: #f6e5bd; }
 .signal.queued { color: #31516b; background: #dce9f2; }
 .signal.running { color: #145039; background: #d3ecdf; }
