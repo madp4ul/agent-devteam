@@ -222,6 +222,7 @@ export interface TaskOverviewView {
   blocking: { blocked: boolean; blockerTaskIds: string[] };
   relationships: TaskRelationshipView[];
   unresolvedAttention: TaskAttentionView[];
+  automationSuspended: boolean;
   startupFailure?: ActivationStartupFailureView & { activationId: string };
   run: {
     status: "idle" | "queued" | "running" | "failed";

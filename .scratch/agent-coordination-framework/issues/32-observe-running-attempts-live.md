@@ -7,9 +7,10 @@ entries expose concise domain context when the runtime provides it. Finished
 attempt transcripts remain available across host restarts until explicit task
 archival.
 
-**Blocked by:** 19 — Inspect and Control a Task; 23 — Recover Queued Work After Restart
+**Blocked by:** 19 — Inspect and Control a Task; 23 — Recover Queued Work After Restart;
+44 — Preserve Board Scroll During Automatic Refresh
 
-**Status:** ready-for-agent
+**Status:** open
 
 - [ ] An open task timeline updates without a manual page refresh whenever its
   authoritative projection changes, including user- or agent-authored comments,
@@ -100,3 +101,6 @@ archival.
   Task expose too little context when reduced to a generic tool name. Enrichment
   is deliberately bounded to fields available from SDK events and authoritative
   coordination results; it does not require storing a private raw runtime dump.
+- Issue 44 must establish one-shot board-context restoration before this issue
+  expands automatic refresh behavior; live updates must preserve user-controlled
+  reading and scroll positions rather than repeatedly applying stale snapshots.

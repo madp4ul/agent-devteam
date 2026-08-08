@@ -114,6 +114,10 @@ without choosing the implementation yet.
   recovery to exhausted or permission-blocked activations without bypassing
   the preserved task queue.
 
+- [Surface Suspended Task Action on the Board](./issues/43-surface-suspended-task-action-on-board.md)
+  — Project task automation suspension onto board cards as an explicit Continue
+  requirement while preserving the interrupted activation's queued state.
+
 ## Next implementation priority
 
 - [Evolve Process Definitions Safely](./issues/26-evolve-process-definitions-safely.md)
@@ -132,10 +136,6 @@ without choosing the implementation yet.
   — Keep an open task timeline current across comments, activations, activity,
   and attempt changes; update transcript activity during a run and persist every
   finished attempt's captured transcript until task archival.
-- [Surface Suspended Task Action on the Board](./issues/43-surface-suspended-task-action-on-board.md)
-  — Distinguish an interrupted task that requires Continue from ordinary queued
-  work directly on its board card.
-
 ## Not yet specified
 
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)

@@ -96,6 +96,7 @@ export class TaskProjectionStore {
     const rows = this.#database
       .prepare(
         `SELECT t.id, t.sequence, t.title, t.board_id, t.column_id, t.revision,
+                t.automation_suspended,
                 c.name AS column_name,
                 SUM(CASE WHEN a.status = 'queued' THEN 1 ELSE 0 END) AS queued_count,
                 SUM(CASE WHEN a.status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
@@ -115,6 +116,7 @@ export class TaskProjectionStore {
       board_id: string;
       column_id: string;
       revision: number;
+      automation_suspended: number;
       column_name: string;
       queued_count: number;
       failed_count: number;
@@ -135,6 +137,7 @@ export class TaskProjectionStore {
           blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
           relationships: this.readTaskRelationships(row.id),
           unresolvedAttention: this.readUnresolvedAttention(row.id),
+          automationSuspended: row.automation_suspended === 1,
           ...(startupFailure === undefined ? {} : { startupFailure }),
           run: {
             status:

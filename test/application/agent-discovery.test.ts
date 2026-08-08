@@ -146,6 +146,7 @@ test("task overview cursors remain stable when an earlier task moves within sele
       blocking: { blocked: false, blockerTaskIds: [] },
         relationships: [],
         unresolvedAttention: [],
+        automationSuspended: false,
         run: {
         status: "idle",
         activeAgentId: null,
@@ -162,6 +163,7 @@ test("task overview cursors remain stable when an earlier task moves within sele
       blocking: { blocked: false, blockerTaskIds: [] },
         relationships: [],
         unresolvedAttention: [],
+        automationSuspended: false,
         run: {
         status: "idle",
         activeAgentId: null,

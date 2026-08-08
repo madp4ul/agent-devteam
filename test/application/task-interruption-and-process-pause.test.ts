@@ -70,6 +70,15 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   const inspection = application.queryTaskInspection(created.task.id);
   assert.equal(inspection.available, true);
   if (inspection.available) assert.equal(inspection.task.automationSuspended, true);
+  const suspendedOverview = application.queryTaskOverviews({
+    boardId: "delivery",
+    columnIds: ["implementation"],
+  });
+  assert.equal(suspendedOverview.available, true);
+  if (suspendedOverview.available) {
+    assert.equal(suspendedOverview.tasks[0]?.automationSuspended, true);
+    assert.equal(suspendedOverview.tasks[0]?.run.status, "queued");
+  }
 
   const continued = application.continueInterruptedTask({
     taskId: created.task.id,
@@ -84,6 +93,14 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "continue-current-attempt",
   }), continued);
+  const continuedOverview = application.queryTaskOverviews({
+    boardId: "delivery",
+    columnIds: ["implementation"],
+  });
+  assert.equal(continuedOverview.available, true);
+  if (continuedOverview.available) {
+    assert.equal(continuedOverview.tasks[0]?.automationSuspended, false);
+  }
   const afterContinue = application.queryTask(created.task.id);
   assert.equal(afterContinue.available, true);
   if (afterContinue.available) {
