@@ -121,8 +121,8 @@ make the automation understandable and safe to operate locally.
 72. As a user, I want retried tool and transport calls to be idempotent, so that a transient communication failure cannot duplicate comments, moves, relationships, or activations.
 73. As a user, I want an orphaned running attempt detected after a crash and recovered through the technical-failure policy, so that automation can resume without pretending the attempt completed.
 74. As an agent, I want attempt context to describe previous outcomes and thread reuse, so that I can recover safely without altering the activation's original meaning.
-75. As a user, I want storage validated and migrated before agents dispatch, so that automation never runs against inconsistent data.
-76. As a user, I want a verified backup before a schema migration and a documented restore procedure, so that storage evolution does not put all coordination history at risk.
+75. As a developer, I want fresh coordination state initialized against the current schema before agents dispatch, so that automation never runs against structurally inconsistent data.
+76. As a developer, I want incompatible pre-release test state recreated rather than migrated, so that unused upgrade paths do not complicate the first implementation.
 77. As a user, I want tasks and their histories retained without an automatic age limit or permanent deletion, so that past decisions and automation remain inspectable.
 78. As an agent, I want a board summary followed by explicit-column paginated listings, so that I can orient myself without loading every task into context.
 79. As an agent, I want task overviews to include title, column, blocking, relationships, and run state, so that I can select relevant tasks before requesting full details.
@@ -438,14 +438,16 @@ history, so that operational evidence has a clear user-controlled lifetime.
   Git configuration. Startup uses that binding rather than re-resolving an
   optional command-line location, and never redirects initialized state because
   a later argument is omitted or changed.
-- Startup validates storage, completes schema migrations, and reconciles every
+- Startup initializes the current schema and reconciles every
   database workspace record with physical directories and framework-owned Git
   worktree registrations before dispatch. A missing bound root, an unrelated
   root, an unrecorded registration, a missing registration, or any other
   inconsistency prevents both agent dispatch and board mutation and never
   substitutes a new empty store.
-- Schema migration creates a verified backup first. Damaged state is preserved,
-  and the first version documents manual backup and restore.
+- Pre-release coordination state is disposable test data. Incompatible state is
+  deleted and recreated against the current schema; schema-version migration,
+  backup, and restore enter scope only when real retained state must survive an
+  upgrade.
 - Tasks and complete histories have no age-based retention limit. Archival is
   reversible at the coordination-record level, subject to separate Git
   workspace behavior.
@@ -563,7 +565,7 @@ history, so that operational evidence has a clear user-controlled lifetime.
   MCP tools all translate through this same boundary. The seam is logical and
   does not require a particular network protocol.
 - Primary behavioral tests run the real process validator, coordination rules,
-  scheduler, relational store and migrations, read projections, and Git
+  scheduler, current relational schema, read projections, and Git
   worktree manager. They use the production database engine in an isolated
   disposable instance and real temporary Git repositories and worktrees.
 - A controlled Codex runtime adapter records prompts, working directories,

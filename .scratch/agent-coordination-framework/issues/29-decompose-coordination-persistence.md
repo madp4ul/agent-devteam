@@ -10,7 +10,7 @@ table.
 
 **Blocked by:** 19 — Inspect and Control a Task
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Creation baseline and applicability
 
@@ -44,27 +44,28 @@ upcoming work will not recreate the concentration described above. In either
 case, record the evidence and resulting module map under `## Answer` before
 marking the ticket resolved.
 
-- [ ] Compare the post-ticket-19 implementation with the creation baseline and
+- [x] Compare the post-ticket-19 implementation with the creation baseline and
   record whether the ticket still applies. If it does, partition the
   implementation around cohesive behavior such as process state, read
   projections, atomic task commands, automation and attempt lifecycle, and
   database lifecycle/schema. Closely coupled behavior may remain together when
   splitting it would leak transaction rules.
-- [ ] One module continues to own the SQLite connection, transaction primitive,
-  schema initialization, and migration ordering.
-- [ ] Commands that change authoritative task state, append activity, and create
+- [x] One module continues to own the SQLite connection, transaction primitive,
+  and current-schema initialization. Pre-release schema migrations are not
+  supported; incompatible test state is recreated.
+- [x] Commands that change authoritative task state, append activity, and create
   resulting activations remain one atomic transaction.
-- [ ] The decomposition introduces no table-by-table repository layer and no
+- [x] The decomposition introduces no table-by-table repository layer and no
   large façade consisting mainly of pass-through methods.
-- [ ] `CoordinationApplication` remains the external seam, and its existing
+- [x] `CoordinationApplication` remains the external seam, and its existing
   caller imports and observable behavior remain compatible.
-- [ ] Internal callers depend only on the cohesive persistence capabilities they
+- [x] Internal callers depend only on the cohesive persistence capabilities they
   use; database implementation details do not escape into the application,
   discovery, automation, MCP, or web interfaces.
-- [ ] Existing tests remain green through the public application seam, with
+- [x] Existing tests remain green through the public application seam, with
   focused characterization coverage added for any transaction or migration
   behavior that was not previously protected.
-- [ ] The old all-purpose store implementation is replaced rather than retained
+- [x] The old all-purpose store implementation is replaced rather than retained
   underneath a new layer, and the resulting structure is judged by locality and
   interface depth rather than an arbitrary line-count target.
 
@@ -75,3 +76,34 @@ marking the ticket resolved.
   attention, relationships, concurrency, recovery, retries, interruption,
   process evolution, and archival. Deferring the decomposition beyond ticket 19
   would make those changes accumulate in the same implementation file.
+
+## Answer
+
+The ticket still applied after issue 20: the former 1,319-line relational store
+contained independent process-definition state, task coordination, and
+activation/attempt/workspace lifecycle behavior. It was replaced by cohesive
+internal persistence modules rather than wrapped in a new façade:
+
+- `CoordinationDatabase` exclusively owns the SQLite connection, current-schema
+  initialization, transaction primitive, and close lifecycle.
+- `ProcessStateStore` owns applied agents, boards, columns, process projections,
+  and the persisted automation switch.
+- `CoordinationTaskStore` owns task projections and atomic task commands,
+  including comments, mentions, attention, activity, and resulting activations.
+- `AutomationStateStore` owns runnable activation selection, task-workspace
+  registrations, attempt state, startup failures, and attempt activity.
+- `openCoordinationPersistence` composes these capabilities over the one
+  database owner; it delegates no behavior and exposes no table repositories.
+
+`CoordinationApplication` remains the external command-and-query seam.
+`TaskDiscovery` receives only process and task capabilities, while
+`AutomationCoordinator` receives process, task, and attempt-lifecycle
+capabilities. Database details remain inside the persistence implementation.
+Task commands retain one `BEGIN IMMEDIATE` transaction across authoritative
+state, immutable activity, and resulting activation creation.
+
+Per user feedback, unused pre-release migrations were removed. Fresh databases
+are initialized directly at the current schema, and incompatible test state may
+be deleted and recreated until retained real-world state makes upgrade
+compatibility a product requirement. The full application-level suite remains
+green after the decomposition.

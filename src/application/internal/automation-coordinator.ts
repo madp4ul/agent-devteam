@@ -9,7 +9,9 @@ import type {
   StartupView,
 } from "../coordination-contract.ts";
 import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-workspace.ts";
-import type { RelationalCoordinationStore } from "./coordination-store.ts";
+import type { CoordinationTaskStore } from "./coordination-store.ts";
+import type { ProcessStateStore } from "./process-state-store.ts";
+import type { AutomationStateStore } from "./automation-state-store.ts";
 
 export interface AutomationProcessContext {
   name: string;
@@ -20,7 +22,9 @@ export interface AutomationProcessContext {
 }
 
 export interface AutomationCoordinatorOptions {
-  store: RelationalCoordinationStore;
+  processStore: ProcessStateStore;
+  taskStore: CoordinationTaskStore;
+  automationStore: AutomationStateStore;
   startup: StartupView;
   runtimeDispatch?: RuntimeDispatchOptions;
   startingRef?: string;
@@ -29,7 +33,9 @@ export interface AutomationCoordinatorOptions {
 }
 
 export class AutomationCoordinator {
-  readonly #store: RelationalCoordinationStore;
+  readonly #processStore: ProcessStateStore;
+  readonly #taskStore: CoordinationTaskStore;
+  readonly #stateStore: AutomationStateStore;
   readonly #startup: StartupView;
   readonly #runtimeDispatch:
     | {
@@ -45,7 +51,9 @@ export class AutomationCoordinator {
   #automationPumpRunning = false;
 
   constructor(options: AutomationCoordinatorOptions) {
-    this.#store = options.store;
+    this.#processStore = options.processStore;
+    this.#taskStore = options.taskStore;
+    this.#stateStore = options.automationStore;
     this.#startup = options.startup;
     this.#automation = options.startup.automation;
     this.#runtimeDispatch =
@@ -75,10 +83,10 @@ export class AutomationCoordinator {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    if (this.#runtimeDispatch === undefined && this.#store.hasWatchedColumns()) {
+    if (this.#runtimeDispatch === undefined && this.#processStore.hasWatchedColumns()) {
       return { accepted: false, reason: "runtime-unavailable" };
     }
-    this.#store.resumeAutomation();
+    this.#processStore.resumeAutomation();
     this.#automation = { state: "running", attemptsMayStart: true };
     if (this.#runtimeDispatch !== undefined) {
       let markFirstDispatchStarted: (() => void) | undefined;
@@ -94,7 +102,7 @@ export class AutomationCoordinator {
       try {
         await Promise.race([firstDispatchStarted, this.#automationWork]);
       } catch (error) {
-        this.#store.pauseAutomation();
+        this.#processStore.pauseAutomation();
         this.#automation = { state: "paused", attemptsMayStart: false };
         this.#automationWork = Promise.resolve();
         return {
@@ -129,9 +137,9 @@ export class AutomationCoordinator {
     if (this.#runtimeDispatch === undefined) return;
     let first = true;
     while (this.#automation.state === "running") {
-      const runnable = this.#store.readNextRunnableActivation();
+      const runnable = this.#stateStore.readNextRunnableActivation();
       if (runnable === undefined) return;
-      const priorWorkspace = this.#store.readTaskWorkspace(runnable.task.id);
+      const priorWorkspace = this.#stateStore.readTaskWorkspace(runnable.task.id);
       let workspace;
       try {
         workspace = await this.#runtimeDispatch.workspaceManager.provision(
@@ -141,7 +149,7 @@ export class AutomationCoordinator {
         );
         if (priorWorkspace === undefined) {
           try {
-            this.#store.saveTaskWorkspace(runnable.task.id, workspace);
+            this.#stateStore.saveTaskWorkspace(runnable.task.id, workspace);
           } catch (error) {
             throw new GitTaskWorkspaceError(
               "workspace-state-persistence",
@@ -151,7 +159,7 @@ export class AutomationCoordinator {
           }
         }
       } catch (error) {
-        const failure = this.#store.recordActivationStartupFailure(
+        const failure = this.#stateStore.recordActivationStartupFailure(
           runnable.activation.id,
           error instanceof GitTaskWorkspaceError ? error.boundary : "workspace-preparation",
           completeDiagnostic(error),
@@ -159,8 +167,8 @@ export class AutomationCoordinator {
         this.#runtimeDiagnostic?.(failure);
         throw new Error(failure.diagnostic, { cause: error });
       }
-      const attempt = this.#store.startAttempt(runnable.activation.id, workspace.path);
-      const currentTask = this.#store.readTask(runnable.task.id);
+      const attempt = this.#stateStore.startAttempt(runnable.activation.id, workspace.path);
+      const currentTask = this.#taskStore.readTask(runnable.task.id);
       if (currentTask === undefined) throw new Error("Runnable task disappeared before dispatch");
       const process = this.#processContext;
       if (process === undefined) throw new Error("Runnable activation has no process context");
@@ -193,7 +201,7 @@ export class AutomationCoordinator {
           started: (threadId) => {
             dispatchStarted = true;
             if (threadId !== undefined) {
-              this.#store.recordAttemptThreadId(
+              this.#stateStore.recordAttemptThreadId(
                 attempt.id,
                 attempt.runStartActivityId,
                 threadId,
@@ -210,7 +218,7 @@ export class AutomationCoordinator {
       try {
         outcome = await outcomePromise;
       } catch (error) {
-        this.#store.completeAttempt(attempt.id, {
+        this.#stateStore.completeAttempt(attempt.id, {
           status: "failed",
           summary: error instanceof Error ? error.message : "Agent runtime dispatch failed",
         });
@@ -224,10 +232,10 @@ export class AutomationCoordinator {
                 status: "failed",
                 summary: "Agent runtime completed without reporting that dispatch started",
               };
-        this.#store.completeAttempt(attempt.id, failedOutcome);
+        this.#stateStore.completeAttempt(attempt.id, failedOutcome);
         throw new Error(failedOutcome.summary);
       }
-      this.#store.completeAttempt(attempt.id, outcome);
+      this.#stateStore.completeAttempt(attempt.id, outcome);
     }
   }
 }

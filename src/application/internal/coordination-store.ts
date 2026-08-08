@@ -6,9 +6,6 @@ import type {
   AddTaskCommentCommand,
   AddTaskCommentResult,
   Actor,
-  AgentRunAgent,
-  AgentRunOutcome,
-  BoardSummaryView,
   BoardMutationResult,
   CreateTaskCommand,
   EditTaskCommand,
@@ -16,219 +13,27 @@ import type {
   MarkUserMentionAddressedCommand,
   MarkUserMentionAddressedResult,
   NeedsAttentionTaskView,
-  ProcessBoardView,
   RuntimeStartupBoundary,
-  RuntimeStartupDiagnostic,
   TaskAttachmentView,
   TaskAttentionView,
   TaskActivityView,
   TaskOverviewView,
   TaskRelationshipView,
-  TaskWorkspaceView,
   TaskView,
 } from "../coordination-contract.ts";
-import { openCoordinationDatabase } from "./coordination-database.ts";
-import type {
-  AgentInstructionContent,
-  ProcessDefinition,
-} from "./process-definition.ts";
+import type { CoordinationDatabase } from "./coordination-database.ts";
 
 export interface StoredTaskOverview {
   sequence: number;
   task: TaskOverviewView;
 }
-
-export class RelationalCoordinationStore {
+export class CoordinationTaskStore {
+  readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
 
-  private constructor(database: DatabaseSync) {
-    this.#database = database;
-  }
-
-  static open(path: string): RelationalCoordinationStore {
-    return new RelationalCoordinationStore(openCoordinationDatabase(path));
-  }
-
-  applyDefinition(
-    definition: ProcessDefinition,
-    instructions: AgentInstructionContent[],
-    version: string,
-  ): void {
-    const instructionByAgent = new Map(
-      instructions.map((instruction) => [instruction.agentId, instruction.content]),
-    );
-    this.transaction(() => {
-      this.#database.exec(`
-        UPDATE columns SET applied = 0, position = position + 100000;
-        UPDATE boards SET applied = 0, position = position + 100000;
-        UPDATE agents SET applied = 0;
-        DELETE FROM runtime;
-      `);
-      this.#database
-        .prepare("INSERT INTO runtime VALUES (1, ?, ?, 'paused')")
-        .run(definition.name, version);
-
-      const insertAgent = this.#database.prepare(
-        `INSERT INTO agents VALUES (?, ?, ?, ?, ?, ?, 1)
-         ON CONFLICT(id) DO UPDATE SET
-           name = excluded.name,
-           role = excluded.role,
-           summary = excluded.summary,
-           instructions_path = excluded.instructions_path,
-           instructions_content = excluded.instructions_content,
-           applied = 1`,
-      );
-      for (const agent of definition.agents) {
-        insertAgent.run(
-          agent.id,
-          agent.name,
-          agent.role,
-          agent.summary,
-          agent.instructions,
-          instructionByAgent.get(agent.id) ?? "",
-        );
-      }
-
-      const insertBoard = this.#database.prepare(`
-        INSERT INTO boards VALUES (?, ?, ?, ?, 1)
-        ON CONFLICT(id) DO UPDATE SET
-          name = excluded.name,
-          guidance = excluded.guidance,
-          position = excluded.position,
-          applied = 1
-      `);
-      const insertColumn = this.#database.prepare(
-        `INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?, 1)
-         ON CONFLICT(board_id, id) DO UPDATE SET
-           name = excluded.name,
-           position = excluded.position,
-           watching_agent_id = excluded.watching_agent_id,
-           framework_owned = excluded.framework_owned,
-           applied = 1`,
-      );
-      definition.boards.forEach((board, boardPosition) => {
-        insertBoard.run(board.id, board.name, board.guidance, boardPosition);
-        board.columns.forEach((column, columnPosition) => {
-          insertColumn.run(
-            board.id,
-            column.id,
-            column.name,
-            columnPosition,
-            column.watchingAgent ?? null,
-            0,
-          );
-        });
-        insertColumn.run(
-          board.id,
-          "completion",
-          "Completion",
-          board.columns.length,
-          null,
-          1,
-        );
-      });
-    });
-  }
-
-  resumeAutomation(): void {
-    this.#database
-      .prepare("UPDATE runtime SET automation_state = 'running' WHERE singleton = 1")
-      .run();
-  }
-
-  pauseAutomation(): void {
-    this.#database
-      .prepare("UPDATE runtime SET automation_state = 'paused' WHERE singleton = 1")
-      .run();
-  }
-
-  hasWatchedColumns(): boolean {
-    return (
-      this.#database
-        .prepare(
-          `SELECT 1
-           FROM columns
-           WHERE applied = 1 AND watching_agent_id IS NOT NULL
-           LIMIT 1`,
-        )
-        .get() !== undefined
-    );
-  }
-
-  readBoards(): ProcessBoardView[] {
-    const boardRows = this.#database
-      .prepare("SELECT id, name, guidance FROM boards WHERE applied = 1 ORDER BY position")
-      .all() as Array<{ id: string; name: string; guidance: string }>;
-    const selectColumns = this.#database.prepare(`
-      SELECT id, name, watching_agent_id, framework_owned
-      FROM columns
-      WHERE board_id = ? AND applied = 1
-      ORDER BY position
-    `);
-    return boardRows.map((board) => ({
-      id: board.id,
-      name: board.name,
-      guidance: board.guidance,
-      columns: (
-        selectColumns.all(board.id) as Array<{
-          id: string;
-          name: string;
-          watching_agent_id: string | null;
-          framework_owned: number;
-        }>
-      ).map((column) => ({
-        id: column.id,
-        name: column.name,
-        watchingAgentId: column.watching_agent_id,
-        frameworkOwned: column.framework_owned === 1,
-      })),
-    }));
-  }
-
-  readBoardSummaries(): BoardSummaryView[] {
-    const boardRows = this.#database
-      .prepare("SELECT id, name FROM boards WHERE applied = 1 ORDER BY position")
-      .all() as Array<{ id: string; name: string }>;
-    const selectColumns = this.#database.prepare(`
-      SELECT c.id, c.name, c.framework_owned,
-             a.id AS agent_id, a.name AS agent_name, a.summary AS agent_summary,
-             COUNT(t.id) AS task_count
-      FROM columns c
-      LEFT JOIN agents a ON a.id = c.watching_agent_id
-      LEFT JOIN tasks t ON t.board_id = c.board_id AND t.column_id = c.id
-      WHERE c.board_id = ? AND c.applied = 1
-      GROUP BY c.id, c.name, c.framework_owned, c.position,
-               a.id, a.name, a.summary
-      ORDER BY c.position
-    `);
-    return boardRows.map((board) => ({
-      id: board.id,
-      name: board.name,
-      columns: (
-        selectColumns.all(board.id) as Array<{
-          id: string;
-          name: string;
-          framework_owned: number;
-          agent_id: string | null;
-          agent_name: string | null;
-          agent_summary: string | null;
-          task_count: number;
-        }>
-      ).map((column) => ({
-        id: column.id,
-        name: column.name,
-        watchingAgent:
-          column.agent_id === null || column.agent_name === null || column.agent_summary === null
-            ? null
-            : {
-                id: column.agent_id,
-                name: column.agent_name,
-                summary: column.agent_summary,
-              },
-        frameworkOwned: column.framework_owned === 1,
-        taskCount: column.task_count,
-      })),
-    }));
+  constructor(database: CoordinationDatabase) {
+    this.#owner = database;
+    this.#database = database.connection;
   }
 
   readTask(taskId: string): TaskView | undefined {
@@ -508,241 +313,6 @@ export class RelationalCoordinationStore {
     ).map((row) => row.target_task_id);
   }
 
-  readNextRunnableActivation():
-    | {
-        activation: ActivationView;
-        task: TaskView;
-        agent: AgentRunAgent;
-        sourceEvent: TaskActivityView | TaskView["comments"][number];
-      }
-    | undefined {
-    const row = this.#database
-      .prepare(
-        `SELECT a.id, a.task_id, a.target_agent_id, a.source_event_id
-         FROM activations a
-         WHERE a.status = 'queued'
-           AND NOT EXISTS (
-             SELECT 1
-             FROM activations earlier
-             WHERE earlier.task_id = a.task_id
-               AND earlier.sequence < a.sequence
-               AND earlier.status <> 'completed'
-           )
-         ORDER BY a.sequence
-         LIMIT 1`,
-      )
-      .get() as
-      | {
-          id: string;
-          task_id: string;
-          target_agent_id: string;
-          source_event_id: string;
-        }
-      | undefined;
-    if (row === undefined) return undefined;
-    const task = this.readTask(row.task_id);
-    const activation = task?.activations.find((candidate) => candidate.id === row.id);
-    const agentRow = this.#database
-      .prepare(
-        `SELECT id, name, role, summary, instructions_content
-         FROM agents
-         WHERE id = ?`,
-      )
-      .get(row.target_agent_id) as
-      | {
-          id: string;
-          name: string;
-          role: string;
-          summary: string;
-          instructions_content: string;
-        }
-      | undefined;
-    const sourceEvent = this.readSourceEvent(row.source_event_id);
-    if (task === undefined || activation === undefined || agentRow === undefined || sourceEvent === undefined) {
-      throw new Error(`Activation ${row.id} has incomplete durable provenance`);
-    }
-    return {
-      activation,
-      task,
-      agent: {
-        id: agentRow.id,
-        name: agentRow.name,
-        role: agentRow.role,
-        summary: agentRow.summary,
-        instructions: agentRow.instructions_content,
-      },
-      sourceEvent,
-    };
-  }
-
-  readTaskWorkspace(taskId: string): TaskWorkspaceView | undefined {
-    const row = this.#database
-      .prepare(
-        `SELECT path, starting_ref, commit_id
-         FROM task_workspaces
-         WHERE task_id = ?`,
-      )
-      .get(taskId) as
-      | { path: string; starting_ref: string; commit_id: string }
-      | undefined;
-    return row === undefined
-      ? undefined
-      : { path: row.path, startingRef: row.starting_ref, commit: row.commit_id };
-  }
-
-  saveTaskWorkspace(taskId: string, workspace: TaskWorkspaceView): void {
-    this.#database
-      .prepare(
-        `INSERT INTO task_workspaces (task_id, path, starting_ref, commit_id)
-         VALUES (?, ?, ?, ?)`,
-      )
-      .run(taskId, workspace.path, workspace.startingRef, workspace.commit);
-  }
-
-  startAttempt(
-    activationId: string,
-    workspacePath: string,
-  ): { id: string; number: number; runStartActivityId: string } {
-    return this.transaction(() => {
-      const activation = this.#database
-        .prepare(
-          `SELECT task_id, target_agent_id
-           FROM activations
-           WHERE id = ? AND status = 'queued'`,
-        )
-        .get(activationId) as
-        | { task_id: string; target_agent_id: string }
-        | undefined;
-      if (activation === undefined) throw new Error(`Activation ${activationId} is not runnable`);
-      const attemptId = randomUUID();
-      const priorAttempts = this.#database
-        .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
-        .get(activationId) as { count: number };
-      const occurredAt = new Date().toISOString();
-      this.#database
-        .prepare("UPDATE activations SET status = 'running' WHERE id = ?")
-        .run(activationId);
-      this.#database
-        .prepare(
-          `INSERT INTO attempts
-            (id, activation_id, status, workspace_path, started_at)
-           VALUES (?, ?, 'running', ?, ?)`,
-        )
-        .run(attemptId, activationId, workspacePath, occurredAt);
-      const runStartActivityId = this.appendActivity(
-        activation.task_id,
-        "attempt.started",
-        { kind: "agent", id: activation.target_agent_id },
-        { activationId, attemptId },
-        occurredAt,
-      );
-      return { id: attemptId, number: priorAttempts.count + 1, runStartActivityId };
-    });
-  }
-
-  recordActivationStartupFailure(
-    activationId: string,
-    boundary: RuntimeStartupBoundary,
-    diagnostic: string,
-  ): RuntimeStartupDiagnostic {
-    return this.transaction(() => {
-      const activation = this.#database
-        .prepare("SELECT task_id FROM activations WHERE id = ? AND status = 'queued'")
-        .get(activationId) as { task_id: string } | undefined;
-      if (activation === undefined) throw new Error(`Activation ${activationId} is not queued`);
-      const occurredAt = new Date().toISOString();
-      this.#database
-        .prepare("UPDATE activations SET status = 'failed' WHERE id = ?")
-        .run(activationId);
-      this.#database
-        .prepare(
-          `INSERT INTO activation_startup_failures
-            (activation_id, occurred_at, boundary, diagnostic, resolved_at)
-           VALUES (?, ?, ?, ?, NULL)`,
-        )
-        .run(activationId, occurredAt, boundary, diagnostic);
-      const attentionReasonId = randomUUID();
-      this.#database
-        .prepare(
-          `INSERT INTO attention_reasons
-            (id, task_id, type, source_event_id, created_at, resolved_at)
-           VALUES (?, ?, 'failed-run', ?, ?, NULL)`,
-        )
-        .run(attentionReasonId, activation.task_id, activationId, occurredAt);
-      this.appendActivity(
-        activation.task_id,
-        "attention.created",
-        { kind: "framework", id: "coordination" },
-        { attentionReasonId, reasonType: "failed-run", sourceEventId: activationId },
-        occurredAt,
-      );
-      return { taskId: activation.task_id, activationId, occurredAt, boundary, diagnostic, resolvedAt: null };
-    });
-  }
-
-  recordAttemptThreadId(attemptId: string, runStartActivityId: string, threadId: string): void {
-    this.transaction(() => {
-      const result = this.#database
-        .prepare("UPDATE attempts SET thread_id = ? WHERE id = ? AND status = 'running'")
-        .run(threadId, attemptId);
-      if (result.changes !== 1) throw new Error(`Attempt ${attemptId} is not running`);
-      const activity = this.#database
-        .prepare(
-          `SELECT details_json
-           FROM activity_ledger
-           WHERE id = ? AND type = 'attempt.started'`,
-        )
-        .get(runStartActivityId) as { details_json: string } | undefined;
-      if (activity === undefined) throw new Error(`Run-start activity ${runStartActivityId} is missing`);
-      const details = JSON.parse(activity.details_json) as Record<string, string>;
-      this.#database
-        .prepare("UPDATE activity_ledger SET details_json = ? WHERE id = ?")
-        .run(JSON.stringify({ ...details, threadId }), runStartActivityId);
-    });
-  }
-
-  completeAttempt(attemptId: string, outcome: AgentRunOutcome): void {
-    this.transaction(() => {
-      const attempt = this.#database
-        .prepare(
-          `SELECT attempt.activation_id, a.task_id, a.target_agent_id
-           FROM attempts attempt
-           JOIN activations a ON a.id = attempt.activation_id
-           WHERE attempt.id = ? AND attempt.status = 'running'`,
-        )
-        .get(attemptId) as
-        | { activation_id: string; task_id: string; target_agent_id: string }
-        | undefined;
-      if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
-      const occurredAt = new Date().toISOString();
-      this.#database
-        .prepare(
-          `UPDATE attempts
-           SET status = ?, completed_at = ?, outcome_status = ?, outcome_summary = ?,
-               thread_id = COALESCE(?, thread_id)
-           WHERE id = ?`,
-        )
-        .run(
-          outcome.status,
-          occurredAt,
-          outcome.status,
-          outcome.summary,
-          outcome.threadId ?? null,
-          attemptId,
-        );
-      this.#database
-        .prepare("UPDATE activations SET status = ? WHERE id = ?")
-        .run(outcome.status, attempt.activation_id);
-      this.appendActivity(
-        attempt.task_id,
-        "attempt.completed",
-        { kind: "agent", id: attempt.target_agent_id },
-        { activationId: attempt.activation_id, attemptId },
-        occurredAt,
-      );
-    });
-  }
-
   createTask(command: CreateTaskCommand): BoardMutationResult {
     return this.transaction(() => {
       const prior = this.readStoredResponse<BoardMutationResult>(
@@ -969,20 +539,9 @@ export class RelationalCoordinationStore {
     });
   }
 
-  close(): void {
-    this.#database.close();
-  }
 
   private transaction<Result>(operation: () => Result): Result {
-    this.#database.exec("BEGIN IMMEDIATE");
-    try {
-      const result = operation();
-      this.#database.exec("COMMIT");
-      return result;
-    } catch (error) {
-      this.#database.exec("ROLLBACK");
-      throw error;
-    }
+    return this.#owner.transaction(operation);
   }
 
   private appendActivity(
@@ -1256,7 +815,7 @@ export class RelationalCoordinationStore {
     return row === undefined ? undefined : (JSON.parse(row.response_json) as Result);
   }
 
-  private readSourceEvent(id: string): TaskActivityView | TaskView["comments"][number] | undefined {
+  readSourceEvent(id: string): TaskActivityView | TaskView["comments"][number] | undefined {
     const row = this.#database
       .prepare(
         `SELECT id, type, actor_kind, actor_id, occurred_at, details_json

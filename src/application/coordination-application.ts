@@ -1,4 +1,7 @@
-import { RelationalCoordinationStore } from "./internal/coordination-store.ts";
+import {
+  openCoordinationPersistence,
+  type CoordinationPersistence,
+} from "./internal/coordination-persistence.ts";
 import { AutomationCoordinator } from "./internal/automation-coordinator.ts";
 import { loadProcessDefinition } from "./internal/process-definition.ts";
 import { TaskDiscovery } from "./internal/task-discovery.ts";
@@ -33,20 +36,20 @@ import type {
 export * from "./coordination-contract.ts";
 
 export class CoordinationApplication {
-  readonly #store: RelationalCoordinationStore;
+  readonly #persistence: CoordinationPersistence;
   readonly #startup: StartupView;
   readonly #automation: AutomationCoordinator;
   readonly #discovery: TaskDiscovery;
   readonly #transcriptAccess: AttemptTranscriptAccess | undefined;
 
   private constructor(
-    store: RelationalCoordinationStore,
+    persistence: CoordinationPersistence,
     startup: StartupView,
     automation: AutomationCoordinator,
     discovery: TaskDiscovery,
     transcriptAccess?: AttemptTranscriptAccess,
   ) {
-    this.#store = store;
+    this.#persistence = persistence;
     this.#startup = startup;
     this.#automation = automation;
     this.#discovery = discovery;
@@ -62,7 +65,8 @@ export class CoordinationApplication {
 
   static async start(options: StartApplicationOptions): Promise<CoordinationApplication> {
     const validation = await loadProcessDefinition(options.processDefinitionPath);
-    const store = RelationalCoordinationStore.open(options.databasePath);
+    const persistence = openCoordinationPersistence(options.databasePath);
+    const { process, tasks, automation } = persistence;
     if (!validation.valid) {
       const startup: StartupView = {
         mode: "configuration-error",
@@ -70,17 +74,22 @@ export class CoordinationApplication {
         automation: { state: "blocked", attemptsMayStart: false },
       };
       return new CoordinationApplication(
-        store,
+        persistence,
         startup,
-        new AutomationCoordinator({ store, startup }),
-        new TaskDiscovery(store, startup),
+        new AutomationCoordinator({
+          processStore: process,
+          taskStore: tasks,
+          automationStore: automation,
+          startup,
+        }),
+        new TaskDiscovery(process, tasks, startup),
         options.transcriptAccess,
       );
     }
 
     const { definition, instructionContents, version } = validation.loaded;
-    store.applyDefinition(definition, instructionContents, version);
-    const boards = store.readBoards();
+    process.applyDefinition(definition, instructionContents, version);
+    const boards = process.readBoards();
     const startup: StartupView = {
       mode: "paused",
       processName: definition.name,
@@ -94,10 +103,12 @@ export class CoordinationApplication {
       summary,
     }));
     return new CoordinationApplication(
-      store,
+      persistence,
       startup,
       new AutomationCoordinator({
-        store,
+        processStore: process,
+        taskStore: tasks,
+        automationStore: automation,
         startup,
         ...(options.runtimeDispatch === undefined
           ? {}
@@ -119,7 +130,7 @@ export class CoordinationApplication {
           ? {}
           : { runtimeDiagnostic: options.runtimeDiagnostic }),
       }),
-      new TaskDiscovery(store, startup, collaborators),
+      new TaskDiscovery(process, tasks, startup, collaborators),
       options.transcriptAccess,
     );
   }
@@ -146,11 +157,11 @@ export class CoordinationApplication {
     }
     return {
       available: true,
-      boards: this.#store.readBoards().map((board) => ({
+      boards: this.#persistence.process.readBoards().map((board) => ({
         ...board,
         columns: board.columns.map((column) => ({
           ...column,
-          tasks: this.#store.readTasksInColumn(board.id, column.id),
+          tasks: this.#persistence.tasks.readTasksInColumn(board.id, column.id),
         })),
       })),
     };
@@ -184,7 +195,7 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const attempt = this.#store.readAttemptTranscriptReference(attemptId);
+    const attempt = this.#persistence.tasks.readAttemptTranscriptReference(attemptId);
     if (attempt === undefined) return { available: false, reason: "not-found" };
     if (attempt.threadId === null || this.#transcriptAccess === undefined) {
       return { available: false, reason: "unavailable" };
@@ -207,7 +218,7 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    return { available: true, tasks: this.#store.readNeedsAttention() };
+    return { available: true, tasks: this.#persistence.tasks.readNeedsAttention() };
   }
 
   queryTask(taskId: string): TaskQueryResult {
@@ -218,7 +229,7 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const task = this.#store.readTask(taskId);
+    const task = this.#persistence.tasks.readTask(taskId);
     if (task === undefined) return { available: false, reason: "not-found" };
     const boards = this.queryBoards();
     if (!boards.available) {
@@ -235,7 +246,7 @@ export class CoordinationApplication {
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
     const gated = this.configurationErrorRejection();
-    const result = gated ?? this.#store.createTask(command);
+    const result = gated ?? this.#persistence.tasks.createTask(command);
     if (
       result.accepted &&
       result.task.activations.some((activation) => activation.status === "queued")
@@ -247,12 +258,12 @@ export class CoordinationApplication {
 
   editTask(command: EditTaskCommand): BoardMutationResult {
     const gated = this.configurationErrorRejection();
-    return gated ?? this.#store.editTask(command);
+    return gated ?? this.#persistence.tasks.editTask(command);
   }
 
   moveTask(command: MoveTaskCommand): BoardMutationResult {
     const gated = this.configurationErrorRejection();
-    const result = gated ?? this.#store.moveTask(command);
+    const result = gated ?? this.#persistence.tasks.moveTask(command);
     if (
       result.accepted &&
       result.task.activations.some((activation) => activation.status === "queued")
@@ -270,7 +281,7 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const result = this.#store.addTaskComment(command);
+    const result = this.#persistence.tasks.addTaskComment(command);
     if (
       result.accepted &&
       result.task.activations.some((activation) => activation.status === "queued")
@@ -290,11 +301,11 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    return this.#store.markUserMentionAddressed(command);
+    return this.#persistence.tasks.markUserMentionAddressed(command);
   }
 
   close(): void {
-    this.#store.close();
+    this.#persistence.close();
   }
 
   private configurationErrorRejection(): BoardMutationResult | undefined {

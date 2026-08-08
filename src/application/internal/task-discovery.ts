@@ -11,19 +11,23 @@ import type {
   TaskOverviewsQueryResult,
   TaskView,
 } from "../coordination-contract.ts";
-import type { RelationalCoordinationStore } from "./coordination-store.ts";
+import type { CoordinationTaskStore } from "./coordination-store.ts";
+import type { ProcessStateStore } from "./process-state-store.ts";
 
 export class TaskDiscovery {
-  readonly #store: RelationalCoordinationStore;
+  readonly #processStore: ProcessStateStore;
+  readonly #taskStore: CoordinationTaskStore;
   readonly #startup: StartupView;
   readonly #collaborators: CollaboratorView[] | undefined;
 
   constructor(
-    store: RelationalCoordinationStore,
+    processStore: ProcessStateStore,
+    taskStore: CoordinationTaskStore,
     startup: StartupView,
     collaborators?: CollaboratorView[],
   ) {
-    this.#store = store;
+    this.#processStore = processStore;
+    this.#taskStore = taskStore;
     this.#startup = startup;
     this.#collaborators = collaborators;
   }
@@ -36,7 +40,7 @@ export class TaskDiscovery {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    return { available: true, boards: this.#store.readBoardSummaries() };
+    return { available: true, boards: this.#processStore.readBoardSummaries() };
   }
 
   queryTaskOverviews(query: TaskOverviewsQuery): TaskOverviewsQueryResult {
@@ -53,7 +57,7 @@ export class TaskDiscovery {
     if (new Set(query.columnIds).size !== query.columnIds.length) {
       return { available: false, reason: "duplicate-column" };
     }
-    const board = this.#store.readBoards().find((candidate) => candidate.id === query.boardId);
+    const board = this.#processStore.readBoards().find((candidate) => candidate.id === query.boardId);
     if (board === undefined) {
       return { available: false, reason: "board-not-found" };
     }
@@ -77,7 +81,7 @@ export class TaskDiscovery {
     if (query.cursor !== undefined && cursor === undefined) {
       return { available: false, reason: "invalid-cursor" };
     }
-    const records = this.#store
+    const records = this.#taskStore
       .readTaskOverviewRecords(query.boardId, canonicalColumnIds)
       .filter((record) => cursor === undefined || record.sequence > cursor.taskSequence);
     const page = records.slice(0, pageSize);
@@ -100,9 +104,9 @@ export class TaskDiscovery {
     const loaded = this.readTask(taskId);
     if (!loaded.available) return loaded;
     const { task } = loaded;
-    const board = this.#store.readBoards().find((candidate) => candidate.id === task.boardId);
+    const board = this.#processStore.readBoards().find((candidate) => candidate.id === task.boardId);
     const column = board?.columns.find((candidate) => candidate.id === task.columnId);
-    const overview = this.#store
+    const overview = this.#taskStore
       .readTaskOverviewRecords(task.boardId, [task.columnId])
       .map((record) => record.task)
       .find((candidate) => candidate.id === task.id);
@@ -122,7 +126,7 @@ export class TaskDiscovery {
         relationships: task.relationships,
         blocking: overview.blocking,
         run: overview.run,
-        unresolvedAttention: this.#store.readUnresolvedAttention(task.id),
+        unresolvedAttention: this.#taskStore.readUnresolvedAttention(task.id),
         onDemand: { activity: true, attachments: true },
       },
     };
@@ -138,7 +142,7 @@ export class TaskDiscovery {
   queryTaskAttachments(taskId: string): TaskAttachmentsQueryResult {
     const loaded = this.readTask(taskId);
     if (!loaded.available) return loaded;
-    return { available: true, attachments: this.#store.readTaskAttachments(taskId) };
+    return { available: true, attachments: this.#taskStore.readTaskAttachments(taskId) };
   }
 
   queryCollaborators(): CollaboratorsQueryResult {
@@ -166,7 +170,7 @@ export class TaskDiscovery {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const task = this.#store.readTask(taskId);
+    const task = this.#taskStore.readTask(taskId);
     return task === undefined
       ? { available: false, reason: "not-found" }
       : { available: true, task };

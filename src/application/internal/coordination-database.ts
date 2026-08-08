@@ -1,34 +1,36 @@
 import { DatabaseSync } from "node:sqlite";
 
-const ACTIVATIONS_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS activations (
-    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-    id TEXT NOT NULL UNIQUE,
-    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    target_agent_id TEXT NOT NULL REFERENCES agents(id),
-    reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention')),
-    source_event_id TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
-    created_at TEXT NOT NULL
-  );
-`;
+export class CoordinationDatabase {
+  readonly connection: DatabaseSync;
 
-const ATTEMPTS_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS attempts (
-    id TEXT PRIMARY KEY,
-    activation_id TEXT NOT NULL REFERENCES activations(id) ON DELETE CASCADE,
-    status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
-    workspace_path TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    completed_at TEXT,
-    outcome_status TEXT CHECK (outcome_status IN ('completed', 'failed')),
-    outcome_summary TEXT,
-    thread_id TEXT
-  );
-`;
+  private constructor(connection: DatabaseSync) {
+    this.connection = connection;
+  }
 
-export function openCoordinationDatabase(path: string): DatabaseSync {
-  const database = new DatabaseSync(path);
+  static open(path: string): CoordinationDatabase {
+    const connection = new DatabaseSync(path);
+    initializeCurrentSchema(connection);
+    return new CoordinationDatabase(connection);
+  }
+
+  transaction<Result>(operation: () => Result): Result {
+    this.connection.exec("BEGIN IMMEDIATE");
+    try {
+      const result = operation();
+      this.connection.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.connection.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  close(): void {
+    this.connection.close();
+  }
+}
+
+function initializeCurrentSchema(database: DatabaseSync): void {
   database.exec("PRAGMA foreign_keys = ON");
   database.exec(`
     CREATE TABLE IF NOT EXISTS runtime (
@@ -77,14 +79,6 @@ export function openCoordinationDatabase(path: string): DatabaseSync {
       revision INTEGER NOT NULL CHECK (revision > 0),
       FOREIGN KEY (board_id, column_id) REFERENCES columns(board_id, id)
     );
-    CREATE TABLE IF NOT EXISTS task_activity (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK (type IN ('task.created', 'task.moved')),
-      actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent')),
-      actor_id TEXT NOT NULL,
-      occurred_at TEXT NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS activity_ledger (
       sequence INTEGER PRIMARY KEY AUTOINCREMENT,
       id TEXT NOT NULL UNIQUE,
@@ -106,14 +100,40 @@ export function openCoordinationDatabase(path: string): DatabaseSync {
       occurred_at TEXT NOT NULL,
       details_json TEXT NOT NULL
     );
-    ${ACTIVATIONS_TABLE_SQL}
+    CREATE TABLE IF NOT EXISTS activations (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT NOT NULL UNIQUE,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      target_agent_id TEXT NOT NULL REFERENCES agents(id),
+      reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention')),
+      source_event_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS task_workspaces (
       task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
       path TEXT NOT NULL UNIQUE,
       starting_ref TEXT NOT NULL,
       commit_id TEXT NOT NULL
     );
-    ${ATTEMPTS_TABLE_SQL}
+    CREATE TABLE IF NOT EXISTS attempts (
+      id TEXT PRIMARY KEY,
+      activation_id TEXT NOT NULL REFERENCES activations(id) ON DELETE CASCADE,
+      status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+      workspace_path TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      outcome_status TEXT CHECK (outcome_status IN ('completed', 'failed')),
+      outcome_summary TEXT,
+      thread_id TEXT
+    );
+    CREATE TABLE IF NOT EXISTS activation_startup_failures (
+      activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
+      occurred_at TEXT NOT NULL,
+      boundary TEXT NOT NULL,
+      diagnostic TEXT NOT NULL,
+      resolved_at TEXT
+    );
     CREATE TABLE IF NOT EXISTS task_comments (
       sequence INTEGER PRIMARY KEY AUTOINCREMENT,
       id TEXT NOT NULL UNIQUE,
@@ -135,7 +155,7 @@ export function openCoordinationDatabase(path: string): DatabaseSync {
       task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       type TEXT NOT NULL CHECK (type IN ('user-mention', 'failed-run')),
       source_event_id TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT NOT NULL,
       resolved_at TEXT
     );
     CREATE TABLE IF NOT EXISTS task_attachments (
@@ -151,253 +171,5 @@ export function openCoordinationDatabase(path: string): DatabaseSync {
       response_json TEXT NOT NULL,
       PRIMARY KEY (command_type, idempotency_key)
     );
-  `);
-  migrateTaskSequence(database);
-  migrateFailedRunOutcomes(database);
-  ensureActivationStartupFailures(database);
-  migrateAttemptThreadId(database);
-  migrateTranscriptOwnership(database);
-  migrateActivityLedger(database);
-  migrateTaskEditedActivity(database);
-  migrateActivationsForMentionSources(database);
-  migrateActivationSourceEventName(database);
-  migrateAttentionActivity(database);
-  migrateAttentionReasonSources(database);
-  return database;
-}
-
-function migrateActivationSourceEventName(database: DatabaseSync): void {
-  const columns = database.prepare("PRAGMA table_info(activations)").all() as Array<{
-    name: string;
-  }>;
-  if (columns.some((column) => column.name === "source_activity_id")) {
-    database.exec(
-      "ALTER TABLE activations RENAME COLUMN source_activity_id TO source_event_id",
-    );
-  }
-}
-
-function migrateAttentionActivity(database: DatabaseSync): void {
-  const schema = database
-    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activity_ledger'")
-    .get() as { sql: string };
-  if (schema.sql.includes("'attention.created'")) return;
-  try {
-    database.exec(`
-      BEGIN IMMEDIATE;
-      CREATE TABLE activity_ledger_with_attention (
-        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-        id TEXT NOT NULL UNIQUE,
-        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-        type TEXT NOT NULL CHECK (
-          type IN (
-            'task.created',
-            'task.edited',
-            'task.moved',
-            'attention.created',
-            'attention.resolved',
-            'activation.created',
-            'attempt.started',
-            'attempt.completed'
-          )
-        ),
-        actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
-        actor_id TEXT NOT NULL,
-        occurred_at TEXT NOT NULL,
-        details_json TEXT NOT NULL
-      );
-      INSERT INTO activity_ledger_with_attention SELECT * FROM activity_ledger;
-      DROP TABLE activity_ledger;
-      ALTER TABLE activity_ledger_with_attention RENAME TO activity_ledger;
-      COMMIT;
-    `);
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
-}
-
-function migrateActivationsForMentionSources(database: DatabaseSync): void {
-  const schema = database
-    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activations'")
-    .get() as { sql: string };
-  if (schema.sql.includes("'agent-mention'")) return;
-  database.exec("PRAGMA foreign_keys = OFF");
-  try {
-    database.exec(`
-      BEGIN IMMEDIATE;
-      ALTER TABLE attempts RENAME TO attempts_before_mentions;
-      ALTER TABLE activation_startup_failures RENAME TO startup_failures_before_mentions;
-      ALTER TABLE activations RENAME TO activations_before_mentions;
-      ${ACTIVATIONS_TABLE_SQL}
-      ${ATTEMPTS_TABLE_SQL}
-      CREATE TABLE activation_startup_failures (
-        activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
-        occurred_at TEXT NOT NULL,
-        boundary TEXT NOT NULL,
-        diagnostic TEXT NOT NULL,
-        resolved_at TEXT
-      );
-      INSERT INTO activations
-        SELECT sequence, id, task_id, target_agent_id, reason_type,
-               source_activity_id, status, created_at
-        FROM activations_before_mentions;
-      INSERT INTO attempts SELECT * FROM attempts_before_mentions;
-      INSERT INTO activation_startup_failures SELECT * FROM startup_failures_before_mentions;
-      DROP TABLE attempts_before_mentions;
-      DROP TABLE startup_failures_before_mentions;
-      DROP TABLE activations_before_mentions;
-      COMMIT;
-    `);
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  } finally {
-    database.exec("PRAGMA foreign_keys = ON");
-  }
-}
-
-function migrateAttentionReasonSources(database: DatabaseSync): void {
-  const columns = database.prepare("PRAGMA table_info(attention_reasons)").all() as Array<{
-    name: string;
-  }>;
-  if (!columns.some((column) => column.name === "source_event_id")) {
-    database.exec("ALTER TABLE attention_reasons ADD COLUMN source_event_id TEXT");
-  }
-  if (!columns.some((column) => column.name === "created_at")) {
-    database.exec("ALTER TABLE attention_reasons ADD COLUMN created_at TEXT");
-    database.exec("UPDATE attention_reasons SET created_at = CURRENT_TIMESTAMP");
-  }
-}
-
-function ensureActivationStartupFailures(database: DatabaseSync): void {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS activation_startup_failures (
-      activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
-      occurred_at TEXT NOT NULL,
-      boundary TEXT NOT NULL,
-      diagnostic TEXT NOT NULL,
-      resolved_at TEXT
-    );
-  `);
-}
-
-function migrateTaskEditedActivity(database: DatabaseSync): void {
-  const schema = database
-    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activity_ledger'")
-    .get() as { sql: string };
-  if (schema.sql.includes("'task.edited'")) return;
-  database.exec("PRAGMA foreign_keys = OFF");
-  try {
-    database.exec(`
-      BEGIN IMMEDIATE;
-      CREATE TABLE activity_ledger_with_task_edits (
-        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-        id TEXT NOT NULL UNIQUE,
-        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-        type TEXT NOT NULL CHECK (
-          type IN (
-            'task.created',
-            'task.edited',
-            'task.moved',
-            'activation.created',
-            'attempt.started',
-            'attempt.completed'
-          )
-        ),
-        actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
-        actor_id TEXT NOT NULL,
-        occurred_at TEXT NOT NULL,
-        details_json TEXT NOT NULL
-      );
-      INSERT INTO activity_ledger_with_task_edits
-        SELECT sequence, id, task_id, type, actor_kind, actor_id, occurred_at, details_json
-        FROM activity_ledger;
-      DROP TABLE activity_ledger;
-      ALTER TABLE activity_ledger_with_task_edits RENAME TO activity_ledger;
-      COMMIT;
-    `);
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  } finally {
-    database.exec("PRAGMA foreign_keys = ON");
-  }
-}
-
-function migrateTaskSequence(database: DatabaseSync): void {
-  const taskColumns = database.prepare("PRAGMA table_info(tasks)").all() as Array<{
-    name: string;
-  }>;
-  if (taskColumns.some((column) => column.name === "sequence")) return;
-  database.exec("ALTER TABLE tasks ADD COLUMN sequence INTEGER");
-  database.exec("UPDATE tasks SET sequence = CAST(SUBSTR(id, 3) AS INTEGER)");
-  database.exec("CREATE UNIQUE INDEX tasks_sequence_unique ON tasks(sequence)");
-}
-
-function migrateFailedRunOutcomes(database: DatabaseSync): void {
-  const activationSchema = database
-    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activations'")
-    .get() as { sql: string };
-  if (activationSchema.sql.includes("'failed'")) return;
-  const attemptColumns = database.prepare("PRAGMA table_info(attempts)").all() as Array<{
-    name: string;
-  }>;
-  const threadIdProjection = attemptColumns.some((column) => column.name === "thread_id")
-    ? "thread_id"
-    : "NULL";
-  database.exec("PRAGMA foreign_keys = OFF");
-  try {
-    database.exec(`
-      BEGIN IMMEDIATE;
-      ALTER TABLE attempts RENAME TO attempts_before_failed_outcomes;
-      ALTER TABLE activations RENAME TO activations_before_failed_outcomes;
-      ${ACTIVATIONS_TABLE_SQL}
-      ${ATTEMPTS_TABLE_SQL}
-      INSERT INTO activations
-        SELECT sequence, id, task_id, target_agent_id, reason_type,
-               source_activity_id, status, created_at
-        FROM activations_before_failed_outcomes;
-      INSERT INTO attempts
-        SELECT id, activation_id, status, workspace_path, started_at,
-               completed_at, outcome_status, outcome_summary, ${threadIdProjection}
-        FROM attempts_before_failed_outcomes;
-      DROP TABLE attempts_before_failed_outcomes;
-      DROP TABLE activations_before_failed_outcomes;
-      COMMIT;
-    `);
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  } finally {
-    database.exec("PRAGMA foreign_keys = ON");
-  }
-}
-
-function migrateAttemptThreadId(database: DatabaseSync): void {
-  const attemptColumns = database.prepare("PRAGMA table_info(attempts)").all() as Array<{
-    name: string;
-  }>;
-  if (!attemptColumns.some((column) => column.name === "thread_id")) {
-    database.exec("ALTER TABLE attempts ADD COLUMN thread_id TEXT");
-  }
-}
-
-function migrateTranscriptOwnership(database: DatabaseSync): void {
-  const attemptColumns = database.prepare("PRAGMA table_info(attempts)").all() as Array<{
-    name: string;
-  }>;
-  if (attemptColumns.some((column) => column.name === "transcript_json")) {
-    database.exec("ALTER TABLE attempts DROP COLUMN transcript_json");
-  }
-}
-
-function migrateActivityLedger(database: DatabaseSync): void {
-  database.exec(`
-    INSERT OR IGNORE INTO activity_ledger
-      (id, task_id, type, actor_kind, actor_id, occurred_at, details_json)
-    SELECT id, task_id, type, actor_kind, actor_id, occurred_at, '{}'
-    FROM task_activity
-    ORDER BY rowid;
   `);
 }

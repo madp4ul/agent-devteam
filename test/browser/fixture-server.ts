@@ -131,8 +131,10 @@ database.prepare(
   "thread-browser-123",
 );
 database.prepare(
-  "INSERT INTO attention_reasons (id, task_id, type, resolved_at) VALUES (?, ?, 'user-mention', NULL)",
-).run("browser-attention", inspected.task.id);
+  `INSERT INTO attention_reasons
+    (id, task_id, type, source_event_id, created_at, resolved_at)
+   VALUES (?, ?, 'user-mention', NULL, ?, NULL)`,
+).run("browser-attention", inspected.task.id, attemptCompletedAt);
 database.prepare(
   "INSERT INTO task_relationships VALUES (?, 'dependency', ?, ?)",
 ).run("browser-relationship", inspected.task.id, draggable.task.id);
