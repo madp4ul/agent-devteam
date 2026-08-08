@@ -39,6 +39,25 @@ an undeclared ID and validate again. Restore the value before continuing.
 
 ## 4. Start the local application
 
+On Windows, use the repository launcher from a normal, non-elevated terminal
+running as the account that owns the checkout:
+
+```powershell
+.\examples\software-delivery\start.cmd
+```
+
+This is the preferred source-based entry point for the supplied example until
+the planned self-contained distribution replaces the development toolchain. It
+anchors paths to the repository root, checks that pnpm and Git are available to
+the current account, builds the browser application, and then starts the
+software-delivery process with its database at
+`.data/software-delivery-example.sqlite3` and task worktrees in the sibling
+`<repository>-software-delivery-example-workspaces` directory. These dedicated
+paths make the adjacent reset script safe to scope. The launcher never changes
+Git's global trust configuration.
+
+On other hosts, or when invoking the development command directly, use:
+
 ```sh
 pnpm start -- --process examples/software-delivery/process.yaml --project .
 ```
@@ -46,9 +65,36 @@ pnpm start -- --process examples/software-delivery/process.yaml --project .
 The default database is `.data/coordination.sqlite3` and the default address is
 `http://127.0.0.1:3000`. Override them when needed:
 
+The Windows launcher passes host and port arguments through to the application,
+so the equivalent address override is:
+
+```powershell
+.\examples\software-delivery\start.cmd --host 127.0.0.1 --port 3100
+```
+
+The direct cross-platform command remains:
+
 ```sh
 pnpm start -- --process examples/software-delivery/process.yaml --database .data/tutorial.sqlite3 --project . --task-workspaces ../agent-devteam-task-workspaces --host 127.0.0.1 --port 3100
 ```
+
+### Reset the Windows example state
+
+During pre-release testing, the example database and Git worktree registrations
+may be discarded together. Stop the application, then run:
+
+```powershell
+.\examples\software-delivery\reset-state.cmd
+```
+
+The reset prints its two exact targets and requires typing `RESET`. It removes
+the example's registered task worktrees, deletes their workspace root, prunes
+stale worktree registrations, and deletes the database together with its SQLite
+sidecar files. It does not delete other `.data` databases or worktrees outside
+the example's dedicated workspace root. The Git prune step may also discard
+administrative registrations for other worktrees whose directories are already
+missing; it never deletes an existing worktree. For non-interactive local
+automation, pass `--yes` only after independently confirming the printed paths.
 
 The page shows `Automation paused`, the process fingerprint, all configured
 columns in order, and a final unwatched Completion column. Inspect the board,

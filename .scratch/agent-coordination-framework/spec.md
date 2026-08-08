@@ -179,6 +179,21 @@ unarchived task does not depend on one host process.
 114. As a user, I want explicit task archival to discard all detailed attempt
 transcripts together with the task workspace while retaining concise attempt
 history, so that operational evidence has a clear user-controlled lifetime.
+115. As a user, I want an open task timeline to receive new comments, activity,
+activations, attempts, and attention promptly without a manual page refresh, so
+that I can follow coordination as it happens.
+116. As a user, I want the comment composer to help me select an agent or the
+user by name, so that consultation does not depend on remembering exact stable
+participant IDs.
+117. As a process author, I want each agent to optionally select its Codex model
+and reasoning effort while retaining my ordinary Codex defaults when omitted,
+so that role-specific quality, latency, and cost are deliberate process choices.
+118. As a user, I want participant mentions highlighted inside authored
+comments together with their activation or attention consequence, so that I can
+see why an agent ran or why the task needs me without searching a wall of text.
+119. As a user, I want task history grouped into causal attempt narratives with
+small derived events folded into their source comment or movement, so that the
+coordination story remains understandable without losing audit evidence.
 
 ## Implementation Decisions
 
@@ -221,6 +236,9 @@ history, so that operational evidence has a clear user-controlled lifetime.
   agents, roles, coordination guidance, stable entity IDs, and the default task
   workspace starting ref. Long-form agent instructions live in referenced
   Markdown documents.
+- An agent definition may optionally select a Codex model and reasoning effort.
+  Omitted values inherit the launching user's Codex configuration; model choice
+  does not alter the shared permission policy.
 - The product supplies a JSON Schema, reference documentation, a tutorial,
   examples, an explicit validator, and startup validation. Diagnostics use
   source locations and explain the rule, consequence, and safe correction.
@@ -278,6 +296,15 @@ history, so that operational evidence has a clear user-controlled lifetime.
   chronological timeline while preserving their different record types. The
   page owns task editing, relationships, task movement, attention recovery,
   current task automation, archival, and attempt transcript access.
+- Canonical participant tokens in authored comments are visually distinct from
+  ordinary prose and expose the activation or user-attention consequence they
+  caused. A later causal-history presentation may fold small derived events into
+  their source comment, movement, or attempt while keeping the complete audit
+  evidence inspectable.
+- While task details remain open, authoritative comments, activity, activations,
+  attempts, and attention changes appear within a short defined freshness bound
+  without discarding draft input, focus, reading position, or open transcript
+  state. The implementation may use polling, server push, or a hybrid.
 - Task details include a **Task workspace** section. Before provisioning it
   explains when the workspace will be created; afterwards it exposes the bound
   Git worktree's absolute location, starting ref and commit, Copy path, and a

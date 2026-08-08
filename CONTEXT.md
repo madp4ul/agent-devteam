@@ -225,6 +225,13 @@ The configurable responsibility given to an agent within a process.
 **Agent instructions**:
 The full guidance an agent receives for carrying out its own role.
 
+**Agent execution profile**:
+The optional Codex model and reasoning effort selected for one process agent.
+When either value is absent, the coordination framework delegates that choice
+to the launching user's ordinary Codex configuration. The profile changes
+execution selection, not the agent's role, instructions, tools, or permission
+policy.
+
 **Agent summary**:
 A short description of an agent's responsibility that helps other agents know
 when to involve it.
@@ -268,6 +275,10 @@ mention order. Mentioning the user creates a notification rather than an agent
 activation. An agent mention creates an activation regardless of whether the
 task's current column is watched, unwatched, or final. An agent mention on an
 unmapped task remains authored text but creates no activation.
+Canonical participant tokens are executable coordination requests, not merely
+typographic references. Descriptive prose uses the participant's display name
+without `@`; an agent must not write a token for itself or for a participant
+whose response is not actually requested.
 
 **Attention reason**:
 A typed cause of a task needing user attention, currently a user mention or a

@@ -31,6 +31,10 @@ explicit user approval, integration, and Completion.
 - [ ] The Code Reviewer consults the Architecture Designer through a mention,
   receives a reply mention, and resumes Code Review without moving the task
   during the round-trip.
+- [ ] Example agents use canonical `@participant-id` tokens only when requesting
+  a new response. Descriptive references, negative findings, and completed
+  handoffs use plain display names and create no accidental, repeated, or
+  self-targeted activations.
 - [ ] Automation stops at Awaiting User Approval until the user reviews task
   history and repository changes and moves the task to Ready to Merge.
 - [ ] The Merge Agent records and verifies process-directed integration before

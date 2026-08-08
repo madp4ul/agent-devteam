@@ -1,13 +1,32 @@
-# 32 — Observe Running Attempts Live
+# 32 — Observe Task Activity and Running Attempts Live
 
-**What to build:** A user can open a running attempt and see meaningful agent
-messages and tool progression update automatically, while finished attempt
-transcripts remain available across host restarts until explicit task archival.
+**What to build:** An open task page stays current as comments, activity,
+activations, attempts, and attention change, and a user can inspect a running
+attempt's meaningful agent messages and tool progression automatically. Finished
+attempt transcripts remain available across host restarts until explicit task
+archival.
 
 **Blocked by:** 19 — Inspect and Control a Task; 23 — Recover Queued Work After Restart
 
 **Status:** ready-for-agent
 
+- [ ] An open task timeline updates without a manual page refresh whenever its
+  authoritative projection changes, including user- or agent-authored comments,
+  framework activity, activation creation and status changes, attempt lifecycle
+  changes, startup failures, and attention creation or resolution.
+- [ ] A successfully submitted comment appears promptly in the timeline, and
+  any activation created by its mention appears as part of the same refreshed
+  task state without duplicates, missing intermediate state, or a second user
+  action.
+- [ ] Updates originating outside the current browser action, including agent
+  comments, moves, attempt outcomes, and another browser command, become visible
+  within a defined short freshness bound. Choose polling, server push, or a
+  hybrid based on the smallest reliable implementation rather than requiring a
+  particular transport in advance.
+- [ ] Reconciliation preserves an in-progress comment draft, focused control,
+  timeline or transcript reading position, and open overlay state. It does not
+  replace the entire task page or repeatedly announce unchanged content to
+  assistive technology.
 - [ ] A running attempt's existing read-only transcript overlay is available
   before the attempt finishes and updates without a manual page refresh.
 - [ ] A newly started tool activity appears promptly with a running state. The
@@ -39,15 +58,19 @@ transcripts remain available across host restarts until explicit task archival.
 - [ ] Transcript persistence is bounded to inspectable messages, tool activity,
   diagnostics, and already-truncated output rather than a private runtime dump.
 - [ ] Controlled streamed-runtime, application-restart, and browser tests prove
-  running-to-terminal updates, stable item identity, all attempt outcomes,
-  navigation/reopening, post-attempt durability, and honest partial loss after
-  a simulated host crash.
+  comment-to-activation timeline refresh, agent-originated task updates,
+  running-to-terminal transcript updates, stable item identity, preserved draft
+  and reading state, all attempt outcomes, navigation/reopening, post-attempt
+  durability, and honest partial loss after a simulated host crash.
 
 ## Comments
 
 - Current code consumes the Codex streamed event API but publishes transcript
   items only after the run ends. The requirement is live operational
   observability, not a replica of the Codex client.
+- Live review after issue 20 found that a newly submitted mention comment and
+  its resulting activation could remain absent from an already-open task
+  timeline. This issue owns freshness for the complete authoritative task
+  projection, not only transcript streaming.
 - Current-attempt elapsed time and actual-agent labels across the board, task,
   and overlay are owned by issue 25 so the timer has one consistent definition.
-

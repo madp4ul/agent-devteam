@@ -131,6 +131,10 @@ export class AutomationCoordinator {
     this.#automationWork = this.runQueuedActivations(() => {}).finally(() => {
       this.#automationPumpRunning = false;
     });
+    void this.#automationWork.catch(() => {
+      this.#processStore.pauseAutomation();
+      this.#automation = { state: "paused", attemptsMayStart: false };
+    });
   }
 
   private async runQueuedActivations(onFirstDispatch: () => void): Promise<void> {

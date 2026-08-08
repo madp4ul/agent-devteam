@@ -5,7 +5,7 @@ typed dependencies, inspect relationship state, and rely on automatic
 reactivation exactly when a task's final blocker becomes satisfied.
 
 **Blocked by:** 18 — Let Agents Discover Shared Work; 19 — Inspect and Control a Task;
-29 — Decompose Coordination Persistence by Behavior
+29 — Decompose Coordination Persistence by Behavior; 36 — Configure Agent Models and Reasoning
 
 **Status:** ready-for-agent
 

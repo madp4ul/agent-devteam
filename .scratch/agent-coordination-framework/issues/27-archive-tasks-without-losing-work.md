@@ -5,7 +5,7 @@ without deleting their coordination history or losing repository work. Agents
 can deliberately inspect completed and archived work, and unarchiving honestly
 starts any later workspace from the configured ref.
 
-**Blocked by:** 18 — Let Agents Discover Shared Work; 19 — Inspect and Control a Task; 23 — Recover Queued Work After Restart; 32 — Observe Running Attempts Live
+**Blocked by:** 18 — Let Agents Discover Shared Work; 19 — Inspect and Control a Task; 23 — Recover Queued Work After Restart; 32 — Observe Task Activity and Running Attempts Live
 
 **Status:** ready-for-agent
 

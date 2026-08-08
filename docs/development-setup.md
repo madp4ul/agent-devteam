@@ -77,15 +77,21 @@ From the repository root, install exactly the dependency graph in
 pnpm install --frozen-lockfile
 ```
 
-Validate the example process, then start the development server:
+Validate the example process, then use the preferred Windows launcher. It
+repeats the Git identity check, builds the browser application, and starts the
+example from the repository root:
 
 ```powershell
 pnpm validate:example
-pnpm build
-pnpm start -- --process examples/software-delivery/process.yaml --project .
+.\examples\software-delivery\start.cmd
 ```
 
 Open <http://127.0.0.1:3000>. Stop the server with `Ctrl+C`.
+
+While state remains disposable during pre-release development, stop the server
+and run `.\examples\software-delivery\reset-state.cmd` to remove the example
+database and its task worktrees as one confirmed operation. The reset does not
+change global Git trust and does not touch other test databases.
 
 Before changing code, it is useful to verify the checkout:
 

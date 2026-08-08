@@ -96,6 +96,8 @@ boards:
     name: Delivery
     guidance: Keep failures visible.
     columns:
+      - id: backlog
+        name: Backlog
       - id: implementation
         name: Implementation
         watchingAgent: implementer
@@ -134,7 +136,7 @@ boards:
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       boardId: "delivery",
-      columnId: "implementation",
+      columnId: "backlog",
       title: "Log this startup failure",
       description: "The source host must retain operator-visible correlation.",
       idempotencyKey: "cli-startup-log-task",
@@ -142,19 +144,41 @@ boards:
   });
   const created = await create.json() as {
     accepted: true;
-    task: { id: string; activations: Array<{ id: string }> };
+    task: { id: string; revision: number };
   };
-  const activationId = created.task.activations[0]?.id;
-  assert.ok(activationId);
-  const logged = waitForOutput(child, "stderr", /\[runtime-start-failed\]/);
   const resume = await fetch(`${baseUrl}/api/automation/resume`, { method: "POST", body: "{}" });
-  assert.equal(resume.status, 409);
+  assert.equal(resume.status, 200);
+  const logged = waitForOutput(child, "stderr", /\[runtime-start-failed\]/);
+  const move = await fetch(`${baseUrl}/api/tasks/${created.task.id}/move`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      destinationColumnId: "implementation",
+      expectedRevision: created.task.revision,
+      idempotencyKey: "cli-startup-log-move",
+    }),
+  });
+  const moved = await move.json() as {
+    accepted: true;
+    task: { activations: Array<{ id: string }> };
+  };
+  const activationId = moved.task.activations[0]?.id;
+  assert.ok(activationId);
   const log = await logged;
   assert.match(log, new RegExp(`task=${escapeRegExp(created.task.id)}`));
   assert.match(log, new RegExp(`activation=${escapeRegExp(activationId)}`));
   assert.match(log, /boundary=starting-ref-resolution/);
   assert.match(log, /missing-starting-ref/);
   assert.doesNotMatch(log, /Log this startup failure|source host must retain/i);
+
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+  const boardAfterFailure = await fetch(`${baseUrl}/api/board`);
+  assert.equal(boardAfterFailure.status, 200);
+  const projection = await boardAfterFailure.json() as {
+    automation: { state: string; attemptsMayStart: boolean };
+  };
+  assert.deepEqual(projection.automation, { state: "paused", attemptsMayStart: false });
+  assert.equal(child.exitCode, null, "one activation startup failure must not terminate the host");
 });
 
 function waitForOutput(

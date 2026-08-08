@@ -11,12 +11,22 @@ The planned production distribution is a self-contained host-native
 application; users will not need the TypeScript development toolchain. See
 [ADR 0002](docs/adr/0002-self-contained-host-native-distribution.md).
 
-```sh
+On Windows, the preferred source launcher for the supplied example is:
+
+```powershell
 pnpm install --frozen-lockfile
 pnpm validate:example
-pnpm build
-pnpm start -- --process examples/software-delivery/process.yaml --project .
+.\examples\software-delivery\start.cmd
 ```
+
+The launcher checks that pnpm and Git are usable by the current Windows
+account, builds the browser application, and starts the software-delivery
+example. Other hosts can use the equivalent `pnpm build` and `pnpm start`
+commands documented in the tutorial.
+
+During pre-release testing, stop the application and run
+`.\examples\software-delivery\reset-state.cmd` to explicitly discard the
+example database and its registered task worktrees.
 
 Open `http://127.0.0.1:3000`. See the
 [process-definition reference](docs/process-definition-reference.md) and

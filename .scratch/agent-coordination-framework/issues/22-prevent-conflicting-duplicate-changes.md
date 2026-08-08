@@ -5,7 +5,7 @@ the shared board without silently overwriting one another or duplicating task
 commands and activations.
 
 **Blocked by:** 16 — Execute the First Task Activation;
-29 — Decompose Coordination Persistence by Behavior
+29 — Decompose Coordination Persistence by Behavior; 36 — Configure Agent Models and Reasoning
 
 **Status:** ready-for-agent
 

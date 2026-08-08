@@ -97,6 +97,13 @@ without choosing the implementation yet.
   runs, fail attempts with unresolved required coordination calls, and persist
   correlated pre-attempt startup diagnostics across logs, UI, and host restarts.
 
+## Next implementation priority
+
+- [Configure Agent Models and Reasoning](./issues/36-configure-agent-models-and-reasoning.md)
+  — Add optional per-agent Codex model and reasoning-effort configuration,
+  preserve ordinary Codex inheritance when omitted, and expose the requested
+  execution profile. This is the delivery gate before issues 21 and 22.
+
 ## Clarified delivery follow-ups
 
 - [Recover Queued Work After Restart](./issues/23-recover-queued-work-after-restart.md)
@@ -111,9 +118,10 @@ without choosing the implementation yet.
 - [Expose a Task's Workspace](./issues/31-expose-task-workspace.md)
   — Add a Task workspace section with lifecycle state, starting point, path,
   Copy path, and Open workspace without building an embedded Git client.
-- [Observe Running Attempts Live](./issues/32-observe-running-attempts-live.md)
-  — Update started and completed transcript activity during a run and persist
-  every finished attempt's captured transcript until task archival.
+- [Observe Task Activity and Running Attempts Live](./issues/32-observe-running-attempts-live.md)
+  — Keep an open task timeline current across comments, activations, activity,
+  and attempt changes; update transcript activity during a run and persist every
+  finished attempt's captured transcript until task archival.
 
 ## Not yet specified
 
@@ -123,6 +131,13 @@ without choosing the implementation yet.
 - [Relocate a Project State Root](./issues/34-relocate-project-state-root.md)
   — Define a lower-priority explicit relocation and Git-registration repair
   workflow only if usage demonstrates that initialized state must move.
+- [Make Participant Mentions Discoverable](./issues/35-make-participant-mentions-discoverable.md)
+  — Evaluate lightweight `@` autocomplete against an explicit recipient
+  control and highlight submitted mentions so users can address agents and see
+  the resulting activation or attention without memorizing stable IDs.
+- [Structure Task History by Cause and Attempt](./issues/37-structure-task-history-by-cause-and-attempt.md)
+  — Prototype a causal timeline that groups attempt work and folds derived
+  activation or attention facts into the comment or movement that caused them.
 
 ## Out of scope
 
