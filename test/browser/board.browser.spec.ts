@@ -1,5 +1,37 @@
 import { expect, test } from "@playwright/test";
 
+test("configuration errors show the invalid value with the actionable diagnostic", async ({ page }) => {
+  await page.route("**/api/board", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        startup: {
+          mode: "configuration-error",
+          diagnostics: [{
+            file: "process.yaml",
+            line: 12,
+            column: 24,
+            invalidValue: "missing-agent",
+            rule: "The referenced watching agent must exist.",
+            consequence: "The process cannot be applied.",
+            correction: "Reference a declared agent ID.",
+          }],
+          automation: { state: "blocked", attemptsMayStart: false },
+        },
+        automation: { state: "blocked", attemptsMayStart: false },
+        boards: [],
+        attention: [],
+      }),
+    });
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "Configuration error" })).toBeVisible();
+  await expect(page.getByText("Invalid value: missing-agent")).toBeVisible();
+});
+
 test("creates in any column, opens tasks directly, and restores a narrow board context", async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 820 });
   await page.goto("/");

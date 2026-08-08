@@ -117,6 +117,7 @@ export function BoardPage({
           {state.startup.diagnostics.map((diagnostic) => (
             <li key={`${diagnostic.file}:${diagnostic.line}:${diagnostic.column}`}>
               <strong>{diagnostic.file}:{diagnostic.line}:{diagnostic.column}</strong>
+              <p>Invalid value: <code>{formatDiagnosticValue(diagnostic.invalidValue)}</code></p>
               <p>{diagnostic.rule}</p>
               <p>{diagnostic.consequence}</p>
               {diagnostic.correction === undefined ? null : <p>{diagnostic.correction}</p>}
@@ -265,6 +266,11 @@ export function BoardPage({
       )}
     </div>
   );
+}
+
+function formatDiagnosticValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  return JSON.stringify(value) ?? String(value);
 }
 
 function BoardColumn({
