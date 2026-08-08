@@ -975,6 +975,10 @@ export class CoordinationTaskStore {
                 outcome_status, outcome_summary, thread_id, model, reasoning_effort
          FROM attempts
          WHERE activation_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM activation_dispatch_claims claim
+             WHERE claim.attempt_id = attempts.id
+           )
          ORDER BY rowid`,
       )
       .all(activationId) as Array<{

@@ -26,6 +26,10 @@ export class GitTaskWorkspaceManager {
     this.taskWorkspaceRoot = taskWorkspaceRoot;
   }
 
+  pathFor(taskId: string): string {
+    return join(this.taskWorkspaceRoot, taskId);
+  }
+
   async provision(
     taskId: string,
     startingRef: string,
@@ -59,7 +63,7 @@ export class GitTaskWorkspaceManager {
       `Could not prepare task workspace root ${this.taskWorkspaceRoot}`,
       mkdir(this.taskWorkspaceRoot, { recursive: true }),
     );
-    const path = join(this.taskWorkspaceRoot, taskId);
+    const path = this.pathFor(taskId);
     await atBoundary(
       "worktree-registration",
       `Could not register task ${taskId} worktree`,
@@ -80,7 +84,7 @@ export class GitTaskWorkspaceManager {
     taskId: string,
     workspace: TaskWorkspaceView,
   ): Promise<void> {
-    const expectedPath = join(this.taskWorkspaceRoot, taskId);
+    const expectedPath = this.pathFor(taskId);
     try {
       if (!samePath(workspace.path, expectedPath)) throw new Error("unexpected path");
       const registration = await runGit([

@@ -32,6 +32,7 @@ export class CoordinationDatabase {
 
 function initializeCurrentSchema(database: DatabaseSync): void {
   database.exec("PRAGMA foreign_keys = ON");
+  database.exec("PRAGMA busy_timeout = 5000");
   database.exec(`
     CREATE TABLE IF NOT EXISTS runtime (
       singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -139,6 +140,11 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       model TEXT,
       reasoning_effort TEXT
     );
+    CREATE TABLE IF NOT EXISTS activation_dispatch_claims (
+      attempt_id TEXT PRIMARY KEY REFERENCES attempts(id) ON DELETE CASCADE,
+      activation_id TEXT NOT NULL UNIQUE REFERENCES activations(id) ON DELETE CASCADE,
+      claimed_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS activation_startup_failures (
       activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
       occurred_at TEXT NOT NULL,
@@ -183,6 +189,24 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       response_json TEXT NOT NULL,
       PRIMARY KEY (command_type, idempotency_key)
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS one_running_activation_per_task
+      ON activations(task_id)
+      WHERE status = 'running';
+    CREATE UNIQUE INDEX IF NOT EXISTS one_relationship_of_each_type
+      ON task_relationships(type, source_task_id, target_task_id);
+    CREATE TRIGGER IF NOT EXISTS activations_start_in_task_order
+      BEFORE UPDATE OF status ON activations
+      WHEN NEW.status = 'running'
+       AND EXISTS (
+         SELECT 1
+         FROM activations earlier
+         WHERE earlier.task_id = NEW.task_id
+           AND earlier.sequence < NEW.sequence
+           AND earlier.status <> 'completed'
+       )
+      BEGIN
+        SELECT RAISE(ABORT, 'activation-order-conflict');
+      END;
   `);
   ensureColumn(database, "agents", "model", "TEXT");
   ensureColumn(database, "agents", "reasoning_effort", "TEXT");

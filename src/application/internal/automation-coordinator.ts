@@ -11,7 +11,7 @@ import type {
 import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-workspace.ts";
 import type { CoordinationTaskStore } from "./coordination-store.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
-import type { AutomationStateStore } from "./automation-state-store.ts";
+import type { AutomationStateStore, RunnableActivation } from "./automation-state-store.ts";
 
 export interface AutomationProcessContext {
   name: string;
@@ -50,6 +50,7 @@ export class AutomationCoordinator {
   #automationWork: Promise<void> = Promise.resolve();
   #automationPumpRunning = false;
   #automationKickPending = false;
+  #wakeAutomationPump: (() => void) | undefined;
 
   constructor(options: AutomationCoordinatorOptions) {
     this.#processStore = options.processStore;
@@ -124,6 +125,9 @@ export class AutomationCoordinator {
     if (this.#automation.state !== "running" || this.#runtimeDispatch === undefined) return;
     if (this.#automationPumpRunning) {
       this.#automationKickPending = true;
+      const wake = this.#wakeAutomationPump;
+      this.#wakeAutomationPump = undefined;
+      wake?.();
       return;
     }
     this.#automationPumpRunning = true;
@@ -148,88 +152,130 @@ export class AutomationCoordinator {
   private async runQueuedActivations(onFirstDispatch: () => void): Promise<void> {
     if (this.#runtimeDispatch === undefined) return;
     let first = true;
+    let firstError: unknown;
+    const activeRuns = new Set<Promise<void>>();
     while (this.#automation.state === "running") {
       const runnable = this.#stateStore.readNextRunnableActivation();
-      if (runnable === undefined) return;
-      const priorWorkspace = this.#stateStore.readTaskWorkspace(runnable.task.id);
-      let workspace;
-      try {
-        workspace = await this.#runtimeDispatch.workspaceManager.provision(
-          runnable.task.id,
-          this.#taskStore.readTaskStartingRef(runnable.task.id) ?? this.#startingRef ?? "",
-          priorWorkspace,
-        );
-        if (priorWorkspace === undefined) {
-          try {
-            this.#stateStore.saveTaskWorkspace(runnable.task.id, workspace);
-          } catch (error) {
-            throw new GitTaskWorkspaceError(
-              "workspace-state-persistence",
-              "Could not persist the provisioned task workspace",
-              error,
+      if (runnable !== undefined) {
+        const { completion } = await this.dispatch(runnable, () => {
+          if (!first) return;
+          first = false;
+          onFirstDispatch();
+        });
+        const tracked = completion
+          .catch((error: unknown) => {
+            firstError ??= error;
+          })
+          .finally(() => activeRuns.delete(tracked));
+        activeRuns.add(tracked);
+        continue;
+      }
+      if (activeRuns.size === 0) {
+        if (firstError !== undefined) throw firstError;
+        return;
+      }
+      let wake: (() => void) | undefined;
+      const nextKick = new Promise<void>((resolve) => {
+        wake = resolve;
+        this.#wakeAutomationPump = resolve;
+      });
+      await Promise.race([...activeRuns, nextKick]);
+      if (this.#wakeAutomationPump === wake) this.#wakeAutomationPump = undefined;
+      if (firstError !== undefined) {
+        await Promise.all(activeRuns);
+        throw firstError;
+      }
+    }
+  }
+
+  private async dispatch(
+    runnable: RunnableActivation,
+    onDispatchStarted: () => void,
+  ): Promise<{ completion: Promise<void> }> {
+    const runtimeDispatch = this.#runtimeDispatch;
+    if (runtimeDispatch === undefined) return { completion: Promise.resolve() };
+    const priorWorkspace = this.#stateStore.readTaskWorkspace(runnable.task.id);
+    const claimedAttempt = this.#stateStore.tryClaimActivation(
+      runnable.activation.id,
+      priorWorkspace?.path ?? runtimeDispatch.workspaceManager.pathFor(runnable.task.id),
+      runnable.agent,
+    );
+    if (claimedAttempt === undefined) return { completion: Promise.resolve() };
+    let workspace;
+    try {
+      workspace = await runtimeDispatch.workspaceManager.provision(
+        runnable.task.id,
+        this.#taskStore.readTaskStartingRef(runnable.task.id) ?? this.#startingRef ?? "",
+        priorWorkspace,
+      );
+      if (priorWorkspace === undefined) {
+        try {
+          this.#stateStore.saveTaskWorkspace(runnable.task.id, workspace);
+        } catch (error) {
+          throw new GitTaskWorkspaceError(
+            "workspace-state-persistence",
+            "Could not persist the provisioned task workspace",
+            error,
+          );
+        }
+      }
+    } catch (error) {
+      const failure = this.#stateStore.recordActivationStartupFailure(
+        runnable.activation.id,
+        error instanceof GitTaskWorkspaceError ? error.boundary : "workspace-preparation",
+        completeDiagnostic(error),
+      );
+      this.#runtimeDiagnostic?.(failure);
+      throw new Error(failure.diagnostic, { cause: error });
+    }
+    const attempt = {
+      ...claimedAttempt,
+      ...this.#stateStore.startAttempt(claimedAttempt.id),
+    };
+    const currentTask = this.#taskStore.readTask(runnable.task.id);
+    if (currentTask === undefined) throw new Error("Runnable task disappeared before dispatch");
+    const process = this.#processContext;
+    if (process === undefined) throw new Error("Runnable activation has no process context");
+    const board = process.boards.find((candidate) => candidate.id === currentTask.boardId);
+    if (board === undefined) throw new Error("Runnable task has no applied board context");
+    let dispatchStarted = false;
+    const outcomePromise = runtimeDispatch.agentRuntime.run(
+      {
+        activationId: runnable.activation.id,
+        agent: runnable.agent,
+        process: {
+          name: process.name,
+          guidance: process.guidance,
+          definitionVersion: process.definitionVersion,
+        },
+        board,
+        collaborators: process.collaborators,
+        reason: runnable.activation.reason,
+        sourceEvent: runnable.sourceEvent,
+        task: currentTask,
+        workspace,
+        attempt: {
+          number: attempt.number,
+          precedingOutcome: null,
+          thread: "fresh",
+          continuationMessage: null,
+        },
+      },
+      {
+        started: (threadId) => {
+          dispatchStarted = true;
+          if (threadId !== undefined) {
+            this.#stateStore.recordAttemptThreadId(
+              attempt.id,
+              attempt.runStartActivityId,
+              threadId,
             );
           }
-        }
-      } catch (error) {
-        const failure = this.#stateStore.recordActivationStartupFailure(
-          runnable.activation.id,
-          error instanceof GitTaskWorkspaceError ? error.boundary : "workspace-preparation",
-          completeDiagnostic(error),
-        );
-        this.#runtimeDiagnostic?.(failure);
-        throw new Error(failure.diagnostic, { cause: error });
-      }
-      const attempt = this.#stateStore.startAttempt(
-        runnable.activation.id,
-        workspace.path,
-        runnable.agent,
-      );
-      const currentTask = this.#taskStore.readTask(runnable.task.id);
-      if (currentTask === undefined) throw new Error("Runnable task disappeared before dispatch");
-      const process = this.#processContext;
-      if (process === undefined) throw new Error("Runnable activation has no process context");
-      const board = process.boards.find((candidate) => candidate.id === currentTask.boardId);
-      if (board === undefined) throw new Error("Runnable task has no applied board context");
-      let dispatchStarted = false;
-      const outcomePromise = this.#runtimeDispatch.agentRuntime.run(
-        {
-          activationId: runnable.activation.id,
-          agent: runnable.agent,
-          process: {
-            name: process.name,
-            guidance: process.guidance,
-            definitionVersion: process.definitionVersion,
-          },
-          board,
-          collaborators: process.collaborators,
-          reason: runnable.activation.reason,
-          sourceEvent: runnable.sourceEvent,
-          task: currentTask,
-          workspace,
-          attempt: {
-            number: attempt.number,
-            precedingOutcome: null,
-            thread: "fresh",
-            continuationMessage: null,
-          },
+          onDispatchStarted();
         },
-        {
-          started: (threadId) => {
-            dispatchStarted = true;
-            if (threadId !== undefined) {
-              this.#stateStore.recordAttemptThreadId(
-                attempt.id,
-                attempt.runStartActivityId,
-                threadId,
-              );
-            }
-            if (first) {
-              first = false;
-              onFirstDispatch();
-            }
-          },
-        },
-      );
+      },
+    );
+    const completion = (async () => {
       let outcome: AgentRunOutcome;
       try {
         outcome = await outcomePromise;
@@ -252,7 +298,8 @@ export class AutomationCoordinator {
         throw new Error(failedOutcome.summary);
       }
       this.#stateStore.completeAttempt(attempt.id, outcome);
-    }
+    })();
+    return { completion };
   }
 }
 

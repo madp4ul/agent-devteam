@@ -136,30 +136,20 @@ export class AutomationStateStore {
       .run(taskId, workspace.path, workspace.startingRef, workspace.commit);
   }
 
-  startAttempt(
+  tryClaimActivation(
     activationId: string,
     workspacePath: string,
     agent: AgentRunAgent,
-  ): { id: string; number: number; runStartActivityId: string } {
+  ): { id: string; number: number } | undefined {
     return this.#owner.transaction(() => {
-      const activation = this.#database
-        .prepare(
-          `SELECT task_id, target_agent_id
-           FROM activations
-           WHERE id = ? AND status = 'queued'`,
-        )
-        .get(activationId) as
-        | { task_id: string; target_agent_id: string }
-        | undefined;
-      if (activation === undefined) throw new Error(`Activation ${activationId} is not runnable`);
-      const attemptId = randomUUID();
+      const result = this.#database
+        .prepare("UPDATE activations SET status = 'running' WHERE id = ? AND status = 'queued'")
+        .run(activationId);
+      if (result.changes !== 1) return undefined;
       const priorAttempts = this.#database
         .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
         .get(activationId) as { count: number };
-      const occurredAt = new Date().toISOString();
-      this.#database
-        .prepare("UPDATE activations SET status = 'running' WHERE id = ?")
-        .run(activationId);
+      const attemptId = randomUUID();
       this.#database
         .prepare(
           `INSERT INTO attempts
@@ -170,18 +160,50 @@ export class AutomationStateStore {
           attemptId,
           activationId,
           workspacePath,
-          occurredAt,
+          new Date().toISOString(),
           agent.model ?? null,
           agent.reasoningEffort ?? null,
         );
+      this.#database
+        .prepare(
+          `INSERT INTO activation_dispatch_claims (attempt_id, activation_id, claimed_at)
+           VALUES (?, ?, ?)`,
+        )
+        .run(attemptId, activationId, new Date().toISOString());
+      return { id: attemptId, number: priorAttempts.count + 1 };
+    });
+  }
+
+  startAttempt(attemptId: string): { runStartActivityId: string } {
+    return this.#owner.transaction(() => {
+      const activation = this.#database
+        .prepare(
+          `SELECT activation.id, activation.task_id, activation.target_agent_id
+           FROM attempts attempt
+           JOIN activations activation ON activation.id = attempt.activation_id
+           JOIN activation_dispatch_claims claim ON claim.attempt_id = attempt.id
+           WHERE attempt.id = ? AND attempt.status = 'running'
+             AND activation.status = 'running'`,
+        )
+        .get(attemptId) as
+        | { id: string; task_id: string; target_agent_id: string }
+        | undefined;
+      if (activation === undefined) throw new Error(`Attempt ${attemptId} is not starting`);
+      const occurredAt = new Date().toISOString();
+      this.#database
+        .prepare("UPDATE attempts SET started_at = ? WHERE id = ?")
+        .run(occurredAt, attemptId);
       const runStartActivityId = this.appendActivity(
         activation.task_id,
         "attempt.started",
         { kind: "agent", id: activation.target_agent_id },
-        { activationId, attemptId },
+        { activationId: activation.id, attemptId },
         occurredAt,
       );
-      return { id: attemptId, number: priorAttempts.count + 1, runStartActivityId };
+      this.#database
+        .prepare("DELETE FROM activation_dispatch_claims WHERE attempt_id = ?")
+        .run(attemptId);
+      return { runStartActivityId };
     });
   }
 
@@ -192,12 +214,19 @@ export class AutomationStateStore {
   ): RuntimeStartupDiagnostic {
     return this.#owner.transaction(() => {
       const activation = this.#database
-        .prepare("SELECT task_id FROM activations WHERE id = ? AND status = 'queued'")
+        .prepare("SELECT task_id FROM activations WHERE id = ? AND status = 'running'")
         .get(activationId) as { task_id: string } | undefined;
-      if (activation === undefined) throw new Error(`Activation ${activationId} is not queued`);
+      if (activation === undefined) throw new Error(`Activation ${activationId} is not starting`);
       const occurredAt = new Date().toISOString();
       this.#database
         .prepare("UPDATE activations SET status = 'failed' WHERE id = ?")
+        .run(activationId);
+      this.#database
+        .prepare(
+          `DELETE FROM attempts
+           WHERE activation_id = ?
+             AND id IN (SELECT attempt_id FROM activation_dispatch_claims)`,
+        )
         .run(activationId);
       this.#database
         .prepare(

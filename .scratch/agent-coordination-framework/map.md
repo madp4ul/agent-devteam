@@ -106,17 +106,18 @@ without choosing the implementation yet.
   refs, immutable blocker history, and reliable reactivation exactly when the
   final blocker becomes satisfied.
 
-## Next implementation priority
-
 - [Prevent Conflicting and Duplicate Changes](./issues/22-prevent-conflicting-duplicate-changes.md)
   — Enforce atomic, idempotent, conflict-safe commands and strict per-task run
   serialization while allowing independent tasks to execute concurrently.
 
-## Clarified delivery follow-ups
+## Next implementation priority
 
 - [Recover Queued Work After Restart](./issues/23-recover-queued-work-after-restart.md)
   — Bind each repository clone to one sibling project state root and reconcile
   its database records with every framework-owned Git worktree at startup.
+
+## Clarified delivery follow-ups
+
 - [Interrupt Tasks and Pause the Process](./issues/25-interrupt-tasks-pause-process.md)
   — Show the actual running agent and current-attempt elapsed time consistently
   on the board, task details, transcript, and process-wide live-run menu.

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
 import {
@@ -599,6 +600,236 @@ test("entering a watched column wakes automation that is already running", async
   assert.equal(runtime.requests.length, 1);
 });
 
+test("different tasks run concurrently while each task preserves activation order", async (t) => {
+  const fixture = await createFixture("task-run-concurrency");
+  const runtime = new ConcurrentAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+
+  const first = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Serialize my activations",
+    description: "Only one activation for this task may run at a time.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-serialized-task",
+  });
+  const second = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Run independently",
+    description: "This task should not wait for another task's active run.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-concurrent-task",
+  });
+  assert.equal(first.accepted, true);
+  assert.equal(second.accepted, true);
+  if (!first.accepted || !second.accepted) return;
+  const firstBacklog = application.moveTask({
+    taskId: first.task.id,
+    destinationColumnId: "backlog",
+    expectedRevision: 1,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "serialized-task-backlog",
+  });
+  assert.equal(firstBacklog.accepted, true);
+  if (!firstBacklog.accepted) return;
+  const firstReentry = application.moveTask({
+    taskId: first.task.id,
+    destinationColumnId: "implementation",
+    expectedRevision: firstBacklog.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "serialized-task-reentry",
+  });
+  assert.equal(firstReentry.accepted, true);
+  if (!firstReentry.accepted) return;
+
+  await application.resumeAutomation();
+  const firstTwoRequests = await Promise.race([
+    runtime.waitForRequests(2),
+    delay(1_000).then(() => undefined),
+  ]);
+  assert.ok(firstTwoRequests, "independent tasks did not begin concurrently");
+  assert.deepEqual(
+    firstTwoRequests.map((request) => request.task.id),
+    [first.task.id, second.task.id],
+  );
+  assert.equal(runtime.requests.length, 2, "the later same-task activation must remain queued");
+
+  runtime.complete(firstTwoRequests[0]!.activationId, {
+    status: "completed",
+    summary: "First task activation completed.",
+  });
+  const firstThreeRequests = await runtime.waitForRequests(3);
+  assert.equal(firstThreeRequests[2]?.task.id, first.task.id);
+  assert.notEqual(firstThreeRequests[2]?.activationId, firstTwoRequests[0]?.activationId);
+
+  runtime.complete(firstTwoRequests[1]!.activationId, {
+    status: "completed",
+    summary: "Independent task completed.",
+  });
+  runtime.complete(firstThreeRequests[2]!.activationId, {
+    status: "completed",
+    summary: "Second activation completed.",
+  });
+  await application.waitForAutomationIdle();
+});
+
+test("a newly queued independent task starts while another task is still running", async (t) => {
+  const fixture = await createFixture("running-task-concurrency");
+  const runtime = new ConcurrentAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const first = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Keep running",
+    description: "Another task may start without waiting for this run.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-already-running-task",
+  });
+  assert.equal(first.accepted, true);
+  if (!first.accepted) return;
+
+  await application.resumeAutomation();
+  const firstRequest = (await runtime.waitForRequests(1))[0]!;
+  const second = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Start during another run",
+    description: "A running task must not globally serialize this task.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-task-during-run",
+  });
+  assert.equal(second.accepted, true);
+  if (!second.accepted) return;
+  const firstTwoRequests = await Promise.race([
+    runtime.waitForRequests(2),
+    delay(1_000).then(() => undefined),
+  ]);
+  assert.ok(firstTwoRequests, "the automation pump did not wake for the independent task");
+  assert.equal(firstTwoRequests[1]?.task.id, second.task.id);
+
+  runtime.complete(firstRequest.activationId, {
+    status: "completed",
+    summary: "Original task completed.",
+  });
+  runtime.complete(firstTwoRequests[1]!.activationId, {
+    status: "completed",
+    summary: "Concurrent task completed.",
+  });
+  await application.waitForAutomationIdle();
+});
+
+test("competing coordinators claim one activation before workspace provisioning", async (t) => {
+  const fixture = await createFixture("activation-claim");
+  const runtime = new ConcurrentAgentRuntime();
+  const runtimeDispatch = {
+    projectRepositoryPath: fixture.repositoryPath,
+    taskWorkspaceRoot: fixture.workspaceRoot,
+    agentRuntime: runtime,
+  };
+  const firstApplication = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch,
+  });
+  t.after(() => firstApplication.close());
+  const created = firstApplication.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Claim before provisioning",
+    description: "Only one coordinator may prepare and dispatch this activation.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-claimed-activation",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const secondApplication = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch,
+  });
+  t.after(() => secondApplication.close());
+
+  const resumes = await Promise.all([
+    firstApplication.resumeAutomation(),
+    secondApplication.resumeAutomation(),
+  ]);
+  assert.ok(resumes.every((result) => result.accepted));
+  const request = (await runtime.waitForRequests(1))[0]!;
+  await delay(250);
+  assert.equal(runtime.requests.length, 1);
+
+  runtime.complete(request.activationId, {
+    status: "completed",
+    summary: "Claimed activation completed once.",
+  });
+  await Promise.all([
+    firstApplication.waitForAutomationIdle(),
+    secondApplication.waitForAutomationIdle(),
+  ]);
+  const inspected = firstApplication.queryTask(created.task.id);
+  assert.equal(inspected.available, true);
+  if (inspected.available) {
+    assert.equal(inspected.task.activations[0]?.attempts.length, 1);
+    assert.equal(inspected.task.activations[0]?.status, "completed");
+    assert.equal(inspected.task.activations[0]?.startupFailure, null);
+  }
+});
+
+test("existing databases add durable dispatch claims before running an activation", async (t) => {
+  const fixture = await createFixture("dispatch-claim-initialization");
+  const initialApplication = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  initialApplication.close();
+  const oldSchemaDatabase = new DatabaseSync(fixture.databasePath);
+  oldSchemaDatabase.exec("DROP TABLE activation_dispatch_claims");
+  oldSchemaDatabase.close();
+
+  const runtime = new CompletingAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Initialize dispatch claims",
+    description: "An existing database gains the additive claim table before dispatch.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-after-claim-initialization",
+  });
+  assert.equal(created.accepted, true);
+  await application.resumeAutomation();
+  await application.waitForAutomationIdle();
+  assert.equal(runtime.requests.length, 1);
+});
+
 test("successive activations reuse one task workspace while another task is isolated", async (t) => {
   const fixture = await createFixture("workspace-reuse");
   const runtime = new ControlledAgentRuntime();
@@ -851,6 +1082,44 @@ class CompletingAgentRuntime implements AgentRuntime {
     this.requests.push(request);
     lifecycle.started();
     return Promise.resolve({ status: "completed", summary: "Completed under control." });
+  }
+}
+
+class ConcurrentAgentRuntime implements AgentRuntime {
+  readonly requests: AgentRunRequest[] = [];
+  readonly #completions = new Map<string, (outcome: AgentRunOutcome) => void>();
+  readonly #requestWaiters: Array<{
+    count: number;
+    resolve: (requests: AgentRunRequest[]) => void;
+  }> = [];
+
+  run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
+    this.requests.push(request);
+    lifecycle.started(`controlled-thread-${request.activationId}`);
+    for (const waiter of this.#requestWaiters.splice(0)) {
+      if (this.requests.length >= waiter.count) {
+        waiter.resolve(this.requests.slice(0, waiter.count));
+      } else {
+        this.#requestWaiters.push(waiter);
+      }
+    }
+    return new Promise((resolve) => {
+      this.#completions.set(request.activationId, resolve);
+    });
+  }
+
+  waitForRequests(count: number): Promise<AgentRunRequest[]> {
+    if (this.requests.length >= count) return Promise.resolve(this.requests.slice(0, count));
+    return new Promise((resolve) => {
+      this.#requestWaiters.push({ count, resolve });
+    });
+  }
+
+  complete(activationId: string, outcome: AgentRunOutcome): void {
+    const resolve = this.#completions.get(activationId);
+    assert.ok(resolve, `No controlled run for activation ${activationId}`);
+    this.#completions.delete(activationId);
+    resolve(outcome);
   }
 }
 
