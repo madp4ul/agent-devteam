@@ -1,4 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
+import { existsSync } from "node:fs";
+
+const currentSchemaVersion = 1;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -8,6 +11,7 @@ export class CoordinationDatabase {
   }
 
   static open(path: string): CoordinationDatabase {
+    prepareMigrationBackup(path);
     const connection = new DatabaseSync(path);
     initializeCurrentSchema(connection);
     return new CoordinationDatabase(connection);
@@ -33,7 +37,9 @@ export class CoordinationDatabase {
 function initializeCurrentSchema(database: DatabaseSync): void {
   database.exec("PRAGMA foreign_keys = ON");
   database.exec("PRAGMA busy_timeout = 5000");
-  database.exec(`
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.exec(`
     CREATE TABLE IF NOT EXISTS runtime (
       singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
       process_name TEXT NOT NULL,
@@ -207,13 +213,61 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       BEGIN
         SELECT RAISE(ABORT, 'activation-order-conflict');
       END;
-  `);
-  ensureColumn(database, "agents", "model", "TEXT");
-  ensureColumn(database, "agents", "reasoning_effort", "TEXT");
-  ensureColumn(database, "attempts", "model", "TEXT");
-  ensureColumn(database, "attempts", "reasoning_effort", "TEXT");
-  ensureColumn(database, "activations", "model", "TEXT");
-  ensureColumn(database, "activations", "reasoning_effort", "TEXT");
+    `);
+    ensureColumn(database, "agents", "model", "TEXT");
+    ensureColumn(database, "agents", "reasoning_effort", "TEXT");
+    ensureColumn(database, "attempts", "model", "TEXT");
+    ensureColumn(database, "attempts", "reasoning_effort", "TEXT");
+    ensureColumn(database, "activations", "model", "TEXT");
+    ensureColumn(database, "activations", "reasoning_effort", "TEXT");
+    database.exec(`PRAGMA user_version = ${currentSchemaVersion}`);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function prepareMigrationBackup(path: string): void {
+  if (!existsSync(path)) return;
+  const inspection = new DatabaseSync(path, { readOnly: true });
+  try {
+    const version = (
+      inspection.prepare("PRAGMA user_version").get() as { user_version: number }
+    ).user_version;
+    if (version > currentSchemaVersion) {
+      throw new Error(
+        `Coordination database schema version ${version} is newer than supported version ${currentSchemaVersion}; use a compatible application without changing this store`,
+      );
+    }
+    if (version === currentSchemaVersion) return;
+    const backupPath = `${path}.pre-migration-v${version}.backup`;
+    if (!existsSync(backupPath)) {
+      const escapedBackupPath = backupPath.replaceAll("'", "''");
+      inspection.exec(`VACUUM INTO '${escapedBackupPath}'`);
+    }
+    verifyMigrationBackup(backupPath, version);
+  } finally {
+    inspection.close();
+  }
+}
+
+function verifyMigrationBackup(backupPath: string, version: number): void {
+  const backup = new DatabaseSync(backupPath, { readOnly: true });
+  try {
+    const integrity = backup.prepare("PRAGMA integrity_check").get() as Record<string, unknown>;
+    if (Object.values(integrity)[0] !== "ok") {
+      throw new Error(`Migration backup ${backupPath} failed SQLite integrity verification`);
+    }
+    const backupVersion = (
+      backup.prepare("PRAGMA user_version").get() as { user_version: number }
+    ).user_version;
+    if (backupVersion !== version) {
+      throw new Error(`Migration backup ${backupPath} does not match schema version ${version}`);
+    }
+  } finally {
+    backup.close();
+  }
 }
 
 function ensureColumn(

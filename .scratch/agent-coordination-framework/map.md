@@ -112,9 +112,10 @@ without choosing the implementation yet.
 
 ## Next implementation priority
 
-- [Recover Queued Work After Restart](./issues/23-recover-queued-work-after-restart.md)
-  — Bind each repository clone to one sibling project state root and reconcile
-  its database records with every framework-owned Git worktree at startup.
+- [Recover Failed and Permission-Blocked Attempts](./issues/24-recover-failed-permission-blocked-attempts.md)
+  — Apply bounded automatic retry to technical failures and explicit user
+  recovery to exhausted or permission-blocked activations without bypassing
+  the preserved task queue.
 
 ## Clarified delivery follow-ups
 

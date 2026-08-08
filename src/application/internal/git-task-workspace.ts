@@ -1,8 +1,92 @@
 import { execFile } from "node:child_process";
-import { mkdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, readdir } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
-import type { RuntimeStartupBoundary, TaskWorkspaceView } from "../coordination-contract.ts";
+import type {
+  ProcessDiagnostic,
+  RuntimeStartupBoundary,
+  TaskWorkspaceView,
+} from "../coordination-contract.ts";
+import { normalizedPath, samePath } from "./path-identity.ts";
+
+export async function validateTaskWorkspaceConsistency(
+  projectRepositoryPath: string,
+  taskWorkspaceRoot: string,
+  records: Array<{ taskId: string; workspace: TaskWorkspaceView }>,
+): Promise<ProcessDiagnostic[]> {
+  const diagnostics: ProcessDiagnostic[] = [];
+  const root = resolve(taskWorkspaceRoot);
+  const recordByPath = new Map(records.map((record) => [normalizedPath(record.workspace.path), record]));
+  let directories: string[] = [];
+  try {
+    directories = (await readdir(root, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(root, entry.name));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  let registered: string[];
+  try {
+    registered = await readRegisteredWorktrees(projectRepositoryPath);
+  } catch (error) {
+    if (records.length === 0 && directories.length === 0) return [];
+    throw error;
+  }
+
+  for (const record of records) {
+    const expectedPath = join(root, record.taskId);
+    if (!samePath(record.workspace.path, expectedPath)) {
+      diagnostics.push(workspaceDiagnostic(
+        root,
+        record.taskId,
+        record.workspace.path,
+        `Database workspace path must be ${expectedPath}`,
+        "Restore the bound project state root as one unit; do not redirect or reconstruct one task workspace.",
+      ));
+    }
+    if (!directories.some((path) => samePath(path, record.workspace.path))) {
+      diagnostics.push(workspaceDiagnostic(
+        root,
+        record.taskId,
+        record.workspace.path,
+        "Every database workspace record must have a workspace directory",
+        "Restore the missing workspace directory from the project-state backup.",
+      ));
+    }
+    if (!registered.some((path) => samePath(path, record.workspace.path))) {
+      diagnostics.push(workspaceDiagnostic(
+        root,
+        record.taskId,
+        record.workspace.path,
+        "Every database workspace record must have a Git worktree registration",
+        "Restore the project state and the repository's external Git worktree metadata together.",
+      ));
+    }
+  }
+  for (const path of directories) {
+    if (!recordByPath.has(normalizedPath(path))) {
+      diagnostics.push(workspaceDiagnostic(
+        root,
+        relative(root, path),
+        path,
+        "Every task-workspace directory must have a database workspace record",
+        "Restore a consistent project-state backup; startup will not adopt or delete the directory.",
+      ));
+    }
+  }
+  for (const path of registered.filter((path) => isWithin(root, path))) {
+    if (!recordByPath.has(normalizedPath(path))) {
+      diagnostics.push(workspaceDiagnostic(
+        root,
+        relative(root, path),
+        path,
+        "Every framework-owned Git worktree registration must have a database workspace record",
+        "Restore a consistent project-state backup; startup will not adopt or remove the registration.",
+      ));
+    }
+  }
+  return diagnostics;
+}
 
 export class GitTaskWorkspaceError extends Error {
   readonly boundary: RuntimeStartupBoundary;
@@ -126,12 +210,34 @@ async function atBoundary<T>(
   }
 }
 
-function samePath(left: string, right: string): boolean {
-  const normalizedLeft = resolve(left);
-  const normalizedRight = resolve(right);
-  return process.platform === "win32"
-    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
-    : normalizedLeft === normalizedRight;
+function isWithin(root: string, candidate: string): boolean {
+  const path = relative(root, candidate);
+  return path !== "" && !path.startsWith("..") && !isAbsolute(path);
+}
+
+async function readRegisteredWorktrees(projectRepositoryPath: string): Promise<string[]> {
+  const output = await runGit([
+    "-C", projectRepositoryPath, "worktree", "list", "--porcelain",
+  ]);
+  return [...output.matchAll(/^worktree (.+)$/gm)].map((match) => resolve(match[1] ?? ""));
+}
+
+function workspaceDiagnostic(
+  root: string,
+  taskId: string,
+  invalidValue: string,
+  rule: string,
+  correction: string,
+): ProcessDiagnostic {
+  return {
+    file: root,
+    line: 1,
+    column: 1,
+    invalidValue: { taskId, path: invalidValue },
+    rule,
+    consequence: "Startup is blocked before board mutation or agent dispatch.",
+    correction,
+  };
 }
 
 function runGit(arguments_: string[]): Promise<string> {

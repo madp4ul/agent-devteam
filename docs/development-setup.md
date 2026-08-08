@@ -58,8 +58,8 @@ git status --short
 
 `git status` must complete without a dubious-ownership error, and the current
 account must have Modify permission on both the checkout and its `.git`
-directory. The selected `--task-workspaces` parent must also be writable by that
-account.
+directory. The parent of the bound sibling project state root must also be
+writable by that account.
 
 If Git reports dubious ownership or worktree registration fails with Access
 Denied, stop the application and reopen PowerShell as the checkout's owning
@@ -89,9 +89,9 @@ pnpm validate:example
 Open <http://127.0.0.1:3000>. Stop the server with `Ctrl+C`.
 
 While state remains disposable during pre-release development, stop the server
-and run `.\examples\software-delivery\reset-state.cmd` to remove the example
-database and its task worktrees as one confirmed operation. The reset does not
-change global Git trust and does not touch other test databases.
+and run `.\examples\software-delivery\reset-state.cmd` to remove the bound
+project state root and its Git worktree registrations as one confirmed
+operation. The reset does not change global Git trust.
 
 Before changing code, it is useful to verify the checkout:
 

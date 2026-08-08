@@ -69,6 +69,50 @@ test("each activation starts a fresh streamed Codex thread without overriding us
   assert.match(prompt, /attempt number: 1/i);
 });
 
+test("an unusable interrupted thread falls back to a fresh thread with honest context", async () => {
+  let prompt = "";
+  let freshStarts = 0;
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      resumeThread: (threadId) => {
+        assert.equal(threadId, "thread-before-restart");
+        throw new Error("persisted thread is unavailable");
+      },
+      startThread: () => {
+        freshStarts += 1;
+        return {
+          runStreamed: async (value) => {
+            prompt = value;
+            return {
+              events: events(
+                { type: "thread.started", thread_id: "thread-replacement" },
+                { type: "item.completed", item: { type: "agent_message", text: "Recovered." } },
+                { type: "turn.completed" },
+              ),
+            };
+          },
+        };
+      },
+    }),
+  });
+  const recovering = request("activation-recovery", "T-0099");
+  recovering.resumeThreadId = "thread-before-restart";
+  recovering.attempt = {
+    number: 2,
+    precedingOutcome: { status: "failed", summary: "The previous host stopped." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+
+  const outcome = await runtime.run(recovering, { started() {} });
+
+  assert.equal(freshStarts, 1);
+  assert.equal(outcome.threadId, "thread-replacement");
+  assert.match(prompt, /Thread: replaced/);
+  assert.match(prompt, /previous host stopped/i);
+});
+
 test("explicit agent execution profiles become SDK thread options", async () => {
   const clients: FakeCodexClient[] = [];
   const runtime = new CodexAgentRuntime({

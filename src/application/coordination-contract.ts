@@ -164,6 +164,7 @@ export interface AgentRunRequest {
   sourceEvent: TaskActivityView | TaskCommentView;
   task: TaskView;
   workspace: TaskWorkspaceView;
+  resumeThreadId?: string;
   attempt: AttemptContextView;
 }
 
@@ -176,7 +177,7 @@ export interface AgentRunOutcome {
 export interface AttemptContextView {
   number: number;
   precedingOutcome: AgentRunOutcome | null;
-  thread: "fresh";
+  thread: "fresh" | "resumed" | "replaced";
   continuationMessage: string | null;
 }
 

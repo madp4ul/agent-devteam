@@ -32,6 +32,55 @@ export class AutomationStateStore {
     this.#taskProjections = taskProjections;
   }
 
+  recoverInterruptedAttempts(): number {
+    return this.#owner.transaction(() => {
+      const interrupted = this.#database
+        .prepare(
+          `SELECT attempt.id, attempt.activation_id, activation.task_id,
+                  activation.target_agent_id
+           FROM attempts attempt
+           JOIN activations activation ON activation.id = attempt.activation_id
+           WHERE attempt.status = 'running' AND activation.status = 'running'
+           ORDER BY attempt.rowid`,
+        )
+        .all() as Array<{
+          id: string;
+          activation_id: string;
+          task_id: string;
+          target_agent_id: string;
+        }>;
+      for (const attempt of interrupted) {
+        const occurredAt = new Date().toISOString();
+        const summary = "The previous host stopped while this attempt was active.";
+        this.#database
+          .prepare(
+            `UPDATE attempts
+             SET status = 'failed', completed_at = ?, outcome_status = 'failed', outcome_summary = ?
+             WHERE id = ?`,
+          )
+          .run(occurredAt, summary, attempt.id);
+        this.#database
+          .prepare("DELETE FROM activation_dispatch_claims WHERE attempt_id = ?")
+          .run(attempt.id);
+        this.#database
+          .prepare("UPDATE activations SET status = 'queued' WHERE id = ?")
+          .run(attempt.activation_id);
+        this.appendActivity(
+          attempt.task_id,
+          "attempt.completed",
+          { kind: "framework", id: "coordination" },
+          {
+            activationId: attempt.activation_id,
+            attemptId: attempt.id,
+            interruption: "host-stopped",
+          },
+          occurredAt,
+        );
+      }
+      return interrupted.length;
+    });
+  }
+
   readNextRunnableActivation(): RunnableActivation | undefined {
     const row = this.#database
       .prepare(
@@ -125,6 +174,25 @@ export class AutomationStateStore {
     return row === undefined
       ? undefined
       : { path: row.path, startingRef: row.starting_ref, commit: row.commit_id };
+  }
+
+  readTaskWorkspaces(): Array<{ taskId: string; workspace: TaskWorkspaceView }> {
+    const rows = this.#database
+      .prepare(
+        `SELECT task_id, path, starting_ref, commit_id
+         FROM task_workspaces
+         ORDER BY task_id`,
+      )
+      .all() as Array<{
+        task_id: string;
+        path: string;
+        starting_ref: string;
+        commit_id: string;
+      }>;
+    return rows.map((row) => ({
+      taskId: row.task_id,
+      workspace: { path: row.path, startingRef: row.starting_ref, commit: row.commit_id },
+    }));
   }
 
   saveTaskWorkspace(taskId: string, workspace: TaskWorkspaceView): void {

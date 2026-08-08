@@ -195,6 +195,7 @@ export class AutomationCoordinator {
     const runtimeDispatch = this.#runtimeDispatch;
     if (runtimeDispatch === undefined) return { completion: Promise.resolve() };
     const priorWorkspace = this.#stateStore.readTaskWorkspace(runnable.task.id);
+    const precedingAttempt = runnable.activation.attempts.at(-1);
     const claimedAttempt = this.#stateStore.tryClaimActivation(
       runnable.activation.id,
       priorWorkspace?.path ?? runtimeDispatch.workspaceManager.pathFor(runnable.task.id),
@@ -254,10 +255,15 @@ export class AutomationCoordinator {
         sourceEvent: runnable.sourceEvent,
         task: currentTask,
         workspace,
+        ...(precedingAttempt?.threadId === null || precedingAttempt === undefined
+          ? {}
+          : { resumeThreadId: precedingAttempt.threadId }),
         attempt: {
           number: attempt.number,
-          precedingOutcome: null,
-          thread: "fresh",
+          precedingOutcome: precedingAttempt?.outcome ?? null,
+          thread: precedingAttempt?.threadId === null || precedingAttempt === undefined
+            ? "fresh"
+            : "resumed",
           continuationMessage: null,
         },
       },

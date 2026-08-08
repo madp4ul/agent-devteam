@@ -50,10 +50,8 @@ This is the preferred source-based entry point for the supplied example until
 the planned self-contained distribution replaces the development toolchain. It
 anchors paths to the repository root, checks that pnpm and Git are available to
 the current account, builds the browser application, and then starts the
-software-delivery process with its database at
-`.data/software-delivery-example.sqlite3` and task worktrees in the sibling
-`<repository>-software-delivery-example-workspaces` directory. These dedicated
-paths make the adjacent reset script safe to scope. The launcher never changes
+software-delivery process with its durable state in the bound sibling
+`<repository>-agent-coordination-state` directory. The launcher never changes
 Git's global trust configuration.
 
 On other hosts, or when invoking the development command directly, use:
@@ -62,8 +60,12 @@ On other hosts, or when invoking the development command directly, use:
 pnpm start -- --process examples/software-delivery/process.yaml --project .
 ```
 
-The default database is `.data/coordination.sqlite3` and the default address is
-`http://127.0.0.1:3000`. Override them when needed:
+The first start binds the repository clone to the sibling
+`<repository>-agent-coordination-state`, which contains `coordination.sqlite3`
+and `task-worktrees/`. The binding is stored in repository-local Git config.
+Use `--state-root <path>` only on first initialization to choose a different
+root. Later starts reuse the binding and reject attempts to redirect it. The
+default address is `http://127.0.0.1:3000`.
 
 The Windows launcher passes host and port arguments through to the application,
 so the equivalent address override is:
@@ -75,7 +77,7 @@ so the equivalent address override is:
 The direct cross-platform command remains:
 
 ```sh
-pnpm start -- --process examples/software-delivery/process.yaml --database .data/tutorial.sqlite3 --project . --task-workspaces ../agent-devteam-task-workspaces --host 127.0.0.1 --port 3100
+pnpm start -- --process examples/software-delivery/process.yaml --project . --host 127.0.0.1 --port 3100
 ```
 
 ### Reset the Windows example state
@@ -114,9 +116,14 @@ assistive-technology-friendly movement path.
 ## 5. Resume Codex automation
 
 `--project` selects the Git repository whose task worktrees Codex will change.
-`--task-workspaces` selects the framework-owned root for those detached
-worktrees and should be outside the selected checkout. If omitted, it defaults
-to a sibling named `<project>-task-workspaces`.
+Its bound project state root is authoritative for both the coordination
+database and detached task worktrees. Startup checks that binding, database
+records, directories, and Git registrations agree before it permits mutation
+or dispatch. A missing or inconsistent root enters Configuration error mode;
+startup never adopts, reconstructs, deletes, or substitutes state.
+
+Back up and restore retained state using the
+[project-state backup and restore procedure](../project-state-backup-and-restore.md).
 
 The application uses the installed Codex SDK and the user's existing Codex
 authentication, sandbox, and approval configuration. Process roles provide
@@ -125,7 +132,9 @@ When **Resume automation** is accepted, the header changes to Automation
 running. If the runtime is unavailable or a worktree cannot be provisioned,
 the page remains paused and displays an actionable error.
 
-Each activation starts a fresh Codex thread in its task worktree. The agent can
+Each new activation starts a Codex thread in its task worktree. After a host
+interruption, recovery retains the activation at the head of its queue and
+resumes its prior thread when available. The agent can
 orient through board summaries, page through explicitly selected columns,
 inspect shared tasks and collaborator summaries, and load task activity or
 attachments on demand. Idempotent comments and movement stay scoped to the

@@ -2,11 +2,6 @@
 setlocal
 
 for %%I in ("%~dp0..\..") do set "REPOSITORY_ROOT=%%~fI"
-for %%I in ("%REPOSITORY_ROOT%\..") do set "REPOSITORY_PARENT=%%~fI"
-for %%I in ("%REPOSITORY_ROOT%") do set "REPOSITORY_NAME=%%~nxI"
-set "DATABASE_PATH=%REPOSITORY_ROOT%\.data\software-delivery-example.sqlite3"
-set "TASK_WORKSPACE_ROOT=%REPOSITORY_PARENT%\%REPOSITORY_NAME%-software-delivery-example-workspaces"
-
 cd /d "%REPOSITORY_ROOT%"
 
 where pnpm.cmd >nul 2>&1
@@ -28,5 +23,5 @@ if errorlevel 1 (
 call pnpm.cmd run build
 if errorlevel 1 exit /b %errorlevel%
 
-call pnpm.cmd start -- --process "%~dp0process.yaml" --database "%DATABASE_PATH%" --project "%REPOSITORY_ROOT%" --task-workspaces "%TASK_WORKSPACE_ROOT%" %*
+call pnpm.cmd start -- --process "%~dp0process.yaml" --project "%REPOSITORY_ROOT%" %*
 exit /b %errorlevel%

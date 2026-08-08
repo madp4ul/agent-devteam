@@ -25,8 +25,8 @@ example. Other hosts can use the equivalent `pnpm build` and `pnpm start`
 commands documented in the tutorial.
 
 During pre-release testing, stop the application and run
-`.\examples\software-delivery\reset-state.cmd` to explicitly discard the
-example database and its registered task worktrees.
+`.\examples\software-delivery\reset-state.cmd` to explicitly discard the bound
+project state root and its registered task worktrees.
 
 Open `http://127.0.0.1:3000`. See the
 [process-definition reference](docs/process-definition-reference.md) and
@@ -34,7 +34,9 @@ Open `http://127.0.0.1:3000`. See the
 startup details.
 
 Every startup remains paused until the user explicitly resumes automation.
-Each distinct activation starts a fresh Codex thread with the user's existing
+Each repository clone is bound to one sibling project state root containing its
+database and task worktrees; startup fails closed when that retained state is
+inconsistent. Each distinct activation starts a Codex thread with the user's existing
 sandbox and approval policy. The project-scoped MCP surface provides summary-
 first board discovery, explicit-column paginated task overviews, full task and
 on-demand history inspection, and collaborator summaries. The React board

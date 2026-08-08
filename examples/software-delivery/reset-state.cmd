@@ -4,13 +4,9 @@ setlocal EnableExtensions EnableDelayedExpansion
 for %%I in ("%~dp0..\..") do set "REPOSITORY_ROOT=%%~fI"
 for %%I in ("%REPOSITORY_ROOT%\..") do set "REPOSITORY_PARENT=%%~fI"
 for %%I in ("%REPOSITORY_ROOT%") do set "REPOSITORY_NAME=%%~nxI"
-set "DATABASE_PATH=%REPOSITORY_ROOT%\.data\software-delivery-example.sqlite3"
-set "TASK_WORKSPACE_ROOT=%REPOSITORY_PARENT%\%REPOSITORY_NAME%-software-delivery-example-workspaces"
+set "PROJECT_STATE_ROOT="
 
 if not defined REPOSITORY_ROOT exit /b 2
-if not defined TASK_WORKSPACE_ROOT exit /b 2
-if /I "%TASK_WORKSPACE_ROOT%"=="%REPOSITORY_ROOT%" exit /b 2
-
 cd /d "%REPOSITORY_ROOT%"
 
 git status --short >nul
@@ -21,9 +17,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
+for /f "usebackq delims=" %%I in (`git config --local --get coordination.projectStateRoot 2^>nul`) do set "PROJECT_STATE_ROOT=%%~fI"
+if not defined PROJECT_STATE_ROOT set "PROJECT_STATE_ROOT=%REPOSITORY_PARENT%\%REPOSITORY_NAME%-agent-coordination-state"
+set "TASK_WORKSPACE_ROOT=%PROJECT_STATE_ROOT%\task-worktrees"
+if /I "%PROJECT_STATE_ROOT%"=="%REPOSITORY_ROOT%" exit /b 2
+if /I "%PROJECT_STATE_ROOT%"=="%REPOSITORY_PARENT%" exit /b 2
+
 echo This permanently resets the software-delivery example state:
-echo   Database:  %DATABASE_PATH%
-echo   Worktrees: %TASK_WORKSPACE_ROOT%
+echo   Project state root: %PROJECT_STATE_ROOT%
 echo.
 echo Stop the example application before continuing.
 
@@ -40,23 +41,17 @@ if exist "%TASK_WORKSPACE_ROOT%\" (
   for /d %%D in ("%TASK_WORKSPACE_ROOT%\*") do (
     git -C "%REPOSITORY_ROOT%" worktree remove --force "%%~fD" >nul 2>&1
   )
-  rmdir /s /q "%TASK_WORKSPACE_ROOT%"
-  if exist "%TASK_WORKSPACE_ROOT%\" (
-    echo Error: Could not remove task workspaces. Stop processes using them and try again.
-    exit /b 1
-  )
 )
 
 git -C "%REPOSITORY_ROOT%" worktree prune --expire now
 if errorlevel 1 exit /b %errorlevel%
 
-for %%F in ("%DATABASE_PATH%" "%DATABASE_PATH%-shm" "%DATABASE_PATH%-wal") do (
-  if exist "%%~fF" del /f /q "%%~fF"
-  if exist "%%~fF" (
-    echo Error: Could not remove %%~fF. Stop the example application and try again.
-    exit /b 1
-  )
+if exist "%PROJECT_STATE_ROOT%\" rmdir /s /q "%PROJECT_STATE_ROOT%"
+if exist "%PROJECT_STATE_ROOT%\" (
+  echo Error: Could not remove the project state root. Stop processes using it and try again.
+  exit /b 1
 )
+git config --local --unset coordination.projectStateRoot >nul 2>&1
 
 echo Software-delivery example state reset successfully.
 exit /b 0

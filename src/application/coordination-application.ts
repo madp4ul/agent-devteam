@@ -5,6 +5,7 @@ import {
 import { AutomationCoordinator } from "./internal/automation-coordinator.ts";
 import { loadProcessDefinition } from "./internal/process-definition.ts";
 import { TaskDiscovery } from "./internal/task-discovery.ts";
+import { validateTaskWorkspaceConsistency } from "./internal/git-task-workspace.ts";
 import type {
   AddTaskCommentCommand,
   AddTaskCommentResult,
@@ -23,6 +24,7 @@ import type {
   MarkUserMentionAddressedCommand,
   MarkUserMentionAddressedResult,
   NeedsAttentionQueryResult,
+  ProcessDiagnostic,
   ProcessValidationResult,
   ResumeAutomationResult,
   StartApplicationOptions,
@@ -68,7 +70,20 @@ export class CoordinationApplication {
 
   static async start(options: StartApplicationOptions): Promise<CoordinationApplication> {
     const validation = await loadProcessDefinition(options.processDefinitionPath);
-    const persistence = openCoordinationPersistence(options.databasePath);
+    let persistence: CoordinationPersistence;
+    try {
+      persistence = openCoordinationPersistence(options.databasePath);
+    } catch (error) {
+      return CoordinationApplication.configurationError([
+        operationalDiagnostic(
+          options.databasePath,
+          error,
+          "Durable coordination storage must be available and migratable",
+          "Startup is blocked without changing or replacing the retained store.",
+          "Restore a verified project-state backup or use a compatible application version.",
+        ),
+      ], options.transcriptAccess);
+    }
     const { process, taskCommands, taskProjections, automation } = persistence;
     if (!validation.valid) {
       const startup: StartupView = {
@@ -91,6 +106,33 @@ export class CoordinationApplication {
     }
 
     const { definition, instructionContents, version } = validation.loaded;
+    if (options.runtimeDispatch !== undefined) {
+      const diagnostics = await validateTaskWorkspaceConsistency(
+        options.runtimeDispatch.projectRepositoryPath,
+        options.runtimeDispatch.taskWorkspaceRoot,
+        automation.readTaskWorkspaces(),
+      );
+      if (diagnostics.length > 0) {
+        const startup: StartupView = {
+          mode: "configuration-error",
+          diagnostics,
+          automation: { state: "blocked", attemptsMayStart: false },
+        };
+        return new CoordinationApplication(
+          persistence,
+          startup,
+          new AutomationCoordinator({
+            processStore: process,
+            taskProjections,
+            automationStore: automation,
+            startup,
+          }),
+          new TaskDiscovery(process, taskProjections, startup),
+          options.transcriptAccess,
+        );
+      }
+    }
+    automation.recoverInterruptedAttempts();
     process.applyDefinition(definition, instructionContents, version);
     const boards = process.readBoards();
     const startup: StartupView = {
@@ -135,6 +177,31 @@ export class CoordinationApplication {
       }),
       new TaskDiscovery(process, taskProjections, startup, collaborators),
       options.transcriptAccess,
+    );
+  }
+
+  static configurationError(
+    diagnostics: ProcessDiagnostic[],
+    transcriptAccess?: AttemptTranscriptAccess,
+  ): CoordinationApplication {
+    const persistence = openCoordinationPersistence(":memory:");
+    const { process, taskProjections, automation } = persistence;
+    const startup: StartupView = {
+      mode: "configuration-error",
+      diagnostics,
+      automation: { state: "blocked", attemptsMayStart: false },
+    };
+    return new CoordinationApplication(
+      persistence,
+      startup,
+      new AutomationCoordinator({
+        processStore: process,
+        taskProjections,
+        automationStore: automation,
+        startup,
+      }),
+      new TaskDiscovery(process, taskProjections, startup),
+      transcriptAccess,
     );
   }
 
@@ -340,4 +407,22 @@ export class CoordinationApplication {
       diagnostics: this.#startup.diagnostics,
     };
   }
+}
+
+function operationalDiagnostic(
+  file: string,
+  error: unknown,
+  rule: string,
+  consequence: string,
+  correction: string,
+): ProcessDiagnostic {
+  return {
+    file,
+    line: 1,
+    column: 1,
+    invalidValue: error instanceof Error ? error.message : String(error),
+    rule,
+    consequence,
+    correction,
+  };
 }

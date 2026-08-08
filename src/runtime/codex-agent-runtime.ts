@@ -38,6 +38,7 @@ export interface CodexThreadLike {
 
 export interface CodexClientLike {
   startThread(options: CodexThreadOptionsLike): CodexThreadLike;
+  resumeThread?(id: string, options: CodexThreadOptionsLike): CodexThreadLike;
 }
 
 export interface CodexAgentRuntimeOptions {
@@ -78,14 +79,41 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     const transcript: AttemptTranscriptItem[] = [];
     try {
       const client = (this.#options.createClient ?? createCodexClient)(clientOptions);
-      const thread = client.startThread({
+      const threadOptions: CodexThreadOptionsLike = {
         workingDirectory: request.workspace.path,
         ...(request.agent.model === undefined ? {} : { model: request.agent.model }),
         ...(request.agent.reasoningEffort === undefined
           ? {}
           : { modelReasoningEffort: request.agent.reasoningEffort }),
-      });
-      const { events } = await thread.runStreamed(composeActivationPrompt(request));
+      };
+      let effectiveRequest = request;
+      let thread: CodexThreadLike;
+      try {
+        if (request.resumeThreadId === undefined) {
+          thread = client.startThread(threadOptions);
+        } else if (client.resumeThread === undefined) {
+          effectiveRequest = replacementRequest(request);
+          thread = client.startThread(threadOptions);
+        } else {
+          thread = client.resumeThread(request.resumeThreadId, threadOptions);
+        }
+      } catch (error) {
+        if (request.resumeThreadId === undefined) throw error;
+        effectiveRequest = replacementRequest(request);
+        thread = client.startThread(threadOptions);
+      }
+      let streamed;
+      try {
+        streamed = await thread.runStreamed(composeActivationPrompt(effectiveRequest));
+      } catch (error) {
+        if (request.resumeThreadId === undefined || effectiveRequest.attempt.thread === "replaced") {
+          throw error;
+        }
+        effectiveRequest = replacementRequest(request);
+        thread = client.startThread(threadOptions);
+        streamed = await thread.runStreamed(composeActivationPrompt(effectiveRequest));
+      }
+      const { events } = streamed;
       let finalResponse = "";
       let turnCompleted = false;
       const failedCoordinationTools = new Map<string, string>();
@@ -174,6 +202,14 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
   #remember(threadId: string, transcript: AttemptTranscriptItem[]): void {
     this.#transcripts.set(threadId, structuredClone(transcript));
   }
+}
+
+function replacementRequest(request: AgentRunRequest): AgentRunRequest {
+  const { resumeThreadId: _resumeThreadId, ...withoutResumeThread } = request;
+  return {
+    ...withoutResumeThread,
+    attempt: { ...request.attempt, thread: "replaced" },
+  };
 }
 
 function toolTranscriptItem(item: { type: string; [key: string]: unknown }): AttemptTranscriptItem {
