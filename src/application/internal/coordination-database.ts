@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 2;
+const currentSchemaVersion = 4;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -11,7 +11,7 @@ export class CoordinationDatabase {
   }
 
   static open(path: string): CoordinationDatabase {
-    prepareMigrationBackup(path);
+    replaceIncompatibleDatabase(path);
     const connection = new DatabaseSync(path);
     initializeCurrentSchema(connection);
     return new CoordinationDatabase(connection);
@@ -35,8 +35,11 @@ export class CoordinationDatabase {
 }
 
 function initializeCurrentSchema(database: DatabaseSync): void {
-  database.exec("PRAGMA foreign_keys = ON");
-  database.exec("PRAGMA busy_timeout = 5000");
+  database.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000");
+  const version = (
+    database.prepare("PRAGMA user_version").get() as { user_version: number }
+  ).user_version;
+  if (version === currentSchemaVersion && currentSchemaIsComplete(database)) return;
   database.exec("BEGIN IMMEDIATE");
   try {
     database.exec(`
@@ -86,6 +89,8 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       title TEXT NOT NULL,
       description TEXT NOT NULL,
       revision INTEGER NOT NULL CHECK (revision > 0),
+      automation_suspended INTEGER NOT NULL DEFAULT 0,
+      suspended_activation_id TEXT,
       FOREIGN KEY (board_id, column_id) REFERENCES columns(board_id, id)
     );
     CREATE TABLE IF NOT EXISTS activity_ledger (
@@ -103,7 +108,9 @@ function initializeCurrentSchema(database: DatabaseSync): void {
           'attention.resolved',
           'activation.created',
           'attempt.started',
-          'attempt.completed'
+          'attempt.completed',
+          'automation.suspended',
+          'automation.resumed'
         )
       ),
       actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
@@ -121,7 +128,13 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
       created_at TEXT NOT NULL,
       model TEXT,
-      reasoning_effort TEXT
+      reasoning_effort TEXT,
+      retry_due_at TEXT,
+      retry_cycle_start INTEGER NOT NULL DEFAULT 0,
+      failure_kind TEXT,
+      failure_summary TEXT,
+      resolution TEXT,
+      continuation_message TEXT
     );
     CREATE TABLE IF NOT EXISTS task_workspaces (
       task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
@@ -144,7 +157,8 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       outcome_summary TEXT,
       thread_id TEXT,
       model TEXT,
-      reasoning_effort TEXT
+      reasoning_effort TEXT,
+      outcome_kind TEXT
     );
     CREATE TABLE IF NOT EXISTS activation_dispatch_claims (
       attempt_id TEXT PRIMARY KEY REFERENCES attempts(id) ON DELETE CASCADE,
@@ -214,18 +228,6 @@ function initializeCurrentSchema(database: DatabaseSync): void {
         SELECT RAISE(ABORT, 'activation-order-conflict');
       END;
     `);
-    ensureColumn(database, "agents", "model", "TEXT");
-    ensureColumn(database, "agents", "reasoning_effort", "TEXT");
-    ensureColumn(database, "attempts", "model", "TEXT");
-    ensureColumn(database, "attempts", "reasoning_effort", "TEXT");
-    ensureColumn(database, "activations", "model", "TEXT");
-    ensureColumn(database, "activations", "reasoning_effort", "TEXT");
-    ensureColumn(database, "activations", "retry_due_at", "TEXT");
-    ensureColumn(database, "activations", "retry_cycle_start", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn(database, "activations", "failure_kind", "TEXT");
-    ensureColumn(database, "activations", "failure_summary", "TEXT");
-    ensureColumn(database, "activations", "resolution", "TEXT");
-    ensureColumn(database, "attempts", "outcome_kind", "TEXT");
     database.exec(`PRAGMA user_version = ${currentSchemaVersion}`);
     database.exec("COMMIT");
   } catch (error) {
@@ -234,56 +236,67 @@ function initializeCurrentSchema(database: DatabaseSync): void {
   }
 }
 
-function prepareMigrationBackup(path: string): void {
+function currentSchemaIsComplete(database: DatabaseSync): boolean {
+  const requiredTables = [
+    "runtime",
+    "agents",
+    "boards",
+    "columns",
+    "task_numbers",
+    "tasks",
+    "activity_ledger",
+    "activations",
+    "task_workspaces",
+    "task_starting_refs",
+    "attempts",
+    "activation_dispatch_claims",
+    "activation_startup_failures",
+    "task_comments",
+    "task_relationships",
+    "attention_reasons",
+    "task_attachments",
+    "command_responses",
+  ];
+  const tables = new Set(
+    (database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>)
+      .map(({ name }) => name),
+  );
+  if (requiredTables.some((table) => !tables.has(table))) return false;
+  const taskColumns = new Set(
+    (database.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>).map(({ name }) => name),
+  );
+  const activationColumns = new Set(
+    (database.prepare("PRAGMA table_info(activations)").all() as Array<{ name: string }>).map(({ name }) => name),
+  );
+  const attemptColumns = new Set(
+    (database.prepare("PRAGMA table_info(attempts)").all() as Array<{ name: string }>).map(({ name }) => name),
+  );
+  const activityTable = database
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activity_ledger'")
+    .get() as { sql: string } | undefined;
+  return taskColumns.has("automation_suspended") &&
+    taskColumns.has("suspended_activation_id") &&
+    activationColumns.has("continuation_message") &&
+    activationColumns.has("retry_cycle_start") &&
+    attemptColumns.has("outcome_kind") &&
+    activityTable?.sql.includes("automation.resumed") === true;
+}
+
+function replaceIncompatibleDatabase(path: string): void {
   if (!existsSync(path)) return;
   const inspection = new DatabaseSync(path, { readOnly: true });
+  let compatible: boolean;
   try {
+    inspection.exec("PRAGMA busy_timeout = 5000");
     const version = (
       inspection.prepare("PRAGMA user_version").get() as { user_version: number }
     ).user_version;
-    if (version > currentSchemaVersion) {
-      throw new Error(
-        `Coordination database schema version ${version} is newer than supported version ${currentSchemaVersion}; use a compatible application without changing this store`,
-      );
-    }
-    if (version === currentSchemaVersion) return;
-    const backupPath = `${path}.pre-migration-v${version}.backup`;
-    if (!existsSync(backupPath)) {
-      const escapedBackupPath = backupPath.replaceAll("'", "''");
-      inspection.exec(`VACUUM INTO '${escapedBackupPath}'`);
-    }
-    verifyMigrationBackup(backupPath, version);
+    compatible = version === currentSchemaVersion && currentSchemaIsComplete(inspection);
   } finally {
     inspection.close();
   }
-}
-
-function verifyMigrationBackup(backupPath: string, version: number): void {
-  const backup = new DatabaseSync(backupPath, { readOnly: true });
-  try {
-    const integrity = backup.prepare("PRAGMA integrity_check").get() as Record<string, unknown>;
-    if (Object.values(integrity)[0] !== "ok") {
-      throw new Error(`Migration backup ${backupPath} failed SQLite integrity verification`);
-    }
-    const backupVersion = (
-      backup.prepare("PRAGMA user_version").get() as { user_version: number }
-    ).user_version;
-    if (backupVersion !== version) {
-      throw new Error(`Migration backup ${backupPath} does not match schema version ${version}`);
-    }
-  } finally {
-    backup.close();
-  }
-}
-
-function ensureColumn(
-  database: DatabaseSync,
-  table: "agents" | "activations" | "attempts",
-  column: string,
-  declaration: string,
-): void {
-  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-  if (!columns.some((candidate) => candidate.name === column)) {
-    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`);
-  }
+  if (compatible) return;
+  rmSync(path, { force: true });
+  rmSync(`${path}-wal`, { force: true });
+  rmSync(`${path}-shm`, { force: true });
 }

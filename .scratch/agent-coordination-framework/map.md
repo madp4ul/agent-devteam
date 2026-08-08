@@ -116,9 +116,9 @@ without choosing the implementation yet.
 
 ## Next implementation priority
 
-- [Interrupt Tasks and Pause the Process](./issues/25-interrupt-tasks-pause-process.md)
-  — Show the actual running agent and current-attempt elapsed time consistently
-  on the board, task details, transcript, and process-wide live-run menu.
+- [Evolve Process Definitions Safely](./issues/26-evolve-process-definitions-safely.md)
+  — Apply changed definitions without silently reinterpreting live tasks or
+  dispatching stale work under new roles.
 
 ## Clarified delivery follow-ups
 
@@ -132,6 +132,9 @@ without choosing the implementation yet.
   — Keep an open task timeline current across comments, activations, activity,
   and attempt changes; update transcript activity during a run and persist every
   finished attempt's captured transcript until task archival.
+- [Surface Suspended Task Action on the Board](./issues/43-surface-suspended-task-action-on-board.md)
+  — Distinguish an interrupted task that requires Continue from ordinary queued
+  work directly on its board card.
 
 ## Not yet specified
 
@@ -151,6 +154,13 @@ without choosing the implementation yet.
 - [Separate Framework, Process, and Role Instructions](./issues/38-separate-framework-process-role-instructions.md)
   — Define a product-owned framework-instruction layer and deliberate prompt
   precedence so process and role authors do not repeat invariant mechanics.
+
+## Deferred release engineering
+
+- [Support Released Schema Upgrades](./issues/42-support-released-schema-upgrades.md)
+  — Keep pre-release schemas disposable, then require verified transactional
+  migrations and recovery backups before shipping a schema-changing release
+  after user-retained state exists.
 
 ## Out of scope
 

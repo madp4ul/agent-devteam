@@ -25,21 +25,28 @@ import type {
 } from "../coordination-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
+import type { CommandResponseStore } from "./command-response-store.ts";
 
 export class TaskCommandStore {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
   readonly #projections: TaskProjectionStore;
+  readonly #commandResponses: CommandResponseStore;
 
-  constructor(database: CoordinationDatabase, projections: TaskProjectionStore) {
+  constructor(
+    database: CoordinationDatabase,
+    projections: TaskProjectionStore,
+    commandResponses: CommandResponseStore,
+  ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#projections = projections;
+    this.#commandResponses = commandResponses;
   }
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
     return this.transaction(() => {
-      const prior = this.readStoredResponse<BoardMutationResult>(
+      const prior = this.#commandResponses.read<BoardMutationResult>(
         "create-task",
         command.idempotencyKey,
       );
@@ -49,14 +56,14 @@ export class TaskCommandStore {
 
       const task = this.insertTask(command, {});
       const result: BoardMutationResult = { accepted: true, task };
-      this.storeCommandResponse("create-task", command.idempotencyKey, result);
+      this.#commandResponses.write("create-task", command.idempotencyKey, result);
       return result;
     });
   }
 
   createChildTask(command: CreateChildTaskCommand): BoardMutationResult {
     return this.transaction(() => {
-      const prior = this.readStoredResponse<BoardMutationResult>(
+      const prior = this.#commandResponses.read<BoardMutationResult>(
         "create-child-task",
         command.idempotencyKey,
       );
@@ -79,7 +86,7 @@ export class TaskCommandStore {
       const updated = this.#projections.readTask(task.id);
       if (updated === undefined) throw new Error("Created child task could not be read back");
       const result: BoardMutationResult = { accepted: true, task: updated };
-      this.storeCommandResponse("create-child-task", command.idempotencyKey, result);
+      this.#commandResponses.write("create-child-task", command.idempotencyKey, result);
       return result;
     });
   }
@@ -87,7 +94,7 @@ export class TaskCommandStore {
   editTask(command: EditTaskCommand): BoardMutationResult {
     return this.transaction(() => {
       const commandType = `edit-task:${command.taskId}`;
-      const prior = this.readStoredResponse<BoardMutationResult>(commandType, command.idempotencyKey);
+      const prior = this.#commandResponses.read<BoardMutationResult>(commandType, command.idempotencyKey);
       if (prior !== undefined) return prior;
       const currentTask = this.#projections.readTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
@@ -116,7 +123,7 @@ export class TaskCommandStore {
       const task = this.#projections.readTask(command.taskId);
       if (task === undefined) throw new Error("Edited task could not be read back");
       const result: BoardMutationResult = { accepted: true, task };
-      this.storeCommandResponse(commandType, command.idempotencyKey, result);
+      this.#commandResponses.write(commandType, command.idempotencyKey, result);
       return result;
     });
   }
@@ -124,7 +131,7 @@ export class TaskCommandStore {
   moveTask(command: MoveTaskCommand): BoardMutationResult {
     return this.transaction(() => {
       const commandType = `move-task:${command.taskId}`;
-      const prior = this.readStoredResponse<BoardMutationResult>(commandType, command.idempotencyKey);
+      const prior = this.#commandResponses.read<BoardMutationResult>(commandType, command.idempotencyKey);
       if (prior !== undefined) return prior;
       const currentTask = this.#projections.readTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
@@ -191,7 +198,7 @@ export class TaskCommandStore {
       const task = this.#projections.readTask(command.taskId);
       if (task === undefined) throw new Error("Moved task could not be read back");
       const result: BoardMutationResult = { accepted: true, task };
-      this.storeCommandResponse(commandType, command.idempotencyKey, result);
+      this.#commandResponses.write(commandType, command.idempotencyKey, result);
       return result;
     });
   }
@@ -199,7 +206,7 @@ export class TaskCommandStore {
   createTaskRelationship(command: CreateTaskRelationshipCommand): TaskRelationshipMutationResult {
     return this.transaction(() => {
       const commandType = "create-task-relationship";
-      const prior = this.readStoredResponse<TaskRelationshipMutationResult>(
+      const prior = this.#commandResponses.read<TaskRelationshipMutationResult>(
         commandType,
         command.idempotencyKey,
       );
@@ -235,9 +242,7 @@ export class TaskCommandStore {
           };
         }
       }
-      this.#database
-        .prepare("INSERT INTO command_responses VALUES (?, ?, ?)")
-        .run(commandType, command.idempotencyKey, JSON.stringify(result));
+      this.#commandResponses.write(commandType, command.idempotencyKey, result);
       return result;
     });
   }
@@ -245,7 +250,7 @@ export class TaskCommandStore {
   addTaskComment(command: AddTaskCommentCommand): AddTaskCommentResult {
     return this.transaction(() => {
       const commandType = `add-task-comment:${command.taskId}`;
-      const prior = this.readStoredResponse<AddTaskCommentResult>(
+      const prior = this.#commandResponses.read<AddTaskCommentResult>(
         commandType,
         command.idempotencyKey,
       );
@@ -286,9 +291,7 @@ export class TaskCommandStore {
       const updated = this.#projections.readTask(command.taskId);
       if (updated === undefined) throw new Error("Commented task could not be read back");
       const result: AddTaskCommentResult = { accepted: true, task: updated, comment };
-      this.#database
-        .prepare("INSERT INTO command_responses VALUES (?, ?, ?)")
-        .run(commandType, command.idempotencyKey, JSON.stringify(result));
+      this.#commandResponses.write(commandType, command.idempotencyKey, result);
       return result;
     });
   }
@@ -298,7 +301,7 @@ export class TaskCommandStore {
   ): MarkUserMentionAddressedResult {
     return this.transaction(() => {
       const commandType = "mark-user-mention-addressed";
-      const prior = this.readStoredResponse<MarkUserMentionAddressedResult>(
+      const prior = this.#commandResponses.read<MarkUserMentionAddressedResult>(
         commandType,
         command.idempotencyKey,
       );
@@ -328,9 +331,7 @@ export class TaskCommandStore {
         );
         result = { accepted: true, attentionReasonId: command.attentionReasonId, resolvedAt };
       }
-      this.#database
-        .prepare("INSERT INTO command_responses VALUES (?, ?, ?)")
-        .run(commandType, command.idempotencyKey, JSON.stringify(result));
+      this.#commandResponses.write(commandType, command.idempotencyKey, result);
       return result;
     });
   }
@@ -356,7 +357,7 @@ export class TaskCommandStore {
   ): ActivationRecoveryResult {
     return this.transaction(() => {
       const commandType = `${action}-failed-activation`;
-      const prior = this.readStoredResponse<ActivationRecoveryResult>(
+      const prior = this.#commandResponses.read<ActivationRecoveryResult>(
         commandType,
         command.idempotencyKey,
       );
@@ -433,7 +434,7 @@ export class TaskCommandStore {
         );
         result = { accepted: true, activationId: reason.activation_id, resolvedAt };
       }
-      this.storeCommandResponse(commandType, command.idempotencyKey, result);
+      this.#commandResponses.write(commandType, command.idempotencyKey, result);
       return result;
     });
   }
@@ -727,22 +728,4 @@ export class TaskCommandStore {
     );
   }
 
-  private readStoredResponse<Result>(commandType: string, idempotencyKey: string): Result | undefined {
-    const row = this.#database
-      .prepare(
-        "SELECT response_json FROM command_responses WHERE command_type = ? AND idempotency_key = ?",
-      )
-      .get(commandType, idempotencyKey) as { response_json: string } | undefined;
-    return row === undefined ? undefined : (JSON.parse(row.response_json) as Result);
-  }
-
-  private storeCommandResponse(
-    commandType: string,
-    idempotencyKey: string,
-    result: unknown,
-  ): void {
-    this.#database
-      .prepare("INSERT INTO command_responses VALUES (?, ?, ?)")
-      .run(commandType, idempotencyKey, JSON.stringify(result));
-  }
 }

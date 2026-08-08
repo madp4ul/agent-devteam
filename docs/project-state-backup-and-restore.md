@@ -6,6 +6,19 @@ common directory contains the matching worktree registrations. Back up or
 restore only while the coordination application and all task agents are
 stopped.
 
+## Schema lifecycle
+
+Before the first release, coordination databases contain disposable development
+state. Startup replaces a version-mismatched or structurally incomplete database
+with the current schema; no pre-release migration paths are maintained.
+
+After the first release, databases produced by supported released versions are
+user-retained state. Before shipping a later schema-changing release, the
+application must provide verified, transactional migrations and a recovery
+backup. A failed migration or unknown future schema must preserve the original
+store and block startup. The pre-release replacement behavior must not be used
+for a database created by a supported released version.
+
 ## Back up
 
 1. Read the authoritative root and Git common directory without changing them:
@@ -23,10 +36,7 @@ stopped.
    `.git/worktrees` administrative records, with the same backup generation.
    Ordinary Git commits or bundles do not contain this local deployment state.
 4. Open the copied database read-only and run `PRAGMA integrity_check`; retain
-   the backup only when it returns `ok`. Schema migration also creates and
-   verifies a sibling `coordination.sqlite3.pre-migration-vN.backup` before it
-   changes storage, but that file is not a substitute for a full state-root
-   backup.
+   the backup only when it returns `ok`.
 
 ## Restore
 

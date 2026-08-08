@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import type {
+  ActiveRunView,
   ActivationView,
+  Actor,
   AgentRunAgent,
   AgentRunOutcome,
   RuntimeStartupBoundary,
@@ -13,23 +15,31 @@ import type {
 } from "../coordination-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
+import type { CommandResponseStore } from "./command-response-store.ts";
 
 export interface RunnableActivation {
   activation: ActivationView;
   task: TaskView;
   agent: AgentRunAgent;
   sourceEvent: TaskActivityView | TaskView["comments"][number];
+  continuationMessage: string | null;
 }
 
 export class AutomationStateStore {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
   readonly #taskProjections: TaskProjectionStore;
+  readonly #commandResponses: CommandResponseStore;
 
-  constructor(database: CoordinationDatabase, taskProjections: TaskProjectionStore) {
+  constructor(
+    database: CoordinationDatabase,
+    taskProjections: TaskProjectionStore,
+    commandResponses: CommandResponseStore,
+  ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#taskProjections = taskProjections;
+    this.#commandResponses = commandResponses;
   }
 
   recoverInterruptedAttempts(now = new Date()): number {
@@ -111,9 +121,11 @@ export class AutomationStateStore {
     const row = this.#database
       .prepare(
         `SELECT a.id, a.task_id, a.target_agent_id, a.source_event_id,
-                a.model, a.reasoning_effort
+                a.model, a.reasoning_effort, a.continuation_message
          FROM activations a
+         JOIN tasks task ON task.id = a.task_id
          WHERE a.status = 'queued'
+           AND task.automation_suspended = 0
            AND (a.retry_due_at IS NULL OR a.retry_due_at <= ?)
            AND NOT EXISTS (
              SELECT 1
@@ -141,6 +153,7 @@ export class AutomationStateStore {
           source_event_id: string;
           model: string | null;
           reasoning_effort: NonNullable<AgentRunAgent["reasoningEffort"]> | null;
+          continuation_message: string | null;
         }
       | undefined;
     if (row === undefined) return undefined;
@@ -185,6 +198,7 @@ export class AutomationStateStore {
           : { reasoningEffort: row.reasoning_effort }),
       },
       sourceEvent,
+      continuationMessage: row.continuation_message,
     };
   }
 
@@ -257,7 +271,7 @@ export class AutomationStateStore {
       const result = this.#database
         .prepare(
           `UPDATE activations
-           SET status = 'running', retry_due_at = NULL
+           SET status = 'running', retry_due_at = NULL, continuation_message = NULL
            WHERE id = ? AND status = 'queued'`,
         )
         .run(activationId);
@@ -288,6 +302,181 @@ export class AutomationStateStore {
         .run(attemptId, activationId, new Date().toISOString());
       return { id: attemptId, number: priorAttempts.count + 1 };
     });
+  }
+
+  releaseDispatchClaim(
+    attemptId: string,
+    activationId: string,
+    continuationMessage: string | null,
+  ): void {
+    this.#owner.transaction(() => {
+      this.#database
+        .prepare("DELETE FROM attempts WHERE id = ? AND activation_id = ?")
+        .run(attemptId, activationId);
+      this.#database
+        .prepare(
+          `UPDATE activations
+           SET status = 'queued', continuation_message = ?
+           WHERE id = ? AND status = 'running'`,
+        )
+        .run(continuationMessage, activationId);
+    });
+  }
+
+  interruptAttempt(
+    attemptId: string,
+    now: Date,
+    actor: Actor & { kind: "user" },
+    idempotencyKey: string,
+  ): void {
+    this.#owner.transaction(() => {
+      const attempt = this.#database
+        .prepare(
+          `SELECT attempt.activation_id, activation.task_id, activation.target_agent_id
+           FROM attempts attempt
+           JOIN activations activation ON activation.id = attempt.activation_id
+           WHERE attempt.id = ? AND attempt.status = 'running'
+             AND activation.status = 'running'`,
+        )
+        .get(attemptId) as
+        | { activation_id: string; task_id: string; target_agent_id: string }
+        | undefined;
+      if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
+      const occurredAt = now.toISOString();
+      const summary = "The user interrupted this attempt.";
+      this.#database
+        .prepare(
+          `UPDATE attempts
+           SET status = 'failed', completed_at = ?, outcome_status = 'failed',
+               outcome_summary = ?, outcome_kind = 'interrupted'
+           WHERE id = ?`,
+        )
+        .run(occurredAt, summary, attemptId);
+      this.#database
+        .prepare(
+          `UPDATE activations
+           SET status = 'queued', retry_due_at = NULL,
+               failure_kind = NULL, failure_summary = NULL
+           WHERE id = ?`,
+        )
+        .run(attempt.activation_id);
+      this.#database
+        .prepare(
+          `UPDATE tasks
+           SET automation_suspended = 1, suspended_activation_id = ?
+           WHERE id = ?`,
+        )
+        .run(attempt.activation_id, attempt.task_id);
+      this.appendActivity(
+        attempt.task_id,
+        "attempt.completed",
+        actor,
+        { activationId: attempt.activation_id, attemptId, interruption: "user" },
+        occurredAt,
+      );
+      this.appendActivity(
+        attempt.task_id,
+        "automation.suspended",
+        actor,
+        { activationId: attempt.activation_id, attemptId },
+        occurredAt,
+      );
+      this.#commandResponses.write("interrupt-task", idempotencyKey, {
+        taskId: attempt.task_id,
+      });
+    });
+  }
+
+  continueInterruptedTask(
+    taskId: string,
+    message: string,
+    idempotencyKey: string,
+    actor: Actor & { kind: "user" },
+  ): string | undefined {
+    return this.#owner.transaction(() => {
+      const replay = this.#commandResponses.read<{ activationId: string }>(
+        "continue-interrupted-task",
+        idempotencyKey,
+      );
+      if (replay !== undefined) return replay.activationId;
+      const row = this.#database
+        .prepare(
+          `SELECT suspended_activation_id
+           FROM tasks
+           WHERE id = ? AND automation_suspended = 1`,
+        )
+        .get(taskId) as { suspended_activation_id: string | null } | undefined;
+      if (row?.suspended_activation_id === null || row === undefined) return undefined;
+      const continuationMessage = message.trim().length === 0
+        ? "Reassess the current task and workspace state before proceeding."
+        : message.trim();
+      this.#database
+        .prepare("UPDATE activations SET continuation_message = ? WHERE id = ?")
+        .run(continuationMessage, row.suspended_activation_id);
+      this.#database
+        .prepare(
+          `UPDATE tasks
+           SET automation_suspended = 0, suspended_activation_id = NULL
+           WHERE id = ?`,
+        )
+        .run(taskId);
+      const occurredAt = new Date().toISOString();
+      this.appendActivity(
+        taskId,
+        "automation.resumed",
+        actor,
+        { activationId: row.suspended_activation_id },
+        occurredAt,
+      );
+      this.#commandResponses.write(
+        "continue-interrupted-task",
+        idempotencyKey,
+        { activationId: row.suspended_activation_id },
+      );
+      return row.suspended_activation_id;
+    });
+  }
+
+  readInterruptedCommand(idempotencyKey: string): { taskId: string } | undefined {
+    return this.#commandResponses.read("interrupt-task", idempotencyKey);
+  }
+
+  readActiveRuns(): ActiveRunView[] {
+    const rows = this.#database.prepare(
+      `SELECT attempt.id AS attempt_id, task.id AS task_id, task.title AS task_title,
+              board.id AS board_id, board.name AS board_name,
+              column.id AS column_id, column.name AS column_name,
+              activation.target_agent_id, attempt.started_at
+       FROM attempts attempt
+       JOIN activations activation ON activation.id = attempt.activation_id
+       JOIN tasks task ON task.id = activation.task_id
+       JOIN boards board ON board.id = task.board_id
+       JOIN columns column ON column.board_id = task.board_id AND column.id = task.column_id
+       WHERE attempt.status = 'running' AND activation.status = 'running'
+       ORDER BY attempt.rowid`,
+    ).all() as Array<{
+      attempt_id: string;
+      task_id: string;
+      task_title: string;
+      board_id: string;
+      board_name: string;
+      column_id: string;
+      column_name: string;
+      target_agent_id: string;
+      started_at: string;
+    }>;
+    return rows.map((row) => ({
+      attemptId: row.attempt_id,
+      taskId: row.task_id,
+      taskTitle: row.task_title,
+      boardId: row.board_id,
+      boardName: row.board_name,
+      columnId: row.column_id,
+      columnName: row.column_name,
+      agentId: row.target_agent_id,
+      status: "running",
+      startedAt: row.started_at,
+    }));
   }
 
   startAttempt(attemptId: string): { runStartActivityId: string } {

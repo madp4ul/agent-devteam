@@ -138,6 +138,7 @@ export class TaskDiscovery {
                 model: currentActivation.model,
                 reasoningEffort: currentActivation.reasoningEffort,
               },
+        automationSuspended: this.#taskProjections.isTaskAutomationSuspended(task.id),
         onDemand: { activity: true, attachments: true },
       },
     };

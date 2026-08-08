@@ -1,0 +1,401 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import test from "node:test";
+
+import {
+  CoordinationApplication,
+  type AgentRunLifecycle,
+  type AgentRunOutcome,
+  type AgentRunRequest,
+  type AgentRuntime,
+  type AutomationClock,
+} from "../../src/application/coordination-application.ts";
+
+const execFileAsync = promisify(execFile);
+
+test("interrupt confirms runtime termination, preserves the queue head, and continues in context", async (t) => {
+  const fixture = await createFixture("interrupt");
+  const runtime = new InterruptibleRuntime();
+  const application = await startApplication(fixture, runtime);
+  t.after(() => application.close());
+
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Interrupt safely",
+    description: "Preserve this activation while a user investigates.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-interrupt-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  await application.resumeAutomation();
+  const first = await runtime.waitForRequest(1);
+  const interrupt = application.interruptTask({
+    taskId: created.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "interrupt-current-attempt",
+  });
+  assert.equal(interrupt.accepted, true);
+  if (!interrupt.accepted) return;
+  assert.equal(interrupt.state, "interrupting");
+  const interruptReplay = application.interruptTask({
+    taskId: created.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "interrupt-current-attempt",
+  });
+  assert.equal(interruptReplay.accepted, true);
+  await interrupt.confirmed;
+  const confirmedReplay = application.interruptTask({
+    taskId: created.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "interrupt-current-attempt",
+  });
+  assert.equal(confirmedReplay.accepted, true);
+  if (confirmedReplay.accepted) assert.equal(confirmedReplay.state, "interrupted");
+
+  const interrupted = application.queryTask(created.task.id);
+  assert.equal(interrupted.available, true);
+  if (!interrupted.available) return;
+  assert.equal(interrupted.task.activations[0]?.status, "queued");
+  assert.equal(interrupted.task.activations[0]?.attempts[0]?.status, "interrupted");
+  assert.equal(interrupted.task.activations[0]?.attempts[0]?.outcome?.status, "user-interrupted");
+  assert.equal(interrupted.task.activations[0]?.attempts.length, 1);
+  assert.deepEqual(interrupted.task.activity.at(-1)?.actor, { kind: "user", id: "paul" });
+  const inspection = application.queryTaskInspection(created.task.id);
+  assert.equal(inspection.available, true);
+  if (inspection.available) assert.equal(inspection.task.automationSuspended, true);
+
+  const continued = application.continueInterruptedTask({
+    taskId: created.task.id,
+    message: "",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-current-attempt",
+  });
+  assert.equal(continued.accepted, true);
+  assert.deepEqual(application.continueInterruptedTask({
+    taskId: created.task.id,
+    message: "",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-current-attempt",
+  }), continued);
+  const afterContinue = application.queryTask(created.task.id);
+  assert.equal(afterContinue.available, true);
+  if (afterContinue.available) {
+    const continuedActivity = afterContinue.task.activity.find(
+      (activity) => activity.type === "automation.resumed",
+    );
+    assert.deepEqual(continuedActivity?.actor, { kind: "user", id: "paul" });
+  }
+  const second = await runtime.waitForRequest(2);
+  assert.equal(second.activationId, first.activationId);
+  assert.equal(second.workspace.path, first.workspace.path);
+  assert.equal(second.resumeThreadId, "thread-1");
+  assert.equal(second.attempt.number, 2);
+  assert.equal(second.attempt.precedingOutcome?.status, "user-interrupted");
+  assert.match(second.attempt.continuationMessage ?? "", /reassess the current task and workspace/i);
+  runtime.complete({ status: "completed", summary: "Continued safely.", threadId: "thread-1" });
+  await application.waitForAutomationIdle();
+});
+
+test("pause drains active attempts and preserves queued work until resume", async (t) => {
+  const fixture = await createFixture("pause");
+  const runtime = new InterruptibleRuntime();
+  const application = await startApplication(fixture, runtime);
+  t.after(() => application.close());
+
+  for (const [title, key] of [["First", "first"], ["Second", "second"]] as const) {
+    const created = application.createTask({
+      boardId: "delivery",
+      columnId: "implementation",
+      title,
+      description: `${title} independent task.`,
+      actor: { kind: "user", id: "paul" },
+      idempotencyKey: key,
+    });
+    assert.equal(created.accepted, true);
+  }
+
+  await application.resumeAutomation();
+  await runtime.waitForRequest(2);
+  const pausing = application.pauseAutomation();
+  assert.deepEqual(pausing, { accepted: true, automation: { state: "pausing", attemptsMayStart: false } });
+  runtime.completeAll({ status: "completed", summary: "Finished while draining." });
+  await application.waitForAutomationIdle();
+  assert.deepEqual(application.queryAutomation(), { state: "paused", attemptsMayStart: false });
+
+  const third = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Queued while paused",
+    description: "This must not dispatch until Resume.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "third",
+  });
+  assert.equal(third.accepted, true);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(runtime.requests.length, 2);
+  await application.resumeAutomation();
+  await runtime.waitForRequest(3);
+  runtime.completeAll({ status: "completed", summary: "Resumed in order." });
+  await application.waitForAutomationIdle();
+});
+
+test("live-run projection uses the mentioned agent rather than the column watcher", async (t) => {
+  const fixture = await createFixture("mentioned-agent");
+  const runtime = new InterruptibleRuntime();
+  const application = await startApplication(fixture, runtime);
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Consult another role",
+    description: "The active agent does not own this column.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-consultation",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const commented = application.addTaskComment({
+    taskId: created.task.id,
+    body: "@consultant please inspect this question.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "request-consultation",
+  });
+  assert.equal(commented.accepted, true);
+  await application.resumeAutomation();
+  await runtime.waitForRequest(1);
+  assert.deepEqual(application.queryActiveRuns().map((run) => ({
+    taskId: run.taskId,
+    agentId: run.agentId,
+    columnId: run.columnId,
+    status: run.status,
+  })), [{
+    taskId: created.task.id,
+    agentId: "consultant",
+    columnId: "backlog",
+    status: "running",
+  }]);
+  runtime.completeAll({ status: "completed", summary: "Consulted." });
+  await application.waitForAutomationIdle();
+});
+
+test("pause preserves a scheduled retry without starting it", async (t) => {
+  const fixture = await createFixture("scheduled-retry-pause");
+  const runtime = new FailingThenCompletingRuntime();
+  const clock = new RetryClock();
+  const application = await startApplication(fixture, runtime, clock);
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Preserve scheduled retry",
+    description: "Pause must hold the retry until Resume.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-retry-pause",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  await application.resumeAutomation();
+  await waitUntil(() => {
+    const task = application.queryTask(created.task.id);
+    return task.available && task.task.activations[0]?.recovery?.state === "scheduled";
+  });
+  assert.equal(runtime.requests.length, 1);
+  application.pauseAutomation();
+  clock.advanceTo("2026-01-01T12:00:10.000Z");
+  await application.waitForAutomationIdle();
+  assert.equal(runtime.requests.length, 1);
+  await application.resumeAutomation();
+  await waitUntil(() => runtime.requests.length === 2);
+  await application.waitForAutomationIdle();
+});
+
+test("interrupt confirmation rejects when durable finalization fails", async () => {
+  const fixture = await createFixture("interrupt-persistence-failure");
+  const runtime = new InterruptibleRuntime();
+  const application = await startApplication(fixture, runtime);
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Require durable interruption",
+    description: "Do not confirm if suspension cannot be stored.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-durable-interrupt",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  await application.resumeAutomation();
+  await runtime.waitForRequest(1);
+  const interrupt = application.interruptTask({
+    taskId: created.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "interrupt-with-store-failure",
+  });
+  assert.equal(interrupt.accepted, true);
+  if (!interrupt.accepted) return;
+  application.close();
+  await assert.rejects(interrupt.confirmed);
+  await assert.rejects(application.waitForAutomationIdle());
+});
+
+class InterruptibleRuntime implements AgentRuntime {
+  readonly requests: AgentRunRequest[] = [];
+  readonly #pending = new Map<string, (outcome: AgentRunOutcome) => void>();
+  readonly #waiters: Array<{ count: number; resolve(request: AgentRunRequest): void }> = [];
+
+  run(
+    request: AgentRunRequest,
+    lifecycle: AgentRunLifecycle,
+    signal?: AbortSignal,
+  ): Promise<AgentRunOutcome> {
+    this.requests.push(request);
+    lifecycle.started(`thread-${this.requests.length}`);
+    for (const waiter of this.#waiters.splice(0)) {
+      const found = this.requests[waiter.count - 1];
+      if (found === undefined) this.#waiters.push(waiter);
+      else waiter.resolve(found);
+    }
+    return new Promise((resolve) => {
+      this.#pending.set(request.activationId, resolve);
+      signal?.addEventListener("abort", () => {
+        this.#pending.delete(request.activationId);
+        resolve({ status: "failed", summary: "Runtime stopped after user interrupt.", threadId: `thread-${this.requests.length}` });
+      }, { once: true });
+    });
+  }
+
+  waitForRequest(count: number): Promise<AgentRunRequest> {
+    const existing = this.requests[count - 1];
+    return existing === undefined
+      ? new Promise((resolve) => this.#waiters.push({ count, resolve }))
+      : Promise.resolve(existing);
+  }
+
+  complete(outcome: AgentRunOutcome): void {
+    const next = this.#pending.values().next().value as ((value: AgentRunOutcome) => void) | undefined;
+    assert.ok(next);
+    this.#pending.delete(this.#pending.keys().next().value as string);
+    next(outcome);
+  }
+
+  completeAll(outcome: AgentRunOutcome): void {
+    for (const complete of this.#pending.values()) complete(outcome);
+    this.#pending.clear();
+  }
+}
+
+async function startApplication(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  runtime: AgentRuntime,
+  automationClock?: AutomationClock,
+): Promise<CoordinationApplication> {
+  return CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    ...(automationClock === undefined ? {} : { automationClock }),
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+}
+
+class FailingThenCompletingRuntime implements AgentRuntime {
+  readonly requests: AgentRunRequest[] = [];
+
+  run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
+    this.requests.push(request);
+    lifecycle.started(`retry-thread-${this.requests.length}`);
+    return Promise.resolve(this.requests.length === 1
+      ? { status: "failed", summary: "Transient failure." }
+      : { status: "completed", summary: "Retry completed." });
+  }
+}
+
+class RetryClock implements AutomationClock {
+  #now = new Date("2026-01-01T12:00:00.000Z");
+  readonly #waiters: Array<{ instant: string; resolve(): void }> = [];
+
+  now(): Date {
+    return new Date(this.#now);
+  }
+
+  waitUntil(instant: string): Promise<void> {
+    if (Date.parse(instant) <= this.#now.getTime()) return Promise.resolve();
+    return new Promise((resolve) => this.#waiters.push({ instant, resolve }));
+  }
+
+  advanceTo(instant: string): void {
+    this.#now = new Date(instant);
+    for (const waiter of this.#waiters.splice(0)) {
+      if (Date.parse(waiter.instant) <= this.#now.getTime()) waiter.resolve();
+      else this.#waiters.push(waiter);
+    }
+  }
+}
+
+async function waitUntil(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (condition()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.fail("Condition did not become true");
+}
+
+async function createFixture(name: string): Promise<{
+  definitionPath: string;
+  databasePath: string;
+  repositoryPath: string;
+  workspaceRoot: string;
+}> {
+  const directory = await mkdtemp(join(tmpdir(), `coordination-${name}-`));
+  const repositoryPath = join(directory, "project");
+  await execFileAsync("git", ["init", "--initial-branch=main", repositoryPath]);
+  await writeFile(join(repositoryPath, "README.md"), "# Test project\n");
+  await execFileAsync("git", ["-C", repositoryPath, "add", "README.md"]);
+  await execFileAsync("git", ["-C", repositoryPath, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "initial"]);
+  const processDirectory = join(directory, "process");
+  await mkdir(processDirectory);
+  await writeFile(join(processDirectory, "agent.md"), "Implement the task.\n");
+  await writeFile(join(processDirectory, "consultant.md"), "Consult on the task.\n");
+  const definitionPath = join(processDirectory, "process.yaml");
+  await writeFile(definitionPath, `schemaVersion: 1
+name: Test process
+defaultTaskWorkspaceStartingRef: main
+coordinationGuidance: Coordinate through the board.
+agents:
+  - id: implementer
+    name: Implementer
+    role: implementation
+    summary: Implements tasks.
+    instructions: agent.md
+  - id: consultant
+    name: Consultant
+    role: consultation
+    summary: Consults on tasks.
+    instructions: consultant.md
+boards:
+  - id: delivery
+    name: Delivery
+    guidance: Deliver changes.
+    columns:
+      - id: backlog
+        name: Backlog
+      - id: implementation
+        name: Implementation
+        watchingAgent: implementer
+`);
+  return {
+    definitionPath,
+    databasePath: join(directory, "coordination.sqlite3"),
+    repositoryPath,
+    workspaceRoot: join(directory, "workspaces"),
+  };
+}

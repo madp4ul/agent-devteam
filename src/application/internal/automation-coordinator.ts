@@ -1,8 +1,12 @@
 import type {
+  ActiveRunView,
   AgentRunAgent,
   AgentRunOutcome,
+  Actor,
   AutomationClock,
   AutomationView,
+  InterruptTaskResult,
+  PauseAutomationResult,
   ProcessBoardView,
   ResumeAutomationResult,
   RuntimeStartupDiagnostic,
@@ -34,6 +38,17 @@ export interface AutomationCoordinatorOptions {
   clock?: AutomationClock;
 }
 
+interface ActiveRunControl {
+  attemptId: string;
+  controller: AbortController;
+  state: "running" | "interrupting";
+  interruptedBy?: Actor & { kind: "user" };
+  interruptIdempotencyKey?: string;
+  confirmed: Promise<void>;
+  confirm(): void;
+  fail(error: unknown): void;
+}
+
 export class AutomationCoordinator {
   readonly #processStore: ProcessStateStore;
   readonly #taskProjections: TaskProjectionStore;
@@ -54,6 +69,7 @@ export class AutomationCoordinator {
   #automationPumpRunning = false;
   #automationKickPending = false;
   #wakeAutomationPump: (() => void) | undefined;
+  readonly #activeRuns = new Map<string, ActiveRunControl>();
 
   constructor(options: AutomationCoordinatorOptions) {
     this.#processStore = options.processStore;
@@ -81,6 +97,13 @@ export class AutomationCoordinator {
     return this.#automation;
   }
 
+  queryActiveRuns(): ActiveRunView[] {
+    return this.#stateStore.readActiveRuns().map((run) => ({
+      ...run,
+      status: this.#activeRuns.get(run.taskId)?.state ?? "running",
+    }));
+  }
+
   async resume(): Promise<ResumeAutomationResult> {
     if (this.#startup.mode === "configuration-error") {
       return {
@@ -91,6 +114,9 @@ export class AutomationCoordinator {
     }
     if (this.#runtimeDispatch === undefined && this.#processStore.hasWatchedColumns()) {
       return { accepted: false, reason: "runtime-unavailable" };
+    }
+    if (this.#automation.state === "pausing") {
+      return { accepted: false, reason: "pause-draining" };
     }
     this.#processStore.resumeAutomation();
     this.#automation = { state: "running", attemptsMayStart: true };
@@ -125,6 +151,34 @@ export class AutomationCoordinator {
     await this.#automationWork;
   }
 
+  pause(): PauseAutomationResult {
+    this.#processStore.pauseAutomation();
+    this.#automation = this.#activeRuns.size === 0
+      ? { state: "paused", attemptsMayStart: false }
+      : { state: "pausing", attemptsMayStart: false };
+    const wake = this.#wakeAutomationPump;
+    this.#wakeAutomationPump = undefined;
+    wake?.();
+    return { accepted: true, automation: this.#automation };
+  }
+
+  interruptTask(
+    taskId: string,
+    actor: Actor & { kind: "user" },
+    idempotencyKey: string,
+  ): InterruptTaskResult {
+    const active = this.#activeRuns.get(taskId);
+    if (active === undefined) return { accepted: false, reason: "not-running" };
+    if (active.state === "interrupting") {
+      return { accepted: false, reason: "already-interrupting" };
+    }
+    active.state = "interrupting";
+    active.interruptedBy = actor;
+    active.interruptIdempotencyKey = idempotencyKey;
+    active.controller.abort();
+    return { accepted: true, state: "interrupting", confirmed: active.confirmed };
+  }
+
   kick(): void {
     if (this.#automation.state !== "running" || this.#runtimeDispatch === undefined) return;
     if (this.#automationPumpRunning) {
@@ -157,7 +211,7 @@ export class AutomationCoordinator {
     if (this.#runtimeDispatch === undefined) return;
     let first = true;
     let firstError: unknown;
-    const activeRuns = new Set<Promise<void>>();
+    const inFlightCompletions = new Set<Promise<void>>();
     while (this.#automation.state === "running") {
       const now = this.#clock.now().toISOString();
       const runnable = this.#stateStore.readNextRunnableActivation(now);
@@ -171,11 +225,11 @@ export class AutomationCoordinator {
           .catch((error: unknown) => {
             firstError ??= error;
           })
-          .finally(() => activeRuns.delete(tracked));
-        activeRuns.add(tracked);
+          .finally(() => inFlightCompletions.delete(tracked));
+        inFlightCompletions.add(tracked);
         continue;
       }
-      if (activeRuns.size === 0) {
+      if (inFlightCompletions.size === 0) {
         if (firstError !== undefined) throw firstError;
         const retryDueAt = this.#stateStore.readNextRetryDueAt(now);
         if (retryDueAt !== undefined) {
@@ -195,13 +249,14 @@ export class AutomationCoordinator {
         wake = resolve;
         this.#wakeAutomationPump = resolve;
       });
-      await Promise.race([...activeRuns, nextKick]);
+      await Promise.race([...inFlightCompletions, nextKick]);
       if (this.#wakeAutomationPump === wake) this.#wakeAutomationPump = undefined;
       if (firstError !== undefined) {
-        await Promise.all(activeRuns);
+        await Promise.all(inFlightCompletions);
         throw firstError;
       }
     }
+    await Promise.all(inFlightCompletions);
   }
 
   private async dispatch(
@@ -245,10 +300,34 @@ export class AutomationCoordinator {
       this.#runtimeDiagnostic?.(failure);
       throw new Error(failure.diagnostic, { cause: error });
     }
+    if (this.#automation.state !== "running") {
+      this.#stateStore.releaseDispatchClaim(
+        claimedAttempt.id,
+        runnable.activation.id,
+        runnable.continuationMessage,
+      );
+      return { completion: Promise.resolve() };
+    }
     const attempt = {
       ...claimedAttempt,
       ...this.#stateStore.startAttempt(claimedAttempt.id),
     };
+    const controller = new AbortController();
+    let confirmInterruption = () => {};
+    let failInterruption = (_error: unknown) => {};
+    const confirmed = new Promise<void>((resolve, reject) => {
+      confirmInterruption = resolve;
+      failInterruption = reject;
+    });
+    const activeRun: ActiveRunControl = {
+      attemptId: attempt.id,
+      controller,
+      state: "running" as "running" | "interrupting",
+      confirmed,
+      confirm: confirmInterruption,
+      fail: failInterruption,
+    };
+    this.#activeRuns.set(runnable.task.id, activeRun);
     const currentTask = this.#taskProjections.readTask(runnable.task.id);
     if (currentTask === undefined) throw new Error("Runnable task disappeared before dispatch");
     const process = this.#processContext;
@@ -282,7 +361,7 @@ export class AutomationCoordinator {
           thread: precedingAttempt?.threadId === null || precedingAttempt === undefined
             ? "fresh"
             : "resumed",
-          continuationMessage: null,
+          continuationMessage: runnable.continuationMessage,
         },
         },
         {
@@ -296,22 +375,49 @@ export class AutomationCoordinator {
             }
           },
         },
+        controller.signal,
       );
     } catch (error) {
       outcomePromise = Promise.reject(error);
     }
     const completion = (async () => {
-      let outcome: AgentRunOutcome;
       try {
-        outcome = await outcomePromise;
+        let outcome: AgentRunOutcome;
+        try {
+          outcome = await outcomePromise;
+        } catch (error) {
+          outcome = {
+            status: "failed",
+            summary: error instanceof Error ? error.message : "Agent runtime dispatch failed",
+          };
+        }
+        if (activeRun.state === "interrupting") {
+          if (
+            activeRun.interruptedBy === undefined ||
+            activeRun.interruptIdempotencyKey === undefined
+          ) {
+            throw new Error("Interrupting attempt has incomplete initiating command context");
+          }
+          this.#stateStore.interruptAttempt(
+            attempt.id,
+            this.#clock.now(),
+            activeRun.interruptedBy,
+            activeRun.interruptIdempotencyKey,
+          );
+        } else {
+          this.#stateStore.completeAttempt(attempt.id, outcome, this.#clock.now());
+        }
+        activeRun.confirm();
       } catch (error) {
-        this.#stateStore.completeAttempt(attempt.id, {
-          status: "failed",
-          summary: error instanceof Error ? error.message : "Agent runtime dispatch failed",
-        }, this.#clock.now());
-        return;
+        if (activeRun.state === "interrupting") activeRun.fail(error);
+        else activeRun.confirm();
+        throw error;
+      } finally {
+        this.#activeRuns.delete(runnable.task.id);
+        if (this.#automation.state === "pausing" && this.#activeRuns.size === 0) {
+          this.#automation = { state: "paused", attemptsMayStart: false };
+        }
       }
-      this.#stateStore.completeAttempt(attempt.id, outcome, this.#clock.now());
     })();
     return { completion };
   }

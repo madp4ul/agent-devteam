@@ -7,9 +7,12 @@ import {
   ApiError,
   createChildTask,
   editTask,
+  interruptTask,
+  continueInterruptedTask,
   readTask,
   type BrowserTaskDetail,
 } from "./api.ts";
+import { ElapsedTime } from "./ElapsedTime.tsx";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
@@ -26,6 +29,11 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
   useEffect(() => {
     void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
   }, [refresh, setFeedback]);
+  useEffect(() => {
+    if (detail?.activeRun === null || detail?.activeRun === undefined) return;
+    const timer = window.setInterval(() => void refresh(), 1_000);
+    return () => window.clearInterval(timer);
+  }, [detail?.activeRun, refresh]);
 
   const back = (event: React.MouseEvent<HTMLAnchorElement>): void => {
     event.preventDefault();
@@ -98,6 +106,38 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
                 </>
               )}
             </dl>
+            {detail.activeRun === null ? null : (
+              <div className="attempt-control">
+                <p>
+                  Current attempt · {detail.activeRun.agentId} · {detail.activeRun.status} ·{" "}
+                  <ElapsedTime startedAt={detail.activeRun.startedAt} />
+                </p>
+                <button
+                  disabled={detail.activeRun.status === "interrupting"}
+                  onClick={() => {
+                    setFeedback({ role: "status", text: `Interrupting ${task.id}…` });
+                    void interruptTask(task.id, crypto.randomUUID())
+                      .then(async () => {
+                        await refresh();
+                        setFeedback({ role: "status", text: `Interrupted ${task.id}. Automation is suspended.` });
+                      })
+                      .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
+                  }}
+                >
+                  {detail.activeRun.status === "interrupting" ? "Interrupting…" : "Interrupt current attempt"}
+                </button>
+              </div>
+            )}
+            {inspection.automationSuspended ? (
+              <ContinueAutomationControl
+                taskId={task.id}
+                onContinued={async () => {
+                  await refresh();
+                  setFeedback({ role: "status", text: `Continued ${task.id}.` });
+                }}
+                onError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })}
+              />
+            ) : null}
             {inspection.unresolvedAttention.length === 0 ? (
               <p className="quiet">No unresolved attention.</p>
             ) : (
@@ -208,6 +248,40 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+function ContinueAutomationControl({
+  taskId,
+  onContinued,
+  onError,
+}: {
+  taskId: string;
+  onContinued(): Promise<void>;
+  onError(error: unknown): void;
+}): ReactNode {
+  const [message, setMessage] = useState("");
+  const [pending, setPending] = useState(false);
+  return (
+    <div className="attempt-control">
+      <p>Task automation is suspended. The interrupted activation remains first in line.</p>
+      <label>
+        Continuation message (optional)
+        <textarea rows={3} value={message} onChange={(event) => setMessage(event.currentTarget.value)} />
+      </label>
+      <button
+        disabled={pending}
+        onClick={() => {
+          setPending(true);
+          void continueInterruptedTask(taskId, message, crypto.randomUUID())
+            .then(onContinued)
+            .catch(onError)
+            .finally(() => setPending(false));
+        }}
+      >
+        {pending ? "Continuing…" : "Continue interrupted activation"}
+      </button>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import type {
   TaskView,
   AttemptTranscriptQueryResult,
   ActivationRecoveryAction,
+  ActiveRunView,
   NeedsAttentionTaskView,
 } from "../../application/coordination-contract.ts";
 
@@ -24,6 +25,7 @@ export interface BrowserBoardView extends Omit<BoardSummaryView, "columns"> {
 export interface BrowserBoardState {
   startup: StartupView;
   automation: AutomationView;
+  activeRuns: ActiveRunView[];
   boards: BrowserBoardView[];
   attention: NeedsAttentionTaskView[];
 }
@@ -32,6 +34,7 @@ export interface BrowserTaskDetail {
   task: TaskView;
   board: BoardView;
   inspection: TaskInspectionView;
+  activeRun: ActiveRunView | null;
 }
 
 export class ApiError extends Error {
@@ -51,14 +54,19 @@ export async function readBoard(): Promise<BrowserBoardState> {
   if (!response.ok && body.startup.mode !== "configuration-error") {
     throw new ApiError(response.status, body);
   }
-  return body;
+  return { ...body, activeRuns: body.activeRuns ?? [] };
 }
 
 export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
   const result = await request<{ available: true } & BrowserTaskDetail>(
     `/api/tasks/${encodeURIComponent(taskId)}`,
   );
-  return { task: result.task, board: result.board, inspection: result.inspection };
+  return {
+    task: result.task,
+    board: result.board,
+    inspection: result.inspection,
+    activeRun: result.activeRun,
+  };
 }
 
 export async function createTask(input: {
@@ -121,6 +129,28 @@ export async function moveTask(
 
 export async function resumeAutomation(): Promise<void> {
   await request("/api/automation/resume", { method: "POST", body: "{}" });
+}
+
+export async function pauseAutomation(): Promise<void> {
+  await request("/api/automation/pause", { method: "POST", body: "{}" });
+}
+
+export async function interruptTask(taskId: string, idempotencyKey: string): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/interrupt`, {
+    method: "POST",
+    body: JSON.stringify({ idempotencyKey }),
+  });
+}
+
+export async function continueInterruptedTask(
+  taskId: string,
+  message: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/continue`, {
+    method: "POST",
+    body: JSON.stringify({ message, idempotencyKey }),
+  });
 }
 
 export async function markUserMentionAddressed(

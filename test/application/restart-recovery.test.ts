@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { access, cp, mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -246,87 +246,37 @@ test("startup reports every durable workspace mismatch before allowing mutation"
   );
 });
 
-test("startup backs up and verifies durable storage before schema migration", async () => {
+test("startup recreates an incompatible pre-release database", async () => {
   const fixture = await createFixture();
   const first = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
   });
+  const created = first.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Disposable pre-release state",
+    description: "This task must not survive a schema mismatch.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-disposable-state",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
   first.close();
   const before = new DatabaseSync(fixture.databasePath);
   before.exec("PRAGMA user_version = 0");
   before.close();
 
-  const migrated = await CoordinationApplication.start({
+  const recreated = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
   });
-  migrated.close();
-  const backupPath = `${fixture.databasePath}.pre-migration-v0.backup`;
-  await access(backupPath);
-  const backup = new DatabaseSync(backupPath, { readOnly: true });
-  assert.equal((backup.prepare("PRAGMA integrity_check").get() as { integrity_check: string }).integrity_check, "ok");
-  assert.equal((backup.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 0);
-  backup.close();
+  assert.equal(recreated.queryStartup().mode, "paused");
+  assert.equal(recreated.queryTask(created.task.id).available, false);
+  recreated.close();
   const current = new DatabaseSync(fixture.databasePath, { readOnly: true });
-  assert.equal((current.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 2);
+  assert.equal((current.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 4);
   current.close();
-});
-
-test("startup rejects a future schema without changing its version", async () => {
-  const fixture = await createFixture();
-  const first = await CoordinationApplication.start({
-    processDefinitionPath: fixture.definitionPath,
-    databasePath: fixture.databasePath,
-  });
-  first.close();
-  const future = new DatabaseSync(fixture.databasePath);
-  future.exec("PRAGMA user_version = 3");
-  future.close();
-
-  const rejected = await CoordinationApplication.start({
-    processDefinitionPath: fixture.definitionPath,
-    databasePath: fixture.databasePath,
-  });
-  const startup = rejected.queryStartup();
-  assert.equal(startup.mode, "configuration-error");
-  if (startup.mode === "configuration-error") {
-    assert.match(JSON.stringify(startup.diagnostics), /schema version 3 is newer than supported version 2/i);
-  }
-  rejected.close();
-  const unchanged = new DatabaseSync(fixture.databasePath, { readOnly: true });
-  assert.equal((unchanged.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 3);
-  unchanged.close();
-});
-
-test("migration backup includes committed data still present in the WAL", async () => {
-  const fixture = await createFixture();
-  const first = await CoordinationApplication.start({
-    processDefinitionPath: fixture.definitionPath,
-    databasePath: fixture.databasePath,
-  });
-  first.close();
-  const writer = new DatabaseSync(fixture.databasePath);
-  writer.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA wal_autocheckpoint = 0;
-    CREATE TABLE migration_wal_marker (value TEXT NOT NULL);
-    INSERT INTO migration_wal_marker VALUES ('committed-before-migration');
-    PRAGMA user_version = 0;
-  `);
-
-  const migrated = await CoordinationApplication.start({
-    processDefinitionPath: fixture.definitionPath,
-    databasePath: fixture.databasePath,
-  });
-  migrated.close();
-  writer.close();
-  const backup = new DatabaseSync(`${fixture.databasePath}.pre-migration-v0.backup`, { readOnly: true });
-  assert.equal(
-    (backup.prepare("SELECT value FROM migration_wal_marker").get() as { value: string }).value,
-    "committed-before-migration",
-  );
-  backup.close();
 });
 
 test("startup distinguishes a missing registration from a present workspace directory", async (t) => {

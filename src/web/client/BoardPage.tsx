@@ -8,11 +8,13 @@ import {
 import type { TaskOverviewView } from "../../application/coordination-contract.ts";
 import {
   createTask,
+  pauseAutomation,
   readBoard,
   resumeAutomation,
   type BrowserBoardState,
   type BrowserColumnView,
 } from "./api.ts";
+import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { Loading } from "./Loading.tsx";
@@ -41,6 +43,11 @@ export function BoardPage({
   useEffect(() => {
     void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
   }, [refresh, setFeedback]);
+  useEffect(() => {
+    if (state === undefined || (state.activeRuns.length === 0 && state.automation.state !== "pausing")) return;
+    const timer = window.setInterval(() => void refresh(), 1_000);
+    return () => window.clearInterval(timer);
+  }, [refresh, state]);
   useLayoutEffect(() => {
     const lane = initialContext === undefined
       ? undefined
@@ -151,6 +158,32 @@ export function BoardPage({
               Resume
             </button>
           ) : null}
+          {state.automation.state === "running" || state.automation.state === "pausing" ? (
+            <button
+              className="secondary"
+              disabled={state.automation.state === "pausing"}
+              onClick={() => void pauseAutomation().then(refresh).catch((error) =>
+                setFeedback({ role: "alert", text: errorMessage(error) }))}
+            >
+              {state.automation.state === "pausing" ? "Draining active runs…" : "Pause"}
+            </button>
+          ) : null}
+          {state.automation.state === "paused" ? <span>No agents are changing boards.</span> : null}
+          <details className="live-runs">
+            <summary>Current runs · {state.activeRuns.length}</summary>
+            {state.activeRuns.length === 0 ? <p>No active agents.</p> : (
+              <ul>
+                {state.activeRuns.map((run) => (
+                  <li key={run.attemptId}>
+                    <button className="secondary" onClick={() => openTask(run.taskId, run.boardId)}>
+                      {run.agentId} · {run.taskId} · {run.boardName} / {run.columnName} · {run.status} ·{" "}
+                      <ElapsedTime startedAt={run.startedAt} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </details>
           {notifications.available ? (
             <button className="secondary" onClick={() => void notifications.toggle()}>
               Desktop notifications {notifications.enabled ? "on" : "off"}
@@ -241,6 +274,7 @@ export function BoardPage({
                   filter={filter}
                   pendingTaskId={pendingTaskId}
                   highlightedTaskId={highlightedTaskId}
+                  activeRuns={state.activeRuns}
                   onOpen={(taskId) => openTask(taskId, board.id)}
                   onCreate={() => setCreation({ boardId: board.id, columnId: column.id })}
                 />
@@ -276,6 +310,7 @@ function BoardColumn({
   filter,
   pendingTaskId,
   highlightedTaskId,
+  activeRuns,
   onOpen,
   onCreate,
 }: {
@@ -284,6 +319,7 @@ function BoardColumn({
   filter: string;
   pendingTaskId?: string | undefined;
   highlightedTaskId?: string | undefined;
+  activeRuns: BrowserBoardState["activeRuns"];
   onOpen(taskId: string): void;
   onCreate(): void;
 }): ReactNode {
@@ -332,6 +368,7 @@ function BoardColumn({
             task={task}
             pending={pendingTaskId === task.id}
             highlighted={highlightedTaskId === task.id}
+            activeRun={activeRuns.find((run) => run.taskId === task.id)}
             onOpen={onOpen}
           />
         ))}
@@ -347,11 +384,13 @@ function TaskCard({
   task,
   pending,
   highlighted,
+  activeRun,
   onOpen,
 }: {
   task: TaskOverviewView;
   pending: boolean;
   highlighted: boolean;
+  activeRun?: BrowserBoardState["activeRuns"][number] | undefined;
   onOpen(taskId: string): void;
 }): ReactNode {
   const cardRef = useRef<HTMLLIElement>(null);
@@ -412,7 +451,10 @@ function TaskCard({
           <span className="signal failed">Failed · {task.run.failedActivationCount}</span>
         ) : null}
         {task.run.activeAgentId === null ? null : (
-          <span className="signal running">Active · {task.run.activeAgentId}</span>
+          <span className="signal running">
+            Active · {task.run.activeAgentId}
+            {activeRun === undefined ? null : <> · <ElapsedTime startedAt={activeRun.startedAt} /></>}
+          </span>
         )}
       </div>
       {task.startupFailure === undefined ? null : (

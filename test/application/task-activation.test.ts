@@ -794,12 +794,22 @@ test("competing coordinators claim one activation before workspace provisioning"
   }
 });
 
-test("existing databases add durable dispatch claims before running an activation", async (t) => {
+test("startup recreates a current-version database whose schema is incomplete", async (t) => {
   const fixture = await createFixture("dispatch-claim-initialization");
   const initialApplication = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
   });
+  const disposable = initialApplication.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Discard incomplete schema state",
+    description: "This task must disappear with the incomplete database.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-before-incomplete-schema",
+  });
+  assert.equal(disposable.accepted, true);
+  if (!disposable.accepted) return;
   initialApplication.close();
   const oldSchemaDatabase = new DatabaseSync(fixture.databasePath);
   oldSchemaDatabase.exec("DROP TABLE activation_dispatch_claims");
@@ -816,11 +826,12 @@ test("existing databases add durable dispatch claims before running an activatio
     },
   });
   t.after(() => application.close());
+  assert.equal(application.queryTask(disposable.task.id).available, false);
   const created = application.createTask({
     boardId: "delivery",
     columnId: "implementation",
-    title: "Initialize dispatch claims",
-    description: "An existing database gains the additive claim table before dispatch.",
+    title: "Use recreated dispatch claims",
+    description: "The recreated database includes the current dispatch-claim table.",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "create-after-claim-initialization",
   });

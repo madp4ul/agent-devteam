@@ -281,6 +281,13 @@ export class TaskProjectionStore {
       .get(attemptId) as { threadId: string | null } | undefined;
   }
 
+  isTaskAutomationSuspended(taskId: string): boolean {
+    const row = this.#database
+      .prepare("SELECT automation_suspended FROM tasks WHERE id = ?")
+      .get(taskId) as { automation_suspended: number } | undefined;
+    return row?.automation_suspended === 1;
+  }
+
   readSourceEvent(id: string): TaskActivityView | TaskView["comments"][number] | undefined {
     const row = this.#database
       .prepare(
@@ -487,14 +494,14 @@ export class TaskProjectionStore {
         completed_at: string | null;
         outcome_status: "completed" | "failed" | null;
         outcome_summary: string | null;
-        outcome_kind: "completed" | "failed" | "permission" | null;
+        outcome_kind: "completed" | "failed" | "permission" | "interrupted" | null;
         thread_id: string | null;
         model: string | null;
         reasoning_effort: AttemptView["reasoningEffort"];
       }>;
     return rows.map((row) => ({
       id: row.id,
-      status: row.status,
+      status: row.outcome_kind === "interrupted" ? "interrupted" : row.status,
       workspacePath: row.workspace_path,
       startedAt: row.started_at,
       completedAt: row.completed_at,
@@ -502,7 +509,11 @@ export class TaskProjectionStore {
         row.outcome_status === null
           ? null
           : {
-              status: row.outcome_kind === "permission" ? "permission-blocked" : row.outcome_status,
+              status: row.outcome_kind === "permission"
+                ? "permission-blocked"
+                : row.outcome_kind === "interrupted"
+                  ? "user-interrupted"
+                  : row.outcome_status,
               summary: row.outcome_summary ?? "",
             },
       threadId: row.thread_id,

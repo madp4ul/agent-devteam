@@ -294,6 +294,7 @@ test("full task inspection keeps history and attachments behind on-demand querie
       model: null,
       reasoningEffort: null,
     },
+    automationSuspended: false,
     onDemand: { activity: true, attachments: true },
   });
   assert.equal("activity" in inspection.task, false);

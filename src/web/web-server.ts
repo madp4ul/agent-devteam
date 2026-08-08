@@ -89,12 +89,12 @@ async function handleBrowserApi(
     const startup = application.queryStartup();
     const automation = application.queryAutomation();
     if (startup.mode === "configuration-error") {
-      sendJson(response, 409, { startup, automation, boards: [], attention: [] });
+      sendJson(response, 409, { startup, automation, activeRuns: [], boards: [], attention: [] });
       return;
     }
     const summaries = application.queryBoardSummaries();
     if (!summaries.available) {
-      sendJson(response, 409, { startup, automation, boards: [], attention: [] });
+      sendJson(response, 409, { startup, automation, activeRuns: [], boards: [], attention: [] });
       return;
     }
     const boards = summaries.boards.map((board) => ({
@@ -108,6 +108,7 @@ async function handleBrowserApi(
     sendJson(response, 200, {
       startup,
       automation,
+      activeRuns: application.queryActiveRuns(),
       boards,
       attention: attention.available ? attention.tasks : [],
     });
@@ -116,6 +117,10 @@ async function handleBrowserApi(
   if (method === "POST" && url.pathname === "/api/automation/resume") {
     const result = await application.resumeAutomation();
     sendJson(response, result.accepted ? 200 : 409, result);
+    return;
+  }
+  if (method === "POST" && url.pathname === "/api/automation/pause") {
+    sendJson(response, 200, application.pauseAutomation());
     return;
   }
   if (method === "POST" && url.pathname === "/api/tasks") {
@@ -150,11 +155,43 @@ async function handleBrowserApi(
     const result = application.queryTask(taskId);
     const inspection = application.queryTaskInspection(taskId);
     if (result.available && inspection.available) {
-      sendJson(response, 200, { ...result, inspection: inspection.task });
+      sendJson(response, 200, {
+        ...result,
+        inspection: inspection.task,
+        activeRun: application.queryActiveRuns().find((run) => run.taskId === taskId) ?? null,
+      });
     } else {
       const reason = !result.available ? result.reason : "not-found";
       sendJson(response, reason === "not-found" ? 404 : 409, !result.available ? result : inspection);
     }
+    return;
+  }
+  const interruptMatch = /^\/api\/tasks\/([^/]+)\/interrupt$/.exec(url.pathname);
+  if (method === "POST" && interruptMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.interruptTask({
+      taskId: decodeURIComponent(interruptMatch[1]),
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    if (result.accepted) {
+      await result.confirmed;
+      sendJson(response, 200, { accepted: true, state: "interrupted" });
+    } else {
+      sendJson(response, result.reason === "not-found" ? 404 : 409, result);
+    }
+    return;
+  }
+  const continueInterruptedMatch = /^\/api\/tasks\/([^/]+)\/continue$/.exec(url.pathname);
+  if (method === "POST" && continueInterruptedMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.continueInterruptedTask({
+      taskId: decodeURIComponent(continueInterruptedMatch[1]),
+      message: stringField(body, "message"),
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
     return;
   }
   if (method === "PATCH" && taskMatch?.[1] !== undefined) {

@@ -10,6 +10,7 @@ import type {
 } from "../../application/coordination-contract.ts";
 import { readAttemptTranscript } from "./api.ts";
 import { errorMessage } from "./feedback.ts";
+import { ElapsedTime } from "./ElapsedTime.tsx";
 
 type TimelineItem =
   | { key: string; kind: "comment"; occurredAt: string; comment: TaskCommentView }
@@ -46,7 +47,7 @@ export function TaskTimeline({
   activity: TaskActivityView[];
   activations: ActivationView[];
 }): ReactNode {
-  const [transcriptAttempt, setTranscriptAttempt] = useState<AttemptView>();
+  const [transcriptAttempt, setTranscriptAttempt] = useState<{ attempt: AttemptView; agentId: string }>();
   const timeline = buildTimeline(comments, activity, activations);
   return (
     <>
@@ -61,7 +62,8 @@ export function TaskTimeline({
       </section>
       {transcriptAttempt === undefined ? null : (
         <TranscriptDialog
-          attempt={transcriptAttempt}
+          attempt={transcriptAttempt.attempt}
+          agentId={transcriptAttempt.agentId}
           onClose={() => setTranscriptAttempt(undefined)}
         />
       )}
@@ -130,7 +132,7 @@ function TimelineEntry({
   onTranscript,
 }: {
   entry: TimelineItem;
-  onTranscript(attempt: AttemptView): void;
+  onTranscript(value: { attempt: AttemptView; agentId: string }): void;
 }): ReactNode {
   if (entry.kind === "comment") {
     return (
@@ -207,7 +209,8 @@ function TimelineEntry({
           <time>{formatDate(entry.occurredAt)}</time>
         </div>
         <p>
-          {entry.agentId} · {entry.attempt.status} · {duration(entry.attempt.startedAt, entry.attempt.completedAt)}
+          {entry.agentId} · {entry.attempt.status} ·{" "}
+          <ElapsedTime startedAt={entry.attempt.startedAt} completedAt={entry.attempt.completedAt} />
         </p>
         <p>
           Model: {entry.attempt.model ?? "Codex default"} · Reasoning: {entry.attempt.reasoningEffort ?? "Codex default"}
@@ -226,7 +229,7 @@ function TimelineEntry({
               <CopyThreadIdButton threadId={entry.attempt.threadId} />
             )}
           </div>
-          <button className="secondary" onClick={() => onTranscript(entry.attempt)}>
+          <button className="secondary" onClick={() => onTranscript({ attempt: entry.attempt, agentId: entry.agentId })}>
             View transcript
           </button>
         </details>
@@ -235,7 +238,11 @@ function TimelineEntry({
   );
 }
 
-function TranscriptDialog({ attempt, onClose }: { attempt: AttemptView; onClose(): void }): ReactNode {
+function TranscriptDialog({ attempt, agentId, onClose }: {
+  attempt: AttemptView;
+  agentId: string;
+  onClose(): void;
+}): ReactNode {
   const [items, setItems] = useState<AttemptTranscriptItem[]>();
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string>();
@@ -268,6 +275,7 @@ function TranscriptDialog({ attempt, onClose }: { attempt: AttemptView; onClose(
           <div>
             <p className="eyebrow">Read-only run evidence</p>
             <h2 id="transcript-title">Attempt transcript</h2>
+            <p>{agentId} · {attempt.status} · <ElapsedTime startedAt={attempt.startedAt} completedAt={attempt.completedAt} /></p>
           </div>
           <button className="icon-button" aria-label="Close transcript" onClick={onClose}>×</button>
         </header>
@@ -343,6 +351,8 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "activation.created": "Activation queued",
     "attempt.started": "Attempt started",
     "attempt.completed": "Attempt completed",
+    "automation.suspended": "Task automation suspended",
+    "automation.resumed": "Task automation continued",
   }[type];
 }
 
@@ -363,6 +373,12 @@ function activityDescription(activity: TaskActivityView): string {
   if (activity.type === "attention.resolved") {
     return `Resolved ${activity.details.reasonType ?? "attention"}.`;
   }
+  if (activity.type === "automation.suspended") {
+    return "The interrupted activation remains first in line until the user continues it.";
+  }
+  if (activity.type === "automation.resumed") {
+    return "The user continued the interrupted activation.";
+  }
   return `Attempt ${activity.details.attemptId ?? "activity"}.`;
 }
 
@@ -371,15 +387,4 @@ function formatDate(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function duration(startedAt: string, completedAt: string | null): string {
-  if (completedAt === null) return "In progress";
-  const seconds = Math.max(
-    0,
-    Math.round((Date.parse(completedAt) - Date.parse(startedAt)) / 1_000),
-  );
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return minutes === 0 ? `${remainder}s` : `${minutes}m ${remainder}s`;
 }

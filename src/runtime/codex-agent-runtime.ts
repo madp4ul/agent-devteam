@@ -33,7 +33,10 @@ export type CodexEventLike =
     };
 
 export interface CodexThreadLike {
-  runStreamed(prompt: string): Promise<{ events: AsyncGenerator<CodexEventLike> }>;
+  runStreamed(
+    prompt: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<{ events: AsyncGenerator<CodexEventLike> }>;
 }
 
 export interface CodexClientLike {
@@ -59,7 +62,11 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     this.#options = options;
   }
 
-  async run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
+  async run(
+    request: AgentRunRequest,
+    lifecycle: AgentRunLifecycle,
+    signal?: AbortSignal,
+  ): Promise<AgentRunOutcome> {
     const mcpArguments = this.#options.mcpServer.args(request);
     const mcpEnvironment = this.#options.mcpServer.environment?.(request);
     const clientOptions: CodexClientOptionsLike = {
@@ -104,14 +111,20 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
       }
       let streamed;
       try {
-        streamed = await thread.runStreamed(composeActivationPrompt(effectiveRequest));
+        streamed = await thread.runStreamed(
+          composeActivationPrompt(effectiveRequest),
+          signal === undefined ? {} : { signal },
+        );
       } catch (error) {
         if (request.resumeThreadId === undefined || effectiveRequest.attempt.thread === "replaced") {
           throw error;
         }
         effectiveRequest = replacementRequest(request);
         thread = client.startThread(threadOptions);
-        streamed = await thread.runStreamed(composeActivationPrompt(effectiveRequest));
+        streamed = await thread.runStreamed(
+          composeActivationPrompt(effectiveRequest),
+          signal === undefined ? {} : { signal },
+        );
       }
       const { events } = streamed;
       let finalResponse = "";

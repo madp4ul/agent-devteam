@@ -9,6 +9,7 @@ import { validateTaskWorkspaceConsistency } from "./internal/git-task-workspace.
 import type {
   AddTaskCommentCommand,
   AddTaskCommentResult,
+  ActiveRunView,
   ActivationRecoveryCommand,
   ActivationRecoveryResult,
   AutomationView,
@@ -18,6 +19,8 @@ import type {
   BoardSummariesQueryResult,
   BoardsQueryResult,
   CollaboratorsQueryResult,
+  ContinueInterruptedTaskCommand,
+  ContinueInterruptedTaskResult,
   CreateTaskCommand,
   CreateChildTaskCommand,
   CreateTaskRelationshipCommand,
@@ -25,10 +28,13 @@ import type {
   MoveTaskCommand,
   MarkUserMentionAddressedCommand,
   MarkUserMentionAddressedResult,
+  InterruptTaskCommand,
+  InterruptTaskResult,
   NeedsAttentionQueryResult,
   ProcessDiagnostic,
   ProcessValidationResult,
   ResumeAutomationResult,
+  PauseAutomationResult,
   StartApplicationOptions,
   StartupView,
   TaskActivityQueryResult,
@@ -48,6 +54,10 @@ export class CoordinationApplication {
   readonly #automation: AutomationCoordinator;
   readonly #discovery: TaskDiscovery;
   readonly #transcriptAccess: AttemptTranscriptAccess | undefined;
+  readonly #pendingInterruptCommands = new Map<
+    string,
+    Extract<InterruptTaskResult, { accepted: true }>
+  >();
 
   private constructor(
     persistence: CoordinationPersistence,
@@ -80,9 +90,9 @@ export class CoordinationApplication {
         operationalDiagnostic(
           options.databasePath,
           error,
-          "Durable coordination storage must be available and migratable",
-          "Startup is blocked without changing or replacing the retained store.",
-          "Restore a verified project-state backup or use a compatible application version.",
+          "Durable coordination storage must be available and writable",
+          "Startup is blocked when the current pre-release store cannot be opened or recreated.",
+          "Fix storage access, then restart so the current schema can be created.",
         ),
       ], options.transcriptAccess);
     }
@@ -216,8 +226,60 @@ export class CoordinationApplication {
     return this.#automation.query();
   }
 
+  queryActiveRuns(): ActiveRunView[] {
+    return this.#automation.queryActiveRuns();
+  }
+
   async resumeAutomation(): Promise<ResumeAutomationResult> {
     return this.#automation.resume();
+  }
+
+  pauseAutomation(): PauseAutomationResult {
+    return this.#automation.pause();
+  }
+
+  interruptTask(command: InterruptTaskCommand): InterruptTaskResult {
+    const replay = this.#persistence.automation.readInterruptedCommand(command.idempotencyKey);
+    if (replay !== undefined) {
+      return { accepted: true, state: "interrupted", confirmed: Promise.resolve() };
+    }
+    const pending = this.#pendingInterruptCommands.get(command.idempotencyKey);
+    if (pending !== undefined) return pending;
+    if (this.#persistence.taskProjections.readTask(command.taskId) === undefined) {
+      return { accepted: false, reason: "not-found" };
+    }
+    const result = this.#automation.interruptTask(
+      command.taskId,
+      command.actor,
+      command.idempotencyKey,
+    );
+    if (!result.accepted) return result;
+    const accepted = {
+      accepted: true as const,
+      state: result.state,
+      confirmed: result.confirmed.finally(() => {
+        this.#pendingInterruptCommands.delete(command.idempotencyKey);
+      }),
+    };
+    this.#pendingInterruptCommands.set(command.idempotencyKey, accepted);
+    return accepted;
+  }
+
+  continueInterruptedTask(
+    command: ContinueInterruptedTaskCommand,
+  ): ContinueInterruptedTaskResult {
+    if (this.#persistence.taskProjections.readTask(command.taskId) === undefined) {
+      return { accepted: false, reason: "not-found" };
+    }
+    const activationId = this.#persistence.automation.continueInterruptedTask(
+      command.taskId,
+      command.message,
+      command.idempotencyKey,
+      command.actor,
+    );
+    if (activationId === undefined) return { accepted: false, reason: "not-suspended" };
+    this.#automation.kick();
+    return { accepted: true, activationId };
   }
 
   async waitForAutomationIdle(): Promise<void> {

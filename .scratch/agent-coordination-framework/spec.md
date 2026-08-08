@@ -198,6 +198,15 @@ coordination story remains understandable without losing audit evidence.
 agent separately from process coordination guidance and role instructions, so
 that each instruction source has one clear owner and projects do not repeat
 universal behavior.
+121. As a user of a released version, I want schema upgrades to preserve my
+coordination state through verified migrations, so that installing a later
+release cannot silently discard real work.
+122. As a user, I want an interrupted task to show on its board card that
+automation is suspended and Continue is required, so that its queued activation
+is not mistaken for work that will start automatically.
+123. As a user, I want known coordination tool calls in attempt transcripts to
+show concise task-domain inputs and confirmed outcomes, so that I can understand
+what changed without reconstructing the call from its name alone.
 
 ## Implementation Decisions
 
@@ -479,10 +488,14 @@ universal behavior.
   root, an unrecorded registration, a missing registration, or any other
   inconsistency prevents both agent dispatch and board mutation and never
   substitutes a new empty store.
-- Pre-release coordination state is disposable test data. Incompatible state is
-  deleted and recreated against the current schema; schema-version migration,
-  backup, and restore enter scope only when real retained state must survive an
-  upgrade.
+- Before the first release, coordination state is disposable test data.
+  Incompatible state is deleted and recreated against the current schema, and
+  the implementation carries no pre-release migration paths.
+- After the first release, schemas created by supported released versions are
+  retained user data. Any later release that changes the schema must provide a
+  verified, transactional migration and backup path before board mutation or
+  agent dispatch. Migration failure and unknown future versions fail closed
+  without deleting or partially changing the retained store.
 - Tasks and complete histories have no age-based retention limit. Archival is
   reversible at the coordination-record level, subject to separate Git
   workspace behavior.
@@ -530,6 +543,10 @@ universal behavior.
   actual target agent plus a minutes-and-seconds timer for the current attempt.
   The timer starts at dispatch, excludes queued time and previous retries, and
   becomes a fixed duration when that attempt ends.
+- A task whose automation was suspended by user interruption has a distinct,
+  accessible board-card action signal stating that Continue is required. Its
+  preserved activation remains queued, but it is not presented as ordinary
+  queued work that automation can start by itself.
 - Task details own current automation controls and history. Activations may be
   queued, running, waiting for retry, awaiting recovery, suspended, completed,
   dismissed, or stale. Attempts may be running, interrupting, completed,
@@ -545,6 +562,11 @@ universal behavior.
   tools appear as running and update in place to completed or failed with their
   final captured output; completed agent messages appear automatically. Token
   streaming and partial command output are not required.
+- Transcript identity is attempt-scoped even when multiple attempts reuse one
+  Codex thread. A continued running attempt never displays its predecessor's
+  captured items. Known coordination MCP calls use available arguments and
+  authoritative results for bounded domain-aware summaries—such as prior and
+  resulting columns for a move—while unknown calls retain the generic fallback.
 - Finished attempt transcripts are durable for every outcome while the task is
   unarchived. Completion does not remove them; explicit archive removes all
   transcript content for the task. Incremental durability for unfinished live

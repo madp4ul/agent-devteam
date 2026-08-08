@@ -1,5 +1,135 @@
 import { expect, test } from "@playwright/test";
 
+test("live runs show the actual agent and timer while process pause drains", async ({ page }) => {
+  let automationState: "running" | "pausing" | "paused" = "running";
+  await page.route("**/api/automation/pause", async (route) => {
+    automationState = "pausing";
+    setTimeout(() => { automationState = "paused"; }, 1_200);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ accepted: true, automation: { state: "pausing", attemptsMayStart: false } }),
+    });
+  });
+  await page.route("**/api/board", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const task = body.boards[0].columns.flatMap((column: { tasks: unknown[] }) => column.tasks)
+      .find((candidate: { id: string }) => candidate.id === "T-0002");
+    task.run = {
+      status: automationState === "paused" ? "idle" : "running",
+      activeAgentId: automationState === "paused" ? null : "consulting-agent",
+      queuedActivationCount: 0,
+      failedActivationCount: 0,
+    };
+    body.automation = automationState === "running"
+      ? { state: "running", attemptsMayStart: true }
+      : { state: automationState, attemptsMayStart: false };
+    body.activeRuns = automationState === "paused" ? [] : [{
+      attemptId: "live-attempt",
+      taskId: "T-0002",
+      taskTitle: "Drag this task",
+      boardId: "delivery",
+      boardName: "Product delivery",
+      columnId: "backlog",
+      columnName: "Backlog",
+      agentId: "consulting-agent",
+      status: "running",
+      startedAt: new Date(Date.now() - 65_000).toISOString(),
+    }];
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto("/");
+  const card = page.getByRole("link", { name: /T-0002 Drag this task/ }).locator("..");
+  await expect(card).toContainText(/Active · consulting-agent · 1m/);
+  await page.getByText("Current runs · 1").click();
+  const runButton = page.getByRole("button", { name: /consulting-agent · T-0002.*running · 1m/ });
+  await expect(runButton).toBeVisible();
+  await runButton.click();
+  await expect(page).toHaveURL(/\/tasks\/T-0002$/);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Pause" }).click();
+  await expect(page.getByRole("button", { name: "Draining active runs…" })).toBeDisabled();
+  await expect(page.getByText("Automation pausing")).toBeVisible();
+  await expect(page.getByText("Automation paused")).toBeVisible();
+  await expect(page.getByText("No agents are changing boards.")).toBeVisible();
+});
+
+test("task interruption waits for confirmation and offers contextual continuation", async ({ page }) => {
+  let interruptionState: "running" | "interrupting" | "interrupted" = "running";
+  let continuedMessage: string | undefined;
+  await page.route("**/api/tasks/T-0002/interrupt", async (route) => {
+    interruptionState = "interrupting";
+    await new Promise<void>((resolve) => setTimeout(resolve, 1_300));
+    interruptionState = "interrupted";
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accepted: true }) });
+  });
+  await page.route("**/api/tasks/T-0002/continue", async (route) => {
+    continuedMessage = (route.request().postDataJSON() as { message: string }).message;
+    interruptionState = "running";
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accepted: true }) });
+  });
+  await page.route("**/api/tasks/T-0002", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.inspection.run = interruptionState === "interrupted"
+      ? { status: "queued", activeAgentId: null, queuedActivationCount: 1, failedActivationCount: 0 }
+      : { status: "running", activeAgentId: "consulting-agent", queuedActivationCount: 0, failedActivationCount: 0 };
+    body.inspection.automationSuspended = interruptionState === "interrupted";
+    const startedAt = new Date(Date.now() - 10_000).toISOString();
+    body.activeRun = interruptionState === "interrupted" ? null : {
+      attemptId: "live-attempt",
+      taskId: "T-0002",
+      taskTitle: "Drag this task",
+      boardId: "delivery",
+      boardName: "Product delivery",
+      columnId: "backlog",
+      columnName: "Backlog",
+      agentId: "consulting-agent",
+      status: interruptionState,
+      startedAt,
+    };
+    body.task.activations = [{
+      id: "live-activation",
+      targetAgentId: "consulting-agent",
+      status: "running",
+      reason: { type: "agent-mention", sourceEventId: "comment-live" },
+      attempts: [{
+        id: "live-attempt",
+        status: "running",
+        workspacePath: "C:/task-workspace",
+        startedAt,
+        completedAt: null,
+        outcome: null,
+        threadId: "thread-live",
+        model: null,
+        reasoningEffort: null,
+      }],
+      startupFailure: null,
+      recovery: null,
+      model: null,
+      reasoningEffort: null,
+    }];
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto("/tasks/T-0002");
+  await expect(page.getByText(/Current attempt · consulting-agent · running/)).toBeVisible();
+  await expect(page.locator(".attempt-entry").filter({ hasText: "consulting-agent · running" })).toBeVisible();
+  await page.getByText("Thread information").click();
+  await page.getByRole("button", { name: "View transcript" }).click();
+  await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText(/consulting-agent · running · 0m/);
+  await page.getByRole("button", { name: "Close transcript" }).click();
+  const interruptClick = page.getByRole("button", { name: "Interrupt current attempt" }).click();
+  await expect(page.getByRole("button", { name: "Interrupting…" })).toBeDisabled();
+  await interruptClick;
+  await expect(page.getByText(/Task automation is suspended/)).toBeVisible();
+  await page.getByLabel("Continuation message (optional)").fill("Continue after checking the workspace.");
+  await page.getByRole("button", { name: "Continue interrupted activation" }).click();
+  await expect.poll(() => continuedMessage).toBe("Continue after checking the workspace.");
+});
+
 test("configuration errors show the invalid value with the actionable diagnostic", async ({ page }) => {
   await page.route("**/api/board", async (route) => {
     await route.fulfill({

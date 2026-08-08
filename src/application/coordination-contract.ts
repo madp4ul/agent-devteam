@@ -75,7 +75,9 @@ export interface TaskActivityView {
     | "attention.resolved"
     | "activation.created"
     | "attempt.started"
-    | "attempt.completed";
+    | "attempt.completed"
+    | "automation.suspended"
+    | "automation.resumed";
   actor: Actor | { kind: "framework"; id: "coordination" };
   occurredAt: string;
   details: Record<string, string>;
@@ -93,11 +95,11 @@ export interface AgentExecutionProfile {
 
 export interface AttemptView extends AgentExecutionProfile {
   id: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "interrupted";
   workspacePath: string;
   startedAt: string;
   completedAt: string | null;
-  outcome: AgentRunOutcome | null;
+  outcome: AttemptOutcomeView | null;
   threadId: string | null;
 }
 
@@ -184,9 +186,15 @@ export interface AgentRunOutcome {
   threadId?: string;
 }
 
+export type AttemptOutcomeView = AgentRunOutcome | {
+  status: "user-interrupted";
+  summary: string;
+  threadId?: string;
+};
+
 export interface AttemptContextView {
   number: number;
-  precedingOutcome: AgentRunOutcome | null;
+  precedingOutcome: AttemptOutcomeView | null;
   thread: "fresh" | "resumed" | "replaced";
   continuationMessage: string | null;
 }
@@ -243,6 +251,7 @@ export interface TaskInspectionView {
   run: TaskOverviewView["run"];
   unresolvedAttention: TaskAttentionView[];
   currentActivation: ({ targetAgentId: string } & AgentExecutionProfile) | null;
+  automationSuspended: boolean;
   onDemand: { activity: true; attachments: true };
 }
 
@@ -292,7 +301,11 @@ export interface CollaboratorView {
 }
 
 export interface AgentRuntime {
-  run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome>;
+  run(
+    request: AgentRunRequest,
+    lifecycle: AgentRunLifecycle,
+    signal?: AbortSignal,
+  ): Promise<AgentRunOutcome>;
 }
 
 export interface AttemptTranscriptAccess {
@@ -352,8 +365,22 @@ export type ProcessValidationResult =
 
 export type AutomationView =
   | { state: "paused"; attemptsMayStart: false }
+  | { state: "pausing"; attemptsMayStart: false }
   | { state: "running"; attemptsMayStart: true }
   | { state: "blocked"; attemptsMayStart: false };
+
+export interface ActiveRunView {
+  attemptId: string;
+  taskId: string;
+  taskTitle: string;
+  boardId: string;
+  boardName: string;
+  columnId: string;
+  columnName: string;
+  agentId: string;
+  status: "running" | "interrupting";
+  startedAt: string;
+}
 
 export type ResumeAutomationResult =
   | { accepted: true; automation: Extract<AutomationView, { state: "running" }> }
@@ -363,7 +390,34 @@ export type ResumeAutomationResult =
       diagnostics: ProcessDiagnostic[];
     }
   | { accepted: false; reason: "runtime-unavailable" }
+  | { accepted: false; reason: "pause-draining" }
   | { accepted: false; reason: "runtime-start-failed"; diagnostic: string };
+
+export type PauseAutomationResult = {
+  accepted: true;
+  automation: Extract<AutomationView, { state: "pausing" | "paused" }>;
+};
+
+export interface InterruptTaskCommand {
+  taskId: string;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
+export type InterruptTaskResult =
+  | { accepted: true; state: "interrupting" | "interrupted"; confirmed: Promise<void> }
+  | { accepted: false; reason: "not-found" | "not-running" | "already-interrupting" };
+
+export interface ContinueInterruptedTaskCommand {
+  taskId: string;
+  message: string;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
+export type ContinueInterruptedTaskResult =
+  | { accepted: true; activationId: string }
+  | { accepted: false; reason: "not-found" | "not-suspended" };
 
 export type BoardsQueryResult =
   | { available: true; boards: BoardView[] }

@@ -2,7 +2,8 @@
 
 **What to build:** An open task page stays current as comments, activity,
 activations, attempts, and attention change, and a user can inspect a running
-attempt's meaningful agent messages and tool progression automatically. Finished
+attempt's meaningful agent messages and tool progression automatically. Tool
+entries expose concise domain context when the runtime provides it. Finished
 attempt transcripts remain available across host restarts until explicit task
 archival.
 
@@ -29,9 +30,23 @@ archival.
   assistive technology.
 - [ ] A running attempt's existing read-only transcript overlay is available
   before the attempt finishes and updates without a manual page refresh.
+- [ ] Transcript content is scoped to the selected attempt, not merely its Codex
+  thread ID. When Continue resumes a previous thread, the new running attempt
+  never displays the preceding attempt's transcript while waiting for its own
+  items, and the preceding attempt's retained transcript remains unchanged.
 - [ ] A newly started tool activity appears promptly with a running state. The
   same logical entry changes to completed or failed when the runtime reports its
   terminal item, without duplicates or reordered history.
+- [ ] Known coordination MCP calls show concise, bounded domain context when the
+  SDK event exposes the required arguments or result. For example, Move Current
+  Task identifies the task's authoritative prior and resulting columns rather
+  than showing only the tool name. Other known calls expose similarly useful
+  facts such as affected task, participant, relationship, attention action, or
+  command outcome without dumping private runtime payloads.
+- [ ] Domain-aware tool summaries use authoritative command results when
+  available, clearly distinguish requested input from confirmed outcome, and
+  fall back to the generic tool name/status/output presentation for unknown
+  tools or unavailable fields.
 - [ ] Completed or failed tool entries retain the useful final summary,
   diagnostic, and bounded/truncated output already expected of historical
   transcripts.
@@ -60,8 +75,10 @@ archival.
 - [ ] Controlled streamed-runtime, application-restart, and browser tests prove
   comment-to-activation timeline refresh, agent-originated task updates,
   running-to-terminal transcript updates, stable item identity, preserved draft
-  and reading state, all attempt outcomes, navigation/reopening, post-attempt
-  durability, and honest partial loss after a simulated host crash.
+  and reading state, resumed-thread attempt isolation, representative
+  domain-aware coordination tool summaries, all attempt outcomes,
+  navigation/reopening, post-attempt durability, and honest partial loss after
+  a simulated host crash.
 
 ## Comments
 
@@ -74,3 +91,12 @@ archival.
   projection, not only transcript streaming.
 - Current-attempt elapsed time and actual-agent labels across the board, task,
   and overlay are owned by issue 25 so the timer has one consistent definition.
+- Live testing after issue 25 found that Continue reuses the Codex thread ID and
+  the runtime currently keys transcripts only by that ID. Until the continued
+  attempt finishes and overwrites the entry, its overlay therefore shows the
+  preceding attempt's transcript. This issue owns attempt-scoped capture and
+  stable per-item identity while retaining thread reuse as metadata.
+- The same live test showed that coordination MCP entries such as Move Current
+  Task expose too little context when reduced to a generic tool name. Enrichment
+  is deliberately bounded to fields available from SDK events and authoritative
+  coordination results; it does not require storing a private raw runtime dump.
