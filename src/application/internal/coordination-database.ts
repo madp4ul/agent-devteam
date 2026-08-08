@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 4;
+const currentSchemaVersion = 6;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -47,7 +47,8 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
       process_name TEXT NOT NULL,
       definition_version TEXT NOT NULL,
-      automation_state TEXT NOT NULL CHECK (automation_state IN ('paused', 'running'))
+      automation_state TEXT NOT NULL CHECK (automation_state IN ('paused', 'running')),
+      impact_previous_version TEXT
     );
     CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY,
@@ -135,6 +136,8 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       failure_summary TEXT,
       resolution TEXT,
       continuation_message TEXT
+      ,definition_version TEXT NOT NULL
+      ,stale INTEGER NOT NULL DEFAULT 0 CHECK (stale IN (0, 1))
     );
     CREATE TABLE IF NOT EXISTS task_workspaces (
       task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
@@ -209,6 +212,18 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       response_json TEXT NOT NULL,
       PRIMARY KEY (command_type, idempotency_key)
     );
+    CREATE VIEW IF NOT EXISTS mapped_tasks AS
+      SELECT task.id
+      FROM tasks task
+      JOIN boards board ON board.id = task.board_id AND board.applied = 1
+      JOIN columns column
+        ON column.board_id = task.board_id AND column.id = task.column_id AND column.applied = 1;
+    CREATE VIEW IF NOT EXISTS agent_inspectable_tasks AS
+      SELECT task.id
+      FROM tasks task
+      JOIN boards board ON board.id = task.board_id
+      JOIN columns column ON column.board_id = task.board_id AND column.id = task.column_id
+      WHERE (board.applied = 1 AND column.applied = 1) OR task.column_id = 'completion';
     CREATE UNIQUE INDEX IF NOT EXISTS one_running_activation_per_task
       ON activations(task_id)
       WHERE status = 'running';
@@ -262,6 +277,17 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
       .map(({ name }) => name),
   );
   if (requiredTables.some((table) => !tables.has(table))) return false;
+  const mappedTasksView = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'mapped_tasks'")
+    .get();
+  if (mappedTasksView === undefined) return false;
+  const inspectableTasksView = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'agent_inspectable_tasks'")
+    .get();
+  if (inspectableTasksView === undefined) return false;
+  const runtimeColumns = new Set(
+    (database.prepare("PRAGMA table_info(runtime)").all() as Array<{ name: string }>).map(({ name }) => name),
+  );
   const taskColumns = new Set(
     (database.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>).map(({ name }) => name),
   );
@@ -274,10 +300,13 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
   const activityTable = database
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activity_ledger'")
     .get() as { sql: string } | undefined;
-  return taskColumns.has("automation_suspended") &&
+  return runtimeColumns.has("impact_previous_version") &&
+    taskColumns.has("automation_suspended") &&
     taskColumns.has("suspended_activation_id") &&
     activationColumns.has("continuation_message") &&
     activationColumns.has("retry_cycle_start") &&
+    activationColumns.has("definition_version") &&
+    activationColumns.has("stale") &&
     attemptColumns.has("outcome_kind") &&
     activityTable?.sql.includes("automation.resumed") === true;
 }

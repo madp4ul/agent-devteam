@@ -8,9 +8,11 @@ import {
 import type { TaskOverviewView } from "../../application/coordination-contract.ts";
 import {
   createTask,
+  dismissStaleActivation,
   pauseAutomation,
   readBoard,
   resumeAutomation,
+  resumeWithCurrentProcess,
   type BrowserBoardState,
   type BrowserColumnView,
 } from "./api.ts";
@@ -38,6 +40,7 @@ export function BoardPage({
   const [highlightedTaskId, setHighlightedTaskId] = useState<string>();
   const laneRefs = useRef(new Map<string, HTMLDivElement>());
   const refresh = useCallback(async () => setState(await readBoard()), []);
+  const processImpact = state?.startup.mode === "paused" ? state.startup.processImpact : undefined;
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
 
   useEffect(() => {
@@ -145,7 +148,7 @@ export function BoardPage({
         <div className="automation-control">
           <span className={`status-dot ${state.automation.state}`} aria-hidden="true" />
           <span>Automation {state.automation.state}</span>
-          {state.automation.state === "paused" ? (
+          {state.automation.state === "paused" && (processImpact?.staleActivations.length ?? 0) === 0 ? (
             <button
               className="secondary"
               onClick={() =>
@@ -194,6 +197,56 @@ export function BoardPage({
         </div>
       </header>
       <main>
+        {processImpact === undefined ? null : (
+          <section className="process-impact" aria-labelledby="process-impact-heading">
+            <p className="eyebrow">Process definition changed</p>
+            <h2 id="process-impact-heading">Review startup impact</h2>
+            <p>
+              Live state was preserved. Stale activations will not run until explicitly approved
+              for the current process, and unmapped tasks remain dormant until a user remaps them.
+            </p>
+            <h3>Unmapped tasks Â· {processImpact.unmappedTasks.length}</h3>
+            {processImpact.unmappedTasks.length === 0 ? <p>All retained tasks are mapped.</p> : (
+              <ul>
+                {processImpact.unmappedTasks.map((task) => (
+                  <li key={task.taskId}>
+                    <button className="secondary" onClick={() => openTask(task.taskId, task.boardId)}>
+                      {task.taskId} Â· {task.title} Â· former {task.boardName} / {task.columnName}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <h3>Stale activations Â· {processImpact.staleActivations.length}</h3>
+            <ul>
+              {processImpact.staleActivations.map((activation) => (
+                <li key={activation.activationId}>
+                  <span>
+                    {activation.taskId} Â· {activation.targetAgentId} Â· {activation.priorStatus}
+                    {activation.targetAvailable ? " Â· current target available" : " Â· target agent removed"}
+                    {activation.taskMapped ? " Â· task mapped" : " Â· task unmapped"}
+                  </span>
+                  <button
+                    className="secondary"
+                    onClick={() => void dismissStaleActivation(
+                      activation.activationId,
+                      crypto.randomUUID(),
+                    ).then(refresh).catch((error) =>
+                      setFeedback({ role: "alert", text: errorMessage(error) }))}
+                  >
+                    Dismiss stale activation
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {processImpact.staleActivations.some((activation) => activation.targetAvailable) ? (
+              <button onClick={() => void resumeWithCurrentProcess().then(refresh).catch((error) =>
+                setFeedback({ role: "alert", text: errorMessage(error) }))}>
+                Resume with current process
+              </button>
+            ) : null}
+          </section>
+        )}
         <section className="needs-attention" aria-labelledby="needs-attention-heading">
           <div className="board-heading">
             <div>

@@ -124,7 +124,10 @@ export class AutomationStateStore {
                 a.model, a.reasoning_effort, a.continuation_message
          FROM activations a
          JOIN tasks task ON task.id = a.task_id
+         JOIN mapped_tasks mapped ON mapped.id = task.id
+         JOIN agents agent ON agent.id = a.target_agent_id AND agent.applied = 1
          WHERE a.status = 'queued'
+           AND a.stale = 0
            AND task.automation_suspended = 0
            AND (a.retry_due_at IS NULL OR a.retry_due_at <= ?)
            AND NOT EXISTS (

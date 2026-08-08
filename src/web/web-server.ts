@@ -119,6 +119,11 @@ async function handleBrowserApi(
     sendJson(response, result.accepted ? 200 : 409, result);
     return;
   }
+  if (method === "POST" && url.pathname === "/api/automation/resume-with-current-process") {
+    const result = await application.resumeWithCurrentProcess();
+    sendJson(response, result.accepted ? 200 : 409, result);
+    return;
+  }
   if (method === "POST" && url.pathname === "/api/automation/pause") {
     sendJson(response, 200, application.pauseAutomation());
     return;
@@ -137,6 +142,17 @@ async function handleBrowserApi(
     return;
   }
   const transcriptMatch = /^\/api\/attempts\/([^/]+)\/transcript$/.exec(url.pathname);
+  const dismissStaleMatch = /^\/api\/activations\/([^/]+)\/dismiss-stale$/.exec(url.pathname);
+  if (method === "POST" && dismissStaleMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.dismissStaleActivation({
+      activationId: decodeURIComponent(dismissStaleMatch[1]),
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
+    return;
+  }
   if (method === "GET" && transcriptMatch?.[1] !== undefined) {
     const result = await application.queryAttemptTranscript(decodeURIComponent(transcriptMatch[1]));
     const status = result.available
@@ -153,7 +169,7 @@ async function handleBrowserApi(
   if (method === "GET" && taskMatch?.[1] !== undefined) {
     const taskId = decodeURIComponent(taskMatch[1]);
     const result = application.queryTask(taskId);
-    const inspection = application.queryTaskInspection(taskId);
+    const inspection = application.queryTaskInspectionForUser(taskId);
     if (result.available && inspection.available) {
       sendJson(response, 200, {
         ...result,

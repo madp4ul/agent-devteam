@@ -131,6 +131,23 @@ export async function resumeAutomation(): Promise<void> {
   await request("/api/automation/resume", { method: "POST", body: "{}" });
 }
 
+export async function resumeWithCurrentProcess(): Promise<void> {
+  await request("/api/automation/resume-with-current-process", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export async function dismissStaleActivation(
+  activationId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await request(`/api/activations/${encodeURIComponent(activationId)}/dismiss-stale`, {
+    method: "POST",
+    body: JSON.stringify({ idempotencyKey }),
+  });
+}
+
 export async function pauseAutomation(): Promise<void> {
   await request("/api/automation/pause", { method: "POST", body: "{}" });
 }

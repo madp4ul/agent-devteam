@@ -21,6 +21,8 @@ import type {
   CollaboratorsQueryResult,
   ContinueInterruptedTaskCommand,
   ContinueInterruptedTaskResult,
+  DismissStaleActivationCommand,
+  DismissStaleActivationResult,
   CreateTaskCommand,
   CreateChildTaskCommand,
   CreateTaskRelationshipCommand,
@@ -145,7 +147,7 @@ export class CoordinationApplication {
       }
     }
     automation.recoverInterruptedAttempts(options.automationClock?.now() ?? new Date());
-    process.applyDefinition(definition, instructionContents, version);
+    const processImpact = process.applyDefinition(definition, instructionContents, version);
     const boards = process.readBoards();
     const startup: StartupView = {
       mode: "paused",
@@ -153,6 +155,7 @@ export class CoordinationApplication {
       processDefinitionVersion: version,
       automation: { state: "paused", attemptsMayStart: false },
       boards,
+      ...(processImpact === undefined ? {} : { processImpact }),
     };
     const collaborators = definition.agents.map(({ id, name, summary }) => ({
       id,
@@ -219,6 +222,15 @@ export class CoordinationApplication {
   }
 
   queryStartup(): StartupView {
+    if (this.#startup.mode === "paused" && this.#startup.processImpact !== undefined) {
+      return {
+        ...this.#startup,
+        processImpact: this.#persistence.process.readDefinitionImpact(
+          this.#startup.processImpact.previousVersion,
+          this.#startup.processImpact.currentVersion,
+        ),
+      };
+    }
     return this.#startup;
   }
 
@@ -231,7 +243,22 @@ export class CoordinationApplication {
   }
 
   async resumeAutomation(): Promise<ResumeAutomationResult> {
+    if (this.#persistence.process.hasStaleActivations()) {
+      return { accepted: false, reason: "process-change-approval-required" };
+    }
     return this.#automation.resume();
+  }
+
+  async resumeWithCurrentProcess(): Promise<ResumeAutomationResult> {
+    return this.#automation.resume(() => {
+      this.#persistence.process.rebaseCompatibleStaleActivations();
+    });
+  }
+
+  dismissStaleActivation(
+    command: DismissStaleActivationCommand,
+  ): DismissStaleActivationResult {
+    return this.#persistence.taskCommands.dismissStaleActivation(command);
   }
 
   pauseAutomation(): PauseAutomationResult {
@@ -314,6 +341,10 @@ export class CoordinationApplication {
     return this.#discovery.queryTaskInspection(taskId);
   }
 
+  queryTaskInspectionForUser(taskId: string): TaskInspectionQueryResult {
+    return this.#discovery.queryTaskInspection(taskId, true);
+  }
+
   queryTaskActivity(taskId: string): TaskActivityQueryResult {
     return this.#discovery.queryTaskActivity(taskId);
   }
@@ -366,16 +397,15 @@ export class CoordinationApplication {
     }
     const task = this.#persistence.taskProjections.readTask(taskId);
     if (task === undefined) return { available: false, reason: "not-found" };
-    const boards = this.queryBoards();
-    if (!boards.available) {
-      return {
-        available: false,
-        reason: "configuration-error",
-        diagnostics: boards.diagnostics,
-      };
-    }
-    const board = boards.boards.find((candidate) => candidate.id === task.boardId);
-    if (board === undefined) return { available: false, reason: "not-found" };
+    const processBoard = this.#persistence.process.readBoard(task.boardId, true);
+    if (processBoard === undefined) return { available: false, reason: "not-found" };
+    const board = {
+      ...processBoard,
+      columns: processBoard.columns.map((column) => ({
+        ...column,
+        tasks: this.#persistence.taskProjections.readTasksInColumn(processBoard.id, column.id),
+      })),
+    };
     return { available: true, task, board };
   }
 

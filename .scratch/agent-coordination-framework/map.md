@@ -117,21 +117,21 @@ without choosing the implementation yet.
 - [Surface Suspended Task Action on the Board](./issues/43-surface-suspended-task-action-on-board.md)
   — Project task automation suspension onto board cards as an explicit Continue
   requirement while preserving the interrupted activation's queued state.
+- [Evolve Process Definitions Safely](./issues/26-evolve-process-definitions-safely.md)
+  — Preserve stable live identities, isolate unmapped tasks, and require explicit
+  approval or dismissal before stale activations proceed under a changed process.
 
 ## Next implementation priority
 
-- [Evolve Process Definitions Safely](./issues/26-evolve-process-definitions-safely.md)
-  — Apply changed definitions without silently reinterpreting live tasks or
-  dispatching stale work under new roles.
+- [Expose a Task's Workspace](./issues/31-expose-task-workspace.md)
+  — Show whether a task workspace exists and let the user copy or open its path
+  without embedding a Git client.
 
 ## Clarified delivery follow-ups
 
 - [Archive Tasks Without Losing Work](./issues/27-archive-tasks-without-losing-work.md)
   — Keep detailed transcripts until explicit archival, then discard them with
   the task workspace while retaining concise attempt history.
-- [Expose a Task's Workspace](./issues/31-expose-task-workspace.md)
-  — Add a Task workspace section with lifecycle state, starting point, path,
-  Copy path, and Open workspace without building an embedded Git client.
 - [Observe Task Activity and Running Attempts Live](./issues/32-observe-running-attempts-live.md)
   — Keep an open task timeline current across comments, activations, activity,
   and attempt changes; update transcript activity during a run and persist every

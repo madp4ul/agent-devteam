@@ -100,11 +100,13 @@ export class TaskDiscovery {
     };
   }
 
-  queryTaskInspection(taskId: string): TaskInspectionQueryResult {
-    const loaded = this.readTask(taskId);
+  queryTaskInspection(taskId: string, includeUnmapped = false): TaskInspectionQueryResult {
+    const loaded = this.readTask(taskId, includeUnmapped);
     if (!loaded.available) return loaded;
     const { task } = loaded;
-    const board = this.#processStore.readBoards().find((candidate) => candidate.id === task.boardId);
+    const board = includeUnmapped || task.columnId === "completion"
+      ? this.#processStore.readBoard(task.boardId, true)
+      : this.#processStore.readBoard(task.boardId);
     const column = board?.columns.find((candidate) => candidate.id === task.columnId);
     const overview = this.#taskProjections
       .readTaskOverviewRecords(task.boardId, [task.columnId])
@@ -171,6 +173,7 @@ export class TaskDiscovery {
 
   private readTask(
     taskId: string,
+    includeUnmapped = false,
   ):
     | { available: true; task: TaskView }
     | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
@@ -183,7 +186,8 @@ export class TaskDiscovery {
       };
     }
     const task = this.#taskProjections.readTask(taskId);
-    return task === undefined
+    if (task === undefined) return { available: false, reason: "not-found" };
+    return !includeUnmapped && !this.#taskProjections.isTaskInspectableByAgent(taskId)
       ? { available: false, reason: "not-found" }
       : { available: true, task };
   }

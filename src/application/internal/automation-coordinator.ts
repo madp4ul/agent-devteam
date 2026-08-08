@@ -104,7 +104,7 @@ export class AutomationCoordinator {
     }));
   }
 
-  async resume(): Promise<ResumeAutomationResult> {
+  async resume(beforeStart?: () => void): Promise<ResumeAutomationResult> {
     if (this.#startup.mode === "configuration-error") {
       return {
         accepted: false,
@@ -118,6 +118,7 @@ export class AutomationCoordinator {
     if (this.#automation.state === "pausing") {
       return { accepted: false, reason: "pause-draining" };
     }
+    beforeStart?.();
     this.#processStore.resumeAutomation();
     this.#automation = { state: "running", attemptsMayStart: true };
     if (this.#runtimeDispatch !== undefined) {

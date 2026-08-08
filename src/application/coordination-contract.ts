@@ -144,6 +144,28 @@ export interface ActivationView extends AgentExecutionProfile {
     | { state: "scheduled"; nextAttempt: number; dueAt: string }
     | { state: "awaiting-retry" | "permission-blocked"; summary: string }
     | null;
+  stale: boolean;
+}
+
+export interface ProcessDefinitionImpact {
+  previousVersion: string;
+  currentVersion: string;
+  unmappedTasks: Array<{
+    taskId: string;
+    title: string;
+    boardId: string;
+    boardName: string;
+    columnId: string;
+    columnName: string;
+  }>;
+  staleActivations: Array<{
+    activationId: string;
+    taskId: string;
+    targetAgentId: string;
+    priorStatus: "queued" | "failed";
+    targetAvailable: boolean;
+    taskMapped: boolean;
+  }>;
 }
 
 export interface AgentRunAgent {
@@ -347,6 +369,7 @@ export interface PausedStartup {
     attemptsMayStart: false;
   };
   boards: ProcessBoardView[];
+  processImpact?: ProcessDefinitionImpact;
 }
 
 export interface ConfigurationErrorStartup {
@@ -391,8 +414,19 @@ export type ResumeAutomationResult =
       diagnostics: ProcessDiagnostic[];
     }
   | { accepted: false; reason: "runtime-unavailable" }
+  | { accepted: false; reason: "process-change-approval-required" }
   | { accepted: false; reason: "pause-draining" }
   | { accepted: false; reason: "runtime-start-failed"; diagnostic: string };
+
+export interface DismissStaleActivationCommand {
+  activationId: string;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
+export type DismissStaleActivationResult =
+  | { accepted: true; activationId: string }
+  | { accepted: false; reason: "not-found" | "not-stale" };
 
 export type PauseAutomationResult = {
   accepted: true;
@@ -550,6 +584,7 @@ export type BoardMutationResult =
         | "not-found"
         | "invalid-destination"
         | "invalid-starting-ref"
+        | "unmapped-task-user-only"
         | "empty-title"
         | "empty-description";
     }

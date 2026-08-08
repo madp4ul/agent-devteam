@@ -320,6 +320,15 @@ export class TaskProjectionStore {
     return row?.automation_suspended === 1;
   }
 
+  isTaskMapped(taskId: string): boolean {
+    return this.#database.prepare("SELECT 1 FROM mapped_tasks WHERE id = ?").get(taskId) !== undefined;
+  }
+
+  isTaskInspectableByAgent(taskId: string): boolean {
+    return this.#database.prepare("SELECT 1 FROM agent_inspectable_tasks WHERE id = ?")
+      .get(taskId) !== undefined;
+  }
+
   readSourceEvent(id: string): TaskActivityView | TaskView["comments"][number] | undefined {
     const row = this.#database
       .prepare(
@@ -432,7 +441,7 @@ export class TaskProjectionStore {
       .prepare(
         `SELECT id, target_agent_id, reason_type, source_event_id, status,
                 model, reasoning_effort, retry_due_at, retry_cycle_start,
-                failure_kind, failure_summary, resolution
+                failure_kind, failure_summary, resolution, stale
          FROM activations
          WHERE task_id = ?
          ORDER BY sequence`,
@@ -450,6 +459,7 @@ export class TaskProjectionStore {
         failure_kind: "technical" | "permission" | null;
         failure_summary: string | null;
         resolution: "dismissed" | null;
+        stale: number;
       }>;
     return rows.map((row) => {
       const attempts = this.readAttempts(row.id);
@@ -474,6 +484,7 @@ export class TaskProjectionStore {
             },
         model: row.model,
         reasoningEffort: row.reasoning_effort,
+        stale: row.stale === 1,
       } satisfies ActivationView;
     });
   }

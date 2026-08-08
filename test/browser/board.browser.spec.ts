@@ -1,4 +1,127 @@
 import { expect, test } from "@playwright/test";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import { startWebServer } from "../../src/web/web-server.ts";
+import { writeProcessEvolutionDefinition } from "../support/process-evolution-fixture.ts";
+
+test("process changes expose startup impact and explicit stale-work recovery", async ({ page }) => {
+  let staleActivations = [
+    {
+      activationId: "compatible-activation",
+      taskId: "T-0001",
+      targetAgentId: "consulting-agent",
+      priorStatus: "queued",
+      targetAvailable: true,
+      taskMapped: true,
+    },
+    {
+      activationId: "removed-target-activation",
+      taskId: "T-0002",
+      targetAgentId: "retired-agent",
+      priorStatus: "failed",
+      targetAvailable: false,
+      taskMapped: false,
+    },
+  ];
+  let resumedWithCurrentProcess = false;
+  await page.route("**/api/activations/removed-target-activation/dismiss-stale", async (route) => {
+    staleActivations = staleActivations.filter(({ activationId }) =>
+      activationId !== "removed-target-activation");
+    await route.fulfill({ status: 200, json: { accepted: true, activationId: "removed-target-activation" } });
+  });
+  await page.route("**/api/automation/resume-with-current-process", async (route) => {
+    resumedWithCurrentProcess = true;
+    staleActivations = [];
+    await route.fulfill({
+      status: 200,
+      json: { accepted: true, automation: { state: "running", attemptsMayStart: true } },
+    });
+  });
+  await page.route("**/api/board", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.startup.processImpact = {
+      previousVersion: "previous-version",
+      currentVersion: "current-version",
+      unmappedTasks: [{
+        taskId: "T-0002",
+        title: "Drag this task",
+        boardId: "delivery",
+        boardName: "Product delivery",
+        columnId: "retired-column",
+        columnName: "Retired column",
+      }],
+      staleActivations,
+    };
+    if (resumedWithCurrentProcess) {
+      body.automation = { state: "running", attemptsMayStart: true };
+    }
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto("/");
+  const impact = page.locator(".process-impact");
+  await expect(impact.getByRole("heading", { name: "Review startup impact" })).toBeVisible();
+  await expect(impact).toContainText("T-0002 Â· Drag this task Â· former Product delivery / Retired column");
+  await expect(impact).toContainText("retired-agent Â· failed Â· target agent removed Â· task unmapped");
+  await impact.locator("li").filter({ hasText: "retired-agent" })
+    .getByRole("button", { name: "Dismiss stale activation" }).click();
+  await expect(impact).not.toContainText("retired-agent");
+  await impact.getByRole("button", { name: "Resume with current process" }).click();
+  await expect.poll(() => resumedWithCurrentProcess).toBe(true);
+  await expect(page.getByText("Automation running")).toBeVisible();
+});
+
+test("actual definition removal, user remapping, and identity restoration stay recoverable", async ({ page }) => {
+  const directory = await mkdtemp(join(tmpdir(), "coordination-browser-process-evolution-"));
+  const definitionPath = join(directory, "process.yaml");
+  const databasePath = join(directory, "coordination.sqlite3");
+  await writeFile(join(directory, "implementer.md"), "Implement the task.\n");
+  await writeProcessEvolutionDefinition(definitionPath, { includeImplementation: true });
+  const first = await CoordinationApplication.start({ processDefinitionPath: definitionPath, databasePath });
+  const created = first.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Recover changed process state",
+    description: "The browser must keep removed state visible and recoverable.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "browser-create-before-definition-change",
+  });
+  expect(created.accepted).toBe(true);
+  if (!created.accepted) return;
+  first.close();
+
+  await writeProcessEvolutionDefinition(definitionPath, { includeImplementation: false });
+  const removed = await CoordinationApplication.start({ processDefinitionPath: definitionPath, databasePath });
+  const removedServer = await startWebServer(removed, { host: "127.0.0.1", port: 0 });
+  await page.goto(removedServer.baseUrl);
+  const impact = page.locator(".process-impact");
+  await expect(impact).toContainText(`${created.task.id} Â· Recover changed process state`);
+  await impact.getByRole("button", { name: "Dismiss stale activation" }).click();
+  await impact.getByRole("button", { name: new RegExp(created.task.id) }).click();
+  await page.getByRole("button", { name: /Backlog/ }).click();
+  await expect(page.getByText("Backlog", { exact: true }).first()).toBeVisible();
+  await removedServer.close();
+  removed.close();
+
+  await writeProcessEvolutionDefinition(definitionPath, {
+    includeImplementation: true,
+    boardName: "Renamed Delivery",
+    implementationName: "Restored Implementation",
+  });
+  const restored = await CoordinationApplication.start({ processDefinitionPath: definitionPath, databasePath });
+  const restoredServer = await startWebServer(restored, { host: "127.0.0.1", port: 0 });
+  await page.goto(restoredServer.baseUrl);
+  await expect(page.getByRole("heading", { name: "Renamed Delivery" })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(created.task.id) })).toBeVisible();
+  await expect(page.locator(".process-impact")).toHaveCount(0);
+  await restoredServer.close();
+  restored.close();
+});
+
 
 test("live runs show the actual agent and timer while process pause drains", async ({ page }) => {
   let automationState: "running" | "pausing" | "paused" = "running";

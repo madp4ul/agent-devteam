@@ -139,9 +139,9 @@ database.prepare(
 database.prepare(
   `INSERT INTO activations
     (id, task_id, target_agent_id, reason_type, source_event_id, status, created_at,
-     model, reasoning_effort, failure_kind, failure_summary)
+     model, reasoning_effort, failure_kind, failure_summary, definition_version)
    VALUES (?, ?, 'implementer', 'agent-mention', ?, 'failed', ?, NULL, NULL,
-           'permission', ?)`,
+           'permission', ?, (SELECT definition_version FROM runtime WHERE singleton = 1))`,
 ).run(
   "browser-permission-activation",
   inspected.task.id,

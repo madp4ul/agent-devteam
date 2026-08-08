@@ -125,6 +125,11 @@ textarea { resize: vertical; line-height: 1.5; }
 .relationship-actions h3 { margin: 0; }
 .attention-list li { color: #7e5510; }
 .needs-attention { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #dfc27d; border-radius: 12px; background: #fffaf0; }
+.process-impact { display: grid; gap: .75rem; margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #90a8bf; border-radius: 12px; background: #f3f8fc; }
+.process-impact h2, .process-impact h3, .process-impact p { margin: 0; }
+.process-impact ul { display: grid; gap: .55rem; margin: 0; padding-left: 1.25rem; }
+.process-impact li { padding-left: .25rem; }
+.process-impact li > button { margin-left: .75rem; }
 .attention-groups { display: grid; gap: .75rem; padding: 0; list-style: none; }
 .attention-groups > li { display: grid; gap: .6rem; padding: .85rem; border: 1px solid #ead9ad; border-radius: 10px; background: white; }
 .attention-groups strong, .attention-groups small { display: block; }

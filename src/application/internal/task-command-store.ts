@@ -3,6 +3,8 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type {
   ActivationView,
+  DismissStaleActivationCommand,
+  DismissStaleActivationResult,
   ActivationRecoveryCommand,
   ActivationRecoveryAction,
   ActivationRecoveryResult,
@@ -137,6 +139,11 @@ export class TaskCommandStore {
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
       if (currentTask.revision !== command.expectedRevision) {
         return { accepted: false, reason: "revision-conflict", currentTask };
+      }
+      const mapped = this.#database.prepare("SELECT 1 FROM mapped_tasks WHERE id = ?")
+        .get(command.taskId);
+      if (command.actor.kind !== "user" && mapped === undefined) {
+        return { accepted: false, reason: "unmapped-task-user-only" };
       }
       if (currentTask.columnId === command.destinationColumnId) {
         return { accepted: false, reason: "invalid-destination" };
@@ -342,6 +349,73 @@ export class TaskCommandStore {
 
   dismissFailedActivation(command: ActivationRecoveryCommand): ActivationRecoveryResult {
     return this.recoverActivation("dismiss", command, "technical");
+  }
+
+  dismissStaleActivation(
+    command: DismissStaleActivationCommand,
+  ): DismissStaleActivationResult {
+    return this.transaction(() => {
+      const prior = this.#commandResponses.read<DismissStaleActivationResult>(
+        "dismiss-stale-activation",
+        command.idempotencyKey,
+      );
+      if (prior !== undefined) return prior;
+      const activation = this.#database.prepare(
+        `SELECT activation.stale, activation.resolution, activation.task_id
+         FROM activations activation
+         WHERE activation.id = ?`,
+      ).get(command.activationId) as
+        | { stale: number; resolution: string | null; task_id: string }
+        | undefined;
+      let result: DismissStaleActivationResult;
+      if (activation === undefined) result = { accepted: false, reason: "not-found" };
+      else if (activation.stale !== 1 || activation.resolution !== null) {
+        result = { accepted: false, reason: "not-stale" };
+      } else {
+        const resolvedAt = new Date().toISOString();
+        this.#database.prepare(
+          `UPDATE activations
+           SET status = 'completed', resolution = 'dismissed', stale = 0,
+               retry_due_at = NULL, failure_kind = NULL, failure_summary = NULL
+           WHERE id = ?`,
+        ).run(command.activationId);
+        const attentionReasons = this.#database.prepare(
+          `SELECT id FROM attention_reasons
+           WHERE source_event_id = ? AND resolved_at IS NULL
+           ORDER BY rowid`,
+        ).all(command.activationId) as Array<{ id: string }>;
+        const resolveAttention = this.#database.prepare(
+          "UPDATE attention_reasons SET resolved_at = ? WHERE id = ?",
+        );
+        for (const reason of attentionReasons) {
+          resolveAttention.run(resolvedAt, reason.id);
+          this.appendActivity(
+            activation.task_id,
+            "attention.resolved",
+            command.actor,
+            { attentionReasonId: reason.id },
+            resolvedAt,
+          );
+        }
+        const suspension = this.#database.prepare(
+          `UPDATE tasks
+           SET automation_suspended = 0, suspended_activation_id = NULL
+           WHERE id = ? AND suspended_activation_id = ?`,
+        ).run(activation.task_id, command.activationId);
+        if (suspension.changes === 1) {
+          this.appendActivity(
+            activation.task_id,
+            "automation.resumed",
+            command.actor,
+            { activationId: command.activationId, resolution: "dismissed" },
+            resolvedAt,
+          );
+        }
+        result = { accepted: true, activationId: command.activationId };
+      }
+      this.#commandResponses.write("dismiss-stale-activation", command.idempotencyKey, result);
+      return result;
+    });
   }
 
   continuePermissionBlockedActivation(
@@ -688,8 +762,9 @@ export class TaskCommandStore {
       .prepare(
         `INSERT INTO activations
           (id, task_id, target_agent_id, reason_type, source_event_id, status, created_at,
-           model, reasoning_effort)
-         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?)`,
+           model, reasoning_effort, definition_version)
+         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?,
+           (SELECT definition_version FROM runtime WHERE singleton = 1))`,
       )
       .run(
         activationId,
