@@ -7,27 +7,32 @@ import type {
   TaskActivityQueryResult,
   TaskAttachmentsQueryResult,
   TaskInspectionQueryResult,
+  UserTaskInspectionQueryResult,
   TaskOverviewsQuery,
   TaskOverviewsQueryResult,
   TaskView,
 } from "../coordination-contract.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
+import type { AutomationStateStore } from "./automation-state-store.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 
 export class TaskDiscovery {
   readonly #processStore: ProcessStateStore;
   readonly #taskProjections: TaskProjectionStore;
+  readonly #automationStore: AutomationStateStore;
   readonly #startup: StartupView;
   readonly #collaborators: CollaboratorView[] | undefined;
 
   constructor(
     processStore: ProcessStateStore,
     taskProjections: TaskProjectionStore,
+    automationStore: AutomationStateStore,
     startup: StartupView,
     collaborators?: CollaboratorView[],
   ) {
     this.#processStore = processStore;
     this.#taskProjections = taskProjections;
+    this.#automationStore = automationStore;
     this.#startup = startup;
     this.#collaborators = collaborators;
   }
@@ -100,7 +105,27 @@ export class TaskDiscovery {
     };
   }
 
-  queryTaskInspection(taskId: string, includeUnmapped = false): TaskInspectionQueryResult {
+  queryTaskInspection(taskId: string): TaskInspectionQueryResult {
+    return this.queryTaskInspectionView(taskId, { audience: "agent" });
+  }
+
+  queryTaskInspectionForUser(taskId: string): UserTaskInspectionQueryResult {
+    return this.queryTaskInspectionView(taskId, { audience: "user" });
+  }
+
+  private queryTaskInspectionView(
+    taskId: string,
+    options: { audience: "agent" },
+  ): TaskInspectionQueryResult;
+  private queryTaskInspectionView(
+    taskId: string,
+    options: { audience: "user" },
+  ): UserTaskInspectionQueryResult;
+  private queryTaskInspectionView(
+    taskId: string,
+    options: { audience: "agent" | "user" },
+  ): TaskInspectionQueryResult | UserTaskInspectionQueryResult {
+    const includeUnmapped = options.audience === "user";
     const loaded = this.readTask(taskId, includeUnmapped);
     if (!loaded.available) return loaded;
     const { task } = loaded;
@@ -141,6 +166,9 @@ export class TaskDiscovery {
                 reasoningEffort: currentActivation.reasoningEffort,
               },
         automationSuspended: this.#taskProjections.isTaskAutomationSuspended(task.id),
+        ...(options.audience === "user"
+          ? { workspace: this.#automationStore.readTaskWorkspace(task.id) ?? null }
+          : {}),
         onDemand: { activity: true, attachments: true },
       },
     };

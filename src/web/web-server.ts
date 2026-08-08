@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, isAbsolute, relative, resolve } from "node:path";
@@ -11,6 +11,7 @@ import {
   type ActivationRecoveryCommand,
   type CreateChildTaskCommand,
   type CreateTaskRelationshipCommand,
+  type TaskWorkspaceView,
   type TaskOverviewView,
 } from "../application/coordination-application.ts";
 import type { AgentToolScopeRegistry } from "../mcp/agent-tool-scope.ts";
@@ -20,6 +21,7 @@ export interface WebServerOptions {
   port: number;
   agentToolScopes?: AgentToolScopeRegistry;
   assetDirectory?: string;
+  openWorkspace?: (taskId: string, workspace: TaskWorkspaceView) => Promise<void>;
 }
 
 export interface RunningWebServer {
@@ -68,7 +70,7 @@ async function handleRequest(
     return;
   }
   if (url.pathname.startsWith("/api/")) {
-    await handleBrowserApi(application, request, response, method, url);
+    await handleBrowserApi(application, options, request, response, method, url);
     return;
   }
   if (method !== "GET" && method !== "HEAD") {
@@ -80,6 +82,7 @@ async function handleRequest(
 
 async function handleBrowserApi(
   application: CoordinationApplication,
+  options: WebServerOptions,
   request: IncomingMessage,
   response: ServerResponse,
   method: string,
@@ -166,6 +169,40 @@ async function handleBrowserApi(
     return;
   }
   const taskMatch = /^\/api\/tasks\/([^/]+)$/.exec(url.pathname);
+  const openWorkspaceMatch = /^\/api\/tasks\/([^/]+)\/workspace\/open$/.exec(url.pathname);
+  if (method === "POST" && openWorkspaceMatch?.[1] !== undefined) {
+    const taskId = decodeURIComponent(openWorkspaceMatch[1]);
+    const inspection = application.queryTaskInspectionForUser(taskId);
+    if (!inspection.available) {
+      sendJson(response, inspection.reason === "not-found" ? 404 : 409, inspection);
+      return;
+    }
+    if (inspection.task.workspace === null) {
+      sendJson(response, 409, { reason: "workspace-not-provisioned" });
+      return;
+    }
+    if (options.openWorkspace === undefined) {
+      sendJson(response, 503, {
+        reason: "host-integration-unavailable",
+        diagnostic: "Opening task workspaces is unavailable on this host.",
+      });
+      return;
+    }
+    try {
+      const workspaceStatus = await stat(inspection.task.workspace.path);
+      if (!workspaceStatus.isDirectory()) {
+        throw new Error("The recorded task workspace is not a directory.");
+      }
+      await options.openWorkspace(taskId, inspection.task.workspace);
+      sendJson(response, 200, { accepted: true });
+    } catch (error) {
+      sendJson(response, 409, {
+        reason: "workspace-open-failed",
+        diagnostic: error instanceof Error ? error.message : "The task workspace could not be opened.",
+      });
+    }
+    return;
+  }
   if (method === "GET" && taskMatch?.[1] !== undefined) {
     const taskId = decodeURIComponent(taskMatch[1]);
     const result = application.queryTask(taskId);

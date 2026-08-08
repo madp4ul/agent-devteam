@@ -42,6 +42,7 @@ import type {
   TaskActivityQueryResult,
   TaskAttachmentsQueryResult,
   TaskInspectionQueryResult,
+  UserTaskInspectionQueryResult,
   TaskOverviewsQuery,
   TaskOverviewsQueryResult,
   TaskQueryResult,
@@ -114,7 +115,7 @@ export class CoordinationApplication {
           automationStore: automation,
           startup,
         }),
-        new TaskDiscovery(process, taskProjections, startup),
+        new TaskDiscovery(process, taskProjections, automation, startup),
         options.transcriptAccess,
       );
     }
@@ -141,7 +142,7 @@ export class CoordinationApplication {
             automationStore: automation,
             startup,
           }),
-          new TaskDiscovery(process, taskProjections, startup),
+          new TaskDiscovery(process, taskProjections, automation, startup),
           options.transcriptAccess,
         );
       }
@@ -191,7 +192,7 @@ export class CoordinationApplication {
           : { runtimeDiagnostic: options.runtimeDiagnostic }),
         ...(options.automationClock === undefined ? {} : { clock: options.automationClock }),
       }),
-      new TaskDiscovery(process, taskProjections, startup, collaborators),
+      new TaskDiscovery(process, taskProjections, automation, startup, collaborators),
       options.transcriptAccess,
     );
   }
@@ -216,7 +217,7 @@ export class CoordinationApplication {
         automationStore: automation,
         startup,
       }),
-      new TaskDiscovery(process, taskProjections, startup),
+      new TaskDiscovery(process, taskProjections, automation, startup),
       transcriptAccess,
     );
   }
@@ -341,8 +342,8 @@ export class CoordinationApplication {
     return this.#discovery.queryTaskInspection(taskId);
   }
 
-  queryTaskInspectionForUser(taskId: string): TaskInspectionQueryResult {
-    return this.#discovery.queryTaskInspection(taskId, true);
+  queryTaskInspectionForUser(taskId: string): UserTaskInspectionQueryResult {
+    return this.#discovery.queryTaskInspectionForUser(taskId);
   }
 
   queryTaskActivity(taskId: string): TaskActivityQueryResult {

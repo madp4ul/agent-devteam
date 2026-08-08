@@ -8,6 +8,7 @@ import {
   createChildTask,
   editTask,
   interruptTask,
+  openTaskWorkspace,
   continueInterruptedTask,
   readTask,
   type BrowserTaskDetail,
@@ -160,7 +161,8 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
             )}
           </section>
 
-          <section className="detail-panel" aria-labelledby="relationships-heading">
+          <div className="detail-column">
+            <section className="detail-panel" aria-labelledby="relationships-heading">
             <p className="eyebrow">Coordination</p>
             <h2 id="relationships-heading">Relationships</h2>
             {task.relationships.length === 0 ? (
@@ -185,7 +187,12 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
                 setFeedback({ role: "status", text: message });
               }}
             />
-          </section>
+            </section>
+            <TaskWorkspacePanel
+              taskId={task.id}
+              workspace={inspection.workspace}
+            />
+          </div>
         </div>
 
         <section className="move-panel" aria-labelledby="move-heading" aria-busy={pendingTaskId !== undefined}>
@@ -249,6 +256,78 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
         />
       ) : null}
     </div>
+  );
+}
+
+function TaskWorkspacePanel({
+  taskId,
+  workspace,
+}: {
+  taskId: string;
+  workspace: BrowserTaskDetail["inspection"]["workspace"];
+}): ReactNode {
+  const [actionFeedback, setActionFeedback] = useState<{
+    role: "status" | "alert";
+    text: string;
+  }>();
+  const [opening, setOpening] = useState(false);
+  return (
+    <section className="detail-panel workspace-panel" aria-labelledby="workspace-heading">
+      <div className="workspace-heading">
+        <div>
+          <p className="eyebrow">Development files</p>
+          <h2 id="workspace-heading">Task workspace</h2>
+        </div>
+        {workspace === null ? null : (
+          <div className="workspace-actions">
+            <button
+              className="secondary"
+              onClick={() => {
+                void navigator.clipboard.writeText(workspace.path)
+                  .then(() => setActionFeedback({ role: "status", text: "Copied task workspace path." }))
+                  .catch((error) => setActionFeedback({ role: "alert", text: errorMessage(error) }));
+              }}
+            >
+              Copy path
+            </button>
+            <button
+              disabled={opening}
+              onClick={() => {
+                setOpening(true);
+                setActionFeedback({ role: "status", text: "Opening task workspace…" });
+                void openTaskWorkspace(taskId)
+                  .then(() => setActionFeedback({
+                    role: "status",
+                    text: "Open request sent to the default folder application.",
+                  }))
+                  .catch((error) => setActionFeedback({ role: "alert", text: errorMessage(error) }))
+                  .finally(() => setOpening(false));
+              }}
+            >
+              {opening ? "Opening…" : "Open workspace"}
+            </button>
+          </div>
+        )}
+      </div>
+      {workspace === null ? (
+        <p className="quiet">
+          No task workspace exists yet. A Git worktree will be created before the first runnable activation.
+        </p>
+      ) : (
+        <>
+          <p className="workspace-meta">
+            Starting ref <strong>{workspace.startingRef}</strong>
+            <span aria-hidden="true"> · </span>
+            Starting commit <code>{workspace.commit}</code>
+          </p>
+          {actionFeedback === undefined ? null : (
+            <p className={`workspace-feedback ${actionFeedback.role}`} role={actionFeedback.role}>
+              {actionFeedback.text}
+            </p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

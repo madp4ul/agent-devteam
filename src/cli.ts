@@ -8,6 +8,8 @@ import {
 import { AgentToolScopeRegistry } from "./mcp/agent-tool-scope.ts";
 import { CodexAgentRuntime } from "./runtime/codex-agent-runtime.ts";
 import { startWebServer } from "./web/web-server.ts";
+import { createHostWorkspaceOpener } from "./web/host-workspace-opener.ts";
+import { GitTaskWorkspaceManager } from "./application/internal/git-task-workspace.ts";
 import { resolveProjectState } from "./application/internal/project-state.ts";
 
 await run(process.argv.slice(2));
@@ -121,10 +123,22 @@ async function run(arguments_: string[]): Promise<void> {
             );
           },
         });
+    const openWorkspaceInHost = createHostWorkspaceOpener();
+    const taskWorkspaceManager = projectState === undefined
+      ? undefined
+      : new GitTaskWorkspaceManager(projectRepositoryPath, projectState.taskWorkspaceRoot);
     const server = await startWebServer(application, {
       host,
       port,
       agentToolScopes,
+      ...(taskWorkspaceManager === undefined || openWorkspaceInHost === undefined
+        ? {}
+        : {
+            openWorkspace: async (taskId, workspace) => {
+              await taskWorkspaceManager.verify(taskId, workspace);
+              await openWorkspaceInHost(workspace.path);
+            },
+          }),
     });
     agentApiBaseUrl = server.baseUrl;
     console.log(`Coordination application listening at ${server.baseUrl}`);

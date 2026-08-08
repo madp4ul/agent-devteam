@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -116,6 +116,12 @@ const attemptStartedAt = new Date(Date.parse(activationOccurredAt) + 1_000).toIS
 const attemptCompletedAt = new Date(Date.parse(attemptStartedAt) + 150_000).toISOString();
 const database = new DatabaseSync(databasePath);
 database.exec("PRAGMA foreign_keys = ON");
+const inspectableWorkspacePath = join(directory, "task workspace with spaces");
+await mkdir(inspectableWorkspacePath);
+database.prepare(
+  `INSERT INTO task_workspaces (task_id, path, starting_ref, commit_id)
+   VALUES (?, ?, ?, ?)`,
+).run(inspected.task.id, inspectableWorkspacePath, "main", "0123456789abcdef0123456789abcdef01234567");
 database.prepare("UPDATE activations SET status = 'completed' WHERE id = ?").run(activation.id);
 database.prepare(
   `INSERT INTO attempts
@@ -171,7 +177,11 @@ if (startupFailure.accepted || startupFailure.reason !== "runtime-start-failed")
   throw new Error("Expected the browser fixture's pre-attempt repository failure");
 }
 
-const server = await startWebServer(application, { host: "127.0.0.1", port: 4174 });
+const server = await startWebServer(application, {
+  host: "127.0.0.1",
+  port: 4174,
+  openWorkspace: async () => undefined,
+});
 console.log(`Browser fixture listening at ${server.baseUrl}`);
 
 return async () => {

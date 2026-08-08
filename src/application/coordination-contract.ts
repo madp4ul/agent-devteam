@@ -278,6 +278,10 @@ export interface TaskInspectionView {
   onDemand: { activity: true; attachments: true };
 }
 
+export interface UserTaskInspectionView extends TaskInspectionView {
+  workspace: TaskWorkspaceView | null;
+}
+
 export interface TaskAttentionView {
   id: string;
   type: "user-mention" | "failed-run" | "automation-suspended";
@@ -483,6 +487,11 @@ export type TaskOverviewsQueryResult =
 
 export type TaskInspectionQueryResult =
   | { available: true; task: TaskInspectionView }
+  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
+  | { available: false; reason: "not-found" };
+
+export type UserTaskInspectionQueryResult =
+  | { available: true; task: UserTaskInspectionView }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { available: false; reason: "not-found" };
 

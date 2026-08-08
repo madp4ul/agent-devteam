@@ -120,7 +120,7 @@ export class GitTaskWorkspaceManager {
     existing: TaskWorkspaceView | undefined,
   ): Promise<TaskWorkspaceView> {
     if (existing !== undefined) {
-      await this.verifyRegisteredWorkspace(taskId, existing);
+      await this.verify(taskId, existing);
       return existing;
     }
 
@@ -164,7 +164,7 @@ export class GitTaskWorkspaceManager {
     return { path, startingRef, commit };
   }
 
-  private async verifyRegisteredWorkspace(
+  async verify(
     taskId: string,
     workspace: TaskWorkspaceView,
   ): Promise<void> {

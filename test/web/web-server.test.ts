@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
+
+const execFileAsync = promisify(execFile);
 
 test("the browser adapter serves the React application and authoritative board projection", async (t) => {
   const fixture = await createFixture("browser-state");
@@ -225,7 +229,79 @@ test("browser state reports configuration errors and resume rejection as JSON", 
   assert.equal((resume.body as { accepted: boolean }).accepted, false);
 });
 
+test("open workspace uses only the authoritative provisioned path and reports host availability", async (t) => {
+  const fixture = await createFixture("open-workspace");
+  const repositoryPath = join(fixture.directory, "project repository");
+  const workspaceRoot = join(fixture.directory, "task workspaces");
+  await mkdir(repositoryPath);
+  await execFileAsync("git", ["init", "--initial-branch=main", repositoryPath]);
+  await execFileAsync("git", ["-C", repositoryPath, "config", "user.email", "test@example.com"]);
+  await execFileAsync("git", ["-C", repositoryPath, "config", "user.name", "Test User"]);
+  await writeFile(join(repositoryPath, "README.md"), "# Test project\n");
+  await execFileAsync("git", ["-C", repositoryPath, "add", "README.md"]);
+  await execFileAsync("git", ["-C", repositoryPath, "commit", "-m", "Initial commit"]);
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: repositoryPath,
+      taskWorkspaceRoot: workspaceRoot,
+      agentRuntime: {
+        run: async (_request, lifecycle) => {
+          lifecycle.started("thread-open-workspace");
+          return { status: "completed", summary: "Workspace provisioned." };
+        },
+      },
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Open this workspace",
+    description: "Use the persisted task worktree path.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "open-workspace-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  await application.resumeAutomation();
+  await application.waitForAutomationIdle();
+
+  let openedPath: string | undefined;
+  const server = await startWebServer(application, {
+    host: "127.0.0.1",
+    port: 0,
+    assetDirectory: fixture.assetDirectory,
+    openWorkspace: async (_taskId, workspace) => { openedPath = workspace.path; },
+  });
+  t.after(() => server.close());
+  const opened = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/workspace/open`,
+    {},
+  );
+  assert.equal(opened.response.status, 200);
+  assert.equal(openedPath, join(workspaceRoot, created.task.id));
+
+  const unavailableServer = await startWebServer(application, {
+    host: "127.0.0.1",
+    port: 0,
+    assetDirectory: fixture.assetDirectory,
+  });
+  t.after(() => unavailableServer.close());
+  const unavailable = await postJson(
+    `${unavailableServer.baseUrl}/api/tasks/${created.task.id}/workspace/open`,
+    {},
+  );
+  assert.equal(unavailable.response.status, 503);
+  assert.deepEqual(unavailable.body, {
+    reason: "host-integration-unavailable",
+    diagnostic: "Opening task workspaces is unavailable on this host.",
+  });
+});
+
 async function createFixture(name: string, schemaVersion = 1): Promise<{
+  directory: string;
   definitionPath: string;
   databasePath: string;
   assetDirectory: string;
@@ -265,6 +341,7 @@ boards:
   );
   await writeFile(join(assetDirectory, "assets", "app.js"), "console.log('app');\n");
   return {
+    directory,
     definitionPath,
     databasePath: join(directory, "coordination.sqlite3"),
     assetDirectory,

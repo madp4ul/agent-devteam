@@ -399,6 +399,43 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByText(/Moved T-0001 to Completion/)).toBeVisible();
 });
 
+test("task details expose lazy and provisioned task workspaces", async ({ page, context }) => {
+  await page.goto("/tasks/T-0002");
+  const unprovisioned = page.getByRole("region", { name: "Task workspace" });
+  await expect(unprovisioned).toContainText("No task workspace exists yet");
+  await expect(unprovisioned).toContainText("created before the first runnable activation");
+  await expect(unprovisioned.getByRole("button", { name: "Copy path" })).toHaveCount(0);
+
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/tasks/T-0001");
+  const workspace = page.getByRole("region", { name: "Task workspace" });
+  const expectedPath = await page.evaluate(async () => {
+    const response = await fetch("/api/tasks/T-0001");
+    const detail = await response.json();
+    return detail.inspection.workspace.path as string;
+  });
+  await expect(workspace).not.toContainText(expectedPath);
+  await expect(workspace).toContainText("main");
+  await expect(workspace).toContainText("0123456789abcdef0123456789abcdef01234567");
+
+  await workspace.getByRole("button", { name: "Copy path" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(expectedPath);
+  await expect(workspace.getByRole("status")).toContainText("Copied task workspace path");
+
+  await workspace.getByRole("button", { name: "Open workspace" }).click();
+  await expect(workspace.getByRole("status")).toContainText("Open request sent");
+
+  await page.route("**/api/tasks/T-0001/workspace/open", (route) => route.fulfill({
+    status: 503,
+    json: {
+      reason: "host-integration-unavailable",
+      diagnostic: "Opening task workspaces is unavailable on this host.",
+    },
+  }));
+  await workspace.getByRole("button", { name: "Open workspace" }).click();
+  await expect(workspace.getByRole("alert")).toContainText("unavailable on this host");
+});
+
 test("task details create children and dependencies through contextual controls", async ({ page }) => {
   await page.goto("/tasks/T-0002");
 

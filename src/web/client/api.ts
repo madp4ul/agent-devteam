@@ -6,7 +6,7 @@ import type {
   BoardMutationResult,
   StartupView,
   TaskOverviewView,
-  TaskInspectionView,
+  UserTaskInspectionView,
   TaskView,
   AttemptTranscriptQueryResult,
   ActivationRecoveryAction,
@@ -33,7 +33,7 @@ export interface BrowserBoardState {
 export interface BrowserTaskDetail {
   task: TaskView;
   board: BoardView;
-  inspection: TaskInspectionView;
+  inspection: UserTaskInspectionView;
   activeRun: ActiveRunView | null;
 }
 
@@ -67,6 +67,13 @@ export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
     inspection: result.inspection,
     activeRun: result.activeRun,
   };
+}
+
+export async function openTaskWorkspace(taskId: string): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/workspace/open`, {
+    method: "POST",
+    body: "{}",
+  });
 }
 
 export async function createTask(input: {

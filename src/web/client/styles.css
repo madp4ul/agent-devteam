@@ -107,7 +107,18 @@ textarea { resize: vertical; line-height: 1.5; }
 .task-heading { max-width: 54rem; }
 .description { color: #4d5b54; font-size: 1.08rem; white-space: pre-wrap; }
 .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+.detail-column { display: grid; min-width: 0; align-content: start; gap: 1rem; }
 .detail-panel, .move-panel, .timeline-section { border: 1px solid var(--line); border-radius: .85rem; background: var(--paper); padding: 1.3rem; box-shadow: 0 5px 18px rgb(20 34 28 / 4%); }
+.workspace-panel { padding: 1rem 1.1rem; }
+.workspace-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.workspace-heading h2 { margin: .15rem 0 0; }
+.workspace-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: .55rem; }
+.workspace-actions button { padding: .55rem .75rem; }
+.workspace-meta { margin: .65rem 0 0; color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
+.workspace-meta code { font-size: inherit; }
+.workspace-feedback { margin: .65rem 0 0; font-size: .8rem; font-weight: 700; }
+.workspace-feedback.status { color: #174e3a; }
+.workspace-feedback.alert { color: #8c2e1d; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .run-pill { border-radius: 999px; background: #e4e8e3; padding: .35rem .62rem; font-size: .7rem; font-weight: 800; text-transform: capitalize; }
 .run-pill.running { color: #15523a; background: #d4ecdf; }

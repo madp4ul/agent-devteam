@@ -466,6 +466,48 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
   );
 });
 
+test("user task inspection exposes the lazy task workspace lifecycle", async (t) => {
+  const fixture = await createFixture("inspect-task-workspace");
+  const runtime = new ControlledAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Inspect my workspace",
+    description: "Show authoritative workspace identity only after provisioning.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-inspectable-workspace-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  const beforeProvisioning = application.queryTaskInspectionForUser(created.task.id);
+  assert.equal(beforeProvisioning.available, true);
+  if (!beforeProvisioning.available) return;
+  assert.equal(beforeProvisioning.task.workspace, null);
+
+  await application.resumeAutomation();
+  const request = runtime.requests[0];
+  assert.ok(request);
+  const afterProvisioning = application.queryTaskInspectionForUser(created.task.id);
+  assert.equal(afterProvisioning.available, true);
+  if (!afterProvisioning.available) return;
+  assert.deepEqual(afterProvisioning.task.workspace, {
+    path: join(fixture.workspaceRoot, created.task.id),
+    startingRef: "main",
+    commit: request.workspace.commit,
+  });
+});
+
 test("retry attempts retain the activation's snapshotted execution profile", async (t) => {
   const fixture = await createFixture(
     "profiled-retry",

@@ -371,6 +371,30 @@ test("a complete state-root backup restores task state at the registered absolut
   assert.equal(registrationsAfter.stdout, registrationsBefore.stdout);
 });
 
+test("user task inspection preserves authoritative workspace identity across restart", async (t) => {
+  const fixture = await createFixture();
+  const provisioned = await provisionCompletedTask(fixture);
+  const beforeRestart = provisioned.application.queryTaskInspectionForUser(provisioned.taskId);
+  assert.equal(beforeRestart.available, true);
+  if (!beforeRestart.available) return;
+  provisioned.application.close();
+
+  const restarted = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: new RecordingRuntime(true),
+    },
+  });
+  t.after(() => restarted.close());
+  const afterRestart = restarted.queryTaskInspectionForUser(provisioned.taskId);
+  assert.equal(afterRestart.available, true);
+  if (!afterRestart.available) return;
+  assert.deepEqual(afterRestart.task.workspace, beforeRestart.task.workspace);
+});
+
 class ControlledClock implements AutomationClock {
   #now: Date;
   readonly #waiters: Array<{ due: number; resolve(): void }> = [];

@@ -117,15 +117,20 @@ without choosing the implementation yet.
 - [Surface Suspended Task Action on the Board](./issues/43-surface-suspended-task-action-on-board.md)
   — Project task automation suspension onto board cards as an explicit Continue
   requirement while preserving the interrupted activation's queued state.
+- [Expose a Task's Workspace](./issues/31-expose-task-workspace.md)
+  — Show lazy and provisioned task-workspace identity on task details and let
+  the user copy or open the verified registered worktree through host-native
+  integration without embedding live Git tooling.
 - [Evolve Process Definitions Safely](./issues/26-evolve-process-definitions-safely.md)
   — Preserve stable live identities, isolate unmapped tasks, and require explicit
   approval or dismissal before stale activations proceed under a changed process.
 
 ## Next implementation priority
 
-- [Expose a Task's Workspace](./issues/31-expose-task-workspace.md)
-  — Show whether a task workspace exists and let the user copy or open its path
-  without embedding a Git client.
+- [Preserve Board Scroll During Automatic Refresh](./issues/44-preserve-board-scroll-during-refresh.md)
+  — Give restored board context one-shot semantics so active-run polling
+  preserves the user's current horizontal lane position before live task
+  refresh expands further.
 
 ## Clarified delivery follow-ups
 
