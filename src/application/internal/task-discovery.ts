@@ -113,6 +113,9 @@ export class TaskDiscovery {
     if (column === undefined || overview === undefined) {
       return { available: false, reason: "not-found" };
     }
+    const currentActivation = task.activations.find(
+      (activation) => activation.status !== "completed",
+    );
     return {
       available: true,
       task: {
@@ -127,6 +130,14 @@ export class TaskDiscovery {
         blocking: overview.blocking,
         run: overview.run,
         unresolvedAttention: this.#taskStore.readUnresolvedAttention(task.id),
+        currentActivation:
+          currentActivation === undefined
+            ? null
+            : {
+                targetAgentId: currentActivation.targetAgentId,
+                model: currentActivation.model,
+                reasoningEffort: currentActivation.reasoningEffort,
+              },
         onDemand: { activity: true, attachments: true },
       },
     };

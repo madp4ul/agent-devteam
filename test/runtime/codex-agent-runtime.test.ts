@@ -69,6 +69,49 @@ test("each activation starts a fresh streamed Codex thread without overriding us
   assert.match(prompt, /attempt number: 1/i);
 });
 
+test("explicit agent execution profiles become SDK thread options", async () => {
+  const clients: FakeCodexClient[] = [];
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: (options) => {
+      const client = new FakeCodexClient(options, "thread-profiled");
+      clients.push(client);
+      return client;
+    },
+  });
+  const profiled = request("activation-profiled", "T-0003");
+  profiled.agent.model = "gpt-5.6-sol";
+  profiled.agent.reasoningEffort = "medium";
+
+  await runtime.run(profiled, { started() {} });
+
+  assert.deepEqual(clients[0]?.threadOptions, {
+    workingDirectory: "C:\\tasks\\worktree",
+    model: "gpt-5.6-sol",
+    modelReasoningEffort: "medium",
+  });
+  assert.equal("sandboxMode" in (clients[0]?.threadOptions ?? {}), false);
+  assert.equal("approvalPolicy" in (clients[0]?.threadOptions ?? {}), false);
+});
+
+test("an unavailable requested model remains an actionable runtime-start failure", async () => {
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => {
+        throw new Error('Requested model "gpt-unavailable" is not available for this account');
+      },
+    }),
+  });
+  const profiled = request("activation-unavailable", "T-0004");
+  profiled.agent.model = "gpt-unavailable";
+
+  await assert.rejects(
+    runtime.run(profiled, { started() {} }),
+    /Requested model "gpt-unavailable" is not available for this account/,
+  );
+});
+
 test("streamed Codex failures become failed attempt outcomes with retained thread identity", async () => {
   const runtime = new CodexAgentRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },

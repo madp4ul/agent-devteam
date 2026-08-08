@@ -47,6 +47,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByText("Task moved")).toBeVisible();
   await expect(page.getByText("Attempt 1")).toBeVisible();
   await expect(page.getByText("2m 30s")).toBeVisible();
+  await expect(page.getByText("Model: Codex default · Reasoning: Codex default")).toBeVisible();
 
   const current = page.getByRole("button", { name: /Implementation.*Current/ });
   await expect(current).toBeDisabled();
@@ -84,6 +85,9 @@ test("pre-attempt startup diagnostics remain discoverable after navigation", asy
   await expect(page.getByText("Startup failed before attempt")).toBeVisible();
   await expect(page.getByText(/Boundary: repository-access/)).toBeVisible();
   await expect(page.getByText(/Could not access project repository/)).toBeVisible();
+  const currentState = page.getByRole("region", { name: "Implementation" });
+  await expect(currentState.getByText("Requested model").locator("..")).toContainText("Codex default");
+  await expect(currentState.getByText("Requested reasoning").locator("..")).toContainText("Codex default");
   await page.getByRole("link", { name: "Back to board" }).click();
   await page.goto("/tasks/T-0003");
   await expect(page.getByText(/missing-project-repository/)).toBeVisible();

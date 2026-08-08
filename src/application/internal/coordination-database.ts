@@ -46,6 +46,8 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       summary TEXT NOT NULL,
       instructions_path TEXT NOT NULL,
       instructions_content TEXT NOT NULL,
+      model TEXT,
+      reasoning_effort TEXT,
       applied INTEGER NOT NULL CHECK (applied IN (0, 1))
     );
     CREATE TABLE IF NOT EXISTS boards (
@@ -108,7 +110,9 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention')),
       source_event_id TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      model TEXT,
+      reasoning_effort TEXT
     );
     CREATE TABLE IF NOT EXISTS task_workspaces (
       task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
@@ -125,7 +129,9 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       completed_at TEXT,
       outcome_status TEXT CHECK (outcome_status IN ('completed', 'failed')),
       outcome_summary TEXT,
-      thread_id TEXT
+      thread_id TEXT,
+      model TEXT,
+      reasoning_effort TEXT
     );
     CREATE TABLE IF NOT EXISTS activation_startup_failures (
       activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
@@ -172,4 +178,22 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       PRIMARY KEY (command_type, idempotency_key)
     );
   `);
+  ensureColumn(database, "agents", "model", "TEXT");
+  ensureColumn(database, "agents", "reasoning_effort", "TEXT");
+  ensureColumn(database, "attempts", "model", "TEXT");
+  ensureColumn(database, "attempts", "reasoning_effort", "TEXT");
+  ensureColumn(database, "activations", "model", "TEXT");
+  ensureColumn(database, "activations", "reasoning_effort", "TEXT");
+}
+
+function ensureColumn(
+  database: DatabaseSync,
+  table: "agents" | "activations" | "attempts",
+  column: string,
+  declaration: string,
+): void {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!columns.some((candidate) => candidate.name === column)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`);
+  }
 }

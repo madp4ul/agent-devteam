@@ -18,26 +18,36 @@ agents:
     role: Designs implementation boundaries before coding begins
     summary: Produces an explicit architecture plan and answers design consultations.
     instructions: ./agents/architecture-designer.md
+    model: gpt-5.6-luna
+    reasoningEffort: medium
   - id: implementation-agent
     name: Implementation Agent
     role: Implements approved plans and requested revisions
     summary: Builds scoped changes with tests and records the verified result.
     instructions: ./agents/implementation-agent.md
+    model: gpt-5.6-luna
+    reasoningEffort: medium
   - id: code-reviewer
     name: Code Reviewer
     role: Reviews implementation correctness and repository standards
     summary: Independently reviews code and returns concrete findings or approval.
     instructions: ./agents/code-reviewer.md
+    model: gpt-5.6-luna
+    reasoningEffort: medium
   - id: architecture-verifier
     name: Architecture Verifier
     role: Verifies the result against the intended architecture
     summary: Checks boundaries and future-change assumptions after code review.
     instructions: ./agents/architecture-verifier.md
+    model: gpt-5.6-luna
+    reasoningEffort: medium
   - id: merge-agent
     name: Merge Agent
     role: Integrates only user-approved work
     summary: Verifies approval and integration before completing the task.
     instructions: ./agents/merge-agent.md
+    model: gpt-5.6-luna
+    reasoningEffort: medium
 boards:
   - id: delivery
     name: Delivery

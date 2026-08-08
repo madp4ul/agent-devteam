@@ -6,6 +6,7 @@ import type {
   AddTaskCommentCommand,
   AddTaskCommentResult,
   Actor,
+  AttemptView,
   BoardMutationResult,
   CreateTaskCommand,
   EditTaskCommand,
@@ -576,21 +577,14 @@ export class CoordinationTaskStore {
       )
       .get(boardId, columnId) as { watching_agent_id: string | null } | undefined;
     if (destination?.watching_agent_id === null || destination === undefined) return;
-    const activationId = randomUUID();
     const occurredAt = new Date().toISOString();
-    this.#database
-      .prepare(
-        `INSERT INTO activations
-          (id, task_id, target_agent_id, reason_type, source_event_id, status, created_at)
-         VALUES (?, ?, ?, 'column-entry', ?, 'queued', ?)`,
-      )
-      .run(
-        activationId,
-        taskId,
-        destination.watching_agent_id,
-        sourceEventId,
-        occurredAt,
-      );
+    const activationId = this.queueActivation(
+      taskId,
+      destination.watching_agent_id,
+      "column-entry",
+      sourceEventId,
+      occurredAt,
+    );
     this.appendActivity(
       taskId,
       "activation.created",
@@ -650,14 +644,13 @@ export class CoordinationTaskStore {
     if (mapped === undefined) return;
     const occurredAt = new Date().toISOString();
     for (const targetAgentId of mentionedAgents) {
-      const activationId = randomUUID();
-      this.#database
-        .prepare(
-          `INSERT INTO activations
-            (id, task_id, target_agent_id, reason_type, source_event_id, status, created_at)
-           VALUES (?, ?, ?, 'agent-mention', ?, 'queued', ?)`,
-        )
-        .run(activationId, taskId, targetAgentId, commentId, occurredAt);
+      const activationId = this.queueActivation(
+        taskId,
+        targetAgentId,
+        "agent-mention",
+        commentId,
+        occurredAt,
+      );
       this.appendActivity(
         taskId,
         "activation.created",
@@ -666,6 +659,40 @@ export class CoordinationTaskStore {
         occurredAt,
       );
     }
+  }
+
+  private queueActivation(
+    taskId: string,
+    targetAgentId: string,
+    reasonType: ActivationView["reason"]["type"],
+    sourceEventId: string,
+    occurredAt: string,
+  ): string {
+    const profile = this.#database
+      .prepare("SELECT model, reasoning_effort FROM agents WHERE id = ? AND applied = 1")
+      .get(targetAgentId) as {
+        model: string | null;
+        reasoning_effort: ActivationView["reasoningEffort"];
+      };
+    const activationId = randomUUID();
+    this.#database
+      .prepare(
+        `INSERT INTO activations
+          (id, task_id, target_agent_id, reason_type, source_event_id, status, created_at,
+           model, reasoning_effort)
+         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?)`,
+      )
+      .run(
+        activationId,
+        taskId,
+        targetAgentId,
+        reasonType,
+        sourceEventId,
+        occurredAt,
+        profile.model,
+        profile.reasoning_effort,
+      );
+    return activationId;
   }
 
   private createUserMentionAttention(
@@ -695,7 +722,8 @@ export class CoordinationTaskStore {
   private readActivations(taskId: string): ActivationView[] {
     const rows = this.#database
       .prepare(
-        `SELECT id, target_agent_id, reason_type, source_event_id, status
+        `SELECT id, target_agent_id, reason_type, source_event_id, status,
+                model, reasoning_effort
          FROM activations
          WHERE task_id = ?
          ORDER BY sequence`,
@@ -706,6 +734,8 @@ export class CoordinationTaskStore {
         reason_type: ActivationView["reason"]["type"];
         source_event_id: string;
         status: ActivationView["status"];
+        model: string | null;
+        reasoning_effort: ActivationView["reasoningEffort"];
       }>;
     return rows.map((row) => ({
       id: row.id,
@@ -714,6 +744,8 @@ export class CoordinationTaskStore {
       reason: { type: row.reason_type, sourceEventId: row.source_event_id },
       attempts: this.readAttempts(row.id),
       startupFailure: this.readActivationStartupFailure(row.id),
+      model: row.model,
+      reasoningEffort: row.reasoning_effort,
     }));
   }
 
@@ -748,7 +780,7 @@ export class CoordinationTaskStore {
     const rows = this.#database
       .prepare(
         `SELECT id, status, workspace_path, started_at, completed_at,
-                outcome_status, outcome_summary, thread_id
+                outcome_status, outcome_summary, thread_id, model, reasoning_effort
          FROM attempts
          WHERE activation_id = ?
          ORDER BY rowid`,
@@ -762,6 +794,8 @@ export class CoordinationTaskStore {
         outcome_status: "completed" | "failed" | null;
         outcome_summary: string | null;
         thread_id: string | null;
+        model: string | null;
+        reasoning_effort: AttemptView["reasoningEffort"];
       }>;
     return rows.map((row) => ({
       id: row.id,
@@ -774,6 +808,8 @@ export class CoordinationTaskStore {
           ? null
           : { status: row.outcome_status, summary: row.outcome_summary ?? "" },
       threadId: row.thread_id,
+      model: row.model,
+      reasoningEffort: row.reasoning_effort,
     }));
   }
 

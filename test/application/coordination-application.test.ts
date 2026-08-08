@@ -311,6 +311,63 @@ agents:
   );
 });
 
+test("agent execution profiles validate at their source and participate in the fingerprint", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "coordination-agent-profile-"));
+  const definitionPath = join(directory, "process.yaml");
+  await writeFile(join(directory, "reviewer.md"), "Review the requested change.\n");
+  const definition = (profile: string) => `schemaVersion: 1
+name: Profiled process
+defaultTaskWorkspaceStartingRef: main
+coordinationGuidance: Keep review independent.
+agents:
+  - id: reviewer
+    name: Reviewer
+    role: Reviews changes
+    summary: Checks correctness.
+    instructions: ./reviewer.md
+${profile}
+boards:
+  - id: delivery
+    name: Delivery
+    guidance: Review before completion.
+    columns:
+      - id: review
+        name: Review
+        watchingAgent: reviewer
+`;
+
+  await writeFile(definitionPath, definition("    model: gpt-5.6-sol\n    reasoningEffort: medium"));
+  const explicit = await CoordinationApplication.validateProcessDefinition(definitionPath);
+  assert.equal(explicit.valid, true);
+  if (!explicit.valid) return;
+
+  await writeFile(definitionPath, definition(""));
+  const inherited = await CoordinationApplication.validateProcessDefinition(definitionPath);
+  assert.equal(inherited.valid, true);
+  if (!inherited.valid) return;
+  assert.notEqual(explicit.processDefinitionVersion, inherited.processDefinitionVersion);
+
+  await writeFile(definitionPath, definition("    model: \"\"\n    reasoningEffort: ultra"));
+  const invalid = await CoordinationApplication.validateProcessDefinition(definitionPath);
+  assert.equal(invalid.valid, false);
+  if (invalid.valid) return;
+  assert.deepEqual(
+    invalid.diagnostics.map(({ line, invalidValue, correction }) => ({
+      line,
+      invalidValue,
+      correction,
+    })),
+    [
+      { line: 11, invalidValue: "", correction: "Provide a non-empty value." },
+      {
+        line: 12,
+        invalidValue: "ultra",
+        correction: "Use one of: minimal, low, medium, high, or xhigh.",
+      },
+    ],
+  );
+});
+
 test("resume is explicit and every later application startup returns to paused", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "coordination-resume-"));
   const definitionPath = join(directory, "process.yaml");

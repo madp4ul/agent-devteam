@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Ajv2020 } from "ajv/dist/2020.js";
+import type { ModelReasoningEffort } from "@openai/codex-sdk";
 import {
   isNode,
   LineCounter,
@@ -20,6 +21,8 @@ export interface ProcessAgentDefinition {
   role: string;
   summary: string;
   instructions: string;
+  model?: string;
+  reasoningEffort?: ModelReasoningEffort;
 }
 
 export interface ProcessColumnDefinition {
@@ -366,6 +369,7 @@ function schemaCorrection(keyword: string, params: Record<string, unknown>): str
     return "Use a lowercase stable ID beginning with a letter and containing only letters, digits, and single hyphens.";
   }
   if (keyword === "minLength") return "Provide a non-empty value.";
+  if (keyword === "enum") return "Use one of: minimal, low, medium, high, or xhigh.";
   if (keyword === "minItems") return "Add at least one item.";
   if (keyword === "const") {
     return `Use the schema-supported value ${JSON.stringify(params.allowedValue)}.`;

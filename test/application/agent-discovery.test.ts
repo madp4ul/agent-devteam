@@ -289,6 +289,11 @@ test("full task inspection keeps history and attachments behind on-demand querie
       failedActivationCount: 0,
     },
     unresolvedAttention: [],
+    currentActivation: {
+      targetAgentId: "implementer",
+      model: null,
+      reasoningEffort: null,
+    },
     onDemand: { activity: true, attachments: true },
   });
   assert.equal("activity" in inspection.task, false);

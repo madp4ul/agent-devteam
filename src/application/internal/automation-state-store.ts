@@ -35,7 +35,8 @@ export class AutomationStateStore {
   readNextRunnableActivation(): RunnableActivation | undefined {
     const row = this.#database
       .prepare(
-        `SELECT a.id, a.task_id, a.target_agent_id, a.source_event_id
+        `SELECT a.id, a.task_id, a.target_agent_id, a.source_event_id,
+                a.model, a.reasoning_effort
          FROM activations a
          WHERE a.status = 'queued'
            AND NOT EXISTS (
@@ -54,6 +55,8 @@ export class AutomationStateStore {
           task_id: string;
           target_agent_id: string;
           source_event_id: string;
+          model: string | null;
+          reasoning_effort: NonNullable<AgentRunAgent["reasoningEffort"]> | null;
         }
       | undefined;
     if (row === undefined) return undefined;
@@ -92,6 +95,10 @@ export class AutomationStateStore {
         role: agentRow.role,
         summary: agentRow.summary,
         instructions: agentRow.instructions_content,
+        ...(row.model === null ? {} : { model: row.model }),
+        ...(row.reasoning_effort === null
+          ? {}
+          : { reasoningEffort: row.reasoning_effort }),
       },
       sourceEvent,
     };
@@ -124,6 +131,7 @@ export class AutomationStateStore {
   startAttempt(
     activationId: string,
     workspacePath: string,
+    agent: AgentRunAgent,
   ): { id: string; number: number; runStartActivityId: string } {
     return this.#owner.transaction(() => {
       const activation = this.#database
@@ -147,10 +155,17 @@ export class AutomationStateStore {
       this.#database
         .prepare(
           `INSERT INTO attempts
-            (id, activation_id, status, workspace_path, started_at)
-           VALUES (?, ?, 'running', ?, ?)`,
+            (id, activation_id, status, workspace_path, started_at, model, reasoning_effort)
+           VALUES (?, ?, 'running', ?, ?, ?, ?)`,
         )
-        .run(attemptId, activationId, workspacePath, occurredAt);
+        .run(
+          attemptId,
+          activationId,
+          workspacePath,
+          occurredAt,
+          agent.model ?? null,
+          agent.reasoningEffort ?? null,
+        );
       const runStartActivityId = this.appendActivity(
         activation.task_id,
         "attempt.started",

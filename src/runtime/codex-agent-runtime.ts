@@ -1,4 +1,4 @@
-import { Codex, type CodexOptions } from "@openai/codex-sdk";
+import { Codex, type CodexOptions, type ThreadOptions } from "@openai/codex-sdk";
 
 import type {
   AgentRunOutcome,
@@ -16,11 +16,10 @@ export interface CodexClientOptionsLike {
   config?: CodexConfigObject;
 }
 
-export interface CodexThreadOptionsLike {
-  workingDirectory?: string;
-  sandboxMode?: string;
-  approvalPolicy?: string;
-}
+export type CodexThreadOptionsLike = Pick<
+  ThreadOptions,
+  "workingDirectory" | "sandboxMode" | "approvalPolicy" | "model" | "modelReasoningEffort"
+>;
 
 export type CodexEventLike =
   | { type: "thread.started"; thread_id: string }
@@ -79,7 +78,13 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     const transcript: AttemptTranscriptItem[] = [];
     try {
       const client = (this.#options.createClient ?? createCodexClient)(clientOptions);
-      const thread = client.startThread({ workingDirectory: request.workspace.path });
+      const thread = client.startThread({
+        workingDirectory: request.workspace.path,
+        ...(request.agent.model === undefined ? {} : { model: request.agent.model }),
+        ...(request.agent.reasoningEffort === undefined
+          ? {}
+          : { modelReasoningEffort: request.agent.reasoningEffort }),
+      });
       const { events } = await thread.runStreamed(composeActivationPrompt(request));
       let finalResponse = "";
       let turnCompleted = false;

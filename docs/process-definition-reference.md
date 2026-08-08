@@ -47,6 +47,19 @@ Instruction content participates in the semantic process-definition fingerprint.
 Keep long-form instructions in the referenced Markdown file rather than embedding
 them in YAML.
 
+Each agent may also select an execution profile:
+
+| Field | Meaning |
+| --- | --- |
+| `model` | Optional non-empty Codex model identifier passed to a new thread. Availability is checked by Codex at runtime. |
+| `reasoningEffort` | Optional SDK-supported effort: `minimal`, `low`, `medium`, `high`, or `xhigh`. |
+
+Omitting either field independently delegates that choice to the launching
+user's ordinary Codex configuration. The framework does not resolve or display
+an invented default. Explicit values participate in the semantic fingerprint,
+are retained with activations and attempts, and do not change instructions,
+tools, sandboxing, approval policy, or any other permission boundary.
+
 ## Boards and columns
 
 A board requires `id`, `name`, `guidance`, and a non-empty ordered `columns`

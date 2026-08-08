@@ -172,6 +172,9 @@ function TimelineEntry({
         <p>
           {entry.agentId} · {entry.attempt.status} · {duration(entry.attempt.startedAt, entry.attempt.completedAt)}
         </p>
+        <p>
+          Model: {entry.attempt.model ?? "Codex default"} · Reasoning: {entry.attempt.reasoningEffort ?? "Codex default"}
+        </p>
         {entry.attempt.outcome === null ? null : (
           <p className="attempt-outcome">{entry.attempt.outcome.summary}</p>
         )}

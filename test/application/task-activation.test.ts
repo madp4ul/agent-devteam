@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { promisify } from "node:util";
 
@@ -348,7 +349,11 @@ test("a pre-attempt workspace failure is durable, correlated, and visible after 
 });
 
 test("resuming runs the queued activation in a just-in-time detached task workspace", async (t) => {
-  const fixture = await createFixture("first-run");
+  const fixture = await createFixture(
+    "first-run",
+    "main",
+    "    model: gpt-5.6-sol\n    reasoningEffort: medium\n",
+  );
   const runtime = new ControlledAgentRuntime();
   const application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
@@ -385,6 +390,15 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
       "controlled-thread",
     );
   }
+  const inspection = application.queryTaskInspection(created.task.id);
+  assert.equal(inspection.available, true);
+  if (inspection.available) {
+    assert.deepEqual(inspection.task.currentActivation, {
+      targetAgentId: "implementer",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "medium",
+    });
+  }
   const request = runtime.requests[0];
   assert.ok(request);
   assert.deepEqual(request.agent, {
@@ -393,6 +407,8 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
     role: "Implements scoped tasks",
     summary: "Builds and verifies changes.",
     instructions: "Implement the requested task.\n",
+    model: "gpt-5.6-sol",
+    reasoningEffort: "medium",
   });
   assert.deepEqual(request.reason, created.task.activations[0]?.reason);
   assert.deepEqual(request.sourceEvent, created.task.activity[0]);
@@ -421,12 +437,16 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
       status: attempt.status,
       outcome: attempt.outcome,
       workspacePath: attempt.workspacePath,
+      model: attempt.model,
+      reasoningEffort: attempt.reasoningEffort,
     })),
     [
       {
         status: "completed",
         outcome: { status: "completed", summary: "Implemented and verified." },
         workspacePath: request.workspace.path,
+        model: "gpt-5.6-sol",
+        reasoningEffort: "medium",
       },
     ],
   );
@@ -434,6 +454,72 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
     completed.task.activity.map((event) => event.type),
     ["task.created", "activation.created", "attempt.started", "attempt.completed"],
   );
+});
+
+test("retry attempts retain the activation's snapshotted execution profile", async (t) => {
+  const fixture = await createFixture(
+    "profiled-retry",
+    "main",
+    "    model: gpt-5.6-sol\n    reasoningEffort: medium\n",
+  );
+  const runtime = new ControlledAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Retry with the requested profile",
+    description: "A later attempt must not silently change model selection.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-profiled-retry",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  await application.resumeAutomation();
+  const first = await runtime.waitForRequest(1);
+  runtime.complete({ status: "failed", summary: "Transient runtime failure." });
+  await application.waitForAutomationIdle();
+
+  // Issue 24 owns retry authorization and scheduling. Emulate only its durable
+  // failed-to-queued transition so this ticket can lock down the retry payload.
+  const database = new DatabaseSync(fixture.databasePath);
+  database.prepare("UPDATE activations SET status = 'queued' WHERE id = ?").run(first.activationId);
+  database.close();
+
+  await application.resumeAutomation();
+  const retry = await runtime.waitForRequest(2);
+  assert.equal(retry.activationId, first.activationId);
+  assert.equal(retry.attempt.number, 2);
+  assert.deepEqual(
+    { model: retry.agent.model, reasoningEffort: retry.agent.reasoningEffort },
+    { model: "gpt-5.6-sol", reasoningEffort: "medium" },
+  );
+  runtime.complete({ status: "completed", summary: "Retry completed." });
+  await application.waitForAutomationIdle();
+
+  const inspected = application.queryTask(created.task.id);
+  assert.equal(inspected.available, true);
+  if (inspected.available) {
+    assert.deepEqual(
+      inspected.task.activations[0]?.attempts.map(({ model, reasoningEffort }) => ({
+        model,
+        reasoningEffort,
+      })),
+      [
+        { model: "gpt-5.6-sol", reasoningEffort: "medium" },
+        { model: "gpt-5.6-sol", reasoningEffort: "medium" },
+      ],
+    );
+  }
 });
 
 test(
@@ -768,7 +854,7 @@ class CompletingAgentRuntime implements AgentRuntime {
   }
 }
 
-async function createFixture(name: string, startingRef = "main"): Promise<{
+async function createFixture(name: string, startingRef = "main", agentProfile = ""): Promise<{
   definitionPath: string;
   databasePath: string;
   repositoryPath: string;
@@ -805,7 +891,7 @@ agents:
     role: Implements scoped tasks
     summary: Builds and verifies changes.
     instructions: ./implementer.md
-boards:
+${agentProfile}boards:
   - id: delivery
     name: Delivery
     guidance: Move work through delivery.

@@ -97,12 +97,17 @@ without choosing the implementation yet.
   runs, fail attempts with unresolved required coordination calls, and persist
   correlated pre-attempt startup diagnostics across logs, UI, and host restarts.
 
+- [Configure Agent Models and Reasoning](./issues/36-configure-agent-models-and-reasoning.md)
+  — Let each process agent optionally select a Codex model and reasoning effort,
+  snapshot the requested profile on activations and attempts, and preserve the
+  launching user's ordinary Codex defaults when either value is omitted.
+
 ## Next implementation priority
 
-- [Configure Agent Models and Reasoning](./issues/36-configure-agent-models-and-reasoning.md)
-  — Add optional per-agent Codex model and reasoning-effort configuration,
-  preserve ordinary Codex inheritance when omitted, and expose the requested
-  execution profile. This is the delivery gate before issues 21 and 22.
+- [Split, Relate, and Unblock Work](./issues/21-split-relate-unblock-work.md)
+  — Add parent-child and dependency relationships, task-specific child starting
+  refs, immutable blocker history, and exactly one activation when the final
+  blocker becomes satisfied.
 
 ## Clarified delivery follow-ups
 

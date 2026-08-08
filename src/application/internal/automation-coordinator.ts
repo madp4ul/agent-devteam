@@ -171,7 +171,11 @@ export class AutomationCoordinator {
         this.#runtimeDiagnostic?.(failure);
         throw new Error(failure.diagnostic, { cause: error });
       }
-      const attempt = this.#stateStore.startAttempt(runnable.activation.id, workspace.path);
+      const attempt = this.#stateStore.startAttempt(
+        runnable.activation.id,
+        workspace.path,
+        runnable.agent,
+      );
       const currentTask = this.#taskStore.readTask(runnable.task.id);
       if (currentTask === undefined) throw new Error("Runnable task disappeared before dispatch");
       const process = this.#processContext;

@@ -73,6 +73,22 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
               <div><dt>Active agent</dt><dd>{inspection.run.activeAgentId ?? "None"}</dd></div>
               <div><dt>Queued activations</dt><dd>{inspection.run.queuedActivationCount}</dd></div>
               <div><dt>Failed activations</dt><dd>{inspection.run.failedActivationCount}</dd></div>
+              {inspection.currentActivation === null ? null : (
+                <>
+                  <div>
+                    <dt>Current activation</dt>
+                    <dd>{inspection.currentActivation.targetAgentId}</dd>
+                  </div>
+                  <div>
+                    <dt>Requested model</dt>
+                    <dd>{inspection.currentActivation.model ?? "Codex default"}</dd>
+                  </div>
+                  <div>
+                    <dt>Requested reasoning</dt>
+                    <dd>{inspection.currentActivation.reasoningEffort ?? "Codex default"}</dd>
+                  </div>
+                </>
+              )}
             </dl>
             {inspection.unresolvedAttention.length === 0 ? (
               <p className="quiet">No unresolved attention.</p>

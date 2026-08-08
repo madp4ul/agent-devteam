@@ -43,6 +43,10 @@ test("an agent comment and move hand work to the next watched-column agent", asy
   await application.resumeAutomation();
   const implementation = await runtime.waitForRequest(1);
   assert.equal(implementation.agent.id, "implementer");
+  assert.deepEqual(
+    { model: implementation.agent.model, reasoningEffort: implementation.agent.reasoningEffort },
+    { model: "gpt-5.6-sol", reasoningEffort: "medium" },
+  );
   assert.equal(implementation.process.guidance, "Keep every handoff explicit.");
   assert.equal(implementation.board.guidance, "Move completed work to review.");
   assert.deepEqual(
@@ -85,6 +89,10 @@ test("an agent comment and move hand work to the next watched-column agent", asy
   });
   const review = await runtime.waitForRequest(2);
   assert.equal(review.agent.id, "reviewer");
+  assert.deepEqual(
+    { model: review.agent.model, reasoningEffort: review.agent.reasoningEffort },
+    { model: "gpt-5.6-terra", reasoningEffort: "high" },
+  );
   assert.equal(review.task.columnId, "review");
   assert.deepEqual(
     review.task.comments.map((entry) => ({ body: entry.body, actor: entry.actor })),
@@ -141,6 +149,14 @@ test("a streamed Codex failure remains an inspectable failed attempt and blocks 
 
   await application.resumeAutomation();
   await runtime.waitForRequest(1);
+  const moved = application.moveTask({
+    taskId: created.task.id,
+    destinationColumnId: "review",
+    expectedRevision: 1,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "queue-review-behind-failing-implementation",
+  });
+  assert.equal(moved.accepted, true);
   runtime.complete({
     status: "failed",
     summary: "Codex could not complete the activation: model stream disconnected",
@@ -152,6 +168,15 @@ test("a streamed Codex failure remains an inspectable failed attempt and blocks 
   assert.equal(failed.available, true);
   if (!failed.available) return;
   assert.equal(failed.task.activations[0]?.status, "failed");
+  const inspection = application.queryTaskInspection(created.task.id);
+  assert.equal(inspection.available, true);
+  if (inspection.available) {
+    assert.deepEqual(inspection.task.currentActivation, {
+      targetAgentId: "implementer",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "medium",
+    });
+  }
   assert.deepEqual(failed.task.activations[0]?.attempts[0], {
     id: failed.task.activations[0]?.attempts[0]?.id,
     status: "failed",
@@ -163,6 +188,8 @@ test("a streamed Codex failure remains an inspectable failed attempt and blocks 
       summary: "Codex could not complete the activation: model stream disconnected",
     },
     threadId: "thread-failed-handoff",
+    model: "gpt-5.6-sol",
+    reasoningEffort: "medium",
   });
 });
 
@@ -305,11 +332,15 @@ agents:
     role: Implements scoped tasks
     summary: Builds the requested change.
     instructions: ./implementer.md
+    model: gpt-5.6-sol
+    reasoningEffort: medium
   - id: reviewer
     name: Code Reviewer
     role: Reviews implementations
     summary: Reviews completed changes.
     instructions: ./reviewer.md
+    model: gpt-5.6-terra
+    reasoningEffort: high
 boards:
   - id: delivery
     name: Delivery

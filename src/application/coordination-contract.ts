@@ -1,3 +1,5 @@
+import type { ModelReasoningEffort } from "@openai/codex-sdk";
+
 export interface StartApplicationOptions {
   processDefinitionPath: string;
   databasePath: string;
@@ -76,7 +78,12 @@ export interface ActivationReasonView {
   sourceEventId: string;
 }
 
-export interface AttemptView {
+export interface AgentExecutionProfile {
+  model: string | null;
+  reasoningEffort: ModelReasoningEffort | null;
+}
+
+export interface AttemptView extends AgentExecutionProfile {
   id: string;
   status: "running" | "completed" | "failed";
   workspacePath: string;
@@ -116,7 +123,7 @@ export type AttemptTranscriptItem =
     }
   | { kind: "diagnostic"; text: string };
 
-export interface ActivationView {
+export interface ActivationView extends AgentExecutionProfile {
   id: string;
   targetAgentId: string;
   status: "queued" | "running" | "completed" | "failed";
@@ -131,6 +138,8 @@ export interface AgentRunAgent {
   role: string;
   summary: string;
   instructions: string;
+  model?: string;
+  reasoningEffort?: ModelReasoningEffort;
 }
 
 export interface TaskWorkspaceView {
@@ -220,6 +229,7 @@ export interface TaskInspectionView {
   blocking: TaskOverviewView["blocking"];
   run: TaskOverviewView["run"];
   unresolvedAttention: TaskAttentionView[];
+  currentActivation: ({ targetAgentId: string } & AgentExecutionProfile) | null;
   onDemand: { activity: true; attachments: true };
 }
 
