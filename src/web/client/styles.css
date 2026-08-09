@@ -202,15 +202,17 @@ textarea { resize: vertical; line-height: 1.5; }
 .timeline-entry p { margin: .55rem 0; }
 .timeline details { margin-top: .8rem; }
 .timeline summary { color: var(--forest); font-weight: 700; cursor: pointer; }
+.attempt-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .8rem; }
 .diagnostic { color: #953824; }
 .transcript-modal { width: min(68rem, 100%); height: min(52rem, calc(100vh - 2rem)); display: flex; flex-direction: column; }
-.thread-strip { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-radius: .6rem; background: #ebeee9; padding: .75rem; }
-.thread-strip code { overflow-wrap: anywhere; }
+.thread-strip { display: flex; justify-content: flex-end; }
 .transcript-content { display: grid; gap: .8rem; overflow-y: auto; margin-top: 1rem; padding-right: .3rem; }
 .transcript-item { border: 1px solid var(--line); border-radius: .65rem; background: white; padding: 1rem; }
 .transcript-item.message { border-left: 4px solid var(--forest); }
 .transcript-item.tool { border-left: 4px solid #547c9b; }
 .transcript-item.diagnostic { border-left: 4px solid var(--coral); }
+.tool-output { margin-top: .8rem; }
+.tool-output summary { width: fit-content; color: var(--forest); font-weight: 700; cursor: pointer; }
 pre { max-height: 18rem; overflow: auto; border-radius: .5rem; color: #d9eee3; background: #17211d; padding: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .unavailable { border: 1px dashed var(--line); border-radius: .7rem; color: var(--muted); padding: 2rem; text-align: center; }
 .loading { display: grid; min-height: 70vh; place-content: center; justify-items: center; color: var(--muted); }

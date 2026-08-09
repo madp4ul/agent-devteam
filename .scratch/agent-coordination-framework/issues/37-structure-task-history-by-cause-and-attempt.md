@@ -39,6 +39,10 @@ technical event or losing the underlying audit evidence.
 - [ ] Dense histories remain navigable with keyboard and assistive technology;
   collapsed summaries announce meaningful counts and state instead of hiding
   failures or pending attention.
+- [ ] Present the task timeline newest-first: the most recent comment, attempt,
+  or event appears at the top and the oldest history remains at the bottom.
+  Preserve authoritative chronological ordering in storage and technical audit
+  views; this is a presentation direction for the redesigned narrative only.
 - [ ] Browser scenarios cover comment-triggered consultation, move-triggered
   handoff, user attention, successful attempts, retries, startup failure,
   interruption, and a long task history where comments remain easy to find.
@@ -56,3 +60,7 @@ technical event or losing the underlying audit evidence.
   and issue 35's mention interaction.
 - This is intentionally not the next implementation ticket. It needs the later
   attempt/recovery event shapes and a focused UI prototype before implementation.
+- Live review after issue 32 found that ongoing supervision would be easier when
+  the latest task history is immediately visible. Include newest-first narrative
+  ordering in the causal-group prototypes rather than changing the current flat
+  timeline separately.

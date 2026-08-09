@@ -268,7 +268,6 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await page.goto("/tasks/T-0002");
   await expect(page.getByText(/Current attempt · consulting-agent · running/)).toBeVisible();
   await expect(page.locator(".attempt-entry").filter({ hasText: "consulting-agent · running" })).toBeVisible();
-  await page.getByText("Thread information").click();
   await page.getByRole("button", { name: "View transcript" }).click();
   await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText(/consulting-agent · running · 0m/);
   await page.getByRole("button", { name: "Close transcript" }).click();
@@ -526,12 +525,17 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByRole("button", { name: /Backlog.*Previous/ })).toBeEnabled();
   await expect(page.getByRole("button", { name: /Completion.*Next/ })).toBeEnabled();
 
-  await page.getByText("Thread information").click();
-  await page.getByRole("button", { name: "View transcript" }).click();
+  const attemptEntry = page.locator(".attempt-entry").filter({ hasText: "Attempt 1" });
+  await expect(attemptEntry.getByText("Thread information")).toHaveCount(0);
+  await expect(attemptEntry).not.toContainText("thread-browser-123");
+  await expect(attemptEntry.getByRole("button", { name: "Copy thread ID" })).toBeVisible();
+  await attemptEntry.getByRole("button", { name: "View transcript" }).click();
   const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
-  await expect(dialog).toContainText("thread-browser-123");
+  await expect(dialog).not.toContainText("thread-browser-123");
   await expect(dialog).toContainText("I inspected the current task.");
   await expect(dialog).toContainText("pnpm test (exit 0)");
+  await expect(dialog.getByText("output truncated")).toBeHidden();
+  await dialog.getByText("View command output").click();
   await expect(dialog).toContainText("output truncated");
   await expect(dialog.getByRole("button", { name: "Copy thread ID" })).toBeVisible();
   await dialog.getByRole("button", { name: "Close transcript" }).click();
@@ -647,7 +651,6 @@ test("an open transcript replaces one running tool entry with its terminal evide
   });
 
   await page.goto("/tasks/T-0001");
-  await page.getByText("Thread information").click();
   await page.getByRole("button", { name: "View transcript" }).click();
   const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
   await expect(dialog).toContainText("pnpm test · running");
@@ -668,9 +671,57 @@ test("an open transcript replaces one running tool entry with its terminal evide
   await page.getByRole("dialog", { name: "Attempt transcript" }).getByRole("button", { name: "Close transcript" }).click();
   await page.goto("/");
   await page.goto("/tasks/T-0001");
-  await page.getByText("Thread information").click();
   await page.getByRole("button", { name: "View transcript" }).click();
   await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText("All live checks passed.");
+});
+
+test("a live transcript follows appended items only while the reader is at the bottom", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const attempt = detail.task.activations[0]?.attempts[0];
+    if (attempt !== undefined) {
+      attempt.status = "running";
+      attempt.completedAt = null;
+      attempt.outcome = null;
+    }
+    await route.fulfill({ response, json: detail });
+  });
+  let reads = 0;
+  await page.route("**/api/attempts/browser-attempt/transcript", async (route) => {
+    reads += 1;
+    const items = Array.from({ length: 40 }, (_, index) => ({
+      id: `follow-message-${index}`,
+      kind: "message",
+      role: "agent",
+      text: `Live transcript message ${index + 1}.`,
+    }));
+    if (reads > 1) {
+      items.push({
+        id: "new-bottom-message",
+        kind: "message",
+        role: "agent",
+        text: "This newly appended message should stay visible.",
+      });
+    }
+    await route.fulfill({
+      status: 200,
+      json: { available: true, threadId: "thread-browser-123", items },
+    });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View transcript" }).click();
+  const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
+  const transcriptContent = dialog.locator(".transcript-content");
+  await expect(dialog).toContainText("Live transcript message 40.");
+  await transcriptContent.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(dialog).toContainText("This newly appended message should stay visible.");
+  await expect.poll(() => transcriptContent.evaluate((element) =>
+    element.scrollHeight - element.clientHeight - element.scrollTop,
+  )).toBeLessThanOrEqual(1);
 });
 
 test("task details expose lazy and provisioned task workspaces", async ({ page, context }) => {

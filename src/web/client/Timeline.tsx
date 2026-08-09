@@ -226,18 +226,14 @@ function TimelineEntry({
         {diagnostic === undefined ? null : (
           <p className="diagnostic">Diagnostic: {diagnostic}</p>
         )}
-        <details>
-          <summary>Thread information</summary>
-          <div className="thread-strip">
-            <span>Thread ID: <code>{entry.attempt.threadId ?? "Unavailable"}</code></span>
-            {entry.attempt.threadId === null ? null : (
-              <CopyThreadIdButton threadId={entry.attempt.threadId} />
-            )}
-          </div>
+        <div className="attempt-actions">
           <button className="secondary" onClick={() => onTranscript({ attemptId: entry.attempt.id, agentId: entry.agentId })}>
             View transcript
           </button>
-        </details>
+          {entry.attempt.threadId === null ? null : (
+            <CopyThreadIdButton threadId={entry.attempt.threadId} />
+          )}
+        </div>
       </article>
     </li>
   );
@@ -252,12 +248,14 @@ function TranscriptDialog({ attempt, agentId, onClose }: {
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string>();
   const contentRef = useRef<HTMLDivElement>(null);
-  const pendingScrollTop = useRef<number | null>(null);
+  const pendingScrollPosition = useRef<number | "bottom" | null>(null);
 
   useLayoutEffect(() => {
-    if (pendingScrollTop.current === null || contentRef.current === null) return;
-    contentRef.current.scrollTop = pendingScrollTop.current;
-    pendingScrollTop.current = null;
+    if (pendingScrollPosition.current === null || contentRef.current === null) return;
+    contentRef.current.scrollTop = pendingScrollPosition.current === "bottom"
+      ? contentRef.current.scrollHeight
+      : pendingScrollPosition.current;
+    pendingScrollPosition.current = null;
   }, [items]);
 
   useEffect(() => {
@@ -267,7 +265,12 @@ function TranscriptDialog({ attempt, agentId, onClose }: {
         const result = await readAttemptTranscript(attempt.id);
         if (!active) return;
         if (result.available) {
-          pendingScrollTop.current = contentRef.current?.scrollTop ?? null;
+          const content = contentRef.current;
+          pendingScrollPosition.current = content === null
+            ? null
+            : content.scrollHeight - content.clientHeight - content.scrollTop <= 32
+              ? "bottom"
+              : content.scrollTop;
           setItems(result.items);
           setUnavailable(false);
           setError(undefined);
@@ -305,7 +308,6 @@ function TranscriptDialog({ attempt, agentId, onClose }: {
           <button className="icon-button" aria-label="Close transcript" onClick={onClose}>×</button>
         </header>
         <div className="thread-strip">
-          <code>{attempt.threadId ?? "Thread ID unavailable"}</code>
           {attempt.threadId === null ? null : (
             <CopyThreadIdButton threadId={attempt.threadId} />
           )}
@@ -340,7 +342,12 @@ function TranscriptDialog({ attempt, agentId, onClose }: {
                 ) : (
                   <>
                     <p><strong>{item.summary}</strong> · {item.status}</p>
-                    {item.output === undefined ? null : <pre>{item.output}</pre>}
+                    {item.output === undefined ? null : (
+                      <details className="tool-output">
+                        <summary>View command output</summary>
+                        <pre>{item.output}</pre>
+                      </details>
+                    )}
                   </>
                 )}
               </article>
