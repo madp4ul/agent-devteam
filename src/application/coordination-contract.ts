@@ -580,6 +580,7 @@ export interface MarkUserMentionAddressedCommand {
 
 export interface ArchiveTaskCommand {
   taskId: string;
+  discardWorkspaceChanges?: true;
   actor: Actor & { kind: "user" };
   idempotencyKey: string;
 }
@@ -587,6 +588,7 @@ export interface ArchiveTaskCommand {
 export interface UnarchiveTaskCommand extends ArchiveTaskCommand {}
 
 export interface ArchiveCompletedTasksCommand {
+  boardId: string;
   actor: Actor & { kind: "user" };
   idempotencyKey: string;
 }

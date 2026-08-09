@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
+import type { TaskOverviewView } from "../../application/coordination-contract.ts";
 import type { BrowserBoardState, BrowserColumnView } from "./api.ts";
 import { TaskCard } from "./TaskCard.tsx";
 
@@ -9,6 +10,7 @@ export type BoardLayout = "row" | "column";
 export function BoardColumn({
   boardId,
   column,
+  archivedTasks,
   layout,
   filter,
   pendingTaskId,
@@ -18,9 +20,11 @@ export function BoardColumn({
   onTaskStripScroll,
   onOpen,
   onCreate,
+  onArchiveCompleted,
 }: {
   boardId: string;
   column: BrowserColumnView;
+  archivedTasks: TaskOverviewView[];
   layout: BoardLayout;
   filter: string;
   pendingTaskId?: string | undefined;
@@ -30,6 +34,7 @@ export function BoardColumn({
   onTaskStripScroll(position: number): void;
   onOpen(taskId: string): void;
   onCreate(): void;
+  onArchiveCompleted(): void;
 }): ReactNode {
   const elementRef = useRef<HTMLElement>(null);
   const [over, setOver] = useState(false);
@@ -45,7 +50,7 @@ export function BoardColumn({
     });
   }, [boardId, column.id]);
   const needle = filter.trim().toLocaleLowerCase();
-  const tasks = column.tasks.filter(
+  const tasks = [...column.tasks, ...archivedTasks].filter(
     (task) =>
       needle.length === 0 ||
       `${task.id} ${task.title}`.toLocaleLowerCase().includes(needle),
@@ -61,7 +66,7 @@ export function BoardColumn({
       aria-labelledby={headingId}
     >
       <header className="column-header">
-        <div>
+        <div className="column-heading">
           <div>
             <h3 id={headingId}>{column.name}</h3>
             {column.frameworkOwned ? null : (
@@ -82,6 +87,14 @@ export function BoardColumn({
             </button>
           ) : null}
         </div>
+        {column.id === "completion" && column.tasks.length > 0 ? (
+          <button
+            className="archive-completed"
+            aria-label="Archive completed tasks"
+            title="Archive completed tasks"
+            onClick={onArchiveCompleted}
+          >Archive</button>
+        ) : null}
       </header>
       <ol
         ref={layout === "row" ? onTaskStrip : undefined}

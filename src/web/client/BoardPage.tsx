@@ -57,12 +57,30 @@ export function BoardPage({
   const [layout, setLayout] = useState<BoardLayout>(readLayoutPreference);
   const [creation, setCreation] = useState<{ boardId: string; columnId: string }>();
   const [highlightedTaskId, setHighlightedTaskId] = useState<string>();
-  const [archivedTasks, setArchivedTasks] = useState<TaskOverviewView[]>();
+  const [showArchived, setShowArchived] = useState(
+    pendingInitialContext.current?.showArchived === true,
+  );
+  const [archivedTasks, setArchivedTasks] = useState<TaskOverviewView[]>([]);
+  const showArchivedRef = useRef(showArchived);
+  const archivedLoadSequence = useRef(0);
   const laneRefs = useRef(new Map<string, HTMLDivElement>());
   const scrollElements = useRef(new Map<string, HTMLElement>());
   const refresh = useCallback(async () => setState(await readBoard()), []);
   const processImpact = state?.startup.mode === "paused" ? state.startup.processImpact : undefined;
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
+  const loadArchivedTasks = useCallback(async () => {
+    const sequence = ++archivedLoadSequence.current;
+    try {
+      const tasks = await readArchivedTasks();
+      if (sequence === archivedLoadSequence.current && showArchivedRef.current) {
+        setArchivedTasks(tasks);
+      }
+    } catch (error) {
+      if (sequence === archivedLoadSequence.current && showArchivedRef.current) {
+        setFeedback({ role: "alert", text: errorMessage(error) });
+      }
+    }
+  }, [setFeedback]);
   const captureScrollPositions = useCallback(() => {
     for (const [key, element] of scrollElements.current) {
       scrollPositions.current.set(key, element.scrollLeft);
@@ -96,6 +114,14 @@ export function BoardPage({
     void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
   }, [refresh, setFeedback]);
   useEffect(() => {
+    if (!showArchived) {
+      archivedLoadSequence.current += 1;
+      return;
+    }
+    void loadArchivedTasks();
+    return () => { archivedLoadSequence.current += 1; };
+  }, [loadArchivedTasks, showArchived]);
+  useEffect(() => {
     if (state === undefined || (state.activeRuns.length === 0 && state.automation.state !== "pausing")) return;
     const timer = window.setInterval(() => void refresh(), 1_000);
     return () => window.clearInterval(timer);
@@ -120,6 +146,7 @@ export function BoardPage({
     const boardContext = {
       boardId,
       filter,
+      showArchived,
       scrollLeft: laneRefs.current.get(boardId)?.scrollLeft ?? 0,
       scrollPositions: Object.fromEntries(scrollPositions.current),
     };
@@ -128,7 +155,7 @@ export function BoardPage({
       "",
       filter.length === 0 ? "/" : `/?q=${encodeURIComponent(filter)}`,
     );
-  }, [captureScrollPositions, filter]);
+  }, [captureScrollPositions, filter, showArchived]);
   const openTask = useCallback((taskId: string, boardId: string) => {
     rememberContext(boardId);
     navigate(`/tasks/${encodeURIComponent(taskId)}`, { returnToBoard: true });
@@ -143,6 +170,27 @@ export function BoardPage({
     });
     rememberContext(boardId);
   }, [rememberContext]);
+
+  const toggleArchivedTasks = useCallback(() => {
+    setShowArchived((current) => {
+      const next = !current;
+      showArchivedRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const archiveCompletedForBoard = useCallback((boardId: string) => {
+    void archiveCompletedTasks(boardId, crypto.randomUUID())
+      .then(async (result) => {
+        await refresh();
+        if (showArchivedRef.current) await loadArchivedTasks();
+        setFeedback({
+          role: result.rejected.length === 0 ? "status" : "alert",
+          text: `Archived ${result.archivedTaskIds.length} completed task(s).${result.rejected.length === 0 ? "" : ` ${result.rejected.length} could not be archived.`}`,
+        });
+      })
+      .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
+  }, [loadArchivedTasks, refresh, setFeedback]);
 
   useEffect(
     () =>
@@ -198,29 +246,11 @@ export function BoardPage({
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">{state.startup.processName}</p>
-          <h1>Coordination board</h1>
+        <div className="board-brand">
+          <h1>{state.startup.processName}</h1>
+          <span>Coordination board</span>
         </div>
         <div className="automation-control">
-          <button
-            className="secondary"
-            onClick={() => void readArchivedTasks()
-              .then(setArchivedTasks)
-              .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }))}
-          >Archived tasks</button>
-          <button
-            className="secondary"
-            onClick={() => void archiveCompletedTasks(crypto.randomUUID())
-              .then(async (result) => {
-                await refresh();
-                setFeedback({
-                  role: result.rejected.length === 0 ? "status" : "alert",
-                  text: `Archived ${result.archivedTaskIds.length} completed task(s).${result.rejected.length === 0 ? "" : ` ${result.rejected.length} could not be archived.`}`,
-                });
-              })
-              .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }))}
-          >Archive completed</button>
           <span className={`status-dot ${state.automation.state}`} aria-hidden="true" />
           <span>Automation {state.automation.state}</span>
           {state.automation.state === "paused" && (processImpact?.staleActivations.length ?? 0) === 0 ? (
@@ -271,23 +301,6 @@ export function BoardPage({
           )}
         </div>
       </header>
-      {archivedTasks === undefined ? null : (
-        <aside className="archived-task-panel" aria-label="Archived tasks">
-          <div className="panel-heading">
-            <h2>Archived tasks</h2>
-            <button className="secondary" onClick={() => setArchivedTasks(undefined)}>Close</button>
-          </div>
-          {archivedTasks.length === 0 ? <p>No archived tasks.</p> : (
-            <ul>{archivedTasks.map((task) => (
-              <li key={task.id}>
-                <button className="secondary" onClick={() => openTask(task.id, task.boardId)}>
-                  {task.id} · {task.title} · {task.column.name}
-                </button>
-              </li>
-            ))}</ul>
-          )}
-        </aside>
-      )}
       <main>
         {processImpact === undefined ? null : (
           <section className="process-impact" aria-labelledby="process-impact-heading">
@@ -389,6 +402,16 @@ export function BoardPage({
               onChange={(event) => changeFilter(event.currentTarget.value)}
             />
           </label>
+          <button
+            className="archive-toggle"
+            aria-label="Show archived tasks"
+            aria-pressed={showArchived}
+            onClick={toggleArchivedTasks}
+          >
+            <span aria-hidden="true" />
+            Archived
+            {showArchived ? ` · ${archivedTasks.length}` : null}
+          </button>
           <fieldset className="layout-control">
             <legend>Board layout</legend>
             <label>
@@ -434,6 +457,8 @@ export function BoardPage({
                   key={column.id}
                   boardId={board.id}
                   column={column}
+                  archivedTasks={(showArchived ? archivedTasks : []).filter((task) =>
+                    task.boardId === board.id && task.column.id === column.id)}
                   layout={layout}
                   filter={filter}
                   pendingTaskId={pendingTaskId}
@@ -450,6 +475,7 @@ export function BoardPage({
                   )}
                   onOpen={(taskId) => openTask(taskId, board.id)}
                   onCreate={() => setCreation({ boardId: board.id, columnId: column.id })}
+                  onArchiveCompleted={() => archiveCompletedForBoard(board.id)}
                 />
               ))}
             </div>

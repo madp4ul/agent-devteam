@@ -1,6 +1,7 @@
 export interface BoardContext {
   boardId: string;
   filter: string;
+  showArchived: boolean;
   scrollLeft: number;
   scrollPositions?: Record<string, number>;
 }

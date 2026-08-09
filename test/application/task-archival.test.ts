@@ -124,7 +124,7 @@ test("archive removes a clean durable workspace and retains task history without
   assert.equal(archived.accepted && archived.task.activity.at(-1)?.type, "task.archived");
 });
 
-test("archive rejects unsafe or busy tasks without changing the task or workspace", async (t) => {
+test("archive rejects busy tasks and requires explicit permission to discard a dirty workspace", async (t) => {
   const fixture = await createFixture("archive-rejections");
   let finishRun!: () => void;
   const runtime: AgentRuntime = {
@@ -177,6 +177,18 @@ test("archive rejects unsafe or busy tasks without changing the task or workspac
   const unchanged = application.queryTaskInspectionForUser(created.task.id);
   assert.equal(unchanged.available, true);
   if (unchanged.available) assert.notEqual(unchanged.task.archived, true);
+
+  const discarded = await application.archiveTask({
+    taskId: created.task.id,
+    discardWorkspaceChanges: true,
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "archive-dirty-with-discard",
+  });
+  assert.equal(discarded.accepted, true);
+  await assert.rejects(stat(detail.task.workspace.path));
+  const archived = application.queryTaskInspectionForUser(created.task.id);
+  assert.equal(archived.available, true);
+  if (archived.available) assert.equal(archived.task.archived, true);
 });
 
 test("archive rejects clean workspaces without a durable ref and worktree removal failures", async (t) => {
@@ -231,7 +243,7 @@ test("archive rejects clean workspaces without a durable ref and worktree remova
 });
 
 test("bulk archive affects only eligible completed tasks and unarchive keeps history without a workspace", async (t) => {
-  const fixture = await createFixture("archive-bulk");
+  const fixture = await createFixture("archive-bulk", true);
   const application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
@@ -240,20 +252,34 @@ test("bulk archive affects only eligible completed tasks and unarchive keeps his
   const completedOne = createTaskInColumn(application, "Completed one", "completion", "completed-one");
   const completedTwo = createTaskInColumn(application, "Completed two", "completion", "completed-two");
   const active = createTaskInColumn(application, "Still active", "implementation", "active");
+  const otherBoardCompleted = createTaskInColumn(
+    application,
+    "Completed elsewhere",
+    "completion",
+    "other-board-completed",
+    "support",
+  );
 
   const bulk = await application.archiveCompletedTasks({
+    boardId: "delivery",
     actor: { kind: "user", id: "local-user" },
     idempotencyKey: "archive-completed",
   });
   assert.deepEqual(bulk, { accepted: true, archivedTaskIds: [completedOne, completedTwo], rejected: [] });
   assert.deepEqual(await application.archiveCompletedTasks({
+    boardId: "delivery",
     actor: { kind: "user", id: "local-user" },
     idempotencyKey: "archive-completed",
   }), bulk);
   const boards = application.queryBoards();
   assert.equal(boards.available, true);
   if (boards.available) {
-    assert.deepEqual(boards.boards[0]?.columns.flatMap((column) => column.tasks.map((task) => task.id)), [active]);
+    const tasksByBoard = new Map(boards.boards.map((board) => [
+      board.id,
+      board.columns.flatMap((column) => column.tasks.map((task) => task.id)),
+    ]));
+    assert.deepEqual(tasksByBoard.get("delivery"), [active]);
+    assert.deepEqual(tasksByBoard.get("support"), [otherBoardCompleted]);
   }
 
   const unarchived = application.unarchiveTask({
@@ -376,6 +402,7 @@ test("bulk archive revalidates Completion after each awaited workspace cleanup",
   if (!second.available) return;
 
   const bulkPromise = application.archiveCompletedTasks({
+    boardId: "delivery",
     actor: { kind: "user", id: "local-user" },
     idempotencyKey: "bulk-race",
   });
@@ -464,7 +491,7 @@ test("startup recovers archival claims around the Git removal boundary", async (
   assert.equal(retry.accepted, true);
 });
 
-async function createFixture(name: string): Promise<{
+async function createFixture(name: string, includeSecondBoard = false): Promise<{
   repository: string;
   workspaceRoot: string;
   databasePath: string;
@@ -498,6 +525,13 @@ boards:
       - id: implementation
         name: Implementation
         watchingAgent: implementer
+${includeSecondBoard ? `  - id: support
+    name: Support
+    guidance: Keep support work separate.
+    columns:
+      - id: triage
+        name: Triage
+` : ""}
 `);
   await writeFile(join(directory, "implementer.md"), "Complete the task.");
   return { repository, workspaceRoot, databasePath: join(directory, "coordination.sqlite3"), definitionPath };
@@ -520,9 +554,10 @@ function createTaskInColumn(
   title: string,
   columnId: string,
   key: string,
+  boardId = "delivery",
 ): string {
   const result = application.createTask({
-    boardId: "delivery",
+    boardId,
     columnId,
     title,
     description: `${title} safely.`,

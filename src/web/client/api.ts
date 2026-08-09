@@ -75,10 +75,17 @@ export async function readArchivedTasks(): Promise<TaskOverviewView[]> {
   return result.tasks;
 }
 
-export async function archiveTask(taskId: string, idempotencyKey: string): Promise<void> {
+export async function archiveTask(
+  taskId: string,
+  idempotencyKey: string,
+  discardWorkspaceChanges = false,
+): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/archive`, {
     method: "POST",
-    body: JSON.stringify({ idempotencyKey }),
+    body: JSON.stringify({
+      idempotencyKey,
+      ...(discardWorkspaceChanges ? { discardWorkspaceChanges: true } : {}),
+    }),
   });
 }
 
@@ -90,11 +97,12 @@ export async function unarchiveTask(taskId: string, idempotencyKey: string): Pro
 }
 
 export async function archiveCompletedTasks(
+  boardId: string,
   idempotencyKey: string,
 ): Promise<Extract<ArchiveCompletedTasksResult, { accepted: true }>> {
   return request("/api/archive/completed", {
     method: "POST",
-    body: JSON.stringify({ idempotencyKey }),
+    body: JSON.stringify({ boardId, idempotencyKey }),
   });
 }
 

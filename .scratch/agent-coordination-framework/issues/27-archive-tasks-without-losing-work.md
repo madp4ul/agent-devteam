@@ -7,7 +7,7 @@ starts any later workspace from the configured ref.
 
 **Blocked by:** 18 — Let Agents Discover Shared Work; 19 — Inspect and Control a Task; 23 — Recover Queued Work After Restart; 32 — Observe Task Activity and Running Attempts Live
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Completed and process-rejected tasks remain visible until the user
   archives them; neither workflow outcome archives automatically.
@@ -16,7 +16,8 @@ starts any later workspace from the configured ref.
 - [x] Archiving is unavailable while the task has active, queued, failed, or
   interrupted activation work or task automation suspension.
 - [x] Workspace cleanup is rejected when staged, modified, or untracked files
-  exist or when the current commit lacks a durable Git ref.
+  exist unless the user explicitly confirms their permanent deletion. Cleanup
+  remains rejected when the current commit lacks a durable Git ref.
 - [x] The framework removes the registered worktree before marking the task
   archived, and any removal failure leaves both task and workspace intact.
 - [x] Cleanup does not infer merge success, require a particular merge target,
@@ -87,3 +88,62 @@ Independent Standards and Spec reviews report no remaining findings.
   dragged.
 - Compact the oversized board title area into a regular responsive application
   bar without removing automation, run, or notification controls.
+
+## User review outcome
+
+The archive and unarchive events now use task-specific timeline descriptions.
+Archive remains directly promoted on completed task details and is available
+through a secondary disclosure elsewhere.
+
+Bulk archive is scoped to a board and appears inside that board's non-empty
+Completion lane. Archived visibility is a reversible toggle beside task search;
+enabled archived cards return to their retained lanes with a matching visual
+treatment, explicit badge, and no drag affordance. The detached archive panel
+and both archive buttons in the automation control were removed, and the board
+header was compacted into a responsive application bar.
+
+Typechecks, the production build, 119 local tests with one intentional skip,
+and all 26 browser scenarios pass. The interaction was also verified visually
+at desktop and narrow widths in the application browser.
+
+## Second user review follow-up
+
+- In row layout, place the non-empty Completion lane's Archive action below
+  its title instead of beside the title/count controls; it must not widen the
+  header area shared by every workflow row.
+- When individual archival is rejected because the task workspace is dirty,
+  offer an explicit destructive confirmation. Confirming permits the framework
+  to force-remove that workspace, including staged, modified, and untracked
+  files, before completing archival.
+- Keep active, queued, failed, interrupted, and automation-suspended work as
+  hard archival blockers. Defining safe activation cancellation is deferred.
+
+The Completion action now has its own line beneath the lane heading. Dirty
+workspace archival remains fail-closed on the initial request and proceeds only
+after a confirmation that states uncommitted files, the workspace, and retained
+transcripts will be permanently removed. Commit durability and automation
+eligibility checks are unchanged.
+
+The final validation passed both TypeScript typechecks, the production build,
+119 local tests with one intentional integration skip, and all 27 browser
+scenarios. Standards and Spec review found no remaining issues.
+
+## Third user review follow-up
+
+- Successful individual archival keeps the user on the task details page and
+  refreshes that page into its archived state instead of returning to the
+  board automatically.
+- Board navigation context retains archived visibility together with the task
+  filter, layout, and scroll position. Returning from details restores those
+  controls for that board visit without turning them into global preferences.
+
+Both settings now travel in the same browser-history context used by the
+existing board return flow. Directly opened task URLs still return to the
+ordinary default board because no prior board context exists.
+
+Archived visibility is explicit user intent rather than inferred from loaded
+archive data. Delayed archive responses are invalidated when that intent
+changes, so they cannot re-enable a toggle the user switched off. Final
+validation passed both TypeScript typechecks, the production build, 119 local
+tests with one intentional integration skip, and all 28 browser scenarios.
+Standards and Spec review found no remaining issues.

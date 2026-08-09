@@ -341,6 +341,9 @@ test("creates in any column, opens tasks directly, and restores a narrow board c
   expect(overflow.flexWrap).toBe("nowrap");
 
   const filter = page.getByLabel("Filter tasks");
+  const archivedToggle = page.getByRole("button", { name: "Show archived tasks" });
+  await archivedToggle.click();
+  await expect(archivedToggle).toHaveAttribute("aria-pressed", "true");
   await filter.fill("Inspect");
   const inspectedLink = page.getByRole("link", { name: /T-0001 Inspect existing coordination/ });
   await inspectedLink.scrollIntoViewIfNeeded();
@@ -349,6 +352,7 @@ test("creates in any column, opens tasks directly, and restores a narrow board c
   await expect(page).toHaveURL(/\/tasks\/T-0001$/);
   await page.getByRole("link", { name: "Back to board" }).click();
   await expect(filter).toHaveValue("Inspect");
+  await expect(archivedToggle).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => lane.evaluate((element) => element.scrollLeft)).toBe(savedScroll);
 
   await filter.fill("");
@@ -430,6 +434,22 @@ test("row layout is compact, independently scrollable, and remembered globally",
   await expect(page.getByTestId("board-lane")).toHaveCSS("flex-wrap", "nowrap");
 });
 
+test("archived visibility follows the latest toggle intent while archive data loads", async ({ page }) => {
+  await page.route("**/api/archive", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await route.fulfill({ status: 200, json: { available: true, tasks: [] } });
+  });
+  await page.goto("/");
+  const archivedToggle = page.getByRole("button", { name: "Show archived tasks" });
+
+  await archivedToggle.click();
+  expect(await archivedToggle.getAttribute("aria-pressed")).toBe("true");
+  await archivedToggle.click();
+  expect(await archivedToggle.getAttribute("aria-pressed")).toBe("false");
+  await page.waitForTimeout(250);
+  expect(await archivedToggle.getAttribute("aria-pressed")).toBe("false");
+});
+
 test("newly entered tasks are newest-first in both board layouts", async ({ page }) => {
   await page.goto("/");
   const createInBacklog = page.getByRole("button", { name: "Create task in Backlog" });
@@ -483,7 +503,7 @@ test("automatic board refresh preserves the user's current horizontal position",
   await expect(page.getByRole("radio", { name: "Row layout" })).toBeChecked();
   const lane = page.getByTestId("column-backlog").getByTestId("task-strip");
   const renderedBoardRead = async (): Promise<number> => Number(
-    (await page.locator(".topbar .eyebrow").textContent())?.replace("Scroll refresh ", ""),
+    (await page.locator(".board-brand h1").textContent())?.replace("Scroll refresh ", ""),
   );
   await expect(lane).toBeVisible();
   const directPosition = await lane.evaluate((element) => {
@@ -818,26 +838,115 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
   }
 });
 
-test("a user archives a completed task, finds it in history, and unarchives it", async ({ page }) => {
+test("archived tasks toggle into their retained board location and can be unarchived", async ({ page }) => {
   await page.goto("/");
+  const automation = page.locator(".automation-control");
+  await expect(automation.getByRole("button", { name: /Archived tasks|Archive completed/ })).toHaveCount(0);
+  await page.setViewportSize({ width: 640, height: 760 });
+  await expect(automation.getByText(/Desktop notifications/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(640);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const completion = page.getByTestId("column-completion");
+
   await page.getByRole("button", { name: "Create task in Completion" }).click();
   await page.getByLabel("Outcome-oriented title").fill("Archive this completed browser task");
   await page.getByLabel("Complete description").fill("Keep its coordination history while removing it from the ordinary board.");
   await page.getByRole("button", { name: "Create task", exact: true }).click();
-  await page.getByRole("link", { name: /Archive this completed browser task/ }).click();
-
-  await page.getByRole("button", { name: "Archive task" }).click();
-  await expect(page).toHaveURL(/\/$/);
+  const archiveCompleted = completion.getByRole("button", { name: "Archive completed tasks" });
+  const completionTitleBounds = await completion.getByRole("heading", { name: "Completion" }).boundingBox();
+  const archiveBounds = await archiveCompleted.boundingBox();
+  expect(completionTitleBounds).not.toBeNull();
+  expect(archiveBounds).not.toBeNull();
+  if (completionTitleBounds !== null && archiveBounds !== null) {
+    expect(archiveBounds.y).toBeGreaterThanOrEqual(
+      completionTitleBounds.y + completionTitleBounds.height,
+    );
+    expect(Math.abs(archiveBounds.x - completionTitleBounds.x)).toBeLessThanOrEqual(4);
+  }
+  await archiveCompleted.click();
+  await expect(page.locator(".feedback")).toContainText(/Archived \d+ completed task/);
   await expect(page.getByRole("link", { name: /Archive this completed browser task/ })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Archived tasks" }).click();
-  const history = page.getByRole("complementary", { name: "Archived tasks" });
-  await history.getByRole("button", { name: /Archive this completed browser task/ }).click();
+  const archivedToggle = page.getByRole("button", { name: "Show archived tasks" });
+  await expect(archivedToggle).toHaveAttribute("aria-pressed", "false");
+  await archivedToggle.click();
+  await expect(archivedToggle).toHaveAttribute("aria-pressed", "true");
+  const archivedCard = completion.locator(".task-card.archived").filter({
+    hasText: "Archive this completed browser task",
+  });
+  await expect(archivedCard).toContainText("Archived");
+  await expect(archivedCard.getByRole("button", { name: /Drag/ })).toHaveCount(0);
+  await archivedToggle.click();
+  await expect(archivedCard).toHaveCount(0);
+  await archivedToggle.click();
+  await completion.getByRole("link", { name: /Archive this completed browser task/ }).click();
   await expect(page.getByText(/Archived · Revision/)).toBeVisible();
   await expect(page.getByRole("button", { name: "View transcript" })).toHaveCount(0);
+  const archivedEntry = page.locator(".timeline-entry").filter({ hasText: "Task archived" });
+  await expect(archivedEntry).toContainText("Removed from the active board");
+  await expect(archivedEntry).not.toContainText("Attempt activity");
   await page.getByRole("button", { name: "Unarchive task" }).click();
   await expect(page.getByRole("status")).toContainText(/Unarchived T-/);
   await expect(page.getByRole("button", { name: "Archive task" })).toBeVisible();
+  const unarchivedEntry = page.locator(".timeline-entry").filter({ hasText: "Task unarchived" });
+  await expect(unarchivedEntry).toContainText("Returned to the active board");
+  await expect(unarchivedEntry).not.toContainText("Attempt activity");
+});
+
+test("archive is promoted only for completed tasks", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Create task in Backlog" }).click();
+  await page.getByLabel("Outcome-oriented title").fill("Keep archival secondary");
+  await page.getByLabel("Complete description").fill("Archive remains available without being promoted before Completion.");
+  await page.getByRole("button", { name: "Create task", exact: true }).click();
+  await page.getByRole("link", { name: /Keep archival secondary/ }).click();
+  const actions = page.locator(".task-hero .form-actions");
+  await expect(actions.getByRole("button", { name: "Archive task" })).toHaveCount(0);
+  await actions.getByText("More actions", { exact: true }).click();
+  const secondaryArchive = actions.getByRole("button", { name: "Archive task" });
+  await expect(secondaryArchive).toBeVisible();
+  await expect(secondaryArchive).toHaveClass(/secondary/);
+  const taskUrl = page.url();
+  await secondaryArchive.click();
+  await expect(page).toHaveURL(taskUrl);
+  await expect(page.getByText(/Archived · Revision/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Unarchive task" })).toBeVisible();
+});
+
+test("a dirty workspace requires explicit discard confirmation before archival", async ({ page }) => {
+  const archiveRequests: Array<Record<string, unknown>> = [];
+  await page.route("**/api/tasks/*/archive", async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    archiveRequests.push(body);
+    if (body.discardWorkspaceChanges === true) {
+      await route.fulfill({ status: 200, json: { accepted: true } });
+      return;
+    }
+    await route.fulfill({ status: 409, json: { accepted: false, reason: "workspace-dirty" } });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Create task in Backlog" }).click();
+  await page.getByLabel("Outcome-oriented title").fill("Confirm workspace discard");
+  await page.getByLabel("Complete description").fill("Require a deliberate choice before deleting local workspace changes.");
+  await page.getByRole("button", { name: "Create task", exact: true }).click();
+  await page.getByRole("link", { name: /Confirm workspace discard/ }).click();
+  const taskUrl = page.url();
+  await page.getByText("More actions", { exact: true }).click();
+  await page.getByRole("button", { name: "Archive task" }).click();
+
+  const confirmation = page.getByRole("dialog", { name: "Discard workspace changes?" });
+  await expect(confirmation).toContainText("permanently delete uncommitted and untracked changes");
+  await confirmation.getByRole("button", { name: "Keep workspace" }).click();
+  await expect(confirmation).toHaveCount(0);
+  await page.getByRole("button", { name: "Archive task" }).click();
+  await confirmation.getByRole("button", { name: "Discard changes and archive" }).click();
+  await expect.poll(() => archiveRequests.length).toBe(3);
+  await expect(page).toHaveURL(taskUrl);
+  expect(archiveRequests).toHaveLength(3);
+  expect(archiveRequests[0]?.discardWorkspaceChanges).toBeUndefined();
+  expect(archiveRequests[1]?.discardWorkspaceChanges).toBeUndefined();
+  expect(archiveRequests[2]?.discardWorkspaceChanges).toBe(true);
 });
 
 test("task details create children and dependencies through contextual controls", async ({ page }) => {

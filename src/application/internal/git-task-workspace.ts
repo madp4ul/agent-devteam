@@ -197,16 +197,29 @@ export class GitTaskWorkspaceManager {
     }
   }
 
-  async removeForArchival(taskId: string, workspace: TaskWorkspaceView): Promise<
+  async removeForArchival(
+    taskId: string,
+    workspace: TaskWorkspaceView,
+    discardChanges?: true,
+  ): Promise<
     { removed: true } | { removed: false; reason: "workspace-dirty" | "workspace-commit-not-durable" | "workspace-cleanup-failed" }
   > {
     try {
       await this.verify(taskId, workspace);
       const status = await runGit(["-C", workspace.path, "status", "--porcelain", "--untracked-files=all"]);
-      if (status.trim().length > 0) return { removed: false, reason: "workspace-dirty" };
+      if (status.trim().length > 0 && !discardChanges) {
+        return { removed: false, reason: "workspace-dirty" };
+      }
       const refs = await runGit(["-C", workspace.path, "for-each-ref", "--format=%(refname)", "--contains", "HEAD"]);
       if (refs.trim().length === 0) return { removed: false, reason: "workspace-commit-not-durable" };
-      await runGit(["-C", this.projectRepositoryPath, "worktree", "remove", workspace.path]);
+      await runGit([
+        "-C",
+        this.projectRepositoryPath,
+        "worktree",
+        "remove",
+        ...(discardChanges ? ["--force"] : []),
+        workspace.path,
+      ]);
       return { removed: true };
     } catch {
       return { removed: false, reason: "workspace-cleanup-failed" };

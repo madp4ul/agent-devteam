@@ -153,6 +153,7 @@ async function handleBrowserApi(
   if (method === "POST" && url.pathname === "/api/archive/completed") {
     const body = await readJsonBody(request);
     const result = await application.archiveCompletedTasks({
+      boardId: stringField(body, "boardId"),
       actor: { kind: "user", id: "local-user" },
       idempotencyKey: stringField(body, "idempotencyKey"),
     });
@@ -190,6 +191,7 @@ async function handleBrowserApi(
     const body = await readJsonBody(request);
     const result = await application.archiveTask({
       taskId: decodeURIComponent(archiveTaskMatch[1]),
+      ...(body.discardWorkspaceChanges === true ? { discardWorkspaceChanges: true } : {}),
       actor: { kind: "user", id: "local-user" },
       idempotencyKey: stringField(body, "idempotencyKey"),
     });

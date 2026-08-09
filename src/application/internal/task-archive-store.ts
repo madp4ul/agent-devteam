@@ -77,10 +77,12 @@ export class TaskArchiveStore {
     });
   }
 
-  completedTaskIds(): string[] {
+  completedTaskIds(boardId: string): string[] {
     return (this.#database.prepare(
-      "SELECT id FROM tasks WHERE column_id = 'completion' AND archived_at IS NULL ORDER BY sequence",
-    ).all() as Array<{ id: string }>).map(({ id }) => id);
+      `SELECT id FROM tasks
+       WHERE board_id = ? AND column_id = 'completion' AND archived_at IS NULL
+       ORDER BY sequence`,
+    ).all(boardId) as Array<{ id: string }>).map(({ id }) => id);
   }
 
   cancelClaim(
@@ -128,12 +130,12 @@ export class TaskArchiveStore {
     ).run(taskId);
   }
 
-  readBulkCommand<Result>(idempotencyKey: string): Result | undefined {
-    return this.#commandResponses.read<Result>("archive-completed-tasks", idempotencyKey);
+  readBulkCommand<Result>(boardId: string, idempotencyKey: string): Result | undefined {
+    return this.#commandResponses.read<Result>(`archive-completed-tasks:${boardId}`, idempotencyKey);
   }
 
-  rememberBulkCommand(idempotencyKey: string, result: unknown): void {
-    this.#commandResponses.write("archive-completed-tasks", idempotencyKey, result);
+  rememberBulkCommand(boardId: string, idempotencyKey: string, result: unknown): void {
+    this.#commandResponses.write(`archive-completed-tasks:${boardId}`, idempotencyKey, result);
   }
 
   archive(

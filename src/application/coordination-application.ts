@@ -573,7 +573,11 @@ export class CoordinationApplication {
         this.#persistence.taskArchive.cancelClaim(command, result);
         return result;
       }
-      const removal = await this.#workspaceManager.removeForArchival(command.taskId, workspace);
+      const removal = await this.#workspaceManager.removeForArchival(
+        command.taskId,
+        workspace,
+        command.discardWorkspaceChanges,
+      );
       if (!removal.removed) {
         const result = { accepted: false as const, reason: removal.reason };
         this.#persistence.taskArchive.cancelClaim(command, result);
@@ -601,12 +605,13 @@ export class CoordinationApplication {
       return { accepted: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
     }
     const prior = this.#persistence.taskArchive.readBulkCommand<ArchiveCompletedTasksResult>(
+      command.boardId,
       command.idempotencyKey,
     );
     if (prior !== undefined) return prior;
     const archivedTaskIds: string[] = [];
     const rejected: Extract<ArchiveCompletedTasksResult, { accepted: true }>['rejected'] = [];
-    for (const taskId of this.#persistence.taskArchive.completedTaskIds()) {
+    for (const taskId of this.#persistence.taskArchive.completedTaskIds(command.boardId)) {
       const result = await this.archiveTaskWithEligibility({
         taskId,
         actor: command.actor,
@@ -616,7 +621,7 @@ export class CoordinationApplication {
       else if (result.reason !== "configuration-error") rejected.push({ taskId, reason: result.reason });
     }
     const result = { accepted: true as const, archivedTaskIds, rejected };
-    this.#persistence.taskArchive.rememberBulkCommand(command.idempotencyKey, result);
+    this.#persistence.taskArchive.rememberBulkCommand(command.boardId, command.idempotencyKey, result);
     return result;
   }
 

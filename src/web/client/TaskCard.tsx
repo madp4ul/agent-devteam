@@ -24,7 +24,7 @@ export function TaskCard({
   useEffect(() => {
     const element = cardRef.current;
     const dragHandle = handleRef.current;
-    if (element === null || dragHandle === null) return;
+    if (task.archived || element === null || dragHandle === null) return;
     return draggable({
       element,
       dragHandle,
@@ -32,25 +32,27 @@ export function TaskCard({
       onDragStart: () => setDragging(true),
       onDrop: () => setDragging(false),
     });
-  }, [task.id]);
+  }, [task.archived, task.id]);
   return (
     <li
       ref={cardRef}
       data-task-id={task.id}
       tabIndex={-1}
-      className={`task-card${pending ? " pending" : ""}${dragging ? " dragging" : ""}${highlighted ? " highlighted" : ""}`}
+      className={`task-card${task.archived ? " archived" : ""}${pending ? " pending" : ""}${dragging ? " dragging" : ""}${highlighted ? " highlighted" : ""}`}
       aria-busy={pending}
     >
       <div className="card-topline">
         <span className="task-id">{task.id}</span>
-        <button
-          ref={handleRef}
-          className="drag-handle"
-          aria-label={`Drag ${task.id}`}
-          title="Drag task"
-        >
-          ⠿
-        </button>
+        {task.archived ? null : (
+          <button
+            ref={handleRef}
+            className="drag-handle"
+            aria-label={`Drag ${task.id}`}
+            title="Drag task"
+          >
+            ⠿
+          </button>
+        )}
       </div>
       <a
         aria-label={`${task.id} ${task.title}`}
@@ -63,6 +65,7 @@ export function TaskCard({
         <span className="card-title">{task.title}</span>
       </a>
       <div className="card-signals">
+        {task.archived ? <span className="signal archived">Archived</span> : null}
         {task.blocking.blocked ? (
           <span className="signal blocked">Blocked · {task.blocking.blockerTaskIds.join(", ")}</span>
         ) : null}

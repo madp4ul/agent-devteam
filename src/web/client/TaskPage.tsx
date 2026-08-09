@@ -28,6 +28,7 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
   const [detail, setDetail] = useState<BrowserTaskDetail>();
   const [editing, setEditing] = useState(false);
   const [archivalPending, setArchivalPending] = useState(false);
+  const [discardConfirmation, setDiscardConfirmation] = useState(false);
   const refreshSequence = useRef(0);
   const refresh = useCallback(async () => {
     const sequence = ++refreshSequence.current;
@@ -67,6 +68,26 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
   const performMove = async (column: BoardColumnView): Promise<void> => {
     await move({ id: task.id, revision: task.revision }, column);
   };
+  const performArchive = (discardWorkspaceChanges = false): void => {
+    setArchivalPending(true);
+    void archiveTask(task.id, crypto.randomUUID(), discardWorkspaceChanges)
+      .then(async () => {
+        await refresh();
+        setFeedback({ role: "status", text: `Archived ${task.id}.` });
+      })
+      .catch((error) => {
+        if (
+          !discardWorkspaceChanges &&
+          error instanceof ApiError &&
+          (error.body as { reason?: string }).reason === "workspace-dirty"
+        ) {
+          setDiscardConfirmation(true);
+          return;
+        }
+        setFeedback({ role: "alert", text: errorMessage(error) });
+      })
+      .finally(() => setArchivalPending(false));
+  };
 
   return (
     <div className="app-shell task-shell">
@@ -102,16 +123,18 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
             ) : (
               <>
                 <button className="secondary" onClick={() => setEditing(true)}>Edit task</button>
-                <button
-                  disabled={archivalPending}
-                  onClick={() => {
-                    setArchivalPending(true);
-                    void archiveTask(task.id, crypto.randomUUID())
-                      .then(() => navigate("/"))
-                      .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }))
-                      .finally(() => setArchivalPending(false));
-                  }}
-                >{archivalPending ? "Archiving…" : "Archive task"}</button>
+                {task.columnId === "completion" ? (
+                  <button disabled={archivalPending} onClick={() => performArchive()}>
+                    {archivalPending ? "Archiving…" : "Archive task"}
+                  </button>
+                ) : (
+                  <details className="more-actions">
+                    <summary>More actions</summary>
+                    <button className="secondary" disabled={archivalPending} onClick={() => performArchive()}>
+                      {archivalPending ? "Archiving…" : "Archive task"}
+                    </button>
+                  </details>
+                )}
               </>
             )}
           </div>
@@ -295,6 +318,47 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
             setFeedback(mutationFeedback(error));
           }}
         />
+      ) : null}
+      {discardConfirmation ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="modal discard-confirmation"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="discard-title"
+          >
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">Destructive archive</p>
+                <h2 id="discard-title">Discard workspace changes?</h2>
+              </div>
+            </div>
+            <p>
+              This task workspace is dirty. Continuing will permanently delete uncommitted
+              and untracked changes along with the workspace and retained transcripts.
+            </p>
+            <p>Open the task workspace first if you need to inspect or preserve those files.</p>
+            <div className="form-actions">
+              <button
+                autoFocus
+                className="secondary"
+                onClick={() => setDiscardConfirmation(false)}
+              >
+                Keep workspace
+              </button>
+              <button
+                className="destructive"
+                disabled={archivalPending}
+                onClick={() => {
+                  setDiscardConfirmation(false);
+                  performArchive(true);
+                }}
+              >
+                {archivalPending ? "Archiving…" : "Discard changes and archive"}
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </div>
   );

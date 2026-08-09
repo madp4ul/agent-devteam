@@ -441,6 +441,12 @@ function activityDescription(activity: TaskActivityView): string {
   if (activity.type === "automation.resumed") {
     return "The user continued the interrupted activation.";
   }
+  if (activity.type === "task.archived") {
+    return "Removed from the active board while retaining its coordination history.";
+  }
+  if (activity.type === "task.unarchived") {
+    return "Returned to the active board in its retained workflow position.";
+  }
   return `Attempt ${activity.details.attemptId ?? "activity"}.`;
 }
 
