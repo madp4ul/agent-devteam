@@ -259,6 +259,14 @@ function TranscriptDialog({ attempt, agentId, onClose }: {
   }, [items]);
 
   useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
     const refresh = async (): Promise<void> => {
       try {
@@ -292,7 +300,13 @@ function TranscriptDialog({ attempt, agentId, onClose }: {
   }, [attempt.id, attempt.status]);
 
   return (
-    <div className="modal-backdrop transcript-backdrop" role="presentation">
+    <div
+      className="modal-backdrop transcript-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         className="modal transcript-modal"
         role="dialog"
@@ -305,13 +319,17 @@ function TranscriptDialog({ attempt, agentId, onClose }: {
             <h2 id="transcript-title">Attempt transcript</h2>
             <p>{agentId} · {attempt.status} · <ElapsedTime startedAt={attempt.startedAt} completedAt={attempt.completedAt} /></p>
           </div>
-          <button className="icon-button" aria-label="Close transcript" onClick={onClose}>×</button>
+          <div className="transcript-header-actions">
+            {attempt.threadId === null ? null : (
+              <CopyThreadIdButton threadId={attempt.threadId} />
+            )}
+            <button className="icon-button" aria-label="Close transcript" onClick={onClose}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
         </header>
-        <div className="thread-strip">
-          {attempt.threadId === null ? null : (
-            <CopyThreadIdButton threadId={attempt.threadId} />
-          )}
-        </div>
         <div ref={contentRef} className="transcript-content">
           {error !== undefined ? (
             <p className="unavailable" role="alert">{error}</p>

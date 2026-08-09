@@ -531,14 +531,33 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(attemptEntry.getByRole("button", { name: "Copy thread ID" })).toBeVisible();
   await attemptEntry.getByRole("button", { name: "View transcript" }).click();
   const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
+  const copyThreadId = dialog.getByRole("button", { name: "Copy thread ID" });
+  const closeTranscript = dialog.getByRole("button", { name: "Close transcript" });
+  const [copyBox, closeBox] = await Promise.all([copyThreadId.boundingBox(), closeTranscript.boundingBox()]);
+  expect(copyBox).not.toBeNull();
+  expect(closeBox).not.toBeNull();
+  expect(Math.abs((copyBox!.y + copyBox!.height / 2) - (closeBox!.y + closeBox!.height / 2))).toBeLessThanOrEqual(2);
+  await expect(closeTranscript.locator("svg")).toBeVisible();
   await expect(dialog).not.toContainText("thread-browser-123");
   await expect(dialog).toContainText("I inspected the current task.");
   await expect(dialog).toContainText("pnpm test (exit 0)");
   await expect(dialog.getByText("output truncated")).toBeHidden();
   await dialog.getByText("View command output").click();
   await expect(dialog).toContainText("output truncated");
-  await expect(dialog.getByRole("button", { name: "Copy thread ID" })).toBeVisible();
-  await dialog.getByRole("button", { name: "Close transcript" }).click();
+  await expect(copyThreadId).toBeVisible();
+  const taskScrollPosition = await page.evaluate(() => {
+    window.scrollTo(0, 240);
+    return window.scrollY;
+  });
+  expect(taskScrollPosition).toBeGreaterThan(0);
+  await dialog.hover();
+  for (let index = 0; index < 4; index += 1) {
+    await page.mouse.wheel(0, 1_000);
+  }
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.scrollY)).toBe(taskScrollPosition);
+  await page.locator(".transcript-backdrop").click({ position: { x: 4, y: 4 } });
+  await expect(dialog).toBeHidden();
 
   await page.getByRole("button", { name: "Edit task" }).click();
   await page.getByLabel("Task title").fill("Inspect all coordination evidence");
@@ -547,6 +566,17 @@ test("details keep contextual controls, one timeline, and readable transcript ev
 
   await page.getByRole("button", { name: /Completion.*Next/ }).click();
   await expect(page.getByText(/Moved T-0001 to Completion/)).toBeVisible();
+});
+
+test("task details keep board navigation pinned while scrolling long history", async ({ page }) => {
+  await page.goto("/tasks/T-0001");
+  await expect(page.getByRole("heading", { name: "Task timeline" })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
+  const topbar = page.locator(".detail-topbar");
+  await expect(page.getByRole("link", { name: "Back to board" })).toBeVisible();
+  await expect.poll(() => topbar.evaluate((element) => element.getBoundingClientRect().top)).toBe(0);
 });
 
 test("an open task reconciles external timeline changes without disturbing a focused draft", async ({ page }) => {
