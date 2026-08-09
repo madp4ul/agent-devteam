@@ -207,6 +207,80 @@ test("task overview cursors remain stable when an earlier task moves within sele
   assert.equal(finalPage.nextCursor, null);
 });
 
+test("task overviews can order cards by their most recent current-column entry", async (t) => {
+  const fixture = await createDiscoveryFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+
+  for (const title of ["Oldest", "Middle", "Newest"]) {
+    const created = application.createTask({
+      boardId: "delivery",
+      columnId: "backlog",
+      title,
+      description: `${title} task description.`,
+      actor: { kind: "user", id: "paul" },
+      idempotencyKey: `create-${title.toLocaleLowerCase()}`,
+    });
+    assert.equal(created.accepted, true);
+  }
+
+  const initiallyOrdered = application.queryTaskOverviews({
+    boardId: "delivery",
+    columnIds: ["backlog"],
+    order: "recent-column-entry",
+  });
+  assert.equal(initiallyOrdered.available, true);
+  if (!initiallyOrdered.available) return;
+  assert.deepEqual(initiallyOrdered.tasks.map((task) => task.title), ["Newest", "Middle", "Oldest"]);
+
+  const left = application.moveTask({
+    taskId: "T-0001",
+    destinationColumnId: "review",
+    expectedRevision: 1,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "oldest-leaves-backlog",
+  });
+  assert.equal(left.accepted, true);
+  const returned = application.moveTask({
+    taskId: "T-0001",
+    destinationColumnId: "backlog",
+    expectedRevision: 2,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "oldest-returns-to-backlog",
+  });
+  assert.equal(returned.accepted, true);
+  const edited = application.editTask({
+    taskId: "T-0002",
+    title: "Middle after an unrelated edit",
+    description: "Editing must not count as entering the current column.",
+    expectedRevision: 1,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "edit-middle-without-reordering",
+  });
+  assert.equal(edited.accepted, true);
+  const inertMove = application.moveTask({
+    taskId: "T-0002",
+    destinationColumnId: "backlog",
+    expectedRevision: 2,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "same-column-move-is-inert",
+  });
+  assert.deepEqual(inertMove, { accepted: false, reason: "invalid-destination" });
+
+  const reordered = application.queryTaskOverviews({
+    boardId: "delivery",
+    columnIds: ["backlog"],
+    order: "recent-column-entry",
+  });
+  assert.equal(reordered.available, true);
+  if (!reordered.available) return;
+  assert.deepEqual(reordered.tasks.map((task) => task.title), [
+    "Oldest",
+    "Newest",
+    "Middle after an unrelated edit",
+  ]);
+});
+
 test("Completion is listed only when agents select it explicitly", async (t) => {
   const fixture = await createDiscoveryFixture();
   const application = await CoordinationApplication.start(fixture);

@@ -291,7 +291,7 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await page.getByRole("link", { name: "Back to board" }).click();
   await expect(page.getByRole("link", { name: /T-0002 Drag this task/ }).locator(".."))
     .not.toContainText("Automation suspended");
-  await expect(attention).not.toContainText("T-0002 · Drag this task");
+  await expect(attention).toHaveCount(0);
 });
 
 test("configuration errors show the invalid value with the actionable diagnostic", async ({ page }) => {
@@ -330,6 +330,7 @@ test("creates in any column, opens tasks directly, and restores a narrow board c
   await page.setViewportSize({ width: 720, height: 820 });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Product delivery" })).toBeVisible();
+  await page.getByRole("radio", { name: "Column layout" }).check();
 
   const lane = page.getByTestId("board-lane");
   const overflow = await lane.evaluate((element) => ({
@@ -364,6 +365,91 @@ test("creates in any column, opens tasks directly, and restores a narrow board c
   await expect(page.getByRole("heading", { name: "Inspect existing coordination" })).toBeVisible();
 });
 
+test("row layout is compact, independently scrollable, and remembered globally", async ({ page }) => {
+  await page.setViewportSize({ width: 760, height: 900 });
+  await page.route("**/api/board", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const board = body.boards[0];
+    const template = board.columns.flatMap((column: { tasks: unknown[] }) => column.tasks)[0];
+    for (const [columnIndex, column] of board.columns.slice(0, 2).entries()) {
+      column.tasks = Array.from({ length: 8 }, (_, taskIndex) => ({
+        ...template,
+        id: `LAYOUT-${columnIndex}-${taskIndex}`,
+        title: `Layout card ${columnIndex}-${taskIndex}`,
+        column: { id: column.id, name: column.name },
+      }));
+    }
+    board.columns.find((column: { id: string }) => column.id === "completion").tasks = [];
+    body.attention = [];
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto("/");
+  const rowChoice = page.getByRole("radio", { name: "Row layout" });
+  const columnChoice = page.getByRole("radio", { name: "Column layout" });
+  await expect(rowChoice).toBeChecked();
+
+  const backlog = page.getByTestId("column-backlog");
+  const implementation = page.getByTestId("column-implementation");
+  const completion = page.getByTestId("column-completion");
+  await expect(page.locator(".needs-attention")).toHaveCount(0);
+  await expect(backlog).toContainText("User");
+  await expect(backlog).not.toContainText("No watching agent");
+  await expect(backlog).toHaveClass(/user-owned/);
+  await expect(implementation).toContainText("Implementation Agent");
+  await expect(implementation).not.toContainText("Watched by");
+  await expect(completion).not.toContainText(/User|No watching agent/);
+  await expect(completion).not.toHaveClass(/user-owned/);
+  await expect(backlog.getByRole("button", { name: "Create task in Backlog" })).toBeVisible();
+  await expect(backlog.getByRole("button", { name: "Create task in Backlog" }).locator("svg"))
+    .toBeVisible();
+  await expect.poll(() => completion.evaluate((element) => element.getBoundingClientRect().height))
+    .toBeLessThan(100);
+  const backlogStrip = backlog.getByTestId("task-strip");
+  const implementationStrip = implementation.getByTestId("task-strip");
+  const backlogPosition = await backlogStrip.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+    return element.scrollLeft;
+  });
+  expect(backlogPosition).toBeGreaterThan(0);
+  expect(await implementationStrip.evaluate((element) => element.scrollLeft)).toBe(0);
+
+  await page.getByLabel("Filter tasks").fill("does not match any card");
+  await expect.poll(() => backlog.evaluate((element) => element.getBoundingClientRect().height))
+    .toBeLessThan(100);
+  await page.getByLabel("Filter tasks").fill("");
+  await expect.poll(() => backlogStrip.evaluate((element) => element.scrollLeft)).toBe(backlogPosition);
+
+  await columnChoice.check();
+  await expect(columnChoice).toBeChecked();
+  await rowChoice.check();
+  await expect.poll(() => backlogStrip.evaluate((element) => element.scrollLeft)).toBe(backlogPosition);
+  await columnChoice.check();
+  await page.reload();
+  await expect(columnChoice).toBeChecked();
+  await expect(page.getByTestId("board-lane")).toHaveCSS("flex-wrap", "nowrap");
+});
+
+test("newly entered tasks are newest-first in both board layouts", async ({ page }) => {
+  await page.goto("/");
+  const createInBacklog = page.getByRole("button", { name: "Create task in Backlog" });
+  for (const title of ["Ordering example older", "Ordering example newer"]) {
+    await createInBacklog.click();
+    await page.getByLabel("Outcome-oriented title").fill(title);
+    await page.getByLabel("Complete description").fill("Verify current-column-entry ordering.");
+    await page.getByRole("button", { name: "Create task", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("Created");
+  }
+
+  const older = page.getByRole("link", { name: /Ordering example older/ }).locator("..");
+  const newer = page.getByRole("link", { name: /Ordering example newer/ }).locator("..");
+  expect((await newer.boundingBox())?.x).toBeLessThan((await older.boundingBox())?.x ?? 0);
+
+  await page.getByRole("radio", { name: "Column layout" }).check();
+  expect((await newer.boundingBox())?.y).toBeLessThan((await older.boundingBox())?.y ?? 0);
+});
+
 test("automatic board refresh preserves the user's current horizontal position", async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 820 });
   let boardReads = 0;
@@ -372,6 +458,13 @@ test("automatic board refresh preserves the user's current horizontal position",
     const body = await response.json();
     boardReads += 1;
     body.startup.processName = `Scroll refresh ${boardReads}`;
+    const backlog = body.boards[0].columns.find((column: { id: string }) => column.id === "backlog");
+    const template = backlog.tasks[0];
+    backlog.tasks = Array.from({ length: 8 }, (_, index) => ({
+      ...template,
+      id: index === 0 ? template.id : `SCROLL-${index}`,
+      title: index === 0 ? template.title : `Overflow card ${index}`,
+    }));
     body.activeRuns = [{
       attemptId: "scroll-refresh-attempt",
       taskId: "T-0002",
@@ -388,7 +481,8 @@ test("automatic board refresh preserves the user's current horizontal position",
   });
 
   await page.goto("/");
-  const lane = page.getByTestId("board-lane");
+  await expect(page.getByRole("radio", { name: "Row layout" })).toBeChecked();
+  const lane = page.getByTestId("column-backlog").getByTestId("task-strip");
   const renderedBoardRead = async (): Promise<number> => Number(
     (await page.locator(".topbar .eyebrow").textContent())?.replace("Scroll refresh ", ""),
   );
@@ -737,7 +831,9 @@ test("needs attention groups by task, locates the card, opens details, and resol
 
 test("pointer dragging moves through the same command and conflicts stay actionable", async ({ page, request }) => {
   await page.goto("/");
+  await page.getByLabel("Filter tasks").fill("Drag this task");
   const handle = page.getByRole("button", { name: "Drag T-0002" });
+  const source = page.getByTestId("column-backlog");
   const destination = page.getByTestId("column-implementation");
   await handle.scrollIntoViewIfNeeded();
   const sourceBox = await handle.boundingBox();
@@ -745,9 +841,14 @@ test("pointer dragging moves through the same command and conflicts stay actiona
   expect(sourceBox).not.toBeNull();
   expect(targetBox).not.toBeNull();
   if (sourceBox === null || targetBox === null) return;
+  const sourceGeometry = await source.boundingBox();
+  const destinationGeometry = await destination.boundingBox();
   await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
   await page.mouse.down();
-  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 100, { steps: 12 });
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 12 });
+  await expect(destination).toHaveClass(/drop-target/);
+  expect(await source.boundingBox()).toEqual(sourceGeometry);
+  expect(await destination.boundingBox()).toEqual(destinationGeometry);
   await page.mouse.up();
   await expect(page.getByRole("status")).toContainText("Moved T-0002 to Implementation");
   await expect(destination.getByRole("link", { name: /T-0002 Drag this task/ })).toBeVisible();

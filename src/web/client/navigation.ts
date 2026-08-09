@@ -2,6 +2,7 @@ export interface BoardContext {
   boardId: string;
   filter: string;
   scrollLeft: number;
+  scrollPositions?: Record<string, number>;
 }
 
 export interface NavigationState {

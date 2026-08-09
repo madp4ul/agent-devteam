@@ -257,6 +257,7 @@ export interface TaskOverviewView {
 export interface TaskOverviewsQuery {
   boardId: string;
   columnIds: string[];
+  order?: "task-sequence" | "recent-column-entry";
   pageSize?: number;
   cursor?: string;
 }

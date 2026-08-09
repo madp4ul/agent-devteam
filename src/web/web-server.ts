@@ -388,6 +388,7 @@ function readAllColumnTaskOverviews(
     const page = application.queryTaskOverviews({
       boardId,
       columnIds: [columnId],
+      order: "recent-column-entry",
       pageSize: 50,
       ...(cursor === undefined ? {} : { cursor }),
     });

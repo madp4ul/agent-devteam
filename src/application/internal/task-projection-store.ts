@@ -17,6 +17,7 @@ import type { CoordinationDatabase } from "./coordination-database.ts";
 
 export interface StoredTaskOverview {
   sequence: number;
+  columnEntrySequence: number;
   task: TaskOverviewView;
 }
 
@@ -97,6 +98,19 @@ export class TaskProjectionStore {
       .prepare(
         `SELECT t.id, t.sequence, t.title, t.board_id, t.column_id, t.revision,
                 t.automation_suspended,
+                COALESCE((
+                  SELECT entry.sequence
+                  FROM activity_ledger entry
+                  WHERE entry.task_id = t.id
+                    AND (
+                      (entry.type = 'task.created'
+                        AND json_extract(entry.details_json, '$.columnId') = t.column_id)
+                      OR (entry.type = 'task.moved'
+                        AND json_extract(entry.details_json, '$.toColumnId') = t.column_id)
+                    )
+                  ORDER BY entry.sequence DESC
+                  LIMIT 1
+                ), t.sequence) AS column_entry_sequence,
                 c.name AS column_name,
                 SUM(CASE WHEN a.status = 'queued' THEN 1 ELSE 0 END) AS queued_count,
                 SUM(CASE WHEN a.status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
@@ -117,6 +131,7 @@ export class TaskProjectionStore {
       column_id: string;
       revision: number;
       automation_suspended: number;
+      column_entry_sequence: number;
       column_name: string;
       queued_count: number;
       failed_count: number;
@@ -128,6 +143,7 @@ export class TaskProjectionStore {
       const startupFailure = this.readLatestUnresolvedStartupFailure(row.id);
       return {
         sequence: row.sequence,
+        columnEntrySequence: row.column_entry_sequence,
         task: {
           id: row.id,
           title: row.title,

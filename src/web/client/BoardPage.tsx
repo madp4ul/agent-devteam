@@ -1,28 +1,27 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
-  draggable,
-  dropTargetForElements,
   monitorForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
-import type { TaskOverviewView } from "../../application/coordination-contract.ts";
 import {
-  createTask,
   dismissStaleActivation,
   pauseAutomation,
   readBoard,
   resumeAutomation,
   resumeWithCurrentProcess,
   type BrowserBoardState,
-  type BrowserColumnView,
 } from "./api.ts";
+import { BoardColumn, type BoardLayout } from "./BoardColumn.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { Loading } from "./Loading.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import type { Navigate, NavigationState } from "./navigation.ts";
+import { TaskCreationDialog } from "./TaskCreationDialog.tsx";
 import { useTaskMovement } from "./task-movement.ts";
+
+const layoutPreferenceKey = "coordination-board-layout";
 
 export function BoardPage({
   navigate,
@@ -34,16 +33,60 @@ export function BoardPage({
   const pendingInitialContext = useRef(
     (window.history.state as NavigationState | null)?.boardContext,
   );
+  const pendingScrollRestore = useRef(pendingInitialContext.current !== undefined);
+  const scrollPositions = useRef(new Map<string, number>(
+    Object.entries(pendingInitialContext.current?.scrollPositions ?? {}),
+  ));
+  const unfilteredScrollPositions = useRef<Map<string, number> | undefined>(undefined);
+  if (
+    pendingInitialContext.current !== undefined &&
+    !scrollPositions.current.has(`column:${pendingInitialContext.current.boardId}`)
+  ) {
+    scrollPositions.current.set(
+      `column:${pendingInitialContext.current.boardId}`,
+      pendingInitialContext.current.scrollLeft,
+    );
+  }
   const [state, setState] = useState<BrowserBoardState>();
   const [filter, setFilter] = useState(
     pendingInitialContext.current?.filter ?? new URLSearchParams(location.search).get("q") ?? "",
   );
+  const [layout, setLayout] = useState<BoardLayout>(readLayoutPreference);
   const [creation, setCreation] = useState<{ boardId: string; columnId: string }>();
   const [highlightedTaskId, setHighlightedTaskId] = useState<string>();
   const laneRefs = useRef(new Map<string, HTMLDivElement>());
+  const scrollElements = useRef(new Map<string, HTMLElement>());
   const refresh = useCallback(async () => setState(await readBoard()), []);
   const processImpact = state?.startup.mode === "paused" ? state.startup.processImpact : undefined;
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
+  const captureScrollPositions = useCallback(() => {
+    for (const [key, element] of scrollElements.current) {
+      scrollPositions.current.set(key, element.scrollLeft);
+    }
+  }, []);
+  const chooseLayout = useCallback((choice: BoardLayout) => {
+    captureScrollPositions();
+    pendingScrollRestore.current = true;
+    setLayout(choice);
+    try {
+      localStorage.setItem(layoutPreferenceKey, choice);
+    } catch {
+      // The in-memory preference still applies when device storage is unavailable.
+    }
+  }, [captureScrollPositions]);
+  const changeFilter = useCallback((nextFilter: string) => {
+    if (filter.length === 0 && nextFilter.length > 0) {
+      captureScrollPositions();
+      unfilteredScrollPositions.current = new Map(scrollPositions.current);
+    } else if (filter.length > 0 && nextFilter.length === 0) {
+      if (unfilteredScrollPositions.current !== undefined) {
+        scrollPositions.current = unfilteredScrollPositions.current;
+        unfilteredScrollPositions.current = undefined;
+      }
+      pendingScrollRestore.current = true;
+    }
+    setFilter(nextFilter);
+  }, [captureScrollPositions, filter]);
 
   useEffect(() => {
     void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
@@ -54,28 +97,34 @@ export function BoardPage({
     return () => window.clearInterval(timer);
   }, [refresh, state]);
   useLayoutEffect(() => {
-    const initialContext = pendingInitialContext.current;
-    const lane = initialContext === undefined
-      ? undefined
-      : laneRefs.current.get(initialContext.boardId);
-    if (state !== undefined && lane !== undefined && initialContext !== undefined) {
-      lane.scrollLeft = initialContext.scrollLeft;
+    if (state === undefined || !pendingScrollRestore.current) return;
+    let restored = false;
+    for (const [key, element] of scrollElements.current) {
+      const position = scrollPositions.current.get(key);
+      if (position === undefined) continue;
+      element.scrollLeft = position;
+      restored = true;
+    }
+    if (restored) {
+      pendingScrollRestore.current = false;
       pendingInitialContext.current = undefined;
     }
-  }, [state]);
+  }, [filter, layout, state]);
 
   const rememberContext = useCallback((boardId: string) => {
+    captureScrollPositions();
     const boardContext = {
       boardId,
       filter,
       scrollLeft: laneRefs.current.get(boardId)?.scrollLeft ?? 0,
+      scrollPositions: Object.fromEntries(scrollPositions.current),
     };
     window.history.replaceState(
       { boardContext },
       "",
       filter.length === 0 ? "/" : `/?q=${encodeURIComponent(filter)}`,
     );
-  }, [filter]);
+  }, [captureScrollPositions, filter]);
   const openTask = useCallback((taskId: string, boardId: string) => {
     rememberContext(boardId);
     navigate(`/tasks/${encodeURIComponent(taskId)}`, { returnToBoard: true });
@@ -251,16 +300,14 @@ export function BoardPage({
             ) : null}
           </section>
         )}
-        <section className="needs-attention" aria-labelledby="needs-attention-heading">
-          <div className="board-heading">
-            <div>
-              <p className="eyebrow">Explicit action required</p>
-              <h2 id="needs-attention-heading">Needs attention</h2>
+        {state.attention.length === 0 ? null : (
+          <section className="needs-attention" aria-labelledby="needs-attention-heading">
+            <div className="board-heading">
+              <div>
+                <p className="eyebrow">Explicit action required</p>
+                <h2 id="needs-attention-heading">Needs attention</h2>
+              </div>
             </div>
-          </div>
-          {state.attention.length === 0 ? (
-            <p className="quiet">No tasks need attention.</p>
-          ) : (
             <ol className="attention-groups">
               {state.attention.map(({ task, reasons }) => (
                 <li key={task.id}>
@@ -290,8 +337,8 @@ export function BoardPage({
                 </li>
               ))}
             </ol>
-          )}
-        </section>
+          </section>
+        )}
         <div className="board-toolbar">
           <label className="filter-field">
             <span>Filter tasks</span>
@@ -300,10 +347,20 @@ export function BoardPage({
               type="search"
               value={filter}
               placeholder="ID or outcome"
-              onChange={(event) => setFilter(event.currentTarget.value)}
+              onChange={(event) => changeFilter(event.currentTarget.value)}
             />
           </label>
-          <p className="lane-hint">Workflow runs left to right · scroll horizontally</p>
+          <fieldset className="layout-control">
+            <legend>Board layout</legend>
+            <label>
+              <input type="radio" name="board-layout" checked={layout === "row"} onChange={() => chooseLayout("row")} />
+              Row layout
+            </label>
+            <label>
+              <input type="radio" name="board-layout" checked={layout === "column"} onChange={() => chooseLayout("column")} />
+              Column layout
+            </label>
+          </fieldset>
         </div>
         {feedback === undefined ? null : (
           <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>
@@ -314,12 +371,22 @@ export function BoardPage({
               <div><p className="eyebrow">Board</p><h2 id={`board-${board.id}`}>{board.name}</h2></div>
             </div>
             <div
-              className="board-lane"
+              className={`board-lane ${layout}-layout`}
               data-testid="board-lane"
               ref={(element) => {
-                if (element === null) laneRefs.current.delete(board.id);
-                else laneRefs.current.set(board.id, element);
+                const key = `column:${board.id}`;
+                if (element === null) {
+                  laneRefs.current.delete(board.id);
+                  scrollElements.current.delete(key);
+                } else {
+                  laneRefs.current.set(board.id, element);
+                  scrollElements.current.set(key, element);
+                }
               }}
+              onScroll={(event) => scrollPositions.current.set(
+                `column:${board.id}`,
+                event.currentTarget.scrollLeft,
+              )}
               tabIndex={0}
               aria-label={`${board.name} workflow columns`}
             >
@@ -328,10 +395,20 @@ export function BoardPage({
                   key={column.id}
                   boardId={board.id}
                   column={column}
+                  layout={layout}
                   filter={filter}
                   pendingTaskId={pendingTaskId}
                   highlightedTaskId={highlightedTaskId}
                   activeRuns={state.activeRuns}
+                  onTaskStrip={(element) => {
+                    const key = `row:${board.id}:${column.id}`;
+                    if (element === null) scrollElements.current.delete(key);
+                    else scrollElements.current.set(key, element);
+                  }}
+                  onTaskStripScroll={(position) => scrollPositions.current.set(
+                    `row:${board.id}:${column.id}`,
+                    position,
+                  )}
                   onOpen={(taskId) => openTask(taskId, board.id)}
                   onCreate={() => setCreation({ boardId: board.id, columnId: column.id })}
                 />
@@ -341,7 +418,7 @@ export function BoardPage({
         ))}
       </main>
       {creation === undefined ? null : (
-        <CreationDialog
+        <TaskCreationDialog
           initial={creation}
           columns={state.boards.find((board) => board.id === creation.boardId)?.columns ?? []}
           onClose={() => setCreation(undefined)}
@@ -361,244 +438,10 @@ function formatDiagnosticValue(value: unknown): string {
   return JSON.stringify(value) ?? String(value);
 }
 
-function BoardColumn({
-  boardId,
-  column,
-  filter,
-  pendingTaskId,
-  highlightedTaskId,
-  activeRuns,
-  onOpen,
-  onCreate,
-}: {
-  boardId: string;
-  column: BrowserColumnView;
-  filter: string;
-  pendingTaskId?: string | undefined;
-  highlightedTaskId?: string | undefined;
-  activeRuns: BrowserBoardState["activeRuns"];
-  onOpen(taskId: string): void;
-  onCreate(): void;
-}): ReactNode {
-  const elementRef = useRef<HTMLElement>(null);
-  const [over, setOver] = useState(false);
-  useEffect(() => {
-    const element = elementRef.current;
-    if (element === null) return;
-    return dropTargetForElements({
-      element,
-      getData: () => ({ boardId, columnId: column.id }),
-      onDragEnter: () => setOver(true),
-      onDragLeave: () => setOver(false),
-      onDrop: () => setOver(false),
-    });
-  }, [boardId, column.id]);
-  const needle = filter.trim().toLocaleLowerCase();
-  const tasks = column.tasks.filter(
-    (task) =>
-      needle.length === 0 ||
-      `${task.id} ${task.title}`.toLocaleLowerCase().includes(needle),
-  );
-  const headingId = `column-${boardId}-${column.id}`;
-  return (
-    <section
-      ref={elementRef}
-      data-testid={`column-${column.id}`}
-      className={`board-column${over ? " drop-target" : ""}`}
-      aria-labelledby={headingId}
-    >
-      <header className="column-header">
-        <div>
-          <h3 id={headingId}>{column.name}</h3>
-          <span className="task-count">{tasks.length}</span>
-        </div>
-        <p>
-          {column.watchingAgent === null
-            ? "No watching agent"
-            : `Watched by ${column.watchingAgent.name}`}
-        </p>
-      </header>
-      <ol className="task-list">
-        {tasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            pending={pendingTaskId === task.id}
-            highlighted={highlightedTaskId === task.id}
-            activeRun={activeRuns.find((run) => run.taskId === task.id)}
-            onOpen={onOpen}
-          />
-        ))}
-      </ol>
-      <button className="create-column" onClick={onCreate}>
-        + Create task in {column.name}
-      </button>
-    </section>
-  );
-}
-
-function TaskCard({
-  task,
-  pending,
-  highlighted,
-  activeRun,
-  onOpen,
-}: {
-  task: TaskOverviewView;
-  pending: boolean;
-  highlighted: boolean;
-  activeRun?: BrowserBoardState["activeRuns"][number] | undefined;
-  onOpen(taskId: string): void;
-}): ReactNode {
-  const cardRef = useRef<HTMLLIElement>(null);
-  const handleRef = useRef<HTMLButtonElement>(null);
-  const [dragging, setDragging] = useState(false);
-  useEffect(() => {
-    const element = cardRef.current;
-    const dragHandle = handleRef.current;
-    if (element === null || dragHandle === null) return;
-    return draggable({
-      element,
-      dragHandle,
-      getInitialData: () => ({ taskId: task.id }),
-      onDragStart: () => setDragging(true),
-      onDrop: () => setDragging(false),
-    });
-  }, [task.id]);
-  return (
-    <li
-      ref={cardRef}
-      data-task-id={task.id}
-      tabIndex={-1}
-      className={`task-card${pending ? " pending" : ""}${dragging ? " dragging" : ""}${highlighted ? " highlighted" : ""}`}
-      aria-busy={pending}
-    >
-      <div className="card-topline">
-        <span className="task-id">{task.id}</span>
-        <button
-          ref={handleRef}
-          className="drag-handle"
-          aria-label={`Drag ${task.id}`}
-          title="Drag task"
-        >
-          ⠿
-        </button>
-      </div>
-      <a
-        aria-label={`${task.id} ${task.title}`}
-        href={`/tasks/${encodeURIComponent(task.id)}`}
-        onClick={(event) => {
-          event.preventDefault();
-          onOpen(task.id);
-        }}
-      >
-        <span className="card-title">{task.title}</span>
-      </a>
-      <div className="card-signals">
-        {task.blocking.blocked ? (
-          <span className="signal blocked">Blocked · {task.blocking.blockerTaskIds.join(", ")}</span>
-        ) : null}
-        {task.unresolvedAttention.length > 0 ? (
-          <span className="signal attention">Needs attention · {task.unresolvedAttention.length}</span>
-        ) : null}
-        {task.run.queuedActivationCount > 0 ? (
-          <span className="signal queued">Queued · {task.run.queuedActivationCount}</span>
-        ) : null}
-        {task.run.failedActivationCount > 0 ? (
-          <span className="signal failed">Failed · {task.run.failedActivationCount}</span>
-        ) : null}
-        {task.run.activeAgentId === null ? null : (
-          <span className="signal running">
-            Active · {task.run.activeAgentId}
-            {activeRun === undefined ? null : <> · <ElapsedTime startedAt={activeRun.startedAt} /></>}
-          </span>
-        )}
-      </div>
-      {task.startupFailure === undefined ? null : (
-        <div className="startup-diagnostic">
-          <strong>Startup failed before attempt · {task.startupFailure.boundary}</strong>
-          <p>{task.startupFailure.diagnostic}</p>
-        </div>
-      )}
-    </li>
-  );
-}
-
-function CreationDialog({
-  initial,
-  columns,
-  onClose,
-  onCreated,
-}: {
-  initial: { boardId: string; columnId: string };
-  columns: BrowserColumnView[];
-  onClose(): void;
-  onCreated(task: { id: string }, column: BrowserColumnView): Promise<void>;
-}): ReactNode {
-  const [columnId, setColumnId] = useState(initial.columnId);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
-  const [error, setError] = useState<string>();
-  const [pending, setPending] = useState(false);
-  const submit = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    setPending(true);
-    setError(undefined);
-    try {
-      const result = await createTask({
-        boardId: initial.boardId,
-        columnId,
-        title,
-        description,
-        idempotencyKey,
-      });
-      const column = columns.find((candidate) => candidate.id === columnId);
-      if (column === undefined) throw new Error("The selected column is unavailable.");
-      await onCreated(result.task, column);
-    } catch (caught) {
-      setError(errorMessage(caught));
-      setPending(false);
-    }
-  };
-  return (
-    <div className="modal-backdrop" role="presentation">
-      <section
-        className="modal create-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-title"
-      >
-        <div className="modal-heading">
-          <div><p className="eyebrow">New coordination work</p><h2 id="create-title">Create task</h2></div>
-          <button className="icon-button" aria-label="Close task creation" onClick={onClose}>×</button>
-        </div>
-        <form onSubmit={(event) => void submit(event)}>
-          <label>
-            Starting column
-            <select
-              aria-label="Starting column"
-              value={columnId}
-              onChange={(event) => setColumnId(event.currentTarget.value)}
-            >
-              {columns.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
-            </select>
-          </label>
-          <label>
-            Outcome-oriented title
-            <input autoFocus value={title} onChange={(event) => setTitle(event.currentTarget.value)} />
-          </label>
-          <label>
-            Complete description
-            <textarea rows={8} value={description} onChange={(event) => setDescription(event.currentTarget.value)} />
-          </label>
-          {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
-          <div className="form-actions">
-            <button type="button" className="secondary" onClick={onClose}>Cancel</button>
-            <button disabled={pending} type="submit">{pending ? "Creating…" : "Create task"}</button>
-          </div>
-        </form>
-      </section>
-    </div>
-  );
+function readLayoutPreference(): BoardLayout {
+  try {
+    return localStorage.getItem(layoutPreferenceKey) === "column" ? "column" : "row";
+  } catch {
+    return "row";
+  }
 }

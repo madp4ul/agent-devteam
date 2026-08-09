@@ -79,16 +79,22 @@ export class TaskDiscovery {
     const canonicalColumnIds = board.columns
       .filter((column) => query.columnIds.includes(column.id))
       .map((column) => column.id);
+    const order = query.order ?? "task-sequence";
     const cursor =
       query.cursor === undefined
         ? undefined
-        : decodeTaskOverviewCursor(query.cursor, query.boardId, canonicalColumnIds);
+        : decodeTaskOverviewCursor(query.cursor, query.boardId, canonicalColumnIds, order);
     if (query.cursor !== undefined && cursor === undefined) {
       return { available: false, reason: "invalid-cursor" };
     }
     const records = this.#taskProjections
       .readTaskOverviewRecords(query.boardId, canonicalColumnIds)
-      .filter((record) => cursor === undefined || record.sequence > cursor.taskSequence);
+      .sort((left, right) => order === "recent-column-entry"
+        ? right.columnEntrySequence - left.columnEntrySequence
+        : left.sequence - right.sequence)
+      .filter((record) => cursor === undefined || (order === "recent-column-entry"
+        ? record.columnEntrySequence < cursor.columnEntrySequence
+        : record.sequence > cursor.taskSequence));
     const page = records.slice(0, pageSize);
     const lastRecord = page.at(-1);
     return {
@@ -99,7 +105,9 @@ export class TaskDiscovery {
           ? encodeTaskOverviewCursor({
               boardId: query.boardId,
               columnIds: canonicalColumnIds,
+              order,
               taskSequence: lastRecord.sequence,
+              columnEntrySequence: lastRecord.columnEntrySequence,
             })
           : null,
     };
@@ -224,38 +232,46 @@ export class TaskDiscovery {
 interface TaskOverviewCursor {
   boardId: string;
   columnIds: string[];
+  order: NonNullable<TaskOverviewsQuery["order"]>;
   taskSequence: number;
+  columnEntrySequence: number;
 }
 
 function encodeTaskOverviewCursor(cursor: TaskOverviewCursor): string {
-  return Buffer.from(JSON.stringify({ version: 1, ...cursor }), "utf8").toString("base64url");
+  return Buffer.from(JSON.stringify({ version: 2, ...cursor }), "utf8").toString("base64url");
 }
 
 function decodeTaskOverviewCursor(
   value: string,
   boardId: string,
   columnIds: string[],
+  order: NonNullable<TaskOverviewsQuery["order"]>,
 ): TaskOverviewCursor | undefined {
   try {
     const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as unknown;
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
     const candidate = parsed as Record<string, unknown>;
     if (
-      candidate.version !== 1 ||
+      candidate.version !== 2 ||
       candidate.boardId !== boardId ||
+      candidate.order !== order ||
       !Array.isArray(candidate.columnIds) ||
       candidate.columnIds.some((columnId) => typeof columnId !== "string") ||
       candidate.columnIds.length !== columnIds.length ||
       candidate.columnIds.some((columnId, index) => columnId !== columnIds[index]) ||
       !Number.isInteger(candidate.taskSequence) ||
-      (candidate.taskSequence as number) < 1
+      (candidate.taskSequence as number) < 1 ||
+      !Number.isInteger(candidate.columnEntrySequence) ||
+      (candidate.columnEntrySequence as number) < 1
     ) {
       return undefined;
     }
     return {
       boardId,
       columnIds,
+      order,
       taskSequence: candidate.taskSequence as number,
+      columnEntrySequence: candidate.columnEntrySequence as number,
     };
   } catch {
     return undefined;
