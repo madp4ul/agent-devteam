@@ -114,6 +114,15 @@ textarea { resize: vertical; line-height: 1.5; }
 .workspace-heading h2 { margin: .15rem 0 0; }
 .workspace-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: .55rem; }
 .workspace-actions button { padding: .55rem .75rem; }
+.workspace-actions .workspace-copy-button { align-self: center; padding: .35rem .5rem; color: var(--muted); background: transparent; font-size: .72rem; }
+.workspace-actions .workspace-copy-button:hover:not(:disabled) { color: var(--ink); background: #e9ede7; }
+.workspace-open-control { display: flex; }
+.workspace-open-primary { border-radius: .65rem 0 0 .65rem; }
+.workspace-open-menu { position: relative; }
+.workspace-actions .workspace-open-disclosure { display: grid; width: 2rem; height: 100%; place-items: center; border-left: 1px solid rgb(255 255 255 / 28%); border-radius: 0 .65rem .65rem 0; padding: 0; }
+.workspace-open-options { position: absolute; z-index: 5; top: calc(100% + .4rem); right: 0; min-width: 14rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); padding: .35rem; box-shadow: var(--shadow); }
+.workspace-open-options button { width: 100%; color: var(--ink); background: transparent; text-align: left; white-space: nowrap; }
+.workspace-open-options button:hover:not(:disabled) { background: #e9ede7; }
 .workspace-meta { margin: .65rem 0 0; color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
 .workspace-meta code { font-size: inherit; }
 .workspace-feedback { margin: .65rem 0 0; font-size: .8rem; font-weight: 700; }
@@ -194,6 +203,8 @@ pre { max-height: 18rem; overflow: auto; border-radius: .5rem; color: #d9eee3; b
   .board-column { flex-basis: min(18rem, calc(100vw - 2.5rem)); }
   .task-hero { flex-direction: column; }
   .detail-grid { grid-template-columns: 1fr; }
+  .workspace-heading { align-items: flex-start; flex-direction: column; }
+  .workspace-actions { width: 100%; justify-content: flex-end; }
   .move-panel { grid-template-columns: 1fr; gap: .8rem; }
   .facts { grid-template-columns: 1fr; }
   .entry-meta { align-items: flex-start; flex-direction: column; gap: .2rem; }

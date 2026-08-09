@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createHostWorkspaceOpener,
+  createVisualStudioCodeWorkspaceOpener,
   launchHostCommand,
 } from "../../src/web/host-workspace-opener.ts";
 
@@ -28,6 +29,38 @@ test("host workspace opening preserves the exact path for supported desktop plat
 
 test("host workspace opening is unavailable on unsupported platforms", () => {
   assert.equal(createHostWorkspaceOpener("aix"), undefined);
+});
+
+test("Visual Studio Code workspace opening preserves the exact path", async () => {
+  const launches: Array<{ command: string; arguments_: string[]; confirmation: string }> = [];
+  const openWorkspace = createVisualStudioCodeWorkspaceOpener(
+    "win32",
+    async (command, arguments_, confirmation) => {
+      launches.push({ command, arguments_, confirmation });
+    },
+    async () => "C:/Users/example/AppData/Local/Programs/Microsoft VS Code/Code.exe",
+  );
+
+  await openWorkspace("C:/project state/task worktrees/T-0001");
+
+  assert.deepEqual(launches, [{
+    command: "C:/Users/example/AppData/Local/Programs/Microsoft VS Code/Code.exe",
+    arguments_: ["C:/project state/task worktrees/T-0001"],
+    confirmation: "spawn",
+  }]);
+});
+
+test("Visual Studio Code workspace opening reports a missing Windows installation", async () => {
+  const openWorkspace = createVisualStudioCodeWorkspaceOpener(
+    "win32",
+    async () => assert.fail("The launcher must not run without an executable."),
+    async () => undefined,
+  );
+
+  await assert.rejects(
+    openWorkspace("C:/project state/task worktrees/T-0001"),
+    /Visual Studio Code could not be found/,
+  );
 });
 
 test("host workspace opening confirms launch without waiting for the application to exit", async () => {

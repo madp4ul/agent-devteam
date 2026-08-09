@@ -269,11 +269,15 @@ test("open workspace uses only the authoritative provisioned path and reports ho
   await application.waitForAutomationIdle();
 
   let openedPath: string | undefined;
+  let openedInVisualStudioCodePath: string | undefined;
   const server = await startWebServer(application, {
     host: "127.0.0.1",
     port: 0,
     assetDirectory: fixture.assetDirectory,
     openWorkspace: async (_taskId, workspace) => { openedPath = workspace.path; },
+    openWorkspaceInVisualStudioCode: async (_taskId, workspace) => {
+      openedInVisualStudioCodePath = workspace.path;
+    },
   });
   t.after(() => server.close());
   const opened = await postJson(
@@ -282,6 +286,13 @@ test("open workspace uses only the authoritative provisioned path and reports ho
   );
   assert.equal(opened.response.status, 200);
   assert.equal(openedPath, join(workspaceRoot, created.task.id));
+
+  const openedInVisualStudioCode = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/workspace/open-vscode`,
+    {},
+  );
+  assert.equal(openedInVisualStudioCode.response.status, 200);
+  assert.equal(openedInVisualStudioCodePath, join(workspaceRoot, created.task.id));
 
   const unavailableServer = await startWebServer(application, {
     host: "127.0.0.1",

@@ -22,6 +22,7 @@ export interface WebServerOptions {
   agentToolScopes?: AgentToolScopeRegistry;
   assetDirectory?: string;
   openWorkspace?: (taskId: string, workspace: TaskWorkspaceView) => Promise<void>;
+  openWorkspaceInVisualStudioCode?: (taskId: string, workspace: TaskWorkspaceView) => Promise<void>;
 }
 
 export interface RunningWebServer {
@@ -170,8 +171,15 @@ async function handleBrowserApi(
   }
   const taskMatch = /^\/api\/tasks\/([^/]+)$/.exec(url.pathname);
   const openWorkspaceMatch = /^\/api\/tasks\/([^/]+)\/workspace\/open$/.exec(url.pathname);
-  if (method === "POST" && openWorkspaceMatch?.[1] !== undefined) {
-    const taskId = decodeURIComponent(openWorkspaceMatch[1]);
+  const openWorkspaceInVisualStudioCodeMatch = /^\/api\/tasks\/([^/]+)\/workspace\/open-vscode$/.exec(
+    url.pathname,
+  );
+  const workspaceOpenMatch = openWorkspaceMatch ?? openWorkspaceInVisualStudioCodeMatch;
+  if (method === "POST" && workspaceOpenMatch?.[1] !== undefined) {
+    const taskId = decodeURIComponent(workspaceOpenMatch[1]);
+    const openWorkspace = openWorkspaceMatch === null
+      ? options.openWorkspaceInVisualStudioCode
+      : options.openWorkspace;
     const inspection = application.queryTaskInspectionForUser(taskId);
     if (!inspection.available) {
       sendJson(response, inspection.reason === "not-found" ? 404 : 409, inspection);
@@ -181,10 +189,12 @@ async function handleBrowserApi(
       sendJson(response, 409, { reason: "workspace-not-provisioned" });
       return;
     }
-    if (options.openWorkspace === undefined) {
+    if (openWorkspace === undefined) {
       sendJson(response, 503, {
         reason: "host-integration-unavailable",
-        diagnostic: "Opening task workspaces is unavailable on this host.",
+        diagnostic: openWorkspaceMatch === null
+          ? "Opening task workspaces in Visual Studio Code is unavailable on this host."
+          : "Opening task workspaces is unavailable on this host.",
       });
       return;
     }
@@ -193,7 +203,7 @@ async function handleBrowserApi(
       if (!workspaceStatus.isDirectory()) {
         throw new Error("The recorded task workspace is not a directory.");
       }
-      await options.openWorkspace(taskId, inspection.task.workspace);
+      await openWorkspace(taskId, inspection.task.workspace);
       sendJson(response, 200, { accepted: true });
     } catch (error) {
       sendJson(response, 409, {

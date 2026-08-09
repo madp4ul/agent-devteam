@@ -422,8 +422,12 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(expectedPath);
   await expect(workspace.getByRole("status")).toContainText("Copied task workspace path");
 
-  await workspace.getByRole("button", { name: "Open workspace" }).click();
-  await expect(workspace.getByRole("status")).toContainText("Open request sent");
+  await workspace.getByRole("button", { name: "Open folder" }).click();
+  await expect(workspace.getByRole("status")).toContainText("default folder application");
+
+  await workspace.getByRole("button", { name: "More ways to open workspace" }).click();
+  await workspace.getByRole("menuitem", { name: "Open in Visual Studio Code" }).click();
+  await expect(workspace.getByRole("status")).toContainText("Visual Studio Code");
 
   await page.route("**/api/tasks/T-0001/workspace/open", (route) => route.fulfill({
     status: 503,
@@ -432,8 +436,31 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
       diagnostic: "Opening task workspaces is unavailable on this host.",
     },
   }));
-  await workspace.getByRole("button", { name: "Open workspace" }).click();
+  await workspace.getByRole("button", { name: "Open folder" }).click();
   await expect(workspace.getByRole("alert")).toContainText("unavailable on this host");
+
+  await page.route("**/api/tasks/T-0001/workspace/open-vscode", (route) => route.fulfill({
+    status: 409,
+    json: {
+      reason: "workspace-open-failed",
+      diagnostic: "Visual Studio Code could not be found on this host.",
+    },
+  }));
+  await workspace.getByRole("button", { name: "More ways to open workspace" }).click();
+  await workspace.getByRole("menuitem", { name: "Open in Visual Studio Code" }).click();
+  await expect(workspace.getByRole("alert")).toContainText("Visual Studio Code could not be found");
+
+  await page.setViewportSize({ width: 360, height: 760 });
+  const workspaceBounds = await workspace.boundingBox();
+  const actionBounds = await workspace.locator(".workspace-actions").boundingBox();
+  expect(workspaceBounds).not.toBeNull();
+  expect(actionBounds).not.toBeNull();
+  if (workspaceBounds !== null && actionBounds !== null) {
+    expect(actionBounds.x).toBeGreaterThanOrEqual(workspaceBounds.x);
+    expect(actionBounds.x + actionBounds.width).toBeLessThanOrEqual(
+      workspaceBounds.x + workspaceBounds.width,
+    );
+  }
 });
 
 test("task details create children and dependencies through contextual controls", async ({ page }) => {

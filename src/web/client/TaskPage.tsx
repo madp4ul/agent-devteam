@@ -9,6 +9,7 @@ import {
   editTask,
   interruptTask,
   openTaskWorkspace,
+  openTaskWorkspaceInVisualStudioCode,
   continueInterruptedTask,
   readTask,
   type BrowserTaskDetail,
@@ -270,7 +271,25 @@ function TaskWorkspacePanel({
     role: "status" | "alert";
     text: string;
   }>();
-  const [opening, setOpening] = useState(false);
+  const [opening, setOpening] = useState<"folder" | "vscode">();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const requestOpen = useCallback((target: "folder" | "vscode") => {
+    setMenuOpen(false);
+    setOpening(target);
+    setActionFeedback({ role: "status", text: "Sending open request…" });
+    const request = target === "folder"
+      ? openTaskWorkspace(taskId)
+      : openTaskWorkspaceInVisualStudioCode(taskId);
+    void request
+      .then(() => setActionFeedback({
+        role: "status",
+        text: target === "folder"
+          ? "Open request sent to the default folder application."
+          : "Open request sent to Visual Studio Code.",
+      }))
+      .catch((error) => setActionFeedback({ role: "alert", text: errorMessage(error) }))
+      .finally(() => setOpening(undefined));
+  }, [taskId]);
   return (
     <section className="detail-panel workspace-panel" aria-labelledby="workspace-heading">
       <div className="workspace-heading">
@@ -281,7 +300,7 @@ function TaskWorkspacePanel({
         {workspace === null ? null : (
           <div className="workspace-actions">
             <button
-              className="secondary"
+              className="secondary workspace-copy-button"
               onClick={() => {
                 void navigator.clipboard.writeText(workspace.path)
                   .then(() => setActionFeedback({ role: "status", text: "Copied task workspace path." }))
@@ -290,22 +309,36 @@ function TaskWorkspacePanel({
             >
               Copy path
             </button>
-            <button
-              disabled={opening}
-              onClick={() => {
-                setOpening(true);
-                setActionFeedback({ role: "status", text: "Opening task workspace…" });
-                void openTaskWorkspace(taskId)
-                  .then(() => setActionFeedback({
-                    role: "status",
-                    text: "Open request sent to the default folder application.",
-                  }))
-                  .catch((error) => setActionFeedback({ role: "alert", text: errorMessage(error) }))
-                  .finally(() => setOpening(false));
-              }}
-            >
-              {opening ? "Opening…" : "Open workspace"}
-            </button>
+            <div className="workspace-open-control">
+              <button
+                className="workspace-open-primary"
+                disabled={opening !== undefined}
+                onClick={() => requestOpen("folder")}
+              >
+                {opening === "folder" ? "Opening…" : "Open folder"}
+              </button>
+              <div className="workspace-open-menu">
+                <button
+                  className="workspace-open-disclosure"
+                  aria-label="More ways to open workspace"
+                  aria-expanded={menuOpen}
+                  aria-haspopup="menu"
+                  disabled={opening !== undefined}
+                  onClick={() => setMenuOpen((current) => !current)}
+                >
+                  <span aria-hidden="true">▾</span>
+                </button>
+                {menuOpen ? <div className="workspace-open-options" role="menu">
+                  <button
+                    role="menuitem"
+                    disabled={opening !== undefined}
+                    onClick={() => requestOpen("vscode")}
+                  >
+                    {opening === "vscode" ? "Opening…" : "Open in Visual Studio Code"}
+                  </button>
+                </div> : null}
+              </div>
+            </div>
           </div>
         )}
       </div>

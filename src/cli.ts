@@ -4,11 +4,15 @@ import { fileURLToPath } from "node:url";
 import {
   CoordinationApplication,
   type ProcessDiagnostic,
+  type TaskWorkspaceView,
 } from "./application/coordination-application.ts";
 import { AgentToolScopeRegistry } from "./mcp/agent-tool-scope.ts";
 import { CodexAgentRuntime } from "./runtime/codex-agent-runtime.ts";
 import { startWebServer } from "./web/web-server.ts";
-import { createHostWorkspaceOpener } from "./web/host-workspace-opener.ts";
+import {
+  createHostWorkspaceOpener,
+  createVisualStudioCodeWorkspaceOpener,
+} from "./web/host-workspace-opener.ts";
 import { GitTaskWorkspaceManager } from "./application/internal/git-task-workspace.ts";
 import { resolveProjectState } from "./application/internal/project-state.ts";
 
@@ -124,6 +128,7 @@ async function run(arguments_: string[]): Promise<void> {
           },
         });
     const openWorkspaceInHost = createHostWorkspaceOpener();
+    const openWorkspaceInVisualStudioCode = createVisualStudioCodeWorkspaceOpener();
     const taskWorkspaceManager = projectState === undefined
       ? undefined
       : new GitTaskWorkspaceManager(projectRepositoryPath, projectState.taskWorkspaceRoot);
@@ -134,10 +139,11 @@ async function run(arguments_: string[]): Promise<void> {
       ...(taskWorkspaceManager === undefined || openWorkspaceInHost === undefined
         ? {}
         : {
-            openWorkspace: async (taskId, workspace) => {
-              await taskWorkspaceManager.verify(taskId, workspace);
-              await openWorkspaceInHost(workspace.path);
-            },
+            openWorkspace: createVerifiedWorkspaceOpener(taskWorkspaceManager, openWorkspaceInHost),
+            openWorkspaceInVisualStudioCode: createVerifiedWorkspaceOpener(
+              taskWorkspaceManager,
+              openWorkspaceInVisualStudioCode,
+            ),
           }),
     });
     agentApiBaseUrl = server.baseUrl;
@@ -173,6 +179,16 @@ async function run(arguments_: string[]): Promise<void> {
 function readOption(arguments_: string[], name: string): string | undefined {
   const index = arguments_.indexOf(name);
   return index === -1 ? undefined : arguments_[index + 1];
+}
+
+function createVerifiedWorkspaceOpener(
+  workspaceManager: GitTaskWorkspaceManager,
+  openPath: (path: string) => Promise<void>,
+): (taskId: string, workspace: TaskWorkspaceView) => Promise<void> {
+  return async (taskId, workspace) => {
+    await workspaceManager.verify(taskId, workspace);
+    await openPath(workspace.path);
+  };
 }
 
 function formatDiagnostic(diagnostic: ProcessDiagnostic): string {

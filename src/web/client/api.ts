@@ -76,6 +76,13 @@ export async function openTaskWorkspace(taskId: string): Promise<void> {
   });
 }
 
+export async function openTaskWorkspaceInVisualStudioCode(taskId: string): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/workspace/open-vscode`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export async function createTask(input: {
   boardId: string;
   columnId: string;

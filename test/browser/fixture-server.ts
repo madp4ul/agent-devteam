@@ -181,6 +181,7 @@ const server = await startWebServer(application, {
   host: "127.0.0.1",
   port: 4174,
   openWorkspace: async () => undefined,
+  openWorkspaceInVisualStudioCode: async () => undefined,
 });
 console.log(`Browser fixture listening at ${server.baseUrl}`);
 
