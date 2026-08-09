@@ -5,7 +5,7 @@ import {
 import { AutomationCoordinator } from "./internal/automation-coordinator.ts";
 import { loadProcessDefinition } from "./internal/process-definition.ts";
 import { TaskDiscovery } from "./internal/task-discovery.ts";
-import { validateTaskWorkspaceConsistency } from "./internal/git-task-workspace.ts";
+import { GitTaskWorkspaceManager, validateTaskWorkspaceConsistency } from "./internal/git-task-workspace.ts";
 import type {
   AddTaskCommentCommand,
   AddTaskCommentResult,
@@ -48,6 +48,13 @@ import type {
   TaskOverviewsQueryResult,
   TaskQueryResult,
   TaskRelationshipMutationResult,
+  ArchiveTaskCommand,
+  ArchiveTaskResult,
+  ArchiveCompletedTasksCommand,
+  ArchiveCompletedTasksResult,
+  ArchivedTaskOverviewsQueryResult,
+  UnarchiveTaskCommand,
+  UnarchiveTaskResult,
 } from "./coordination-contract.ts";
 
 export * from "./coordination-contract.ts";
@@ -58,6 +65,7 @@ export class CoordinationApplication {
   readonly #automation: AutomationCoordinator;
   readonly #discovery: TaskDiscovery;
   readonly #transcriptAccess: AttemptTranscriptAccess | undefined;
+  readonly #workspaceManager: GitTaskWorkspaceManager | undefined;
   readonly #pendingInterruptCommands = new Map<
     string,
     Extract<InterruptTaskResult, { accepted: true }>
@@ -69,12 +77,14 @@ export class CoordinationApplication {
     automation: AutomationCoordinator,
     discovery: TaskDiscovery,
     transcriptAccess?: AttemptTranscriptAccess,
+    workspaceManager?: GitTaskWorkspaceManager,
   ) {
     this.#persistence = persistence;
     this.#startup = startup;
     this.#automation = automation;
     this.#discovery = discovery;
     this.#transcriptAccess = transcriptAccess;
+    this.#workspaceManager = workspaceManager;
   }
 
   static async validateProcessDefinition(path: string): Promise<ProcessValidationResult> {
@@ -122,6 +132,26 @@ export class CoordinationApplication {
     }
 
     const { definition, instructionContents, version } = validation.loaded;
+    const workspaceManager = options.runtimeDispatch === undefined
+      ? undefined
+      : new GitTaskWorkspaceManager(
+          options.runtimeDispatch.projectRepositoryPath,
+          options.runtimeDispatch.taskWorkspaceRoot,
+        );
+    for (const claim of persistence.taskArchive.readInterruptedClaims()) {
+      const workspace = automation.readTaskWorkspace(claim.taskId);
+      if (workspace === undefined) {
+        persistence.taskArchive.releaseInterruptedClaim(claim.taskId);
+        continue;
+      }
+      if (workspaceManager === undefined) continue;
+      const recovery = await workspaceManager.inspectInterruptedArchival(workspace);
+      if (recovery === "intact") {
+        persistence.taskArchive.releaseInterruptedClaim(claim.taskId);
+      } else if (recovery === "removed") {
+        persistence.taskArchive.archive(claim.taskId, claim.actor, claim.idempotencyKey);
+      }
+    }
     if (options.runtimeDispatch !== undefined) {
       const diagnostics = await validateTaskWorkspaceConsistency(
         options.runtimeDispatch.projectRepositoryPath,
@@ -198,6 +228,7 @@ export class CoordinationApplication {
       }),
       new TaskDiscovery(process, taskProjections, automation, startup, collaborators),
       options.transcriptAccess,
+      workspaceManager,
     );
   }
 
@@ -342,6 +373,10 @@ export class CoordinationApplication {
     return this.#discovery.queryTaskOverviews(query);
   }
 
+  queryArchivedTaskOverviews(): ArchivedTaskOverviewsQueryResult {
+    return this.#discovery.queryArchivedTaskOverviews();
+  }
+
   queryTaskInspection(taskId: string): TaskInspectionQueryResult {
     return this.#discovery.queryTaskInspection(taskId);
   }
@@ -368,6 +403,9 @@ export class CoordinationApplication {
     }
     const attempt = this.#persistence.taskProjections.readAttemptTranscriptReference(attemptId);
     if (attempt === undefined) return { available: false, reason: "not-found" };
+    if (this.#persistence.taskProjections.isAttemptArchived(attemptId)) {
+      return { available: false, reason: "unavailable" };
+    }
     const persisted = this.#persistence.taskProjections.readPersistedAttemptTranscript(attemptId);
     if (persisted !== undefined && attempt.threadId !== null) {
       return { available: true, threadId: attempt.threadId, items: persisted };
@@ -513,6 +551,73 @@ export class CoordinationApplication {
     return this.recoverActivation(
       () => this.#persistence.taskCommands.continuePermissionBlockedActivation(command),
     );
+  }
+
+  async archiveTask(command: ArchiveTaskCommand): Promise<ArchiveTaskResult> {
+    return this.archiveTaskWithEligibility(command, "any-idle-task");
+  }
+
+  private async archiveTaskWithEligibility(
+    command: ArchiveTaskCommand,
+    eligibility: "any-idle-task" | "completed-only",
+  ): Promise<ArchiveTaskResult> {
+    if (this.#startup.mode === "configuration-error") {
+      return { accepted: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
+    }
+    const claim = this.#persistence.taskArchive.claim(command, eligibility);
+    if (!claim.claimed) return claim.result;
+    const workspace = this.#persistence.automation.readTaskWorkspace(command.taskId);
+    if (workspace !== undefined) {
+      if (this.#workspaceManager === undefined) {
+        const result = { accepted: false as const, reason: "runtime-unavailable" as const };
+        this.#persistence.taskArchive.cancelClaim(command, result);
+        return result;
+      }
+      const removal = await this.#workspaceManager.removeForArchival(command.taskId, workspace);
+      if (!removal.removed) {
+        const result = { accepted: false as const, reason: removal.reason };
+        this.#persistence.taskArchive.cancelClaim(command, result);
+        return result;
+      }
+    }
+    return this.#persistence.taskArchive.archive(command.taskId, command.actor, command.idempotencyKey);
+  }
+
+  unarchiveTask(command: UnarchiveTaskCommand): UnarchiveTaskResult {
+    if (this.#startup.mode === "configuration-error") {
+      return { accepted: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
+    }
+    return this.#persistence.taskArchive.unarchive(
+      command.taskId,
+      command.actor,
+      command.idempotencyKey,
+    );
+  }
+
+  async archiveCompletedTasks(
+    command: ArchiveCompletedTasksCommand,
+  ): Promise<ArchiveCompletedTasksResult> {
+    if (this.#startup.mode === "configuration-error") {
+      return { accepted: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
+    }
+    const prior = this.#persistence.taskArchive.readBulkCommand<ArchiveCompletedTasksResult>(
+      command.idempotencyKey,
+    );
+    if (prior !== undefined) return prior;
+    const archivedTaskIds: string[] = [];
+    const rejected: Extract<ArchiveCompletedTasksResult, { accepted: true }>['rejected'] = [];
+    for (const taskId of this.#persistence.taskArchive.completedTaskIds()) {
+      const result = await this.archiveTaskWithEligibility({
+        taskId,
+        actor: command.actor,
+        idempotencyKey: `${command.idempotencyKey}:${taskId}`,
+      }, "completed-only");
+      if (result.accepted) archivedTaskIds.push(taskId);
+      else if (result.reason !== "configuration-error") rejected.push({ taskId, reason: result.reason });
+    }
+    const result = { accepted: true as const, archivedTaskIds, rejected };
+    this.#persistence.taskArchive.rememberBulkCommand(command.idempotencyKey, result);
+    return result;
   }
 
   close(): void {

@@ -42,10 +42,12 @@ export function TaskTimeline({
   comments,
   activity,
   activations,
+  transcriptsAvailable = true,
 }: {
   comments: TaskCommentView[];
   activity: TaskActivityView[];
   activations: ActivationView[];
+  transcriptsAvailable?: boolean;
 }): ReactNode {
   const [transcriptSelection, setTranscriptSelection] = useState<{ attemptId: string; agentId: string }>();
   const timeline = buildTimeline(comments, activity, activations);
@@ -61,7 +63,11 @@ export function TaskTimeline({
         <h2 id="timeline-heading">Task timeline</h2>
         <ol className="timeline">
           {timeline.map((entry) => (
-            <TimelineEntry key={entry.key} entry={entry} onTranscript={setTranscriptSelection} />
+            <TimelineEntry
+              key={entry.key}
+              entry={entry}
+              {...(transcriptsAvailable ? { onTranscript: setTranscriptSelection } : {})}
+            />
           ))}
         </ol>
       </section>
@@ -137,7 +143,7 @@ function TimelineEntry({
   onTranscript,
 }: {
   entry: TimelineItem;
-  onTranscript(value: { attemptId: string; agentId: string }): void;
+  onTranscript?: (value: { attemptId: string; agentId: string }) => void;
 }): ReactNode {
   if (entry.kind === "comment") {
     return (
@@ -227,9 +233,13 @@ function TimelineEntry({
           <p className="diagnostic">Diagnostic: {diagnostic}</p>
         )}
         <div className="attempt-actions">
-          <button className="secondary" onClick={() => onTranscript({ attemptId: entry.attempt.id, agentId: entry.agentId })}>
-            View transcript
-          </button>
+          {onTranscript === undefined ? (
+            <span className="quiet">Detailed transcript discarded on archival.</span>
+          ) : (
+            <button className="secondary" onClick={() => onTranscript({ attemptId: entry.attempt.id, agentId: entry.agentId })}>
+              View transcript
+            </button>
+          )}
           {entry.attempt.threadId === null ? null : (
             <CopyThreadIdButton threadId={entry.attempt.threadId} />
           )}
@@ -403,6 +413,8 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "attempt.completed": "Attempt completed",
     "automation.suspended": "Task automation suspended",
     "automation.resumed": "Task automation continued",
+    "task.archived": "Task archived",
+    "task.unarchived": "Task unarchived",
   }[type];
 }
 

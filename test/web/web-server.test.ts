@@ -311,6 +311,56 @@ test("open workspace uses only the authoritative provisioned path and reports ho
   });
 });
 
+test("browser archive endpoints remove tasks from the board and support history and unarchive", async (t) => {
+  const fixture = await createFixture("browser-archive");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Archive through the browser",
+    description: "The browser uses the same archival command seam.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "archive-browser-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const server = await startWebServer(application, {
+    host: "127.0.0.1",
+    port: 0,
+    assetDirectory: fixture.assetDirectory,
+  });
+  t.after(() => server.close());
+
+  const archived = await fetch(`${server.baseUrl}/api/tasks/${created.task.id}/archive`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ idempotencyKey: "archive-from-browser" }),
+  });
+  assert.equal(archived.status, 200);
+  const board = await (await fetch(`${server.baseUrl}/api/board`)).json() as {
+    boards: Array<{ columns: Array<{ tasks: Array<{ id: string }> }> }>;
+  };
+  assert.deepEqual(board.boards[0]?.columns.flatMap((column) => column.tasks), []);
+  const history = await (await fetch(`${server.baseUrl}/api/archive`)).json() as {
+    tasks: Array<{ id: string }>;
+  };
+  assert.deepEqual(history.tasks.map(({ id }) => id), [created.task.id]);
+
+  const unarchived = await fetch(`${server.baseUrl}/api/tasks/${created.task.id}/unarchive`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ idempotencyKey: "unarchive-from-browser" }),
+  });
+  assert.equal(unarchived.status, 200);
+  const restored = await application.queryTaskInspectionForUser(created.task.id);
+  assert.equal(restored.available, true);
+  if (restored.available) assert.notEqual(restored.task.archived, true);
+});
+
 async function createFixture(name: string, schemaVersion = 1): Promise<{
   directory: string;
   definitionPath: string;

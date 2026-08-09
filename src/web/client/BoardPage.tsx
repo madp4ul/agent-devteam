@@ -4,13 +4,16 @@ import {
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
 import {
+  archiveCompletedTasks,
   dismissStaleActivation,
   pauseAutomation,
   readBoard,
+  readArchivedTasks,
   resumeAutomation,
   resumeWithCurrentProcess,
   type BrowserBoardState,
 } from "./api.ts";
+import type { TaskOverviewView } from "../../application/coordination-contract.ts";
 import { BoardColumn, type BoardLayout } from "./BoardColumn.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
@@ -54,6 +57,7 @@ export function BoardPage({
   const [layout, setLayout] = useState<BoardLayout>(readLayoutPreference);
   const [creation, setCreation] = useState<{ boardId: string; columnId: string }>();
   const [highlightedTaskId, setHighlightedTaskId] = useState<string>();
+  const [archivedTasks, setArchivedTasks] = useState<TaskOverviewView[]>();
   const laneRefs = useRef(new Map<string, HTMLDivElement>());
   const scrollElements = useRef(new Map<string, HTMLElement>());
   const refresh = useCallback(async () => setState(await readBoard()), []);
@@ -199,6 +203,24 @@ export function BoardPage({
           <h1>Coordination board</h1>
         </div>
         <div className="automation-control">
+          <button
+            className="secondary"
+            onClick={() => void readArchivedTasks()
+              .then(setArchivedTasks)
+              .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }))}
+          >Archived tasks</button>
+          <button
+            className="secondary"
+            onClick={() => void archiveCompletedTasks(crypto.randomUUID())
+              .then(async (result) => {
+                await refresh();
+                setFeedback({
+                  role: result.rejected.length === 0 ? "status" : "alert",
+                  text: `Archived ${result.archivedTaskIds.length} completed task(s).${result.rejected.length === 0 ? "" : ` ${result.rejected.length} could not be archived.`}`,
+                });
+              })
+              .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }))}
+          >Archive completed</button>
           <span className={`status-dot ${state.automation.state}`} aria-hidden="true" />
           <span>Automation {state.automation.state}</span>
           {state.automation.state === "paused" && (processImpact?.staleActivations.length ?? 0) === 0 ? (
@@ -249,6 +271,23 @@ export function BoardPage({
           )}
         </div>
       </header>
+      {archivedTasks === undefined ? null : (
+        <aside className="archived-task-panel" aria-label="Archived tasks">
+          <div className="panel-heading">
+            <h2>Archived tasks</h2>
+            <button className="secondary" onClick={() => setArchivedTasks(undefined)}>Close</button>
+          </div>
+          {archivedTasks.length === 0 ? <p>No archived tasks.</p> : (
+            <ul>{archivedTasks.map((task) => (
+              <li key={task.id}>
+                <button className="secondary" onClick={() => openTask(task.id, task.boardId)}>
+                  {task.id} · {task.title} · {task.column.name}
+                </button>
+              </li>
+            ))}</ul>
+          )}
+        </aside>
+      )}
       <main>
         {processImpact === undefined ? null : (
           <section className="process-impact" aria-labelledby="process-impact-heading">

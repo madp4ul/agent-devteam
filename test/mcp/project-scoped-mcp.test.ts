@@ -103,6 +103,7 @@ boards:
     [
       "summarize_boards",
       "list_tasks",
+      "list_archived_tasks",
       "inspect_task",
       "list_task_activity",
       "list_task_attachments",
@@ -120,6 +121,7 @@ boards:
     Object.fromEntries(
       [
         "summarize_boards",
+        "list_archived_tasks",
         "inspect_task",
         "list_task_activity",
         "list_task_attachments",
@@ -132,6 +134,7 @@ boards:
     ),
     {
       summarize_boards: [],
+      list_archived_tasks: [],
       inspect_task: ["taskId"],
       list_task_activity: ["taskId"],
       list_task_attachments: ["taskId"],

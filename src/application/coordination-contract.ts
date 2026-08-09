@@ -77,7 +77,9 @@ export interface TaskActivityView {
     | "attempt.started"
     | "attempt.completed"
     | "automation.suspended"
-    | "automation.resumed";
+    | "automation.resumed"
+    | "task.archived"
+    | "task.unarchived";
   actor: Actor | { kind: "framework"; id: "coordination" };
   occurredAt: string;
   details: Record<string, string>;
@@ -243,6 +245,7 @@ export interface TaskOverviewView {
   boardId: string;
   column: { id: string; name: string };
   revision: number;
+  archived?: true;
   blocking: { blocked: boolean; blockerTaskIds: string[] };
   relationships: TaskRelationshipView[];
   unresolvedAttention: TaskAttentionView[];
@@ -271,6 +274,7 @@ export interface TaskInspectionView {
   boardId: string;
   column: { id: string; name: string };
   revision: number;
+  archived?: true;
   comments: TaskCommentView[];
   relationships: TaskRelationshipView[];
   blocking: TaskOverviewView["blocking"];
@@ -353,6 +357,7 @@ export interface TaskView {
   boardId: string;
   columnId: string;
   revision: number;
+  archived?: true;
   comments: TaskCommentView[];
   relationships: TaskRelationshipView[];
   activity: TaskActivityView[];
@@ -488,6 +493,10 @@ export type TaskOverviewsQueryResult =
     }
   | { available: false; reason: "column-not-found"; columnId: string };
 
+export type ArchivedTaskOverviewsQueryResult =
+  | { available: true; tasks: TaskOverviewView[] }
+  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
+
 export type TaskInspectionQueryResult =
   | { available: true; task: TaskInspectionView }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
@@ -569,6 +578,37 @@ export interface MarkUserMentionAddressedCommand {
   idempotencyKey: string;
 }
 
+export interface ArchiveTaskCommand {
+  taskId: string;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
+export interface UnarchiveTaskCommand extends ArchiveTaskCommand {}
+
+export interface ArchiveCompletedTasksCommand {
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
+export type ArchiveTaskResult =
+  | { accepted: true; task: TaskView }
+  | { accepted: false; reason: "not-found" | "already-archived" | "archive-in-progress" | "not-completed" | "activation-work-pending" | "automation-suspended" | "workspace-dirty" | "workspace-commit-not-durable" | "workspace-cleanup-failed" | "runtime-unavailable" }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
+
+export type UnarchiveTaskResult =
+  | { accepted: true; task: TaskView }
+  | { accepted: false; reason: "not-found" | "not-archived" }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
+
+export type ArchiveCompletedTasksResult =
+  | {
+      accepted: true;
+      archivedTaskIds: string[];
+      rejected: Array<{ taskId: string; reason: Exclude<ArchiveTaskResult, { accepted: true }>['reason'] }>;
+    }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
+
 export interface ActivationRecoveryCommand {
   attentionReasonId: string;
   actor: Actor & { kind: "user" };
@@ -596,6 +636,7 @@ export type BoardMutationResult =
         | "not-found"
         | "invalid-destination"
         | "invalid-starting-ref"
+        | "archived-task"
         | "unmapped-task-user-only"
         | "empty-title"
         | "empty-description";
@@ -613,7 +654,7 @@ export type MoveTaskResult =
 export type TaskRelationshipMutationResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { accepted: false; reason: "not-found" | "self-relationship" | "duplicate-relationship" };
+  | { accepted: false; reason: "not-found" | "archived-task" | "self-relationship" | "duplicate-relationship" };
 
 export type AddTaskCommentResult =
   | { accepted: true; task: TaskView; comment: TaskCommentView }
@@ -622,7 +663,7 @@ export type AddTaskCommentResult =
       reason: "configuration-error";
       diagnostics: ProcessDiagnostic[];
     }
-  | { accepted: false; reason: "not-found" | "empty-comment" };
+  | { accepted: false; reason: "not-found" | "archived-task" | "empty-comment" };
 
 export type MarkUserMentionAddressedResult =
   | { accepted: true; attentionReasonId: string; resolvedAt: string }

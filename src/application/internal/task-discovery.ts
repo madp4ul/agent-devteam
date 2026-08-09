@@ -5,6 +5,7 @@ import type {
   ProcessDiagnostic,
   StartupView,
   TaskActivityQueryResult,
+  ArchivedTaskOverviewsQueryResult,
   TaskAttachmentsQueryResult,
   TaskInspectionQueryResult,
   UserTaskInspectionQueryResult,
@@ -113,6 +114,13 @@ export class TaskDiscovery {
     };
   }
 
+  queryArchivedTaskOverviews(): ArchivedTaskOverviewsQueryResult {
+    if (this.#startup.mode === "configuration-error") {
+      return { available: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
+    }
+    return { available: true, tasks: this.#taskProjections.readArchivedTaskOverviewRecords().map(({ task }) => task) };
+  }
+
   queryTaskInspection(taskId: string): TaskInspectionQueryResult {
     return this.queryTaskInspectionView(taskId, { audience: "agent" });
   }
@@ -134,15 +142,16 @@ export class TaskDiscovery {
     options: { audience: "agent" | "user" },
   ): TaskInspectionQueryResult | UserTaskInspectionQueryResult {
     const includeUnmapped = options.audience === "user";
-    const loaded = this.readTask(taskId, includeUnmapped);
+    const loaded = this.readTask(taskId, includeUnmapped, true);
     if (!loaded.available) return loaded;
     const { task } = loaded;
-    const board = includeUnmapped || task.columnId === "completion"
+    const board = includeUnmapped || task.archived || task.columnId === "completion"
       ? this.#processStore.readBoard(task.boardId, true)
       : this.#processStore.readBoard(task.boardId);
     const column = board?.columns.find((candidate) => candidate.id === task.columnId);
-    const overview = this.#taskProjections
-      .readTaskOverviewRecords(task.boardId, [task.columnId])
+    const overview = (task.archived
+      ? this.#taskProjections.readArchivedTaskOverviewRecords()
+      : this.#taskProjections.readTaskOverviewRecords(task.boardId, [task.columnId]))
       .map((record) => record.task)
       .find((candidate) => candidate.id === task.id);
     if (column === undefined || overview === undefined) {
@@ -160,6 +169,7 @@ export class TaskDiscovery {
         boardId: task.boardId,
         column: { id: column.id, name: column.name },
         revision: task.revision,
+        ...(task.archived ? { archived: true as const } : {}),
         comments: task.comments,
         relationships: task.relationships,
         blocking: overview.blocking,
@@ -183,14 +193,14 @@ export class TaskDiscovery {
   }
 
   queryTaskActivity(taskId: string): TaskActivityQueryResult {
-    const loaded = this.readTask(taskId);
+    const loaded = this.readTask(taskId, false, true);
     return loaded.available
       ? { available: true, activity: loaded.task.activity }
       : loaded;
   }
 
   queryTaskAttachments(taskId: string): TaskAttachmentsQueryResult {
-    const loaded = this.readTask(taskId);
+    const loaded = this.readTask(taskId, false, true);
     if (!loaded.available) return loaded;
     return { available: true, attachments: this.#taskProjections.readTaskAttachments(taskId) };
   }
@@ -210,6 +220,7 @@ export class TaskDiscovery {
   private readTask(
     taskId: string,
     includeUnmapped = false,
+    includeArchived = false,
   ):
     | { available: true; task: TaskView }
     | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
@@ -223,7 +234,7 @@ export class TaskDiscovery {
     }
     const task = this.#taskProjections.readTask(taskId);
     if (task === undefined) return { available: false, reason: "not-found" };
-    return !includeUnmapped && !this.#taskProjections.isTaskInspectableByAgent(taskId)
+    return !includeUnmapped && !(includeArchived && task.archived) && !this.#taskProjections.isTaskInspectableByAgent(taskId)
       ? { available: false, reason: "not-found" }
       : { available: true, task };
   }

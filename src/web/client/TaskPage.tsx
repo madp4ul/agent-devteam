@@ -5,6 +5,7 @@ import {
   addTaskComment,
   addTaskDependency,
   ApiError,
+  archiveTask,
   createChildTask,
   editTask,
   interruptTask,
@@ -13,6 +14,7 @@ import {
   continueInterruptedTask,
   readTask,
   type BrowserTaskDetail,
+  unarchiveTask,
 } from "./api.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
@@ -25,6 +27,7 @@ import { TaskTimeline } from "./Timeline.tsx";
 export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navigate }): ReactNode {
   const [detail, setDetail] = useState<BrowserTaskDetail>();
   const [editing, setEditing] = useState(false);
+  const [archivalPending, setArchivalPending] = useState(false);
   const refreshSequence = useRef(0);
   const refresh = useCallback(async () => {
     const sequence = ++refreshSequence.current;
@@ -69,7 +72,7 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
     <div className="app-shell task-shell">
       <header className="detail-topbar">
         <a href="/" className="back-link" onClick={back}>← Back to board</a>
-        <span className="revision">Revision {task.revision}</span>
+        <span className="revision">{task.archived ? "Archived · " : ""}Revision {task.revision}</span>
       </header>
       <main className="task-detail">
         {feedback === undefined ? null : (
@@ -81,7 +84,37 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
             <h1>{task.title}</h1>
             <p className="description">{task.description}</p>
           </div>
-          <button className="secondary" onClick={() => setEditing(true)}>Edit task</button>
+          <div className="form-actions">
+            {task.archived ? (
+              <button
+                disabled={archivalPending}
+                onClick={() => {
+                  setArchivalPending(true);
+                  void unarchiveTask(task.id, crypto.randomUUID())
+                    .then(async () => {
+                      await refresh();
+                      setFeedback({ role: "status", text: `Unarchived ${task.id}. A later activation will create a new workspace from the process starting ref.` });
+                    })
+                    .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }))
+                    .finally(() => setArchivalPending(false));
+                }}
+              >{archivalPending ? "Unarchiving…" : "Unarchive task"}</button>
+            ) : (
+              <>
+                <button className="secondary" onClick={() => setEditing(true)}>Edit task</button>
+                <button
+                  disabled={archivalPending}
+                  onClick={() => {
+                    setArchivalPending(true);
+                    void archiveTask(task.id, crypto.randomUUID())
+                      .then(() => navigate("/"))
+                      .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }))
+                      .finally(() => setArchivalPending(false));
+                  }}
+                >{archivalPending ? "Archiving…" : "Archive task"}</button>
+              </>
+            )}
+          </div>
         </section>
 
         <div className="detail-grid">
@@ -187,13 +220,13 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
                 ))}
               </ul>
             )}
-            <RelationshipForms
+            {task.archived ? null : <RelationshipForms
               detail={detail}
               onChanged={async (message) => {
                 await refresh();
                 setFeedback({ role: "status", text: message });
               }}
-            />
+            />}
             </section>
             <TaskWorkspacePanel
               taskId={task.id}
@@ -202,7 +235,7 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
           </div>
         </div>
 
-        <section className="move-panel" aria-labelledby="move-heading" aria-busy={pendingTaskId !== undefined}>
+        {task.archived ? null : <section className="move-panel" aria-labelledby="move-heading" aria-busy={pendingTaskId !== undefined}>
           <div>
             <p className="eyebrow">Contextual movement</p>
             <h2 id="move-heading">Move task</h2>
@@ -230,20 +263,21 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
               );
             })}
           </ol>
-        </section>
+        </section>}
 
-        <CommentForm
+        {task.archived ? null : <CommentForm
           taskId={task.id}
           onCommented={async () => {
             await refresh();
             setFeedback({ role: "status", text: `Commented on ${task.id}.` });
           }}
-        />
+        />}
 
         <TaskTimeline
           comments={task.comments}
           activity={task.activity}
           activations={task.activations}
+          transcriptsAvailable={!task.archived}
         />
       </main>
       {editing ? (

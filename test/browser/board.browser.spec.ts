@@ -818,6 +818,28 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
   }
 });
 
+test("a user archives a completed task, finds it in history, and unarchives it", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Create task in Completion" }).click();
+  await page.getByLabel("Outcome-oriented title").fill("Archive this completed browser task");
+  await page.getByLabel("Complete description").fill("Keep its coordination history while removing it from the ordinary board.");
+  await page.getByRole("button", { name: "Create task", exact: true }).click();
+  await page.getByRole("link", { name: /Archive this completed browser task/ }).click();
+
+  await page.getByRole("button", { name: "Archive task" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("link", { name: /Archive this completed browser task/ })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Archived tasks" }).click();
+  const history = page.getByRole("complementary", { name: "Archived tasks" });
+  await history.getByRole("button", { name: /Archive this completed browser task/ }).click();
+  await expect(page.getByText(/Archived · Revision/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "View transcript" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Unarchive task" }).click();
+  await expect(page.getByRole("status")).toContainText(/Unarchived T-/);
+  await expect(page.getByRole("button", { name: "Archive task" })).toBeVisible();
+});
+
 test("task details create children and dependencies through contextual controls", async ({ page }) => {
   await page.goto("/tasks/T-0002");
 

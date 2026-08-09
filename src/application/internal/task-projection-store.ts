@@ -32,7 +32,7 @@ export class TaskProjectionStore {
   readTask(taskId: string): TaskView | undefined {
     const row = this.#database
       .prepare(
-        "SELECT id, title, description, board_id, column_id, revision FROM tasks WHERE id = ?",
+        "SELECT id, title, description, board_id, column_id, revision, archived_at FROM tasks WHERE id = ?",
       )
       .get(taskId) as
       | {
@@ -42,6 +42,7 @@ export class TaskProjectionStore {
           board_id: string;
           column_id: string;
           revision: number;
+          archived_at: string | null;
         }
       | undefined;
     if (row === undefined) return undefined;
@@ -67,6 +68,7 @@ export class TaskProjectionStore {
       boardId: row.board_id,
       columnId: row.column_id,
       revision: row.revision,
+      ...(row.archived_at === null ? {} : { archived: true as const }),
       comments: this.readTaskComments(taskId),
       relationships: this.readTaskRelationships(taskId),
       activity: activity.map((event) => ({
@@ -85,7 +87,7 @@ export class TaskProjectionStore {
 
   readTasksInColumn(boardId: string, columnId: string): TaskView[] {
     const rows = this.#database
-      .prepare("SELECT id FROM tasks WHERE board_id = ? AND column_id = ? ORDER BY id")
+      .prepare("SELECT id FROM tasks WHERE board_id = ? AND column_id = ? AND archived_at IS NULL ORDER BY id")
       .all(boardId, columnId) as Array<{ id: string }>;
     return rows.flatMap((row) => {
       const task = this.readTask(row.id);
@@ -98,7 +100,7 @@ export class TaskProjectionStore {
     const rows = this.#database
       .prepare(
         `SELECT t.id, t.sequence, t.title, t.board_id, t.column_id, t.revision,
-                t.automation_suspended,
+                t.automation_suspended, t.archived_at,
                 COALESCE((
                   SELECT entry.sequence
                   FROM activity_ledger entry
@@ -120,7 +122,7 @@ export class TaskProjectionStore {
          FROM tasks t
          JOIN columns c ON c.board_id = t.board_id AND c.id = t.column_id
          LEFT JOIN activations a ON a.task_id = t.id
-         WHERE t.board_id = ? AND t.column_id IN (${placeholders})
+         WHERE t.board_id = ? AND t.column_id IN (${placeholders}) AND t.archived_at IS NULL
          GROUP BY t.id, t.sequence, t.title, t.board_id, t.column_id, t.revision, c.name
          ORDER BY t.sequence`,
       )
@@ -132,6 +134,7 @@ export class TaskProjectionStore {
       column_id: string;
       revision: number;
       automation_suspended: number;
+      archived_at: string | null;
       column_entry_sequence: number;
       column_name: string;
       queued_count: number;
@@ -171,6 +174,55 @@ export class TaskProjectionStore {
           },
         },
       };
+    });
+  }
+
+  readArchivedTaskOverviewRecords(): StoredTaskOverview[] {
+    const rows = this.#database.prepare(
+      `SELECT board_id, column_id FROM tasks WHERE archived_at IS NOT NULL
+       GROUP BY board_id, column_id ORDER BY MIN(sequence)`,
+    ).all() as Array<{ board_id: string; column_id: string }>;
+    return rows
+      .flatMap(({ board_id, column_id }) =>
+        this.readTaskOverviewRecordsIncludingArchived(board_id, column_id))
+      .sort((left, right) => left.sequence - right.sequence);
+  }
+
+  isAttemptArchived(attemptId: string): boolean {
+    return this.#database.prepare(
+      `SELECT 1 FROM attempts attempt
+       JOIN activations activation ON activation.id = attempt.activation_id
+       JOIN tasks task ON task.id = activation.task_id
+       WHERE attempt.id = ? AND task.archived_at IS NOT NULL`,
+    ).get(attemptId) !== undefined;
+  }
+
+  private readTaskOverviewRecordsIncludingArchived(boardId: string, columnId: string): StoredTaskOverview[] {
+    const rows = this.#database.prepare(
+      `SELECT id, sequence FROM tasks
+       WHERE board_id = ? AND column_id = ? AND archived_at IS NOT NULL ORDER BY sequence`,
+    ).all(boardId, columnId) as Array<{ id: string; sequence: number }>;
+    return rows.flatMap(({ id, sequence }) => {
+      const task = this.readTask(id);
+      if (task === undefined) return [];
+      const column = this.#database.prepare(
+        "SELECT name FROM columns WHERE board_id = ? AND id = ?",
+      ).get(boardId, columnId) as { name: string } | undefined;
+      if (column === undefined) return [];
+      const blockerTaskIds = this.readBlockingTaskIds(id);
+      return [{ sequence, columnEntrySequence: sequence, task: {
+        id: task.id,
+        title: task.title,
+        boardId: task.boardId,
+        column: { id: task.columnId, name: column.name },
+        revision: task.revision,
+        archived: true,
+        blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
+        relationships: task.relationships,
+        unresolvedAttention: this.readUnresolvedAttention(id),
+        automationSuspended: this.isTaskAutomationSuspended(id),
+        run: { status: "idle", activeAgentId: null, queuedActivationCount: 0, failedActivationCount: 0 },
+      }}];
     });
   }
 
@@ -251,12 +303,13 @@ export class TaskProjectionStore {
                 task.column_id, task.sequence
          FROM tasks task
          JOIN boards board ON board.id = task.board_id
-         WHERE task.automation_suspended = 1
+         WHERE task.archived_at IS NULL AND (
+              task.automation_suspended = 1
             OR EXISTS (
               SELECT 1
               FROM attention_reasons attention
               WHERE attention.task_id = task.id AND attention.resolved_at IS NULL
-            )
+            ))
          ORDER BY task.sequence`,
       )
       .all() as Array<{
@@ -342,6 +395,13 @@ export class TaskProjectionStore {
       .prepare("SELECT automation_suspended FROM tasks WHERE id = ?")
       .get(taskId) as { automation_suspended: number } | undefined;
     return row?.automation_suspended === 1;
+  }
+
+  isTaskArchivalPending(taskId: string): boolean {
+    const row = this.#database
+      .prepare("SELECT archival_pending FROM tasks WHERE id = ?")
+      .get(taskId) as { archival_pending: number } | undefined;
+    return row?.archival_pending === 1;
   }
 
   isTaskMapped(taskId: string): boolean {

@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 7;
+const currentSchemaVersion = 8;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -90,6 +90,10 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       title TEXT NOT NULL,
       description TEXT NOT NULL,
       revision INTEGER NOT NULL CHECK (revision > 0),
+      archived_at TEXT,
+      archival_pending INTEGER NOT NULL DEFAULT 0 CHECK (archival_pending IN (0, 1)),
+      archival_actor_id TEXT,
+      archival_idempotency_key TEXT,
       automation_suspended INTEGER NOT NULL DEFAULT 0,
       suspended_activation_id TEXT,
       FOREIGN KEY (board_id, column_id) REFERENCES columns(board_id, id)
@@ -111,7 +115,9 @@ function initializeCurrentSchema(database: DatabaseSync): void {
           'attempt.started',
           'attempt.completed',
           'automation.suspended',
-          'automation.resumed'
+          'automation.resumed',
+          'task.archived',
+          'task.unarchived'
         )
       ),
       actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
@@ -221,13 +227,15 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       FROM tasks task
       JOIN boards board ON board.id = task.board_id AND board.applied = 1
       JOIN columns column
-        ON column.board_id = task.board_id AND column.id = task.column_id AND column.applied = 1;
+        ON column.board_id = task.board_id AND column.id = task.column_id AND column.applied = 1
+      WHERE task.archived_at IS NULL;
     CREATE VIEW IF NOT EXISTS agent_inspectable_tasks AS
       SELECT task.id
       FROM tasks task
       JOIN boards board ON board.id = task.board_id
       JOIN columns column ON column.board_id = task.board_id AND column.id = task.column_id
-      WHERE (board.applied = 1 AND column.applied = 1) OR task.column_id = 'completion';
+      WHERE task.archived_at IS NULL
+        AND ((board.applied = 1 AND column.applied = 1) OR task.column_id = 'completion');
     CREATE UNIQUE INDEX IF NOT EXISTS one_running_activation_per_task
       ON activations(task_id)
       WHERE status = 'running';
@@ -308,12 +316,16 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
   return runtimeColumns.has("impact_previous_version") &&
     taskColumns.has("automation_suspended") &&
     taskColumns.has("suspended_activation_id") &&
+    taskColumns.has("archived_at") &&
+    taskColumns.has("archival_pending") &&
+    taskColumns.has("archival_actor_id") &&
+    taskColumns.has("archival_idempotency_key") &&
     activationColumns.has("continuation_message") &&
     activationColumns.has("retry_cycle_start") &&
     activationColumns.has("definition_version") &&
     activationColumns.has("stale") &&
     attemptColumns.has("outcome_kind") &&
-    activityTable?.sql.includes("automation.resumed") === true;
+    activityTable?.sql.includes("task.archived") === true;
 }
 
 function replaceIncompatibleDatabase(path: string): void {

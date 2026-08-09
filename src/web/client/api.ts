@@ -12,6 +12,7 @@ import type {
   ActivationRecoveryAction,
   ActiveRunView,
   NeedsAttentionTaskView,
+  ArchiveCompletedTasksResult,
 } from "../../application/coordination-contract.ts";
 
 export interface BrowserColumnView extends BoardSummaryColumnView {
@@ -67,6 +68,34 @@ export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
     inspection: result.inspection,
     activeRun: result.activeRun,
   };
+}
+
+export async function readArchivedTasks(): Promise<TaskOverviewView[]> {
+  const result = await request<{ available: true; tasks: TaskOverviewView[] }>("/api/archive");
+  return result.tasks;
+}
+
+export async function archiveTask(taskId: string, idempotencyKey: string): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/archive`, {
+    method: "POST",
+    body: JSON.stringify({ idempotencyKey }),
+  });
+}
+
+export async function unarchiveTask(taskId: string, idempotencyKey: string): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/unarchive`, {
+    method: "POST",
+    body: JSON.stringify({ idempotencyKey }),
+  });
+}
+
+export async function archiveCompletedTasks(
+  idempotencyKey: string,
+): Promise<Extract<ArchiveCompletedTasksResult, { accepted: true }>> {
+  return request("/api/archive/completed", {
+    method: "POST",
+    body: JSON.stringify({ idempotencyKey }),
+  });
 }
 
 export async function openTaskWorkspace(taskId: string): Promise<void> {

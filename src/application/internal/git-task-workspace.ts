@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
 import type {
@@ -195,6 +195,35 @@ export class GitTaskWorkspaceManager {
         error,
       );
     }
+  }
+
+  async removeForArchival(taskId: string, workspace: TaskWorkspaceView): Promise<
+    { removed: true } | { removed: false; reason: "workspace-dirty" | "workspace-commit-not-durable" | "workspace-cleanup-failed" }
+  > {
+    try {
+      await this.verify(taskId, workspace);
+      const status = await runGit(["-C", workspace.path, "status", "--porcelain", "--untracked-files=all"]);
+      if (status.trim().length > 0) return { removed: false, reason: "workspace-dirty" };
+      const refs = await runGit(["-C", workspace.path, "for-each-ref", "--format=%(refname)", "--contains", "HEAD"]);
+      if (refs.trim().length === 0) return { removed: false, reason: "workspace-commit-not-durable" };
+      await runGit(["-C", this.projectRepositoryPath, "worktree", "remove", workspace.path]);
+      return { removed: true };
+    } catch {
+      return { removed: false, reason: "workspace-cleanup-failed" };
+    }
+  }
+
+  async inspectInterruptedArchival(
+    workspace: TaskWorkspaceView,
+  ): Promise<"intact" | "removed" | "inconsistent"> {
+    const directoryExists = await stat(workspace.path)
+      .then((entry) => entry.isDirectory())
+      .catch((error: NodeJS.ErrnoException) => error.code === "ENOENT" ? false : Promise.reject(error));
+    const registered = (await readRegisteredWorktrees(this.projectRepositoryPath))
+      .some((path) => samePath(path, workspace.path));
+    if (directoryExists && registered) return "intact";
+    if (!directoryExists && !registered) return "removed";
+    return "inconsistent";
   }
 }
 

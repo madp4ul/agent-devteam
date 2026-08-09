@@ -145,6 +145,20 @@ async function handleBrowserApi(
     sendMutation(response, result, 201);
     return;
   }
+  if (method === "GET" && url.pathname === "/api/archive") {
+    const result = application.queryArchivedTaskOverviews();
+    sendJson(response, result.available ? 200 : 409, result);
+    return;
+  }
+  if (method === "POST" && url.pathname === "/api/archive/completed") {
+    const body = await readJsonBody(request);
+    const result = await application.archiveCompletedTasks({
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    sendJson(response, result.accepted ? 200 : 409, result);
+    return;
+  }
   const transcriptMatch = /^\/api\/attempts\/([^/]+)\/transcript$/.exec(url.pathname);
   const dismissStaleMatch = /^\/api\/activations\/([^/]+)\/dismiss-stale$/.exec(url.pathname);
   if (method === "POST" && dismissStaleMatch?.[1] !== undefined) {
@@ -170,6 +184,28 @@ async function handleBrowserApi(
     return;
   }
   const taskMatch = /^\/api\/tasks\/([^/]+)$/.exec(url.pathname);
+  const archiveTaskMatch = /^\/api\/tasks\/([^/]+)\/archive$/.exec(url.pathname);
+  const unarchiveTaskMatch = /^\/api\/tasks\/([^/]+)\/unarchive$/.exec(url.pathname);
+  if (method === "POST" && archiveTaskMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = await application.archiveTask({
+      taskId: decodeURIComponent(archiveTaskMatch[1]),
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
+    return;
+  }
+  if (method === "POST" && unarchiveTaskMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.unarchiveTask({
+      taskId: decodeURIComponent(unarchiveTaskMatch[1]),
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
+    return;
+  }
   const openWorkspaceMatch = /^\/api\/tasks\/([^/]+)\/workspace\/open$/.exec(url.pathname);
   const openWorkspaceInVisualStudioCodeMatch = /^\/api\/tasks\/([^/]+)\/workspace\/open-vscode$/.exec(
     url.pathname,
@@ -497,6 +533,10 @@ async function handleAgentApi(
     }));
     return;
   }
+  if (method === "GET" && url.pathname === "/agent-api/tasks/archive") {
+    sendAgentQuery(response, application.queryArchivedTaskOverviews());
+    return;
+  }
   const activityMatch = /^\/agent-api\/tasks\/([^/]+)\/activity$/.exec(url.pathname);
   if (method === "GET" && activityMatch?.[1] !== undefined) {
     sendAgentQuery(response, application.queryTaskActivity(decodeURIComponent(activityMatch[1])));
@@ -663,6 +703,7 @@ function sendAgentQuery(
   result:
     | ReturnType<CoordinationApplication["queryBoardSummaries"]>
     | ReturnType<CoordinationApplication["queryTaskOverviews"]>
+    | ReturnType<CoordinationApplication["queryArchivedTaskOverviews"]>
     | ReturnType<CoordinationApplication["queryTaskInspection"]>
     | ReturnType<CoordinationApplication["queryTaskActivity"]>
     | ReturnType<CoordinationApplication["queryTaskAttachments"]>

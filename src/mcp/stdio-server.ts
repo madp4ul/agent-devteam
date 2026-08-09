@@ -50,6 +50,16 @@ server.registerTool(
 );
 
 server.registerTool(
+  "list_archived_tasks",
+  {
+    description:
+      "Deliberately list tasks retained in archive history. Archived tasks are excluded from ordinary column listings.",
+    inputSchema: {},
+  },
+  async () => callAgentApi("GET", "/agent-api/tasks/archive"),
+);
+
+server.registerTool(
   "inspect_task",
   {
     description:

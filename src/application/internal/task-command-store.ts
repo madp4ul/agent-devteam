@@ -74,6 +74,9 @@ export class TaskCommandStore {
       if (this.#projections.readTask(command.parentTaskId) === undefined) {
         return { accepted: false, reason: "not-found" };
       }
+      if (this.taskIsReadOnly(this.#projections.readTask(command.parentTaskId)!)) {
+        return { accepted: false, reason: "archived-task" };
+      }
       const rejection = this.taskCreationRejection(command);
       if (rejection !== undefined) return rejection;
       if (command.startingRef !== undefined && command.startingRef.trim().length === 0) {
@@ -101,6 +104,9 @@ export class TaskCommandStore {
       if (prior !== undefined) return prior;
       const currentTask = this.#projections.readTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
+      if (this.taskIsReadOnly(currentTask)) {
+        return { accepted: false, reason: "archived-task" };
+      }
       if (currentTask.revision !== command.expectedRevision) {
         return { accepted: false, reason: "revision-conflict", currentTask };
       }
@@ -138,6 +144,9 @@ export class TaskCommandStore {
       if (prior !== undefined) return prior;
       const currentTask = this.#projections.readTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
+      if (this.taskIsReadOnly(currentTask)) {
+        return { accepted: false, reason: "archived-task" };
+      }
       if (currentTask.revision !== command.expectedRevision) {
         return { accepted: false, reason: "revision-conflict", currentTask };
       }
@@ -232,6 +241,11 @@ export class TaskCommandStore {
       let result: TaskRelationshipMutationResult;
       if (sourceTask === undefined || targetTask === undefined) {
         result = { accepted: false, reason: "not-found" };
+      } else if (
+        this.taskIsReadOnly(sourceTask) ||
+        this.taskIsReadOnly(targetTask)
+      ) {
+        result = { accepted: false, reason: "archived-task" };
       } else if (command.sourceTaskId === command.targetTaskId) {
         result = { accepted: false, reason: "self-relationship" };
       } else {
@@ -273,6 +287,9 @@ export class TaskCommandStore {
       if (prior !== undefined) return prior;
       const task = this.#projections.readTask(command.taskId);
       if (task === undefined) return { accepted: false, reason: "not-found" };
+      if (this.taskIsReadOnly(task)) {
+        return { accepted: false, reason: "archived-task" };
+      }
       if (command.body.trim().length === 0) {
         return { accepted: false, reason: "empty-comment" };
       }
@@ -310,6 +327,10 @@ export class TaskCommandStore {
       this.#commandResponses.write(commandType, command.idempotencyKey, result);
       return result;
     });
+  }
+
+  private taskIsReadOnly(task: TaskView): boolean {
+    return task.archived === true || this.#projections.isTaskArchivalPending(task.id);
   }
 
   markUserMentionAddressed(
@@ -665,7 +686,8 @@ export class TaskCommandStore {
         `SELECT task.board_id, task.column_id, column.watching_agent_id
          FROM tasks task
          JOIN columns column ON column.board_id = task.board_id AND column.id = task.column_id
-         WHERE task.id = ? AND column.applied = 1`,
+         WHERE task.id = ? AND task.archived_at IS NULL
+           AND task.archival_pending = 0 AND column.applied = 1`,
       )
       .get(taskId) as { watching_agent_id: string | null } | undefined;
     if (task?.watching_agent_id == null) return;

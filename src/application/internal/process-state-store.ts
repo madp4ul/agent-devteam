@@ -317,7 +317,7 @@ export class ProcessStateStore {
              COUNT(t.id) AS task_count
       FROM columns c
       LEFT JOIN agents a ON a.id = c.watching_agent_id
-      LEFT JOIN tasks t ON t.board_id = c.board_id AND t.column_id = c.id
+      LEFT JOIN tasks t ON t.board_id = c.board_id AND t.column_id = c.id AND t.archived_at IS NULL
       WHERE c.board_id = ? AND c.applied = 1
       GROUP BY c.id, c.name, c.framework_owned, c.position,
                a.id, a.name, a.summary
