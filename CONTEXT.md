@@ -79,9 +79,11 @@ self-handoff loops.
 **Completion column**:
 The framework-owned final column present on every board. It has a stable
 identity, cannot be deleted, reordered, or watched by an agent, and is not part
-of the editable process definition. A task in this column is completed and
-remains there across process-definition changes. Agents may deliberately query
-and inspect its tasks through the board tools.
+of the editable process definition. It is a destination rather than a starting
+point: tasks cannot be created in it and enter it only by moving from another
+column. A task in this column is completed and remains there across
+process-definition changes. Agents may deliberately query and inspect its tasks
+through the board tools.
 
 **Task**:
 A described unit of work that moves through a board and carries the comments

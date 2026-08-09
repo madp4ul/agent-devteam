@@ -194,17 +194,62 @@ see why an agent ran or why the task needs me without searching a wall of text.
 119. As a user, I want task history grouped into causal attempt narratives with
 small derived events folded into their source comment or movement, so that the
 coordination story remains understandable without losing audit evidence.
-120. As a process author, I want invariant framework mechanics supplied to every
+120. As a user, I want the task description presented as prominent readable
+content rather than subordinate title metadata, so that the task's intended
+outcome remains central while I inspect and control it.
+121. As a user, I want task details to name the agent that is actually running
+and show its elapsed time, so that I can understand current responsibility at a
+glance without inspecting execution configuration.
+122. As a user, I want queued activations shown as an ordered list with one
+human-readable agent name per activation, including repeated agents, so that I
+can see the exact order in which work will execute.
+123. As a user, I want an idle task with queued activations to explain why its
+next activation cannot start, so that I can distinguish board pause, task
+blocking, suspension, scheduled retry, and other waits that need different
+responses.
+124. As a user, I want task movement to be one compact column selector ordered
+like the board, so that changing the current column does not dominate the task
+page.
+125. As a user, I want Task Workspace to lead the task-details utility area, so
+that repository files produced by agents remain easy to reach during ordinary
+review.
+126. As a user, I want relationships grouped by what they mean to the current
+task and identified by task title as well as ID, so that I do not need to decode
+technical relationship direction.
+127. As a user, I want to find dependencies across project boards by task title
+or ID, so that relationship creation does not depend on memorizing generated
+identifiers.
+128. As a user, I want to remove an incorrect dependency or parent-child
+relationship without deleting either task, so that I can administratively
+recover work that was blocked by a mistaken relationship.
+129. As a user, I want relationship removal to preview its consequence and
+reactivate a watched task when it clears the final blocker, so that recovery is
+deliberate and does not leave newly runnable work dormant.
+130. As a user, I want child-task creation to use the same dialog as ordinary
+task creation while retaining parent context and an optional starting Git ref,
+so that one familiar interaction creates both kinds of task.
+131. As a user, I want new tasks and child tasks to default to the beginning of
+their board while retaining deliberate selection of other workflow columns, so
+that the conventional route is easy without hardcoding one process route.
+132. As a user or agent, I want Completion to be unavailable as a task's
+starting column through every interface, so that completed work can only result
+from moving an existing task through the workflow.
+133. As a keyboard or narrow-screen user, I want task details to retain a
+coherent reading and interaction order, so that compact desktop presentation
+does not sacrifice accessibility.
+134. As a user, I want clear visual separation between the comment composer and
+Task Timeline, so that authored input and task history do not run together.
+135. As a process author, I want invariant framework mechanics supplied to every
 agent separately from process coordination guidance and role instructions, so
 that each instruction source has one clear owner and projects do not repeat
 universal behavior.
-121. As a user of a released version, I want schema upgrades to preserve my
+136. As a user of a released version, I want schema upgrades to preserve my
 coordination state through verified migrations, so that installing a later
 release cannot silently discard real work.
-122. As a user, I want an interrupted task to show on its board card that
+137. As a user, I want an interrupted task to show on its board card that
 automation is suspended and Continue is required, so that its queued activation
 is not mistaken for work that will start automatically.
-123. As a user, I want known coordination tool calls in attempt transcripts to
+138. As a user, I want known coordination tool calls in attempt transcripts to
 show concise task-domain inputs and confirmed outcomes, so that I can understand
 what changed without reconstructing the call from its name alone.
 
@@ -316,6 +361,27 @@ what changed without reconstructing the call from its name alone.
   chronological timeline while preserving their different record types. The
   page owns task editing, relationships, task movement, attention recovery,
   current task automation, archival, and attempt transcript access.
+- Task details use a primary content area and a utility sidebar. The primary
+  area presents the title, a dedicated readable Description section, current
+  Agent activity, Add comment, and Task Timeline. The utility sidebar presents
+  Task Workspace first, followed by compact Move task and Relationships
+  controls. On narrow screens the canonical reading order is title and
+  description, Agent activity, Task Workspace, Move task, Relationships, Add
+  comment, and Task Timeline. The comment composer and timeline have visible
+  separation.
+- Agent activity begins with one visually distinct current-state item. While an
+  attempt runs, that item names the configured agent and shows elapsed time and
+  applicable interruption controls. When queued work cannot run, it becomes a
+  Waiting item whose first line states the most actionable reason; additional
+  simultaneous reasons are available through a compact disclosure. An idle
+  task without queued work uses a quiet idle state rather than fabricated
+  detail rows.
+- The activation queue follows the current-state item as an ordered list with
+  one configured human-readable agent name per activation. Repeated agent names
+  remain repeated because each row represents a distinct activation in strict
+  execution order. Task details do not promote requested model, reasoning
+  effort, aggregate queue counts, or empty `None` facts. Attention and recovery
+  actions remain with Agent activity.
 - Canonical participant tokens in authored comments are visually distinct from
   ordinary prose and expose the activation or user-attention consequence they
   caused. A later causal-history presentation may fold small derived events into
@@ -330,9 +396,43 @@ what changed without reconstructing the call from its name alone.
   Git worktree's absolute location, starting ref and commit, Copy path, and a
   supported host-native Open workspace action. Rich live branch/index/file
   state is a later enhancement rather than part of basic discovery.
-- The task move chooser allows every other defined column, preserves board
-  order, and marks current, previous, and next positions. Watching-agent
-  information is secondary context and does not restrict movement.
+- Move task is one compact selector whose selected option is the current
+  column and whose options preserve board order. Selecting another column moves
+  immediately through the existing conflict-safe command; pending movement
+  disables the selector, and failure restores authoritative state and reports
+  feedback. It has no separate confirmation, action button, movement taxonomy,
+  or explanatory paragraph.
+- Relationships are grouped from the current task's perspective as Parent
+  tasks, Child tasks, Depends on, and Blocking tasks. Each related-task row
+  leads with its title and supplies ID, board/column context, and unresolved
+  blocking state. The title opens that task's details.
+- Add dependency is an inline searchable combobox over active tasks on every
+  project board. It matches title or task ID, excludes the current task and
+  duplicate relationships, supports keyboard selection, and shows title, ID,
+  board, and column in its suggestions. Selecting a suggestion does not mutate
+  state until the user invokes Add dependency.
+- Dependency and parent-child relationships can be removed as an
+  administrative user action without deleting either task or erasing prior
+  history. A compact icon-only action has an accessible name and opens a
+  confirmation dialog that names the relationship and previews whether removal
+  will unblock the task and may queue an agent. Removal is recorded in both
+  tasks' activity histories. Clearing the final unresolved blocker queues the
+  current column's watching agent under the same conditions as final blocker
+  satisfaction; removing an already satisfied relationship changes only the
+  current relationship structure.
+- Ordinary and child-task creation share one dialog. Child mode identifies the
+  parent and atomically creates the parent-child relationship while reusing the
+  ordinary starting-column, outcome-oriented title, description, Cancel, and
+  Create controls. The optional task-workspace starting ref is available under
+  an Advanced disclosure. Child creation from task details defaults to the
+  board's first column while retaining deliberate selection of any other
+  non-Completion column.
+- The framework-owned Completion column is a destination and never a starting
+  point. Board columns and creation dialogs do not offer Create task in
+  Completion, and the shared application contract rejects ordinary or child
+  creation there regardless of whether the caller is the browser, an agent
+  tool, or another API adapter. Existing tasks continue to enter Completion
+  through movement.
 - Completion is entry into the Completion column. Rejection uses a
   process-specific unwatched workflow column. Neither outcome automatically
   archives the task.
@@ -654,6 +754,15 @@ what changed without reconstructing the call from its name alone.
   attention and failure recovery, process pause, task interruption and
   continuation, and guarded archival without attempting to express every
   lifecycle branch through UI automation.
+- Application-level behavior covers rejection of ordinary and child creation
+  in Completion, relationship removal history, preservation of both related
+  tasks, and exactly-once reactivation when removal clears the final blocker.
+  Browser scenarios cover the responsive task-details reading order,
+  description emphasis, running and waiting Agent activity, repeated queued
+  agents in execution order, immediate movement, project-wide dependency
+  finding, accessible relationship removal and confirmation, shared child
+  creation, omission of Completion creation controls, keyboard operation, and
+  separation between Add comment and Task Timeline.
 - The first-usable-version acceptance proof is an end-to-end product test with
   the real UI, adapters, database, scheduler, and Git integration plus the
   controlled Codex runtime. It must exercise the nontrivial architecture-led
@@ -697,6 +806,12 @@ what changed without reconstructing the call from its name alone.
 - A permanent operations dashboard, historical run dashboard, run-centric task
   page, comments-only or run-only timeline filters, attempt grouping, or bulk
   interruption.
+- Redesigning Task Timeline grouping, content, or ordering; refining Task
+  Workspace content; or changing archival behavior and controls as part of the
+  task-details cleanup.
+- Agent-facing relationship removal. The shared application behavior may
+  support a future agent tool, but the first user-facing removal workflow is an
+  administrative browser action.
 - Automatic workflow effects inferred from a successful Codex response,
   semantic evaluation of whether an agent's answer was adequate, or automatic
   recovery of a forgotten handoff.
@@ -739,3 +854,7 @@ what changed without reconstructing the call from its name alone.
 - Implementation tickets should preserve the application command-and-query
   boundary as a deep module and split work into dependency-aware vertical
   slices. The next workflow step is to turn this specification into tickets.
+- The task-details redesign proceeds directly to implementation with responsive
+  and keyboard browser scenarios plus live visual review. The separate causal
+  Task Timeline redesign still requires focused prototype comparison before it
+  becomes ready for implementation.

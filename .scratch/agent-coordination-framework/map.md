@@ -124,13 +124,22 @@ without choosing the implementation yet.
 - [Evolve Process Definitions Safely](./issues/26-evolve-process-definitions-safely.md)
   — Preserve stable live identities, isolate unmapped tasks, and require explicit
   approval or dismissal before stale activations proceed under a changed process.
-
-## Next implementation priority
-
 - [Preserve Board Scroll During Automatic Refresh](./issues/44-preserve-board-scroll-during-refresh.md)
   — Give restored board context one-shot semantics so active-run polling
   preserves the user's current horizontal lane position before live task
   refresh expands further.
+
+## Next implementation priority
+
+- [Prevent Tasks from Starting in Completion and Unify Creation](./issues/46-prevent-completion-task-creation.md)
+  — Make Completion a creation invariant across user and agent interfaces while
+  giving ordinary and child tasks one consistent creation dialog.
+- [Reshape Task Details Around Agent Activity](./issues/47-reshape-task-details-around-agent-activity.md)
+  — Replace automation-profile clutter and oversized movement with a responsive
+  task-first layout, truthful current activity, and an ordered activation queue.
+- [Make Task Relationships Discoverable and Recoverable](./issues/48-make-task-relationships-discoverable-recoverable.md)
+  — After issues 46 and 47, group relationships by meaning, add project-wide
+  task finding, and let users safely remove mistaken blocking relationships.
 
 ## Clarified delivery follow-ups
 

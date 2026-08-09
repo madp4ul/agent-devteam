@@ -7,7 +7,7 @@ technical event or losing the underlying audit evidence.
 
 **Blocked by:** 19 — Inspect and Control a Task; 20 — Consult Agents and Notify the User;
 24 — Recover Failed and Permission-Blocked Attempts; 25 — Interrupt Tasks and Pause the Process;
-32 — Observe Task Activity and Running Attempts Live
+32 — Observe Task Activity and Running Attempts Live; 47 — Reshape Task Details Around Agent Activity
 
 **Status:** open
 
@@ -64,3 +64,7 @@ technical event or losing the underlying audit evidence.
   the latest task history is immediately visible. Include newest-first narrative
   ordering in the causal-group prototypes rather than changing the current flat
   timeline separately.
+- The surrounding task-details layout is being cleaned up separately in issue
+  47. Revisit this ticket with the user after that layout is available and
+  before starting its required causal-group prototypes; do not infer Task
+  Timeline grouping or interaction decisions from the surrounding page design.
