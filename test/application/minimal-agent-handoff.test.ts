@@ -11,6 +11,8 @@ import {
   type AgentRunRequest,
   type AgentRunLifecycle,
   type AgentRuntime,
+  type AttemptTranscriptAccess,
+  type AttemptTranscriptItem,
   type AutomationClock,
   CoordinationApplication,
 } from "../../src/application/coordination-application.ts";
@@ -124,6 +126,69 @@ test("an agent comment and move hand work to the next watched-column agent", asy
   await application.waitForAutomationIdle();
 });
 
+test("a finished attempt transcript remains inspectable after application restart", async (t) => {
+  const fixture = await createFixture();
+  const runtime = new ControlledAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+    transcriptAccess: runtime,
+  });
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Retain the completed transcript",
+    description: "Persist inspectable evidence when the attempt finishes.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-durable-transcript-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  await application.resumeAutomation();
+  const request = await runtime.waitForRequest(1);
+  const expectedTranscript: AttemptTranscriptItem[] = [
+    { kind: "message", role: "agent", text: "The implementation is ready for review." },
+  ];
+  runtime.setTranscript(request.attemptId, expectedTranscript);
+  runtime.complete({
+    status: "completed",
+    summary: "Implementation complete.",
+    threadId: "reused-codex-thread",
+  });
+  await application.waitForAutomationIdle();
+  const completedTask = application.queryTask(created.task.id);
+  const attemptId = completedTask.available
+    ? completedTask.task.activations[0]?.attempts[0]?.id
+    : undefined;
+  assert.ok(attemptId);
+  assert.deepEqual(await application.queryAttemptTranscript(attemptId), {
+    available: true,
+    threadId: "reused-codex-thread",
+    items: expectedTranscript,
+  });
+  application.close();
+
+  const restarted = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => restarted.close());
+  const retainedTask = restarted.queryTask(created.task.id);
+  assert.equal(retainedTask.available, true);
+  if (retainedTask.available) assert.equal(retainedTask.task.columnId, "implementation");
+  assert.deepEqual(await restarted.queryAttemptTranscript(attemptId), {
+    available: true,
+    threadId: "reused-codex-thread",
+    items: expectedTranscript,
+  });
+});
+
 test("a streamed Codex failure remains inspectable while its retry waits at the queue head", async (t) => {
   const fixture = await createFixture();
   const runtime = new ControlledAgentRuntime();
@@ -136,6 +201,7 @@ test("a streamed Codex failure remains inspectable while its retry waits at the 
       taskWorkspaceRoot: fixture.workspaceRoot,
       agentRuntime: runtime,
     },
+    transcriptAccess: runtime,
   });
   t.after(() => application.close());
   const created = application.createTask({
@@ -150,7 +216,11 @@ test("a streamed Codex failure remains inspectable while its retry waits at the 
   if (!created.accepted) return;
 
   await application.resumeAutomation();
-  await runtime.waitForRequest(1);
+  const failedRequest = await runtime.waitForRequest(1);
+  const failedTranscript: AttemptTranscriptItem[] = [
+    { kind: "diagnostic", text: "model stream disconnected" },
+  ];
+  runtime.setTranscript(failedRequest.attemptId, failedTranscript);
   const moved = application.moveTask({
     taskId: created.task.id,
     destinationColumnId: "review",
@@ -193,6 +263,13 @@ test("a streamed Codex failure remains inspectable while its retry waits at the 
     threadId: "thread-failed-handoff",
     model: "gpt-5.6-sol",
     reasoningEffort: "medium",
+  });
+  const failedAttemptId = failed.task.activations[0]?.attempts[0]?.id;
+  assert.ok(failedAttemptId);
+  assert.deepEqual(await application.queryAttemptTranscript(failedAttemptId), {
+    available: true,
+    threadId: "thread-failed-handoff",
+    items: failedTranscript,
   });
 });
 
@@ -264,8 +341,9 @@ test("agent command idempotency replays stay scoped to the current task", async 
   }
 });
 
-class ControlledAgentRuntime implements AgentRuntime {
+class ControlledAgentRuntime implements AgentRuntime, AttemptTranscriptAccess {
   readonly requests: AgentRunRequest[] = [];
+  readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
   #complete: ((outcome: AgentRunOutcome) => void) | undefined;
   readonly #waiters: Array<{
     count: number;
@@ -295,6 +373,15 @@ class ControlledAgentRuntime implements AgentRuntime {
     assert.ok(this.#complete);
     this.#complete(outcome);
     this.#complete = undefined;
+  }
+
+  setTranscript(attemptId: string, transcript: AttemptTranscriptItem[]): void {
+    this.#transcripts.set(attemptId, structuredClone(transcript));
+  }
+
+  async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {
+    const transcript = this.#transcripts.get(attemptId);
+    return transcript === undefined ? null : structuredClone(transcript);
   }
 }
 

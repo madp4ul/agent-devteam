@@ -5,6 +5,7 @@ import type {
   Actor,
   AutomationClock,
   AutomationView,
+  AttemptTranscriptAccess,
   InterruptTaskResult,
   PauseAutomationResult,
   ProcessBoardView,
@@ -36,6 +37,7 @@ export interface AutomationCoordinatorOptions {
   processContext?: AutomationProcessContext;
   runtimeDiagnostic?(diagnostic: RuntimeStartupDiagnostic): void;
   clock?: AutomationClock;
+  transcriptAccess?: AttemptTranscriptAccess;
 }
 
 interface ActiveRunControl {
@@ -64,6 +66,7 @@ export class AutomationCoordinator {
   readonly #processContext: AutomationProcessContext | undefined;
   readonly #runtimeDiagnostic: ((diagnostic: RuntimeStartupDiagnostic) => void) | undefined;
   readonly #clock: AutomationClock;
+  readonly #transcriptAccess: AttemptTranscriptAccess | undefined;
   #automation: AutomationView;
   #automationWork: Promise<void> = Promise.resolve();
   #automationPumpRunning = false;
@@ -91,6 +94,7 @@ export class AutomationCoordinator {
     this.#processContext = options.processContext;
     this.#runtimeDiagnostic = options.runtimeDiagnostic;
     this.#clock = options.clock ?? systemAutomationClock;
+    this.#transcriptAccess = options.transcriptAccess;
   }
 
   query(): AutomationView {
@@ -340,30 +344,31 @@ export class AutomationCoordinator {
     try {
       outcomePromise = runtimeDispatch.agentRuntime.run(
         {
-        activationId: runnable.activation.id,
-        agent: runnable.agent,
-        process: {
-          name: process.name,
-          guidance: process.guidance,
-          definitionVersion: process.definitionVersion,
-        },
-        board,
-        collaborators: process.collaborators,
-        reason: runnable.activation.reason,
-        sourceEvent: runnable.sourceEvent,
-        task: currentTask,
-        workspace,
-        ...(precedingAttempt?.threadId === null || precedingAttempt === undefined
-          ? {}
-          : { resumeThreadId: precedingAttempt.threadId }),
-        attempt: {
-          number: attempt.number,
-          precedingOutcome: precedingAttempt?.outcome ?? null,
-          thread: precedingAttempt?.threadId === null || precedingAttempt === undefined
-            ? "fresh"
-            : "resumed",
-          continuationMessage: runnable.continuationMessage,
-        },
+          activationId: runnable.activation.id,
+          attemptId: attempt.id,
+          agent: runnable.agent,
+          process: {
+            name: process.name,
+            guidance: process.guidance,
+            definitionVersion: process.definitionVersion,
+          },
+          board,
+          collaborators: process.collaborators,
+          reason: runnable.activation.reason,
+          sourceEvent: runnable.sourceEvent,
+          task: currentTask,
+          workspace,
+          ...(precedingAttempt?.threadId === null || precedingAttempt === undefined
+            ? {}
+            : { resumeThreadId: precedingAttempt.threadId }),
+          attempt: {
+            number: attempt.number,
+            precedingOutcome: precedingAttempt?.outcome ?? null,
+            thread: precedingAttempt?.threadId === null || precedingAttempt === undefined
+              ? "fresh"
+              : "resumed",
+            continuationMessage: runnable.continuationMessage,
+          },
         },
         {
           started: (threadId) => {
@@ -392,6 +397,9 @@ export class AutomationCoordinator {
             summary: error instanceof Error ? error.message : "Agent runtime dispatch failed",
           };
         }
+        const transcript = this.#transcriptAccess === undefined
+          ? undefined
+          : await this.#transcriptAccess.read(attempt.id) ?? undefined;
         if (activeRun.state === "interrupting") {
           if (
             activeRun.interruptedBy === undefined ||
@@ -404,9 +412,10 @@ export class AutomationCoordinator {
             this.#clock.now(),
             activeRun.interruptedBy,
             activeRun.interruptIdempotencyKey,
+            transcript,
           );
         } else {
-          this.#stateStore.completeAttempt(attempt.id, outcome, this.#clock.now());
+          this.#stateStore.completeAttempt(attempt.id, outcome, this.#clock.now(), true, transcript);
         }
         activeRun.confirm();
       } catch (error) {

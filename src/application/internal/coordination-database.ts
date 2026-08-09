@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 6;
+const currentSchemaVersion = 7;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -163,6 +163,10 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       reasoning_effort TEXT,
       outcome_kind TEXT
     );
+    CREATE TABLE IF NOT EXISTS attempt_transcripts (
+      attempt_id TEXT PRIMARY KEY REFERENCES attempts(id) ON DELETE CASCADE,
+      items_json TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS activation_dispatch_claims (
       attempt_id TEXT PRIMARY KEY REFERENCES attempts(id) ON DELETE CASCADE,
       activation_id TEXT NOT NULL UNIQUE REFERENCES activations(id) ON DELETE CASCADE,
@@ -264,6 +268,7 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     "task_workspaces",
     "task_starting_refs",
     "attempts",
+    "attempt_transcripts",
     "activation_dispatch_claims",
     "activation_startup_failures",
     "task_comments",

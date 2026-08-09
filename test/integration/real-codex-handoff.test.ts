@@ -75,11 +75,11 @@ test(
     if (!completed.available) return;
     const transcripts = await Promise.all(
       completed.task.activations.map(async (activation) => {
-        const threadId = activation.attempts[0]?.threadId;
+        const attempt = activation.attempts[0];
         return {
           activationId: activation.id,
-          attempt: activation.attempts[0],
-          transcript: threadId == null ? null : await runtime.read(threadId),
+          attempt,
+          transcript: attempt == null ? null : await runtime.read(attempt.id),
         };
       }),
     );
@@ -99,7 +99,9 @@ test(
     );
     assert.ok(threadIds.every((threadId) => typeof threadId === "string"));
     assert.notEqual(threadIds[0], threadIds[1]);
-    const implementationTranscript = await runtime.read(threadIds[0] as string);
+    const implementationTranscript = await runtime.read(
+      completed.task.activations[0]?.attempts[0]?.id as string,
+    );
     assert.deepEqual(
       implementationTranscript
         ?.filter((item) => item.kind === "tool")
@@ -110,7 +112,9 @@ test(
         { summary: "coordination.move_current_task", status: "completed" },
       ],
     );
-    const reviewTranscript = await runtime.read(threadIds[1] as string);
+    const reviewTranscript = await runtime.read(
+      completed.task.activations[1]?.attempts[0]?.id as string,
+    );
     assert.deepEqual(
       reviewTranscript
         ?.filter((item) => item.kind === "tool")

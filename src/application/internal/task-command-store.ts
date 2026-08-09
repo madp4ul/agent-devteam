@@ -17,6 +17,7 @@ import type {
   CreateTaskRelationshipCommand,
   EditTaskCommand,
   MoveTaskCommand,
+  MoveTaskResult,
   MarkUserMentionAddressedCommand,
   MarkUserMentionAddressedResult,
   TaskAttentionView,
@@ -130,10 +131,10 @@ export class TaskCommandStore {
     });
   }
 
-  moveTask(command: MoveTaskCommand): BoardMutationResult {
+  moveTask(command: MoveTaskCommand): MoveTaskResult {
     return this.transaction(() => {
       const commandType = `move-task:${command.taskId}`;
-      const prior = this.#commandResponses.read<BoardMutationResult>(commandType, command.idempotencyKey);
+      const prior = this.#commandResponses.read<MoveTaskResult>(commandType, command.idempotencyKey);
       if (prior !== undefined) return prior;
       const currentTask = this.#projections.readTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
@@ -204,7 +205,15 @@ export class TaskCommandStore {
       }
       const task = this.#projections.readTask(command.taskId);
       if (task === undefined) throw new Error("Moved task could not be read back");
-      const result: BoardMutationResult = { accepted: true, task };
+      const result: MoveTaskResult = {
+        accepted: true,
+        task,
+        transition: {
+          taskId: task.id,
+          fromColumnId: currentTask.columnId,
+          toColumnId: command.destinationColumnId,
+        },
+      };
       this.#commandResponses.write(commandType, command.idempotencyKey, result);
       return result;
     });

@@ -8,6 +8,7 @@ import type {
   AttemptTranscriptAccess,
   AttemptTranscriptItem,
 } from "../application/coordination-application.ts";
+import { summarizeCoordinationTool } from "./coordination-tool-transcript.ts";
 
 type CodexConfigValue = string | number | boolean | CodexConfigValue[] | CodexConfigObject;
 type CodexConfigObject = { [key: string]: CodexConfigValue };
@@ -141,9 +142,20 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           typeof event.item.text === "string"
         ) {
           finalResponse = event.item.text;
-          transcript.push({ kind: "message", role: "agent", text: event.item.text });
-        } else if (event.type === "item.completed") {
-          transcript.push(toolTranscriptItem(event.item));
+          transcript.push({
+            ...(typeof event.item.id === "string" ? { id: event.item.id } : {}),
+            kind: "message",
+            role: "agent",
+            text: event.item.text,
+          });
+          this.#remember(request.attemptId, transcript);
+        } else if (
+          event.type === "item.started" ||
+          event.type === "item.updated" ||
+          event.type === "item.completed"
+        ) {
+          upsertToolTranscriptItem(transcript, event.item, event.type, request.task.id);
+          this.#remember(request.attemptId, transcript);
           const coordinationCall = coordinationToolCall(event.item);
           if (coordinationCall?.status === "failed") {
             failedCoordinationTools.set(coordinationCall.name, coordinationCall.diagnostic);
@@ -161,7 +173,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
         } else if (event.type === "turn.failed" || event.type === "error") {
           const diagnostic = event.type === "turn.failed" ? event.error.message : event.message;
           if (threadId !== undefined) {
-            this.#remember(threadId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
+            this.#remember(request.attemptId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
           }
           return runtimeFailure(diagnostic, threadId);
         }
@@ -173,7 +185,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
         };
       }
       if (!turnCompleted) {
-        this.#remember(threadId, [
+        this.#remember(request.attemptId, [
           ...transcript,
           { kind: "diagnostic", text: "The Codex stream ended before turn.completed." },
         ]);
@@ -187,18 +199,18 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
         const diagnostic = [...failedCoordinationTools]
           .map(([name, cause]) => `Required coordination tool ${name} failed: ${cause}`)
           .join("; ");
-        this.#remember(threadId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
+        this.#remember(request.attemptId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
         return { status: "failed", summary: diagnostic, threadId };
       }
       if (permissionBlockSummary !== undefined) {
-        this.#remember(threadId, transcript);
+        this.#remember(request.attemptId, transcript);
         return {
           status: "permission-blocked",
           summary: permissionBlockSummary,
           threadId,
         };
       }
-      this.#remember(threadId, transcript);
+      this.#remember(request.attemptId, transcript);
       return {
         status: "completed",
         summary: finalResponse,
@@ -207,20 +219,20 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     } catch (error) {
       if (threadId === undefined) throw error;
       const diagnostic = error instanceof Error ? error.message : "the streamed run failed";
-      this.#remember(threadId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
+      this.#remember(request.attemptId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
       return runtimeFailure(diagnostic, threadId);
     } finally {
       this.#options.mcpServer.release?.(request);
     }
   }
 
-  async read(threadId: string): Promise<AttemptTranscriptItem[] | null> {
-    const transcript = this.#transcripts.get(threadId);
+  async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {
+    const transcript = this.#transcripts.get(attemptId);
     return transcript === undefined ? null : structuredClone(transcript);
   }
 
-  #remember(threadId: string, transcript: AttemptTranscriptItem[]): void {
-    this.#transcripts.set(threadId, structuredClone(transcript));
+  #remember(attemptId: string, transcript: AttemptTranscriptItem[]): void {
+    this.#transcripts.set(attemptId, structuredClone(transcript));
   }
 }
 
@@ -254,7 +266,11 @@ function replacementRequest(request: AgentRunRequest): AgentRunRequest {
   };
 }
 
-function toolTranscriptItem(item: { type: string; [key: string]: unknown }): AttemptTranscriptItem {
+function toolTranscriptItem(
+  item: { type: string; [key: string]: unknown },
+  eventType: "item.started" | "item.updated" | "item.completed",
+  currentTaskId: string,
+): AttemptTranscriptItem {
   if (item.type === "error") {
     const text = typeof item.message === "string"
       ? item.message
@@ -263,21 +279,43 @@ function toolTranscriptItem(item: { type: string; [key: string]: unknown }): Att
         : "Codex reported an item-level error without a diagnostic message.";
     return { kind: "diagnostic", text };
   }
-  const status = typeof item.status === "string" ? item.status : "completed";
+  const status = eventType === "item.started" || item.status === "in_progress"
+    ? "running"
+    : typeof item.status === "string"
+      ? item.status
+      : eventType === "item.completed"
+        ? "completed"
+        : "running";
   const command = typeof item.command === "string" ? item.command : undefined;
   const exitCode = typeof item.exit_code === "number" ? item.exit_code : undefined;
   const summary = command === undefined
-    ? readableToolSummary(item)
+    ? summarizeCoordinationTool(item, status, currentTaskId) ?? readableToolSummary(item)
     : `${command}${exitCode === undefined ? "" : ` (exit ${exitCode})`}`;
   const rawOutput = [item.aggregated_output, item.output, item.result, errorMessage(item.error)]
     .find((value) => typeof value === "string") as string | undefined;
   return {
+    ...(typeof item.id === "string" ? { id: item.id } : {}),
     kind: "tool",
     name: item.type,
     status,
     summary,
     ...(rawOutput === undefined ? {} : { output: truncateOutput(rawOutput) }),
   };
+}
+
+function upsertToolTranscriptItem(
+  transcript: AttemptTranscriptItem[],
+  item: { type: string; [key: string]: unknown },
+  eventType: "item.started" | "item.updated" | "item.completed",
+  currentTaskId: string,
+): void {
+  const next = toolTranscriptItem(item, eventType, currentTaskId);
+  const itemId = "id" in next ? next.id : undefined;
+  const existingIndex = itemId === undefined
+    ? -1
+    : transcript.findIndex((entry) => "id" in entry && entry.id === itemId);
+  if (existingIndex === -1) transcript.push(next);
+  else transcript[existingIndex] = next;
 }
 
 function coordinationToolCall(item: { type: string; [key: string]: unknown }):

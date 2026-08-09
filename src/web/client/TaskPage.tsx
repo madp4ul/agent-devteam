@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import type { BoardColumnView } from "../../application/coordination-contract.ts";
 import {
@@ -25,17 +25,23 @@ import { TaskTimeline } from "./Timeline.tsx";
 export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navigate }): ReactNode {
   const [detail, setDetail] = useState<BrowserTaskDetail>();
   const [editing, setEditing] = useState(false);
-  const refresh = useCallback(async () => setDetail(await readTask(taskId)), [taskId]);
+  const refreshSequence = useRef(0);
+  const refresh = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
+    const next = await readTask(taskId);
+    if (sequence === refreshSequence.current) setDetail(next);
+  }, [taskId]);
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
 
   useEffect(() => {
     void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
   }, [refresh, setFeedback]);
   useEffect(() => {
-    if (detail?.activeRun === null || detail?.activeRun === undefined) return;
-    const timer = window.setInterval(() => void refresh(), 1_000);
+    const timer = window.setInterval(() => {
+      void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
+    }, 1_000);
     return () => window.clearInterval(timer);
-  }, [detail?.activeRun, refresh]);
+  }, [refresh, setFeedback]);
 
   const back = (event: React.MouseEvent<HTMLAnchorElement>): void => {
     event.preventDefault();

@@ -545,6 +545,134 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByText(/Moved T-0001 to Completion/)).toBeVisible();
 });
 
+test("an open task reconciles external timeline changes without disturbing a focused draft", async ({ page }) => {
+  let reads = 0;
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    reads += 1;
+    if (reads === 2) {
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+    }
+    if (reads >= 3) {
+      detail.task.comments.push({
+        id: "external-live-comment",
+        body: "An agent added this while the task page remained open.",
+        actor: { kind: "agent", id: "implementer" },
+        occurredAt: "2026-08-09T12:00:00.000Z",
+      });
+      detail.task.activity.push({
+        id: "external-live-activation-event",
+        type: "activation.created",
+        actor: { kind: "framework", id: "coordination" },
+        occurredAt: "2026-08-09T12:00:00.001Z",
+        details: {
+          activationId: "external-live-activation",
+          targetAgentId: "external-reviewer",
+        },
+      });
+      detail.task.activations.push({
+        id: "external-live-activation",
+        targetAgentId: "external-reviewer",
+        status: "queued",
+        reason: { type: "agent-mention", sourceEventId: "external-live-comment" },
+        attempts: [],
+        startupFailure: null,
+        recovery: null,
+        model: null,
+        reasoningEffort: null,
+        stale: false,
+      });
+    }
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const draft = page.getByRole("textbox", { name: "Comment" });
+  await draft.fill("Keep this unfinished user draft.");
+  await draft.focus();
+  await expect(page.getByText("An agent added this while the task page remained open.")).toBeVisible();
+  await expect(page.getByText("Queued for external-reviewer.")).toBeVisible();
+  await page.waitForTimeout(750);
+  await expect(page.getByText("An agent added this while the task page remained open.")).toBeVisible();
+  await expect(page.getByText("Queued for external-reviewer.")).toHaveCount(1);
+  await expect(draft).toHaveValue("Keep this unfinished user draft.");
+  await expect(draft).toBeFocused();
+});
+
+test("an open transcript replaces one running tool entry with its terminal evidence", async ({ page }) => {
+  let reads = 0;
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const attempt = detail.task.activations[0]?.attempts[0];
+    if (attempt !== undefined) {
+      attempt.status = "running";
+      attempt.completedAt = null;
+      attempt.outcome = null;
+    }
+    await route.fulfill({ response, json: detail });
+  });
+  await page.route("**/api/attempts/browser-attempt/transcript", async (route) => {
+    reads += 1;
+    const retainedMessages = Array.from({ length: 30 }, (_, index) => ({
+      id: `retained-message-${index}`,
+      kind: "message",
+      role: "agent",
+      text: `Retained transcript message ${index + 1}.`,
+    }));
+    await route.fulfill({
+      status: 200,
+      json: {
+        available: true,
+        threadId: "thread-browser-123",
+        items: reads === 1
+          ? [{
+              id: "live-browser-tool",
+              kind: "tool",
+              name: "command_execution",
+              status: "running",
+              summary: "pnpm test",
+            }, ...retainedMessages]
+          : [{
+              id: "live-browser-tool",
+              kind: "tool",
+              name: "command_execution",
+              status: "completed",
+              summary: "pnpm test (exit 0)",
+              output: "All live checks passed.",
+            }, ...retainedMessages],
+      },
+    });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByText("Thread information").click();
+  await page.getByRole("button", { name: "View transcript" }).click();
+  const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
+  await expect(dialog).toContainText("pnpm test · running");
+  const transcriptContent = dialog.locator(".transcript-content");
+  const readingPosition = await transcriptContent.evaluate((element) => {
+    element.scrollTop = 120;
+    return element.scrollTop;
+  });
+  expect(readingPosition).toBeGreaterThan(0);
+  await expect(dialog).toContainText("pnpm test (exit 0) · completed");
+  await expect(dialog).toContainText("All live checks passed.");
+  await expect(dialog.locator(".transcript-item")).toHaveCount(31);
+  expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
+
+  await dialog.getByRole("button", { name: "Close transcript" }).click();
+  await page.getByRole("button", { name: "View transcript" }).click();
+  await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText("All live checks passed.");
+  await page.getByRole("dialog", { name: "Attempt transcript" }).getByRole("button", { name: "Close transcript" }).click();
+  await page.goto("/");
+  await page.goto("/tasks/T-0001");
+  await page.getByText("Thread information").click();
+  await page.getByRole("button", { name: "View transcript" }).click();
+  await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText("All live checks passed.");
+});
+
 test("task details expose lazy and provisioned task workspaces", async ({ page, context }) => {
   await page.goto("/tasks/T-0002");
   const unprovisioned = page.getByRole("region", { name: "Task workspace" });

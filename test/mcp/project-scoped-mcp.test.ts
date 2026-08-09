@@ -329,13 +329,18 @@ boards:
   };
   await client.callTool({ name: "add_comment", arguments: commentArguments });
   await client.callTool({ name: "add_comment", arguments: commentArguments });
-  await client.callTool({
+  const moveResult = await client.callTool({
     name: "move_current_task",
     arguments: {
       destinationColumnId: "review",
       expectedRevision: inspectedTask.revision,
       idempotencyKey: "agent-move",
     },
+  });
+  assert.deepEqual(JSON.parse(textContent(moveResult.content)).transition, {
+    taskId: created.task.id,
+    fromColumnId: "implementation",
+    toColumnId: "review",
   });
 
   const updated = application.queryTask(created.task.id);
@@ -389,6 +394,12 @@ boards:
     summary: "Controlled assembled handoff complete.",
     threadId: "controlled-assembled-thread",
   });
+  const moveTranscriptItem = (await runtime.read("controlled-assembled-attempt"))
+    ?.find((item) => item.kind === "tool" && item.summary.includes(" → "));
+  assert.equal(
+    moveTranscriptItem?.kind === "tool" ? moveTranscriptItem.summary : undefined,
+    `${runtimeTask.task.id}: implementation → review (confirmed)`,
+  );
   const runtimeUpdated = application.queryTask(runtimeTask.task.id);
   assert.equal(runtimeUpdated.available, true);
   if (!runtimeUpdated.available) return;
@@ -515,6 +526,7 @@ function assembledRequest(
   assert.ok(sourceEvent);
   return {
     activationId: "controlled-assembled-activation",
+    attemptId: "controlled-assembled-attempt",
     agent: {
       id: "implementer",
       name: "Implementation Agent",

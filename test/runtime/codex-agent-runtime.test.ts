@@ -34,8 +34,8 @@ test("each activation starts a fresh streamed Codex thread without overriding us
     summary: "Handoff completed.",
     threadId: "thread-1",
   });
-  assert.deepEqual(await runtime.read("thread-1"), [
-    { kind: "message", role: "agent", text: "Handoff completed." },
+  assert.deepEqual(await runtime.read("attempt-activation-1"), [
+    { id: "message-1", kind: "message", role: "agent", text: "Handoff completed." },
   ]);
   assert.equal(second.threadId, "thread-2");
   assert.equal(clients.length, 2);
@@ -167,7 +167,7 @@ test("streamed Codex failures become failed attempt outcomes with retained threa
     summary: "Codex could not complete the activation: model stream disconnected",
     threadId: "thread-failure",
   });
-  assert.deepEqual(await runtime.read("thread-failure"), [
+  assert.deepEqual(await runtime.read("attempt-activation-failure"), [
     { kind: "diagnostic", text: "model stream disconnected" },
   ]);
 });
@@ -233,7 +233,7 @@ test("an exception after thread startup becomes an inspectable failed outcome", 
     },
   );
   assert.equal(startedThreadId, "thread-interrupted");
-  assert.deepEqual(await runtime.read("thread-interrupted"), [
+  assert.deepEqual(await runtime.read("attempt-activation-interrupted"), [
     { kind: "diagnostic", text: "connection dropped" },
   ]);
 });
@@ -264,7 +264,7 @@ test("a stream that ends without turn.completed is a failed outcome", async () =
       threadId: "thread-truncated",
     },
   );
-  assert.deepEqual(await runtime.read("thread-truncated"), [
+  assert.deepEqual(await runtime.read("attempt-activation-truncated"), [
     { kind: "message", role: "agent", text: "This was not confirmed complete." },
     { kind: "diagnostic", text: "The Codex stream ended before turn.completed." },
   ]);
@@ -309,12 +309,13 @@ test("a failed required coordination call makes the attempt fail with actionable
       threadId: "thread-coordination-failure",
     },
   );
-  assert.deepEqual(await runtime.read("thread-coordination-failure"), [
+  assert.deepEqual(await runtime.read("attempt-activation-coordination-failure"), [
     {
+      id: "tool-call-1",
       kind: "tool",
       name: "mcp_tool_call",
       status: "failed",
-      summary: "coordination.inspect_current_task",
+      summary: "T-0006: current task inspection failed",
       output: "user cancelled MCP tool call",
     },
     { kind: "message", role: "agent", text: "I could not inspect the task." },
@@ -355,7 +356,7 @@ test("transcript capture keeps useful tool activity and truncates large command 
   });
 
   await runtime.run(request("activation-tools", "T-0006"), { started() {} });
-  const transcript = await runtime.read("thread-tools");
+  const transcript = await runtime.read("attempt-activation-tools");
   assert.equal(transcript?.length, 2);
   assert.deepEqual(transcript?.[0], {
     kind: "tool",
@@ -368,6 +369,241 @@ test("transcript capture keeps useful tool activity and truncates large command 
     kind: "diagnostic",
     text: "Tool output could not be decoded.",
   });
+});
+
+test("a running attempt exposes stable tool progression before the Codex turn finishes", async () => {
+  let releaseTool!: () => void;
+  const toolMayFinish = new Promise<void>((resolve) => {
+    releaseTool = resolve;
+  });
+  let toolStarted!: () => void;
+  const toolIsRunning = new Promise<void>((resolve) => {
+    toolStarted = resolve;
+  });
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: liveToolEvents(toolStarted, toolMayFinish),
+        }),
+      }),
+    }),
+  });
+  const liveRequest = request("activation-live", "T-0007");
+
+  const outcome = runtime.run(liveRequest, { started() {} });
+  await toolIsRunning;
+  assert.deepEqual(await runtime.read(liveRequest.attemptId), [
+    {
+      id: "tool-live",
+      kind: "tool",
+      name: "mcp_tool_call",
+      status: "running",
+      summary: "delivery: tasks in implementation (requested)",
+    },
+  ]);
+
+  releaseTool();
+  await outcome;
+  assert.deepEqual(await runtime.read(liveRequest.attemptId), [
+    {
+      id: "tool-live",
+      kind: "tool",
+      name: "mcp_tool_call",
+      status: "completed",
+      summary: "delivery: tasks in implementation (succeeded)",
+    },
+  ]);
+});
+
+test("a completed coordination move summarizes the authoritative task transition", async () => {
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-domain-summary" },
+            {
+              type: "item.completed",
+              item: {
+                id: "move-tool",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "move_current_task",
+                status: "completed",
+                arguments: { destinationColumnId: "review", expectedRevision: 4 },
+                result: {
+                  content: [{
+                    type: "text",
+                    text: JSON.stringify({
+                      accepted: true,
+                      transition: {
+                        taskId: "T-0008",
+                        fromColumnId: "implementation",
+                        toColumnId: "review",
+                      },
+                    }),
+                  }],
+                },
+              },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+  const moveRequest = request("activation-domain-summary", "T-0008");
+
+  await runtime.run(moveRequest, { started() {} });
+
+  assert.deepEqual(await runtime.read(moveRequest.attemptId), [{
+    id: "move-tool",
+    kind: "tool",
+    name: "mcp_tool_call",
+    status: "completed",
+    summary: "T-0008: implementation → review (confirmed)",
+  }]);
+});
+
+test("coordination summaries distinguish successful reads from rejected commands", async () => {
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-outcome-labels" },
+            {
+              type: "item.completed",
+              item: {
+                id: "inspect-tool",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "inspect_task",
+                status: "completed",
+                arguments: { taskId: "T-0042" },
+                result: { content: [{ type: "text", text: JSON.stringify({ id: "T-0042" }) }] },
+              },
+            },
+            {
+              type: "item.completed",
+              item: {
+                id: "dependency-tool",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "add_dependency",
+                status: "completed",
+                arguments: { targetTaskId: "T-0041" },
+                result: {
+                  content: [{
+                    type: "text",
+                    text: JSON.stringify({ accepted: false, reason: "duplicate-relationship" }),
+                  }],
+                },
+              },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+  const outcomeRequest = request("activation-outcome-labels", "T-0040");
+
+  await runtime.run(outcomeRequest, { started() {} });
+
+  const transcript = await runtime.read(outcomeRequest.attemptId);
+  assert.equal(transcript?.[0]?.kind === "tool" ? transcript[0].summary : undefined, "T-0042: inspect task (succeeded)");
+  assert.equal(
+    transcript?.[1]?.kind === "tool" ? transcript[1].summary : undefined,
+    "T-0040: dependency on T-0041 (rejected: duplicate-relationship)",
+  );
+});
+
+test("a completed agent message is inspectable before the Codex turn finishes", async () => {
+  let releaseTurn!: () => void;
+  const turnMayFinish = new Promise<void>((resolve) => {
+    releaseTurn = resolve;
+  });
+  let messageCompleted!: () => void;
+  const messageIsReady = new Promise<void>((resolve) => {
+    messageCompleted = resolve;
+  });
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: liveMessageEvents(messageCompleted, turnMayFinish),
+        }),
+      }),
+    }),
+  });
+  const liveRequest = request("activation-live-message", "T-0009");
+
+  const outcome = runtime.run(liveRequest, { started() {} });
+  await messageIsReady;
+  assert.deepEqual(await runtime.read(liveRequest.attemptId), [{
+    id: "message-live",
+    kind: "message",
+    role: "agent",
+    text: "The requested change is complete.",
+  }]);
+  releaseTurn();
+  await outcome;
+});
+
+test("continued attempts sharing one Codex thread retain isolated transcripts", async () => {
+  let runNumber = 0;
+  const sharedThread = (): CodexThreadLike => ({
+    runStreamed: async () => {
+      runNumber += 1;
+      return {
+        events: events(
+          { type: "thread.started", thread_id: "shared-thread" },
+          {
+            type: "item.completed",
+            item: {
+              id: `message-${runNumber}`,
+              type: "agent_message",
+              text: `Attempt ${runNumber} evidence.`,
+            },
+          },
+          { type: "turn.completed" },
+        ),
+      };
+    },
+  });
+  const runtime = new CodexAgentRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: sharedThread,
+      resumeThread: sharedThread,
+    }),
+  });
+  const first = request("activation-shared", "T-0010");
+  const continued = request("activation-shared", "T-0010");
+  continued.attemptId = "attempt-activation-shared-2";
+  continued.resumeThreadId = "shared-thread";
+
+  await runtime.run(first, { started() {} });
+  await runtime.run(continued, { started() {} });
+
+  assert.deepEqual(await runtime.read(first.attemptId), [{
+    id: "message-1",
+    kind: "message",
+    role: "agent",
+    text: "Attempt 1 evidence.",
+  }]);
+  assert.deepEqual(await runtime.read(continued.attemptId), [{
+    id: "message-2",
+    kind: "message",
+    role: "agent",
+    text: "Attempt 2 evidence.",
+  }]);
 });
 
 class FakeCodexClient implements CodexClientLike {
@@ -423,9 +659,61 @@ async function* interruptedEvents(): AsyncGenerator<CodexEventLike> {
   throw new Error("connection dropped");
 }
 
+async function* liveToolEvents(
+  toolStarted: () => void,
+  toolMayFinish: Promise<void>,
+): AsyncGenerator<CodexEventLike> {
+  yield { type: "thread.started", thread_id: "thread-live" };
+  yield {
+    type: "item.started",
+    item: {
+      id: "tool-live",
+      type: "mcp_tool_call",
+      server: "coordination",
+      tool: "list_tasks",
+      arguments: { boardId: "delivery", columnIds: ["implementation"] },
+      status: "in_progress",
+    },
+  };
+  toolStarted();
+  await toolMayFinish;
+  yield {
+    type: "item.completed",
+    item: {
+      id: "tool-live",
+      type: "mcp_tool_call",
+      server: "coordination",
+      tool: "list_tasks",
+      arguments: { boardId: "delivery", columnIds: ["implementation"] },
+      status: "completed",
+      result: { content: [{ type: "text", text: JSON.stringify({ tasks: [] }) }] },
+    },
+  };
+  yield { type: "turn.completed" };
+}
+
+async function* liveMessageEvents(
+  messageCompleted: () => void,
+  turnMayFinish: Promise<void>,
+): AsyncGenerator<CodexEventLike> {
+  yield { type: "thread.started", thread_id: "thread-live-message" };
+  yield {
+    type: "item.completed",
+    item: {
+      id: "message-live",
+      type: "agent_message",
+      text: "The requested change is complete.",
+    },
+  };
+  messageCompleted();
+  await turnMayFinish;
+  yield { type: "turn.completed" };
+}
+
 function request(activationId: string, taskId: string): AgentRunRequest {
   return {
     activationId,
+    attemptId: `attempt-${activationId}`,
     agent: {
       id: "implementer",
       name: "Implementation Agent",

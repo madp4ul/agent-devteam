@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import type {
   ActivationView,
@@ -47,8 +47,13 @@ export function TaskTimeline({
   activity: TaskActivityView[];
   activations: ActivationView[];
 }): ReactNode {
-  const [transcriptAttempt, setTranscriptAttempt] = useState<{ attempt: AttemptView; agentId: string }>();
+  const [transcriptSelection, setTranscriptSelection] = useState<{ attemptId: string; agentId: string }>();
   const timeline = buildTimeline(comments, activity, activations);
+  const transcriptAttempt = transcriptSelection === undefined
+    ? undefined
+    : activations
+      .flatMap((activation) => activation.attempts)
+      .find((attempt) => attempt.id === transcriptSelection.attemptId);
   return (
     <>
       <section className="timeline-section" aria-labelledby="timeline-heading">
@@ -56,15 +61,15 @@ export function TaskTimeline({
         <h2 id="timeline-heading">Task timeline</h2>
         <ol className="timeline">
           {timeline.map((entry) => (
-            <TimelineEntry key={entry.key} entry={entry} onTranscript={setTranscriptAttempt} />
+            <TimelineEntry key={entry.key} entry={entry} onTranscript={setTranscriptSelection} />
           ))}
         </ol>
       </section>
-      {transcriptAttempt === undefined ? null : (
+      {transcriptAttempt === undefined || transcriptSelection === undefined ? null : (
         <TranscriptDialog
-          attempt={transcriptAttempt.attempt}
-          agentId={transcriptAttempt.agentId}
-          onClose={() => setTranscriptAttempt(undefined)}
+          attempt={transcriptAttempt}
+          agentId={transcriptSelection.agentId}
+          onClose={() => setTranscriptSelection(undefined)}
         />
       )}
     </>
@@ -132,7 +137,7 @@ function TimelineEntry({
   onTranscript,
 }: {
   entry: TimelineItem;
-  onTranscript(value: { attempt: AttemptView; agentId: string }): void;
+  onTranscript(value: { attemptId: string; agentId: string }): void;
 }): ReactNode {
   if (entry.kind === "comment") {
     return (
@@ -229,7 +234,7 @@ function TimelineEntry({
               <CopyThreadIdButton threadId={entry.attempt.threadId} />
             )}
           </div>
-          <button className="secondary" onClick={() => onTranscript({ attempt: entry.attempt, agentId: entry.agentId })}>
+          <button className="secondary" onClick={() => onTranscript({ attemptId: entry.attempt.id, agentId: entry.agentId })}>
             View transcript
           </button>
         </details>
@@ -246,22 +251,42 @@ function TranscriptDialog({ attempt, agentId, onClose }: {
   const [items, setItems] = useState<AttemptTranscriptItem[]>();
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string>();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const pendingScrollTop = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (pendingScrollTop.current === null || contentRef.current === null) return;
+    contentRef.current.scrollTop = pendingScrollTop.current;
+    pendingScrollTop.current = null;
+  }, [items]);
 
   useEffect(() => {
     let active = true;
-    void readAttemptTranscript(attempt.id)
-      .then((result) => {
+    const refresh = async (): Promise<void> => {
+      try {
+        const result = await readAttemptTranscript(attempt.id);
         if (!active) return;
-        if (result.available) setItems(result.items);
-        else setUnavailable(true);
-      })
-      .catch((caught) => {
+        if (result.available) {
+          pendingScrollTop.current = contentRef.current?.scrollTop ?? null;
+          setItems(result.items);
+          setUnavailable(false);
+          setError(undefined);
+        } else {
+          setUnavailable(true);
+        }
+      } catch (caught) {
         if (active) setError(errorMessage(caught));
-      });
+      }
+    };
+    void refresh();
+    const timer = attempt.status === "running"
+      ? window.setInterval(() => void refresh(), 1_000)
+      : undefined;
     return () => {
       active = false;
+      if (timer !== undefined) window.clearInterval(timer);
     };
-  }, [attempt.id]);
+  }, [attempt.id, attempt.status]);
 
   return (
     <div className="modal-backdrop transcript-backdrop" role="presentation">
@@ -285,7 +310,7 @@ function TranscriptDialog({ attempt, agentId, onClose }: {
             <CopyThreadIdButton threadId={attempt.threadId} />
           )}
         </div>
-        <div className="transcript-content">
+        <div ref={contentRef} className="transcript-content">
           {error !== undefined ? (
             <p className="unavailable" role="alert">{error}</p>
           ) : unavailable ? (
@@ -300,7 +325,7 @@ function TranscriptDialog({ attempt, agentId, onClose }: {
             </p>
           ) : (
             items.map((item, index) => (
-              <article key={index} className={`transcript-item ${item.kind}`}>
+              <article key={item.id ?? `${attempt.id}-${index}`} className={`transcript-item ${item.kind}`}>
                 <p className="eyebrow">
                   {item.kind === "message"
                     ? "Codex message"

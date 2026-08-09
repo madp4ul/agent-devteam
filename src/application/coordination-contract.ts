@@ -123,15 +123,16 @@ export interface RuntimeStartupDiagnostic extends ActivationStartupFailureView {
 }
 
 export type AttemptTranscriptItem =
-  | { kind: "message"; role: "agent"; text: string }
+  | { id?: string; kind: "message"; role: "agent"; text: string }
   | {
+      id?: string;
       kind: "tool";
       name: string;
       status: string;
       summary: string;
       output?: string;
     }
-  | { kind: "diagnostic"; text: string };
+  | { id?: string; kind: "diagnostic"; text: string };
 
 export interface ActivationView extends AgentExecutionProfile {
   id: string;
@@ -186,6 +187,7 @@ export interface TaskWorkspaceView {
 
 export interface AgentRunRequest {
   activationId: string;
+  attemptId: string;
   agent: AgentRunAgent;
   process: {
     name: string;
@@ -337,7 +339,7 @@ export interface AgentRuntime {
 }
 
 export interface AttemptTranscriptAccess {
-  read(threadId: string): Promise<AttemptTranscriptItem[] | null>;
+  read(attemptId: string): Promise<AttemptTranscriptItem[] | null>;
 }
 
 export interface AgentRunLifecycle {
@@ -599,6 +601,14 @@ export type BoardMutationResult =
         | "empty-description";
     }
   | { accepted: false; reason: "revision-conflict"; currentTask: TaskView };
+
+export type MoveTaskResult =
+  | {
+      accepted: true;
+      task: TaskView;
+      transition: { taskId: string; fromColumnId: string; toColumnId: string };
+    }
+  | Exclude<BoardMutationResult, { accepted: true }>;
 
 export type TaskRelationshipMutationResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }

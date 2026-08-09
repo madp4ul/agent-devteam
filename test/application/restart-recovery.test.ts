@@ -132,6 +132,10 @@ test("restart records an interrupted attempt and retries its activation at the h
       ],
     );
     assert.equal(task.task.activations[1]?.status, "completed");
+    assert.deepEqual(
+      await recovered.queryAttemptTranscript(firstRequest.attemptId),
+      { available: false, reason: "unavailable" },
+    );
   }
   const idleAfterRestart = recovered.queryTask(idle.task.id);
   assert.equal(idleAfterRestart.available, true);
@@ -275,7 +279,7 @@ test("startup recreates an incompatible pre-release database", async () => {
   assert.equal(recreated.queryTask(created.task.id).available, false);
   recreated.close();
   const current = new DatabaseSync(fixture.databasePath, { readOnly: true });
-  assert.equal((current.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 6);
+  assert.equal((current.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 7);
   current.close();
 });
 

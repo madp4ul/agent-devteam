@@ -12,6 +12,8 @@ import {
   type AgentRunOutcome,
   type AgentRunRequest,
   type AgentRuntime,
+  type AttemptTranscriptAccess,
+  type AttemptTranscriptItem,
   type AutomationClock,
 } from "../../src/application/coordination-application.ts";
 
@@ -21,7 +23,6 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   const fixture = await createFixture("interrupt");
   const runtime = new InterruptibleRuntime();
   const application = await startApplication(fixture, runtime);
-  t.after(() => application.close());
 
   const created = application.createTask({
     boardId: "delivery",
@@ -66,6 +67,11 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   assert.equal(interrupted.task.activations[0]?.attempts[0]?.status, "interrupted");
   assert.equal(interrupted.task.activations[0]?.attempts[0]?.outcome?.status, "user-interrupted");
   assert.equal(interrupted.task.activations[0]?.attempts.length, 1);
+  assert.deepEqual(await application.queryAttemptTranscript(first.attemptId), {
+    available: true,
+    threadId: "thread-1",
+    items: [{ kind: "message", role: "agent", text: "Attempt 1 interruptible evidence." }],
+  });
   assert.deepEqual(interrupted.task.activity.at(-1)?.actor, { kind: "user", id: "paul" });
   const firstSuspensionActivity = interrupted.task.activity.find(
     (activity) => activity.type === "automation.suspended",
@@ -167,6 +173,17 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   await runtime.waitForRequest(3);
   runtime.complete({ status: "completed", summary: "Continued safely.", threadId: "thread-1" });
   await application.waitForAutomationIdle();
+  application.close();
+  const restarted = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => restarted.close());
+  assert.deepEqual(await restarted.queryAttemptTranscript(first.attemptId), {
+    available: true,
+    threadId: "thread-1",
+    items: [{ kind: "message", role: "agent", text: "Attempt 1 interruptible evidence." }],
+  });
 });
 
 test("pause drains active attempts and preserves queued work until resume", async (t) => {
@@ -310,8 +327,9 @@ test("interrupt confirmation rejects when durable finalization fails", async () 
   await assert.rejects(application.waitForAutomationIdle());
 });
 
-class InterruptibleRuntime implements AgentRuntime {
+class InterruptibleRuntime implements AgentRuntime, AttemptTranscriptAccess {
   readonly requests: AgentRunRequest[] = [];
+  readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
   readonly #pending = new Map<string, (outcome: AgentRunOutcome) => void>();
   readonly #waiters: Array<{ count: number; resolve(request: AgentRunRequest): void }> = [];
 
@@ -321,6 +339,11 @@ class InterruptibleRuntime implements AgentRuntime {
     signal?: AbortSignal,
   ): Promise<AgentRunOutcome> {
     this.requests.push(request);
+    this.#transcripts.set(request.attemptId, [{
+      kind: "message",
+      role: "agent",
+      text: `Attempt ${request.attempt.number} interruptible evidence.`,
+    }]);
     lifecycle.started(`thread-${this.requests.length}`);
     for (const waiter of this.#waiters.splice(0)) {
       const found = this.requests[waiter.count - 1];
@@ -334,6 +357,10 @@ class InterruptibleRuntime implements AgentRuntime {
         resolve({ status: "failed", summary: "Runtime stopped after user interrupt.", threadId: `thread-${this.requests.length}` });
       }, { once: true });
     });
+  }
+
+  async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {
+    return structuredClone(this.#transcripts.get(attemptId) ?? null);
   }
 
   waitForRequest(count: number): Promise<AgentRunRequest> {
@@ -370,6 +397,7 @@ async function startApplication(
       taskWorkspaceRoot: fixture.workspaceRoot,
       agentRuntime: runtime,
     },
+    ...(runtime instanceof InterruptibleRuntime ? { transcriptAccess: runtime } : {}),
   });
 }
 

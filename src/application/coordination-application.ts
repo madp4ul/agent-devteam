@@ -28,6 +28,7 @@ import type {
   CreateTaskRelationshipCommand,
   EditTaskCommand,
   MoveTaskCommand,
+  MoveTaskResult,
   MarkUserMentionAddressedCommand,
   MarkUserMentionAddressedResult,
   InterruptTaskCommand,
@@ -191,6 +192,9 @@ export class CoordinationApplication {
           ? {}
           : { runtimeDiagnostic: options.runtimeDiagnostic }),
         ...(options.automationClock === undefined ? {} : { clock: options.automationClock }),
+        ...(options.transcriptAccess === undefined
+          ? {}
+          : { transcriptAccess: options.transcriptAccess }),
       }),
       new TaskDiscovery(process, taskProjections, automation, startup, collaborators),
       options.transcriptAccess,
@@ -364,10 +368,14 @@ export class CoordinationApplication {
     }
     const attempt = this.#persistence.taskProjections.readAttemptTranscriptReference(attemptId);
     if (attempt === undefined) return { available: false, reason: "not-found" };
+    const persisted = this.#persistence.taskProjections.readPersistedAttemptTranscript(attemptId);
+    if (persisted !== undefined && attempt.threadId !== null) {
+      return { available: true, threadId: attempt.threadId, items: persisted };
+    }
     if (attempt.threadId === null || this.#transcriptAccess === undefined) {
       return { available: false, reason: "unavailable" };
     }
-    const items = await this.#transcriptAccess.read(attempt.threadId);
+    const items = await this.#transcriptAccess.read(attemptId);
     return items === null
       ? { available: false, reason: "unavailable" }
       : { available: true, threadId: attempt.threadId, items };
@@ -436,7 +444,7 @@ export class CoordinationApplication {
     return gated ?? this.#persistence.taskCommands.editTask(command);
   }
 
-  moveTask(command: MoveTaskCommand): BoardMutationResult {
+  moveTask(command: MoveTaskCommand): MoveTaskResult {
     const gated = this.configurationErrorRejection();
     const result = gated ?? this.#persistence.taskCommands.moveTask(command);
     if (result.accepted) this.#automation.kick();
@@ -511,7 +519,9 @@ export class CoordinationApplication {
     this.#persistence.close();
   }
 
-  private configurationErrorRejection(): BoardMutationResult | undefined {
+  private configurationErrorRejection():
+    | Extract<BoardMutationResult, { accepted: false; reason: "configuration-error" }>
+    | undefined {
     if (this.#startup.mode !== "configuration-error") return undefined;
     return {
       accepted: false,

@@ -7,6 +7,7 @@ import type {
   Actor,
   AgentRunAgent,
   AgentRunOutcome,
+  AttemptTranscriptItem,
   RuntimeStartupBoundary,
   RuntimeStartupDiagnostic,
   TaskActivityView,
@@ -331,6 +332,7 @@ export class AutomationStateStore {
     now: Date,
     actor: Actor & { kind: "user" },
     idempotencyKey: string,
+    transcript?: AttemptTranscriptItem[],
   ): void {
     this.#owner.transaction(() => {
       const attempt = this.#database
@@ -345,6 +347,7 @@ export class AutomationStateStore {
         | { activation_id: string; task_id: string; target_agent_id: string }
         | undefined;
       if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
+      if (transcript !== undefined) this.persistAttemptTranscript(attemptId, transcript);
       const occurredAt = now.toISOString();
       const summary = "The user interrupted this attempt.";
       this.#database
@@ -601,6 +604,7 @@ export class AutomationStateStore {
     outcome: AgentRunOutcome,
     now: Date,
     automaticRetry = true,
+    transcript?: AttemptTranscriptItem[],
   ): void {
     this.#owner.transaction(() => {
       const attempt = this.#database
@@ -620,6 +624,7 @@ export class AutomationStateStore {
           }
         | undefined;
       if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
+      if (transcript !== undefined) this.persistAttemptTranscript(attemptId, transcript);
       const occurredAt = now.toISOString();
       const persistedStatus = outcome.status === "completed" ? "completed" : "failed";
       const outcomeKind = outcome.status === "permission-blocked" ? "permission" : outcome.status;
@@ -701,6 +706,16 @@ export class AutomationStateStore {
         occurredAt,
       );
     });
+  }
+
+  private persistAttemptTranscript(attemptId: string, transcript: AttemptTranscriptItem[]): void {
+    this.#database
+      .prepare(
+        `INSERT INTO attempt_transcripts (attempt_id, items_json)
+         VALUES (?, ?)
+         ON CONFLICT(attempt_id) DO UPDATE SET items_json = excluded.items_json`,
+      )
+      .run(attemptId, JSON.stringify(transcript));
   }
 
   private createFailureAttention(taskId: string, activationId: string, occurredAt: string): void {

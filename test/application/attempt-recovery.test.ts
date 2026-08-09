@@ -11,6 +11,8 @@ import {
   type AgentRunOutcome,
   type AgentRunRequest,
   type AgentRuntime,
+  type AttemptTranscriptAccess,
+  type AttemptTranscriptItem,
   type AutomationClock,
   CoordinationApplication,
 } from "../../src/application/coordination-application.ts";
@@ -123,7 +125,6 @@ test("exhaustion offers retry and dismiss only on the current attention reason",
     summary: "failure three",
     actions: ["retry", "dismiss"],
   });
-
   const retried = application.retryFailedActivation({
     attentionReasonId: reason!.id,
     actor: { kind: "user", id: "paul" },
@@ -194,7 +195,6 @@ test("permission block requires explicit continuation and never retries automati
   const runtime = new ControlledRuntime();
   const clock = new ControlledClock("2026-01-01T12:00:00.000Z");
   const application = await startControlledApplication(fixture, runtime, clock);
-  t.after(() => application.close());
   const { taskId, firstActivationId, laterActivationId } = createQueuedPair(application);
 
   await application.resumeAutomation();
@@ -218,6 +218,11 @@ test("permission block requires explicit continuation and never retries automati
     explanation:
       "Automatic retry is unavailable for permission blocks. Complete the required action or change Codex policy, then Continue.",
   });
+  assert.deepEqual(await application.queryAttemptTranscript(first.attemptId), {
+    available: true,
+    threadId: "permission-thread",
+    items: [{ kind: "message", role: "agent", text: "Attempt 1 runtime evidence." }],
+  });
 
   const continued = application.continuePermissionBlockedActivation({
     attentionReasonId: reason!.id,
@@ -239,16 +244,33 @@ test("permission block requires explicit continuation and never retries automati
   if (inspected.available) {
     assert.equal(inspected.task.activations[0]?.attempts[0]?.outcome?.status, "permission-blocked");
   }
+  application.close();
+  const restarted = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => restarted.close());
+  assert.deepEqual(await restarted.queryAttemptTranscript(first.attemptId), {
+    available: true,
+    threadId: "permission-thread",
+    items: [{ kind: "message", role: "agent", text: "Attempt 1 runtime evidence." }],
+  });
 });
 
-class ControlledRuntime implements AgentRuntime {
+class ControlledRuntime implements AgentRuntime, AttemptTranscriptAccess {
   readonly requests: AgentRunRequest[] = [];
+  readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
   #complete: ((outcome: AgentRunOutcome) => void) | undefined;
   #completed: Promise<void> = Promise.resolve();
   readonly #waiters: Array<{ count: number; resolve(request: AgentRunRequest): void }> = [];
 
   run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
     this.requests.push(request);
+    this.#transcripts.set(request.attemptId, [{
+      kind: "message",
+      role: "agent",
+      text: `Attempt ${request.attempt.number} runtime evidence.`,
+    }]);
     lifecycle.started(`thread-${this.requests.length}`);
     for (const waiter of this.#waiters.splice(0)) {
       const found = this.requests[waiter.count - 1];
@@ -258,6 +280,10 @@ class ControlledRuntime implements AgentRuntime {
     const outcome = new Promise<AgentRunOutcome>((resolve) => { this.#complete = resolve; });
     this.#completed = outcome.then(() => undefined);
     return outcome;
+  }
+
+  async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {
+    return structuredClone(this.#transcripts.get(attemptId) ?? null);
   }
 
   complete(outcome: AgentRunOutcome): void {
@@ -298,6 +324,7 @@ async function startControlledApplication(
       taskWorkspaceRoot: fixture.workspaceRoot,
       agentRuntime: runtime,
     },
+    transcriptAccess: runtime,
   });
 }
 

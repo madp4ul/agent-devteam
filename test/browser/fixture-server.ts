@@ -62,7 +62,7 @@ const application = await CoordinationApplication.start({
     },
   },
   transcriptAccess: {
-    read: async (threadId) => threadId === "thread-browser-123" ? browserTranscript : null,
+    read: async (attemptId) => attemptId === "browser-attempt" ? browserTranscript : null,
   },
 });
 const inspected = application.createTask({
