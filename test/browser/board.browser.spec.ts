@@ -364,6 +364,58 @@ test("creates in any column, opens tasks directly, and restores a narrow board c
   await expect(page.getByRole("heading", { name: "Inspect existing coordination" })).toBeVisible();
 });
 
+test("automatic board refresh preserves the user's current horizontal position", async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 820 });
+  let boardReads = 0;
+  await page.route("**/api/board", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    boardReads += 1;
+    body.startup.processName = `Scroll refresh ${boardReads}`;
+    body.activeRuns = [{
+      attemptId: "scroll-refresh-attempt",
+      taskId: "T-0002",
+      taskTitle: "Drag this task",
+      boardId: "delivery",
+      boardName: "Product delivery",
+      columnId: "backlog",
+      columnName: "Backlog",
+      agentId: "consulting-agent",
+      status: "running",
+      startedAt: new Date(Date.now() - 65_000).toISOString(),
+    }];
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto("/");
+  const lane = page.getByTestId("board-lane");
+  const renderedBoardRead = async (): Promise<number> => Number(
+    (await page.locator(".topbar .eyebrow").textContent())?.replace("Scroll refresh ", ""),
+  );
+  await expect(lane).toBeVisible();
+  const directPosition = await lane.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+    return element.scrollLeft;
+  });
+  const readsAfterDirectScroll = await renderedBoardRead();
+  await expect.poll(renderedBoardRead).toBeGreaterThan(readsAfterDirectScroll);
+  expect(await lane.evaluate((element) => element.scrollLeft)).toBe(directPosition);
+
+  await lane.evaluate((element) => { element.scrollLeft = 3; });
+  await page.getByRole("link", { name: /T-0001 Inspect existing coordination/ }).click();
+  await expect(page).toHaveURL(/\/tasks\/T-0001$/);
+  await page.getByRole("link", { name: "Back to board" }).click();
+  await expect.poll(() => lane.evaluate((element) => element.scrollLeft)).toBe(3);
+
+  const userPosition = await lane.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+    return element.scrollLeft;
+  });
+  const readsAfterUserScroll = await renderedBoardRead();
+  await expect.poll(renderedBoardRead).toBeGreaterThan(readsAfterUserScroll);
+  expect(await lane.evaluate((element) => element.scrollLeft)).toBe(userPosition);
+});
+
 test("details keep contextual controls, one timeline, and readable transcript evidence", async ({ page }) => {
   await page.goto("/tasks/T-0001");
   await expect(page.getByText("Understand the full task history")).toBeVisible();

@@ -31,10 +31,12 @@ export function BoardPage({
   navigate: Navigate;
   notifications: DesktopNotificationControl;
 }): ReactNode {
-  const initialContext = (window.history.state as NavigationState | null)?.boardContext;
+  const pendingInitialContext = useRef(
+    (window.history.state as NavigationState | null)?.boardContext,
+  );
   const [state, setState] = useState<BrowserBoardState>();
   const [filter, setFilter] = useState(
-    initialContext?.filter ?? new URLSearchParams(location.search).get("q") ?? "",
+    pendingInitialContext.current?.filter ?? new URLSearchParams(location.search).get("q") ?? "",
   );
   const [creation, setCreation] = useState<{ boardId: string; columnId: string }>();
   const [highlightedTaskId, setHighlightedTaskId] = useState<string>();
@@ -52,13 +54,15 @@ export function BoardPage({
     return () => window.clearInterval(timer);
   }, [refresh, state]);
   useLayoutEffect(() => {
+    const initialContext = pendingInitialContext.current;
     const lane = initialContext === undefined
       ? undefined
       : laneRefs.current.get(initialContext.boardId);
     if (state !== undefined && lane !== undefined && initialContext !== undefined) {
       lane.scrollLeft = initialContext.scrollLeft;
+      pendingInitialContext.current = undefined;
     }
-  }, [state, initialContext]);
+  }, [state]);
 
   const rememberContext = useCallback((boardId: string) => {
     const boardContext = {

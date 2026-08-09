@@ -9,21 +9,21 @@ user scrolling alone.
 
 **Priority:** High — address before issue 32 expands automatic live refresh.
 
-**Status:** open
+**Status:** resolved
 
-- [ ] Returning from task details restores the saved board, filter, and
+- [x] Returning from task details restores the saved board, filter, and
   horizontal lane position once after the board is available.
-- [ ] Subsequent authoritative board refreshes preserve the lane's current
+- [x] Subsequent authoritative board refreshes preserve the lane's current
   horizontal position, including the one-second polling used while an attempt
   is active or process pause is draining.
-- [ ] User scrolling after the initial restoration remains authoritative and is
+- [x] User scrolling after the initial restoration remains authoritative and is
   not replaced by the older navigation snapshot on a later render.
-- [ ] Multiple board lanes retain their own current positions without coupling
+- [x] Multiple board lanes retain their own current positions without coupling
   one board's restoration or refresh to another board.
-- [ ] Deliberate navigation behavior, such as locating a task or restoring a
+- [x] Deliberate navigation behavior, such as locating a task or restoring a
   board context after task inspection, may still scroll intentionally and does
   so without fighting later manual scrolling.
-- [ ] A browser regression test covers a horizontally overflowing lane on both
+- [x] A browser regression test covers a horizontally overflowing lane on both
   a direct board load and a return from task details, forces at least one
   automatic refresh with an active run, and proves that a newer user-selected
   position remains stable.
@@ -43,3 +43,15 @@ user scrolling alone.
   replaces `state` every second, so the effect repeatedly writes the stale
   `initialContext.scrollLeft`. The restoration needs one-shot semantics rather
   than being coupled to every authoritative projection update.
+
+## Answer
+
+Board navigation context is now retained as pending one-shot restoration data.
+`BoardPage` consumes it only after the referenced lane is available and leaves
+all later authoritative refreshes and user scrolling untouched. A browser
+regression covers direct-load polling and return-from-details restoration on a
+horizontally overflowing lane, including a newer manual position surviving an
+active-run refresh.
+
+Type-checking, the production build, the full automated suite, and the complete
+browser suite pass.
