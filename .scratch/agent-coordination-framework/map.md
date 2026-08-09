@@ -128,12 +128,12 @@ without choosing the implementation yet.
   — Give restored board context one-shot semantics so active-run polling
   preserves the user's current horizontal lane position before live task
   refresh expands further.
+- [Prevent Tasks from Starting in Completion and Unify Creation](./issues/46-prevent-completion-task-creation.md)
+  — Make Completion an application-owned creation invariant across user and
+  agent interfaces while giving ordinary and child tasks one shared dialog.
 
 ## Next implementation priority
 
-- [Prevent Tasks from Starting in Completion and Unify Creation](./issues/46-prevent-completion-task-creation.md)
-  — Make Completion a creation invariant across user and agent interfaces while
-  giving ordinary and child tasks one consistent creation dialog.
 - [Reshape Task Details Around Agent Activity](./issues/47-reshape-task-details-around-agent-activity.md)
   — Replace automation-profile clutter and oversized movement with a responsive
   task-first layout, truthful current activity, and an ordered activation queue.

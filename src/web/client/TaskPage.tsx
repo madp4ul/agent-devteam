@@ -6,7 +6,6 @@ import {
   addTaskDependency,
   ApiError,
   archiveTask,
-  createChildTask,
   editTask,
   interruptTask,
   openTaskWorkspace,
@@ -23,6 +22,7 @@ import { Loading } from "./Loading.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
 import { useTaskMovement } from "./task-movement.ts";
 import { TaskTimeline } from "./Timeline.tsx";
+import { TaskCreationDialog } from "./TaskCreationDialog.tsx";
 
 export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navigate }): ReactNode {
   const [detail, setDetail] = useState<BrowserTaskDetail>();
@@ -510,10 +510,7 @@ function RelationshipForms({
   onChanged(message: string): Promise<void>;
 }): ReactNode {
   const [targetTaskId, setTargetTaskId] = useState("");
-  const [childTitle, setChildTitle] = useState("");
-  const [childDescription, setChildDescription] = useState("");
-  const [childColumnId, setChildColumnId] = useState(detail.task.columnId);
-  const [startingRef, setStartingRef] = useState("");
+  const [creatingChild, setCreatingChild] = useState(false);
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
 
@@ -532,50 +529,38 @@ function RelationshipForms({
     }
   };
 
-  const createChild = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    setPending(true);
-    setError(undefined);
-    try {
-      const result = await createChildTask(detail.task.id, {
-        boardId: detail.task.boardId,
-        columnId: childColumnId,
-        title: childTitle,
-        description: childDescription,
-        ...(startingRef.trim().length === 0 ? {} : { startingRef: startingRef.trim() }),
-        idempotencyKey: crypto.randomUUID(),
-      });
-      setChildTitle("");
-      setChildDescription("");
-      setStartingRef("");
-      await onChanged(`Created child ${result.task.id}.`);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setPending(false);
-    }
-  };
-
   return (
-    <details className="relationship-actions">
-      <summary>Manage relationships</summary>
-      <div className="relationship-action-content">
-        <form onSubmit={(event) => void addDependency(event)}>
-          <h3>Add dependency</h3>
-          <label>Blocking task ID<input value={targetTaskId} onChange={(event) => setTargetTaskId(event.currentTarget.value)} /></label>
-          <button disabled={pending || targetTaskId.trim().length === 0}>Add dependency</button>
-        </form>
-        <form onSubmit={(event) => void createChild(event)}>
-          <h3>Create child task</h3>
-          <label>Title<input value={childTitle} onChange={(event) => setChildTitle(event.currentTarget.value)} /></label>
-          <label>Description<textarea rows={3} value={childDescription} onChange={(event) => setChildDescription(event.currentTarget.value)} /></label>
-          <label>Column<select value={childColumnId} onChange={(event) => setChildColumnId(event.currentTarget.value)}>{detail.board.columns.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}</select></label>
-          <label>Starting Git ref (optional)<input value={startingRef} onChange={(event) => setStartingRef(event.currentTarget.value)} /></label>
-          <button disabled={pending || childTitle.trim().length === 0 || childDescription.trim().length === 0}>Create child</button>
-        </form>
-        {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
-      </div>
-    </details>
+    <>
+      <details className="relationship-actions">
+        <summary>Manage relationships</summary>
+        <div className="relationship-action-content">
+          <form onSubmit={(event) => void addDependency(event)}>
+            <h3>Add dependency</h3>
+            <label>Blocking task ID<input value={targetTaskId} onChange={(event) => setTargetTaskId(event.currentTarget.value)} /></label>
+            <button disabled={pending || targetTaskId.trim().length === 0}>Add dependency</button>
+          </form>
+          <button type="button" className="secondary" onClick={() => setCreatingChild(true)}>
+            Create child task
+          </button>
+          {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
+        </div>
+      </details>
+      {creatingChild ? (
+        <TaskCreationDialog
+          initial={{
+            boardId: detail.task.boardId,
+            columnId: detail.board.columns.find((column) => column.taskCreationAllowed)?.id ?? "",
+          }}
+          columns={detail.board.columns}
+          parent={{ id: detail.task.id, title: detail.task.title }}
+          onClose={() => setCreatingChild(false)}
+          onCreated={async (task) => {
+            setCreatingChild(false);
+            await onChanged(`Created child ${task.id}.`);
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 

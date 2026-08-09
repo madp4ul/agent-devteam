@@ -736,6 +736,7 @@ function request(activationId: string, taskId: string): AgentRunRequest {
           name: "Implementation",
           watchingAgentId: "implementer",
           frameworkOwned: false,
+          taskCreationAllowed: true,
         },
       ],
     },

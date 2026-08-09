@@ -35,6 +35,7 @@ export interface ProcessColumnView {
   name: string;
   watchingAgentId: string | null;
   frameworkOwned: boolean;
+  taskCreationAllowed: boolean;
 }
 
 export interface ProcessBoardView {
@@ -49,6 +50,7 @@ export interface BoardSummaryColumnView {
   name: string;
   watchingAgent: Pick<AgentRunAgent, "id" | "name" | "summary"> | null;
   frameworkOwned: boolean;
+  taskCreationAllowed: boolean;
   taskCount: number;
 }
 
@@ -637,6 +639,7 @@ export type BoardMutationResult =
       reason:
         | "not-found"
         | "invalid-destination"
+        | "completion-is-not-starting-column"
         | "invalid-starting-ref"
         | "archived-task"
         | "unmapped-task-user-only"

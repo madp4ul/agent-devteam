@@ -522,6 +522,8 @@ boards:
     name: Delivery
     guidance: Deliver safely.
     columns:
+      - id: backlog
+        name: Backlog
       - id: implementation
         name: Implementation
         watchingAgent: implementer
@@ -556,9 +558,13 @@ function createTaskInColumn(
   key: string,
   boardId = "delivery",
 ): string {
+  let startingColumnId = columnId;
+  if (columnId === "completion") {
+    startingColumnId = boardId === "support" ? "triage" : "backlog";
+  }
   const result = application.createTask({
     boardId,
-    columnId,
+    columnId: startingColumnId,
     title,
     description: `${title} safely.`,
     actor: { kind: "user", id: "local-user" },
@@ -566,5 +572,16 @@ function createTaskInColumn(
   });
   assert.equal(result.accepted, true);
   if (!result.accepted) throw new Error("Task creation failed");
+  if (columnId === "completion") {
+    const completed = application.moveTask({
+      taskId: result.task.id,
+      destinationColumnId: "completion",
+      expectedRevision: result.task.revision,
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: `${key}-complete`,
+    });
+    assert.equal(completed.accepted, true);
+    if (!completed.accepted) throw new Error("Task completion failed");
+  }
   return result.task.id;
 }

@@ -325,6 +325,21 @@ boards:
     },
   });
   assert.match(textContent(childResult.content), /Scoped child/);
+  const rejectedCompletedChild = await client.callTool({
+    name: "create_child_task",
+    arguments: {
+      boardId: "delivery",
+      columnId: "completion",
+      title: "Completed at creation",
+      description: "The agent adapter must expose the shared creation invariant.",
+      idempotencyKey: "agent-completed-child",
+    },
+  });
+  assert.equal(rejectedCompletedChild.isError, true);
+  assert.deepEqual(JSON.parse(textContent(rejectedCompletedChild.content)), {
+    accepted: false,
+    reason: "completion-is-not-starting-column",
+  });
 
   const commentArguments = {
     body: "Implementation complete; handing off for review.",
@@ -547,9 +562,9 @@ function assembledRequest(
       name: "Delivery",
       guidance: "Keep movement explicit.",
       columns: [
-        { id: "implementation", name: "Implementation", watchingAgentId: null, frameworkOwned: false },
-        { id: "review", name: "Review", watchingAgentId: null, frameworkOwned: false },
-        { id: "completion", name: "Completion", watchingAgentId: null, frameworkOwned: true },
+        { id: "implementation", name: "Implementation", watchingAgentId: null, frameworkOwned: false, taskCreationAllowed: true },
+        { id: "review", name: "Review", watchingAgentId: null, frameworkOwned: false, taskCreationAllowed: true },
+        { id: "completion", name: "Completion", watchingAgentId: null, frameworkOwned: true, taskCreationAllowed: false },
       ],
     },
     collaborators: [],

@@ -43,6 +43,7 @@ test("board summaries orient agents without returning task payloads", async (t) 
             name: "Backlog",
             watchingAgent: null,
             frameworkOwned: false,
+            taskCreationAllowed: true,
             taskCount: 1,
           },
           {
@@ -54,6 +55,7 @@ test("board summaries orient agents without returning task payloads", async (t) 
               summary: "Builds scoped changes.",
             },
             frameworkOwned: false,
+            taskCreationAllowed: true,
             taskCount: 1,
           },
           {
@@ -65,6 +67,7 @@ test("board summaries orient agents without returning task payloads", async (t) 
               summary: "Reviews completed changes.",
             },
             frameworkOwned: false,
+            taskCreationAllowed: true,
             taskCount: 0,
           },
           {
@@ -72,6 +75,7 @@ test("board summaries orient agents without returning task payloads", async (t) 
             name: "Completion",
             watchingAgent: null,
             frameworkOwned: true,
+            taskCreationAllowed: false,
             taskCount: 0,
           },
         ],
@@ -287,13 +291,22 @@ test("Completion is listed only when agents select it explicitly", async (t) => 
   t.after(() => application.close());
   const created = application.createTask({
     boardId: "delivery",
-    columnId: "completion",
+    columnId: "backlog",
     title: "Completed work",
     description: "Inspect this only through a deliberate Completion query.",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "create-completed-task",
   });
   assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const completed = application.moveTask({
+    taskId: created.task.id,
+    destinationColumnId: "completion",
+    expectedRevision: created.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "complete-task",
+  });
+  assert.equal(completed.accepted, true);
 
   const backlog = application.queryTaskOverviews({
     boardId: "delivery",

@@ -74,7 +74,7 @@ export function BoardColumn({
             )}
           </div>
           <span className="task-count">{tasks.length}</span>
-          {layout === "row" ? (
+          {layout === "row" && column.taskCreationAllowed ? (
             <button
               className="row-create"
               aria-label={`Create task in ${column.name}`}
@@ -116,7 +116,7 @@ export function BoardColumn({
           />
         ))}
       </ol>
-      {layout === "column" ? <button className="create-column" onClick={onCreate}>
+      {layout === "column" && column.taskCreationAllowed ? <button className="create-column" onClick={onCreate}>
         + Create task in {column.name}
       </button> : null}
     </section>

@@ -188,6 +188,9 @@ textarea { resize: vertical; line-height: 1.5; }
 .relationship-action-content { display: grid; gap: 1rem; margin-top: 1rem; }
 .relationship-actions form { display: grid; gap: .65rem; padding-top: 1rem; border-top: 1px solid #d8ddd9; }
 .relationship-actions h3 { margin: 0; }
+.create-advanced { border-top: 1px solid #d8ddd9; padding-top: .75rem; }
+.create-advanced summary { width: fit-content; color: var(--forest); font-weight: 800; cursor: pointer; }
+.create-advanced label { margin-top: .75rem; }
 .attention-list li { color: #7e5510; }
 .needs-attention { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #dfc27d; border-radius: 12px; background: #fffaf0; }
 .process-impact { display: grid; gap: .75rem; margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #90a8bf; border-radius: 12px; background: #f3f8fc; }

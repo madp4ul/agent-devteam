@@ -109,7 +109,7 @@ test("moving into a watched column records an activation for the movement event"
   assert.equal(moved.task.activations[0]?.targetAgentId, "implementer");
 });
 
-test("unwatched and Completion column entries remain inert", async (t) => {
+test("tasks start in workflow columns and enter Completion only by moving", async (t) => {
   const fixture = await createFixture("inert-entry");
   const application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
@@ -125,7 +125,7 @@ test("unwatched and Completion column entries remain inert", async (t) => {
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "create-in-backlog",
   });
-  const completedTask = application.createTask({
+  const rejectedCompletionTask = application.createTask({
     boardId: "delivery",
     columnId: "completion",
     title: "Already complete",
@@ -133,9 +133,12 @@ test("unwatched and Completion column entries remain inert", async (t) => {
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "create-in-completion",
   });
+  assert.deepEqual(rejectedCompletionTask, {
+    accepted: false,
+    reason: "completion-is-not-starting-column",
+  });
   assert.equal(backlogTask.accepted, true);
-  assert.equal(completedTask.accepted, true);
-  if (!backlogTask.accepted || !completedTask.accepted) return;
+  if (!backlogTask.accepted) return;
   const moved = application.moveTask({
     taskId: backlogTask.task.id,
     destinationColumnId: "completion",
@@ -147,7 +150,7 @@ test("unwatched and Completion column entries remain inert", async (t) => {
   if (!moved.accepted) return;
 
   assert.equal(moved.task.activations.length, 0);
-  assert.equal(completedTask.task.activations.length, 0);
+  assert.equal(moved.task.columnId, "completion");
 });
 
 test("moving to the current column is rejected without creating an entry activation", async (t) => {

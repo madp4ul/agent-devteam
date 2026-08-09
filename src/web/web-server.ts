@@ -450,6 +450,7 @@ function sendMutation(
     result.reason === "empty-title" ||
     result.reason === "empty-description" ||
     result.reason === "invalid-starting-ref" ||
+    result.reason === "completion-is-not-starting-column" ||
     result.reason === "invalid-destination"
       ? 400
       : result.reason === "not-found"

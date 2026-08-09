@@ -193,7 +193,7 @@ test("agent consultation can round-trip in watched and Completion columns withou
   });
   const completed = application.createTask({
     boardId: "delivery",
-    columnId: "completion",
+    columnId: "backlog",
     title: "Review completed evidence",
     description: "Completed work remains available for consultation.",
     actor: { kind: "user", id: "paul" },
@@ -202,6 +202,15 @@ test("agent consultation can round-trip in watched and Completion columns withou
   assert.equal(watched.accepted, true);
   assert.equal(completed.accepted, true);
   if (!watched.accepted || !completed.accepted) return;
+  const movedToCompletion = application.moveTask({
+    taskId: completed.task.id,
+    destinationColumnId: "completion",
+    expectedRevision: completed.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "complete-consultation-task",
+  });
+  assert.equal(movedToCompletion.accepted, true);
+  if (!movedToCompletion.accepted) return;
 
   const request = application.addTaskComment({
     taskId: watched.task.id,
@@ -218,7 +227,7 @@ test("agent consultation can round-trip in watched and Completion columns withou
     idempotencyKey: "watched-response",
   });
   const completedRequest = application.addTaskComment({
-    taskId: completed.task.id,
+    taskId: movedToCompletion.task.id,
     body: "@architect please verify the completed design evidence.",
     actor: { kind: "agent", id: "reviewer" },
     idempotencyKey: "completed-request",

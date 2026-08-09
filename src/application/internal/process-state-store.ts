@@ -3,6 +3,7 @@ import type {
   ProcessBoardView,
   ProcessDefinitionImpact,
 } from "../coordination-contract.ts";
+import { taskCreationAllowed } from "./task-creation-policy.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type {
   AgentInstructionContent,
@@ -273,6 +274,7 @@ export class ProcessStateStore {
         name: column.name,
         watchingAgentId: column.watching_agent_id,
         frameworkOwned: column.framework_owned === 1,
+        taskCreationAllowed: taskCreationAllowed(column.id),
       })),
     }));
   }
@@ -302,6 +304,7 @@ export class ProcessStateStore {
         name: column.name,
         watchingAgentId: column.watching_agent_id,
         frameworkOwned: column.framework_owned === 1,
+        taskCreationAllowed: taskCreationAllowed(column.id),
       })),
     };
   }
@@ -348,6 +351,7 @@ export class ProcessStateStore {
                 summary: column.agent_summary,
               },
         frameworkOwned: column.framework_owned === 1,
+        taskCreationAllowed: taskCreationAllowed(column.id),
         taskCount: column.task_count,
       })),
     }));

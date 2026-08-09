@@ -147,6 +147,53 @@ test("a child can start from committed Git state without sharing its parent's wo
   }
 });
 
+test("child creation rejects Completion atomically and retains deliberate workflow placement", async (t) => {
+  const fixture = await createFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+
+  const parent = createTask(application, "backlog", "Parent work", "completion-parent");
+  const rejected = application.createChildTask({
+    parentTaskId: parent.id,
+    boardId: "delivery",
+    columnId: "completion",
+    title: "Already completed child",
+    description: "A child must begin in a workflow column.",
+    startingRef: "feature-base",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reject-completed-child",
+  });
+  assert.deepEqual(rejected, {
+    accepted: false,
+    reason: "completion-is-not-starting-column",
+  });
+  const unchangedParent = application.queryTask(parent.id);
+  assert.equal(unchangedParent.available, true);
+  if (!unchangedParent.available) return;
+  assert.deepEqual(unchangedParent.task.relationships, []);
+  assert.deepEqual(
+    unchangedParent.task.activity.map((event) => event.type),
+    ["task.created"],
+  );
+  assert.deepEqual(application.queryTask("T-0002"), { available: false, reason: "not-found" });
+
+  const child = application.createChildTask({
+    parentTaskId: parent.id,
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Deliberately placed child",
+    description: "The child starts in the selected workflow column.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-deliberate-child",
+  });
+  assert.equal(child.accepted, true);
+  if (!child.accepted) return;
+  assert.equal(child.task.id, "T-0002");
+  assert.equal(child.task.columnId, "implementation");
+  assert.equal(child.task.relationships.length, 1);
+  assert.equal(child.task.activity.filter((event) => event.type === "task.created").length, 1);
+});
+
 test("final blocker clearance wakes running idle automation", async (t) => {
   const fixture = await createGitFixture();
   const runtime = new RecordingRuntime();

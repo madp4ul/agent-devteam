@@ -325,7 +325,7 @@ test("configuration errors show the invalid value with the actionable diagnostic
   await expect(page.getByText("Invalid value: missing-agent")).toBeVisible();
 });
 
-test("creates in any column, opens tasks directly, and restores a narrow board context", async ({ page }) => {
+test("creates in workflow columns, opens tasks directly, and restores a narrow board context", async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 820 });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Product delivery" })).toBeVisible();
@@ -356,13 +356,16 @@ test("creates in any column, opens tasks directly, and restores a narrow board c
   await expect.poll(() => lane.evaluate((element) => element.scrollLeft)).toBe(savedScroll);
 
   await filter.fill("");
-  await page.getByRole("button", { name: "Create task in Completion" }).click();
-  await expect(page.getByLabel("Starting column")).toHaveValue("completion");
-  await page.getByLabel("Outcome-oriented title").fill("Document the completed outcome");
-  await page.getByLabel("Complete description").fill("Make the created task available immediately on the board.");
+  await expect(page.getByRole("button", { name: "Create task in Completion" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Create task in Backlog" }).click();
+  await expect(page.getByLabel("Starting column")).toHaveValue("backlog");
+  await expect(page.getByLabel("Starting column").locator('option[value="completion"]')).toHaveCount(0);
+  await page.getByLabel("Starting column").selectOption("implementation");
+  await page.getByLabel("Outcome-oriented title").fill("Start a deliberate implementation");
+  await page.getByLabel("Complete description").fill("Keep deliberate workflow placement without allowing completed-at-creation work.");
   await page.getByRole("button", { name: "Create task", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText(/Created T-\d{4} in Completion/);
-  await expect(page.getByRole("link", { name: /Document the completed outcome/ })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText(/Created T-\d{4} in Implementation/);
+  await expect(page.getByRole("link", { name: /Start a deliberate implementation/ })).toBeVisible();
 
   await page.goto("/tasks/T-0001");
   await expect(page.getByRole("heading", { name: "Inspect existing coordination" })).toBeVisible();
@@ -404,6 +407,7 @@ test("row layout is compact, independently scrollable, and remembered globally",
   await expect(implementation).not.toContainText("Watched by");
   await expect(completion).not.toContainText(/User|No watching agent/);
   await expect(completion).not.toHaveClass(/user-owned/);
+  await expect(completion.getByRole("button", { name: "Create task in Completion" })).toHaveCount(0);
   await expect(backlog.getByRole("button", { name: "Create task in Backlog" })).toBeVisible();
   await expect(backlog.getByRole("button", { name: "Create task in Backlog" }).locator("svg"))
     .toBeVisible();
@@ -838,7 +842,24 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
   }
 });
 
-test("archived tasks toggle into their retained board location and can be unarchived", async ({ page }) => {
+test("archived tasks toggle into their retained board location and can be unarchived", async ({ page, request }) => {
+  const createdResponse = await request.post("/api/tasks", {
+    data: {
+      boardId: "delivery",
+      columnId: "backlog",
+      title: "Archive this completed browser task",
+      description: "Keep its coordination history while removing it from the ordinary board.",
+      idempotencyKey: "create-browser-archive-task",
+    },
+  });
+  const created = await createdResponse.json() as { task: { id: string; revision: number } };
+  await request.post(`/api/tasks/${created.task.id}/move`, {
+    data: {
+      destinationColumnId: "completion",
+      expectedRevision: created.task.revision,
+      idempotencyKey: "complete-browser-archive-task",
+    },
+  });
   await page.goto("/");
   const automation = page.locator(".automation-control");
   await expect(automation.getByRole("button", { name: /Archived tasks|Archive completed/ })).toHaveCount(0);
@@ -848,10 +869,7 @@ test("archived tasks toggle into their retained board location and can be unarch
   await page.setViewportSize({ width: 1280, height: 800 });
   const completion = page.getByTestId("column-completion");
 
-  await page.getByRole("button", { name: "Create task in Completion" }).click();
-  await page.getByLabel("Outcome-oriented title").fill("Archive this completed browser task");
-  await page.getByLabel("Complete description").fill("Keep its coordination history while removing it from the ordinary board.");
-  await page.getByRole("button", { name: "Create task", exact: true }).click();
+  await expect(completion.getByRole("button", { name: "Create task in Completion" })).toHaveCount(0);
   const archiveCompleted = completion.getByRole("button", { name: "Archive completed tasks" });
   const completionTitleBounds = await completion.getByRole("heading", { name: "Completion" }).boundingBox();
   const archiveBounds = await archiveCompleted.boundingBox();
@@ -962,12 +980,17 @@ test("task details create children and dependencies through contextual controls"
   await dependencyForm.getByRole("button", { name: "Add dependency" }).click();
   await expect(page.getByText("Blocked by T-0003")).toBeVisible();
 
-  const childForm = page.locator("form").filter({ has: page.getByRole("heading", { name: "Create child task" }) });
-  await childForm.getByLabel("Title").fill("Investigate a focused child outcome");
-  await childForm.getByLabel("Description").fill("Keep the child isolated from dirty parent files.");
-  await childForm.getByLabel("Column").selectOption("backlog");
-  await childForm.getByLabel("Starting Git ref (optional)").fill("main");
-  await childForm.getByRole("button", { name: "Create child" }).click();
+  await page.getByRole("button", { name: "Create child task" }).click();
+  const childDialog = page.getByRole("dialog", { name: "Create child task" });
+  await expect(childDialog).toContainText("Parent T-0002");
+  await expect(childDialog.getByLabel("Starting column")).toHaveValue("backlog");
+  await expect(childDialog.getByLabel("Starting column").locator('option[value="completion"]')).toHaveCount(0);
+  await childDialog.getByLabel("Outcome-oriented title").fill("Investigate a focused child outcome");
+  await childDialog.getByLabel("Complete description").fill("Keep the child isolated from dirty parent files.");
+  await expect(childDialog.getByLabel("Starting Git ref (optional)")).not.toBeVisible();
+  await childDialog.getByText("Advanced", { exact: true }).click();
+  await childDialog.getByLabel("Starting Git ref (optional)").fill("main");
+  await childDialog.getByRole("button", { name: "Create child task", exact: true }).click();
   await expect(page.getByRole("status")).toContainText(/Created child T-\d{4}/);
   await expect(page.getByText(/Parent \/ child: T-0002/)).toBeVisible();
 });

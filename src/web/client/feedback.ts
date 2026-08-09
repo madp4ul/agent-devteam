@@ -10,6 +10,9 @@ export function errorMessage(error: unknown): string {
     const body = error.body as { reason?: string; diagnostic?: string };
     if (body.reason === "empty-title") return "Enter an outcome-oriented title.";
     if (body.reason === "empty-description") return "Enter a complete description.";
+    if (body.reason === "completion-is-not-starting-column") {
+      return "Create the task in a workflow column, then move it to Completion when the work is done.";
+    }
     if (body.reason === "runtime-unavailable") {
       return "Automation remains paused because no agent runtime is configured.";
     }

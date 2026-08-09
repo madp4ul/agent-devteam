@@ -29,6 +29,7 @@ import type {
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { CommandResponseStore } from "./command-response-store.ts";
+import { taskCreationAllowed } from "./task-creation-policy.ts";
 
 export class TaskCommandStore {
   readonly #owner: CoordinationDatabase;
@@ -589,6 +590,9 @@ export class TaskCommandStore {
     if (command.title.trim().length === 0) return { accepted: false, reason: "empty-title" };
     if (command.description.trim().length === 0) {
       return { accepted: false, reason: "empty-description" };
+    }
+    if (!taskCreationAllowed(command.columnId)) {
+      return { accepted: false, reason: "completion-is-not-starting-column" };
     }
     const destination = this.#database
       .prepare("SELECT 1 FROM columns WHERE board_id = ? AND id = ? AND applied = 1")
