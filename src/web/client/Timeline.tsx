@@ -504,35 +504,24 @@ function activityDescription(activity: TaskActivityView, columns: TimelineColumn
 
 type RelationshipActivityEvent = "created" | "removed" | "satisfied";
 type RelationshipActivityRole = "source" | "target";
-type RelationshipPresentationText = { label: string; description: string };
+type RelationshipPresentationText = { label: string; prefix: string; suffix: string };
 type RelationshipPresentation = RelationshipPresentationText & { taskName: string };
-type RelationshipPresentationFactory = (taskName: string) => RelationshipPresentationText;
 type DirectionalRelationshipKey = `${TaskRelationshipView["type"]}:${RelationshipActivityRole}:${RelationshipActivityEvent}`;
-type LegacyRelationshipKey = `${TaskRelationshipView["type"]}:${RelationshipActivityEvent}`;
 
 const directionalRelationshipPresentations = {
-  "dependency:source:created": (task) => ({ label: "Dependency added", description: `Now depends on ${task}.` }),
-  "dependency:source:removed": (task) => ({ label: "Dependency removed", description: `Does not depend on ${task} anymore.` }),
-  "dependency:source:satisfied": (task) => ({ label: "Dependency satisfied", description: `${task} completed, satisfying this dependency.` }),
-  "dependency:target:created": (task) => ({ label: "Blocking dependency added", description: `Now blocks ${task}.` }),
-  "dependency:target:removed": (task) => ({ label: "Blocking dependency removed", description: `No longer blocks ${task}.` }),
-  "dependency:target:satisfied": (task) => ({ label: "Blocking dependency satisfied", description: `Completed and stopped blocking ${task}.` }),
-  "parent-child:source:created": (task) => ({ label: "Child task added", description: `${task} was added as a child task.` }),
-  "parent-child:source:removed": (task) => ({ label: "Child task removed", description: `${task} is no longer a child task.` }),
-  "parent-child:source:satisfied": (task) => ({ label: "Child task completed", description: `${task} completed, satisfying this child relationship.` }),
-  "parent-child:target:created": (task) => ({ label: "Parent task added", description: `${task} was added as the parent task.` }),
-  "parent-child:target:removed": (task) => ({ label: "Parent task removed", description: `${task} is no longer the parent task.` }),
-  "parent-child:target:satisfied": (task) => ({ label: "Parent task unblocked", description: `Completed and stopped blocking ${task}.` }),
-} satisfies Record<DirectionalRelationshipKey, RelationshipPresentationFactory>;
-
-const legacyRelationshipPresentations = {
-  "dependency:created": (task) => ({ label: "Dependency added", description: `A dependency with ${task} was added.` }),
-  "dependency:removed": (task) => ({ label: "Dependency removed", description: `The dependency with ${task} was removed.` }),
-  "dependency:satisfied": (task) => ({ label: "Dependency satisfied", description: `The dependency with ${task} was satisfied.` }),
-  "parent-child:created": (task) => ({ label: "Parent-child relationship added", description: `A parent-child relationship with ${task} was added.` }),
-  "parent-child:removed": (task) => ({ label: "Parent-child relationship removed", description: `The parent-child relationship with ${task} was removed.` }),
-  "parent-child:satisfied": (task) => ({ label: "Parent-child relationship satisfied", description: `The parent-child relationship with ${task} was satisfied.` }),
-} satisfies Record<LegacyRelationshipKey, RelationshipPresentationFactory>;
+  "dependency:source:created": { label: "Dependency added", prefix: "Now depends on ", suffix: "." },
+  "dependency:source:removed": { label: "Dependency removed", prefix: "Does not depend on ", suffix: " anymore." },
+  "dependency:source:satisfied": { label: "Dependency satisfied", prefix: "", suffix: " completed, satisfying this dependency." },
+  "dependency:target:created": { label: "Blocking dependency added", prefix: "Now blocks ", suffix: "." },
+  "dependency:target:removed": { label: "Blocking dependency removed", prefix: "No longer blocks ", suffix: "." },
+  "dependency:target:satisfied": { label: "Blocking dependency satisfied", prefix: "Completed and stopped blocking ", suffix: "." },
+  "parent-child:source:created": { label: "Child task added", prefix: "", suffix: " was added as a child task." },
+  "parent-child:source:removed": { label: "Child task removed", prefix: "", suffix: " is no longer a child task." },
+  "parent-child:source:satisfied": { label: "Child task completed", prefix: "", suffix: " completed, satisfying this child relationship." },
+  "parent-child:target:created": { label: "Parent task added", prefix: "", suffix: " was added as the parent task." },
+  "parent-child:target:removed": { label: "Parent task removed", prefix: "", suffix: " is no longer the parent task." },
+  "parent-child:target:satisfied": { label: "Parent task unblocked", prefix: "Completed and stopped blocking ", suffix: "." },
+} satisfies Record<DirectionalRelationshipKey, RelationshipPresentationText>;
 
 function relationshipActivityPresentation(
   activity: TaskActivityView,
@@ -544,32 +533,26 @@ function relationshipActivityPresentation(
     activity.type !== "relationship.satisfied"
   ) return undefined;
 
-  const relatedTaskId = activity.details.relatedTaskId ??
-    activity.details.completedTaskId ?? activity.details.unblockedTaskId;
+  const relatedTaskId = activity.details.relatedTaskId;
   const relatedTask = tasks.find((task) => task.id === relatedTaskId);
   const taskName = relatedTask?.title ?? relatedTaskId ?? "the related task";
   const relationshipType = activity.details.relationshipType;
   const role = activity.details.relationshipRole;
   if (relationshipType !== "dependency" && relationshipType !== "parent-child") return undefined;
   const event = activity.type.slice("relationship.".length) as RelationshipActivityEvent;
-  if (role === "source" || role === "target") {
-    return {
-      ...directionalRelationshipPresentations[`${relationshipType}:${role}:${event}`](taskName),
-      taskName,
-    };
-  }
-  return { ...legacyRelationshipPresentations[`${relationshipType}:${event}`](taskName), taskName };
+  if (role !== "source" && role !== "target") return undefined;
+  return {
+    ...directionalRelationshipPresentations[`${relationshipType}:${role}:${event}`],
+    taskName,
+  };
 }
 
 function relationshipDescription(presentation: RelationshipPresentation): ReactNode {
-  const taskStart = presentation.description.indexOf(presentation.taskName);
-  if (taskStart < 0) return presentation.description;
-  const taskEnd = taskStart + presentation.taskName.length;
   return (
     <>
-      {presentation.description.slice(0, taskStart)}
+      {presentation.prefix}
       <strong className="relationship-task-name">{presentation.taskName}</strong>
-      {presentation.description.slice(taskEnd)}
+      {presentation.suffix}
     </>
   );
 }

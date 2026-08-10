@@ -207,17 +207,13 @@ export class TaskCommandStore {
           relationship.source_task_id,
           "relationship.satisfied",
           { kind: "framework", id: "coordination" },
-          this.relationshipActivityDetails(relationship, "source", command.taskId, {
-            completedTaskId: command.taskId,
-          }),
+          this.relationshipActivityDetails(relationship, "source", command.taskId),
         );
         this.appendActivity(
           command.taskId,
           "relationship.satisfied",
           { kind: "framework", id: "coordination" },
-          this.relationshipActivityDetails(relationship, "target", relationship.source_task_id, {
-            unblockedTaskId: relationship.source_task_id,
-          }),
+          this.relationshipActivityDetails(relationship, "target", relationship.source_task_id),
         );
         if (this.#projections.readBlockingTaskIds(relationship.source_task_id).length === 0) {
           this.createBlockersClearedActivation(

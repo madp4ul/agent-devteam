@@ -156,7 +156,6 @@ test("a child can start from committed Git state without sharing its parent's wo
       relationshipType: "parent-child",
       relationshipRole: "source",
       relatedTaskId: child.task.id,
-      completedTaskId: child.task.id,
     });
   }
 });

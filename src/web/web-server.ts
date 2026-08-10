@@ -278,8 +278,7 @@ async function handleBrowserApi(
           ? relationship.targetTaskId
           : relationship.sourceTaskId),
         ...result.task.activity.flatMap((activity) => {
-          const relatedTaskId = activity.details.relatedTaskId ??
-            activity.details.completedTaskId ?? activity.details.unblockedTaskId;
+          const relatedTaskId = activity.details.relatedTaskId;
           return relatedTaskId === undefined ? [] : [relatedTaskId];
         }),
       ]);
