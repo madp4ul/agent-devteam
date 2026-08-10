@@ -172,7 +172,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .workspace-history-flow { display: grid; grid-template-rows: auto 2.25rem auto; margin: 0 .15rem .85rem; }
 .workspace-history-node { display: grid; grid-template-columns: .8rem minmax(0, 1fr); align-items: center; gap: .55rem; min-width: 0; }
 .workspace-history-node > div { display: flex; align-items: baseline; min-width: 0; gap: .5rem; }
-.workspace-history-marker { width: .58rem; height: .58rem; border: 2px solid var(--forest); border-radius: 50%; background: var(--paper); }
+.workspace-history-marker { width: .58rem; height: .58rem; justify-self: center; border: 2px solid var(--forest); border-radius: 50%; background: var(--paper); }
 .workspace-history-node.current .workspace-history-marker { background: var(--forest); }
 .workspace-history-connector { display: grid; grid-template-columns: .8rem minmax(0, 1fr); align-items: center; gap: .55rem; color: var(--muted); font-size: .72rem; }
 .workspace-history-connector::before { width: 2px; height: 100%; justify-self: center; background: #b7c2ba; content: ""; }

@@ -58,3 +58,11 @@ which must be discussed with the user and prototyped after this surrounding
 layout is available. Task Workspace refinement and archival behavior remain in
 their existing issues.
 
+Keep `TaskPage` as the composition and authoritative-refresh module rather than
+letting this issue grow it back into one file. Implement Agent activity as a
+cohesive `AgentActivityPanel` module that owns running, waiting, queued,
+attention, recovery, and interruption presentation behind a small task-state
+interface. Move task may become its own sidebar module if that produces a
+smaller interface than passing its control state through Agent activity; do not
+replace the extraction with one large `useTaskPage` hook or JSX-only wrappers
+with broad prop lists.

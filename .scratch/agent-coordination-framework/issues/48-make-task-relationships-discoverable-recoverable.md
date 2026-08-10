@@ -56,3 +56,10 @@ Relationship removal is initially an administrative user recovery action for
 incorrect board state. A future ticket may expose the same shared application
 command to agents after its authority and discovery experience are designed.
 
+Implement the expanded relationship experience as a cohesive
+`TaskRelationshipsPanel` module rather than adding its search, selection,
+creation, confirmation, removal, conflict, and recovery state back to
+`TaskPage`. Keep the module's interface centered on authoritative relationship
+state and one refresh/change callback; keep project-wide search and mutation
+orchestration inside the module unless implementation evidence reveals a
+smaller, reusable seam.
