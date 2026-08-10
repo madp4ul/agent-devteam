@@ -13,6 +13,7 @@ import type {
   ActiveRunView,
   NeedsAttentionTaskView,
   ArchiveCompletedTasksResult,
+  TaskWorkspaceGitStateView,
 } from "../../application/coordination-contract.ts";
 
 export interface BrowserColumnView extends BoardSummaryColumnView {
@@ -118,6 +119,13 @@ export async function openTaskWorkspaceInVisualStudioCode(taskId: string): Promi
     method: "POST",
     body: "{}",
   });
+}
+
+export async function readTaskWorkspaceGitState(taskId: string): Promise<TaskWorkspaceGitStateView> {
+  const result = await request<{ available: true; state: TaskWorkspaceGitStateView }>(
+    `/api/tasks/${encodeURIComponent(taskId)}/workspace/git-state`,
+  );
+  return result.state;
 }
 
 export async function createTask(input: {

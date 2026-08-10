@@ -251,6 +251,21 @@ async function handleBrowserApi(
     }
     return;
   }
+  const workspaceGitStateMatch = /^\/api\/tasks\/([^/]+)\/workspace\/git-state$/.exec(url.pathname);
+  if (method === "GET" && workspaceGitStateMatch?.[1] !== undefined) {
+    const result = await application.queryTaskWorkspaceGitState(
+      decodeURIComponent(workspaceGitStateMatch[1]),
+    );
+    const status = result.available
+      ? 200
+      : result.reason === "not-found"
+        ? 404
+        : result.reason === "git-status-unavailable"
+          ? 503
+          : 409;
+    sendJson(response, status, result);
+    return;
+  }
   if (method === "GET" && taskMatch?.[1] !== undefined) {
     const taskId = decodeURIComponent(taskMatch[1]);
     const result = application.queryTask(taskId);

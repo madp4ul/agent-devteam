@@ -287,6 +287,28 @@ test("open workspace uses only the authoritative provisioned path and reports ho
   assert.equal(opened.response.status, 200);
   assert.equal(openedPath, join(workspaceRoot, created.task.id));
 
+  const gitStateResponse = await fetch(
+    `${server.baseUrl}/api/tasks/${created.task.id}/workspace/git-state`,
+  );
+  const expectedShortHash = (await execFileAsync("git", [
+    "-C", join(workspaceRoot, created.task.id), "rev-parse", "--short=7", "HEAD",
+  ])).stdout.trim();
+  assert.equal(gitStateResponse.status, 200);
+  assert.deepEqual(await gitStateResponse.json(), {
+    available: true,
+    state: {
+      head: { kind: "detached", shortHash: expectedShortHash },
+      history: { kind: "progress", commitsSinceTaskStart: 0 },
+      changes: {
+        additions: 0,
+        deletions: 0,
+        stagedFiles: 0,
+        unstagedFiles: 0,
+        untrackedFiles: 0,
+      },
+    },
+  });
+
   const openedInVisualStudioCode = await postJson(
     `${server.baseUrl}/api/tasks/${created.task.id}/workspace/open-vscode`,
     {},

@@ -842,6 +842,162 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
   }
 });
 
+test("task workspace Git summary refreshes branch, detached, history, and clean change state", async ({ page }) => {
+  await page.clock.install();
+  let reads = 0;
+  await page.route("**/api/tasks/T-0001/workspace/git-state", async (route) => {
+    reads += 1;
+    await route.fulfill({
+      status: 200,
+      json: reads === 1
+        ? {
+            available: true,
+            state: {
+              head: { kind: "branch", name: "codex/issue-33" },
+              history: { kind: "progress", commitsSinceTaskStart: 3 },
+              changes: {
+                additions: 14,
+                deletions: 5,
+                stagedFiles: 2,
+                unstagedFiles: 2,
+                untrackedFiles: 1,
+              },
+            },
+          }
+        : {
+            available: true,
+            state: {
+              head: { kind: "detached", shortHash: "abc1234" },
+              history: { kind: "diverged" },
+              changes: {
+                additions: 0,
+                deletions: 0,
+                stagedFiles: 0,
+                unstagedFiles: 0,
+                untrackedFiles: 0,
+              },
+            },
+          },
+    });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const summary = page.getByRole("region", { name: "Workspace Git summary" });
+  await expect(summary).toContainText("codex/issue-33");
+  await expect(summary).toContainText("3 commits since task start");
+  await expect(summary).toContainText("+14");
+  await expect(summary).toContainText("−5");
+  await expect(summary).toContainText("2 staged");
+  await expect(summary).toContainText("2 unstaged");
+  await expect(summary).toContainText("1 untracked");
+
+  await page.clock.fastForward(30_000);
+  await expect(summary).toContainText("Detached at abc1234");
+  await expect(summary).toContainText("History diverged from task start");
+  await expect(summary).toContainText("No uncommitted changes");
+  await expect(summary).not.toContainText("staged");
+});
+
+test("running workspace Git scans pause while hidden and never overlap", async ({ page, context, request }) => {
+  await page.clock.install();
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const detail = await (await request.get("/api/tasks/T-0001")).json();
+  detail.activeRun = {
+    attemptId: "live-attempt",
+    activationId: "live-activation",
+    taskId: "T-0001",
+    agentId: "implementer",
+    status: "running",
+    startedAt: new Date().toISOString(),
+  };
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    await route.fulfill({ status: 200, json: detail });
+  });
+  let reads = 0;
+  let releaseSlowScan: (() => void) | undefined;
+  await page.route("**/api/tasks/T-0001/workspace/git-state", async (route) => {
+    reads += 1;
+    if (reads === 2) await new Promise<void>((resolve) => { releaseSlowScan = resolve; });
+    await route.fulfill({ status: 200, json: cleanGitState() });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await expect(page.getByRole("region", { name: "Workspace Git summary" })).toContainText(
+    "No uncommitted changes",
+  );
+  expect(reads).toBe(1);
+
+  await page.clock.fastForward(5_000);
+  await expect.poll(() => reads).toBe(2);
+  await page.clock.fastForward(20_000);
+  expect(reads).toBe(2);
+  const workspace = page.getByRole("region", { name: "Task workspace" });
+  await workspace.getByRole("button", { name: "Copy path" }).click();
+  await expect(workspace.getByRole("status")).toContainText("Copied task workspace path");
+  await workspace.getByRole("button", { name: "Open folder" }).click();
+  await expect(workspace.getByRole("status")).toContainText("default folder application");
+  releaseSlowScan?.();
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.fastForward(30_000);
+  expect(reads).toBe(2);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(() => reads).toBe(3);
+});
+
+test("a failed workspace Git scan retains its result and recovers automatically", async ({ page }) => {
+  await page.clock.install();
+  let reads = 0;
+  await page.route("**/api/tasks/T-0001/workspace/git-state", async (route) => {
+    reads += 1;
+    if (reads === 2) {
+      await route.fulfill({
+        status: 503,
+        json: { available: false, reason: "git-status-unavailable" },
+      });
+      return;
+    }
+    await route.fulfill({ status: 200, json: cleanGitState() });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const summary = page.getByRole("region", { name: "Workspace Git summary" });
+  await expect(summary).toContainText("No uncommitted changes");
+  await page.clock.fastForward(30_000);
+  await expect(summary.getByText("Git status unavailable")).toBeVisible();
+  await expect(summary).toContainText("No uncommitted changes");
+  const workspace = page.getByRole("region", { name: "Task workspace" });
+  await workspace.getByRole("button", { name: "More ways to open workspace" }).click();
+  await workspace.getByRole("menuitem", { name: "Open in Visual Studio Code" }).click();
+  await expect(workspace.getByRole("status")).toContainText("Visual Studio Code");
+  await page.clock.fastForward(30_000);
+  await expect(summary.getByText("Git status unavailable")).toHaveCount(0);
+  expect(reads).toBe(3);
+});
+
+function cleanGitState(): object {
+  return {
+    available: true,
+    state: {
+      head: { kind: "branch", name: "main" },
+      history: { kind: "progress", commitsSinceTaskStart: 0 },
+      changes: {
+        additions: 0,
+        deletions: 0,
+        stagedFiles: 0,
+        unstagedFiles: 0,
+        untrackedFiles: 0,
+      },
+    },
+  };
+}
+
 test("archived tasks toggle into their retained board location and can be unarchived", async ({ page, request }) => {
   const createdResponse = await request.post("/api/tasks", {
     data: {

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import type { BoardColumnView } from "../../application/coordination-contract.ts";
+import type {
+  BoardColumnView,
+  TaskWorkspaceGitStateView,
+} from "../../application/coordination-contract.ts";
 import {
   addTaskComment,
   addTaskDependency,
@@ -10,6 +13,7 @@ import {
   interruptTask,
   openTaskWorkspace,
   openTaskWorkspaceInVisualStudioCode,
+  readTaskWorkspaceGitState,
   continueInterruptedTask,
   readTask,
   type BrowserTaskDetail,
@@ -254,6 +258,7 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
             <TaskWorkspacePanel
               taskId={task.id}
               workspace={inspection.workspace}
+              attemptRunning={detail.activeRun !== null}
             />
           </div>
         </div>
@@ -367,9 +372,11 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
 function TaskWorkspacePanel({
   taskId,
   workspace,
+  attemptRunning,
 }: {
   taskId: string;
   workspace: BrowserTaskDetail["inspection"]["workspace"];
+  attemptRunning: boolean;
 }): ReactNode {
   const [actionFeedback, setActionFeedback] = useState<{
     role: "status" | "alert";
@@ -377,6 +384,68 @@ function TaskWorkspacePanel({
   }>();
   const [opening, setOpening] = useState<"folder" | "vscode">();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [gitState, setGitState] = useState<TaskWorkspaceGitStateView>();
+  const [gitUnavailable, setGitUnavailable] = useState(false);
+  const attemptRunningRef = useRef(attemptRunning);
+  attemptRunningRef.current = attemptRunning;
+  useEffect(() => {
+    setGitState(undefined);
+    setGitUnavailable(false);
+    if (workspace === null) return;
+
+    let disposed = false;
+    let timer: number | undefined;
+    let scanInProgress = false;
+    let scanRequested = false;
+    const pageIsHidden = (): boolean => document.visibilityState === "hidden";
+    const clearTimer = (): void => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+    };
+    const schedule = (milliseconds: number): void => {
+      clearTimer();
+      timer = window.setTimeout(() => void scan(), milliseconds);
+    };
+    const scan = async (): Promise<void> => {
+      if (disposed || pageIsHidden()) return;
+      if (scanInProgress) {
+        scanRequested = true;
+        return;
+      }
+      scanInProgress = true;
+      let failed = false;
+      try {
+        const next = await readTaskWorkspaceGitState(taskId);
+        if (!disposed) {
+          setGitState(next);
+          setGitUnavailable(false);
+        }
+      } catch {
+        failed = true;
+        if (!disposed) setGitUnavailable(true);
+      } finally {
+        scanInProgress = false;
+        if (disposed || pageIsHidden()) return;
+        if (scanRequested) {
+          scanRequested = false;
+          void scan();
+        } else {
+          schedule(failed || !attemptRunningRef.current ? 30_000 : 5_000);
+        }
+      }
+    };
+    const handleVisibilityChange = (): void => {
+      clearTimer();
+      if (!pageIsHidden()) void scan();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    void scan();
+    return () => {
+      disposed = true;
+      clearTimer();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [taskId, workspace?.path]);
   const requestOpen = useCallback((target: "folder" | "vscode") => {
     setMenuOpen(false);
     setOpening(target);
@@ -457,6 +526,7 @@ function TaskWorkspacePanel({
             <span aria-hidden="true"> · </span>
             Starting commit <code>{workspace.commit}</code>
           </p>
+          <WorkspaceGitSummary state={gitState} unavailable={gitUnavailable} />
           {actionFeedback === undefined ? null : (
             <p className={`workspace-feedback ${actionFeedback.role}`} role={actionFeedback.role}>
               {actionFeedback.text}
@@ -464,6 +534,58 @@ function TaskWorkspacePanel({
           )}
         </>
       )}
+    </section>
+  );
+}
+
+function WorkspaceGitSummary({
+  state,
+  unavailable,
+}: {
+  state: TaskWorkspaceGitStateView | undefined;
+  unavailable: boolean;
+}): ReactNode {
+  return (
+    <section className="workspace-git-summary" aria-label="Workspace Git summary">
+      {state === undefined ? (
+        <p className="quiet">Reading Git status…</p>
+      ) : (
+        <div className="workspace-git-cards">
+          <div className="workspace-git-card">
+            <p className="workspace-git-label">Current HEAD</p>
+            {state.head.kind === "branch" ? (
+              <strong>{state.head.name}</strong>
+            ) : (
+              <strong>Detached at <code>{state.head.shortHash}</code></strong>
+            )}
+            <p className="workspace-history">
+              {state.history.kind === "diverged"
+                ? "History diverged from task start"
+                : `${state.history.commitsSinceTaskStart} ${state.history.commitsSinceTaskStart === 1 ? "commit" : "commits"} since task start`}
+            </p>
+          </div>
+          <div className="workspace-git-card">
+            <p className="workspace-git-label">Workspace changes</p>
+            <p className="workspace-line-totals">
+              <strong className="additions">+{state.changes.additions}</strong>
+              <strong className="deletions">−{state.changes.deletions}</strong>
+              <span>tracked lines</span>
+            </p>
+            {state.changes.stagedFiles === 0 &&
+            state.changes.unstagedFiles === 0 &&
+            state.changes.untrackedFiles === 0 ? (
+              <p className="workspace-clean">No uncommitted changes</p>
+            ) : (
+              <ul className="workspace-change-counts">
+                {state.changes.stagedFiles === 0 ? null : <li>{state.changes.stagedFiles} staged</li>}
+                {state.changes.unstagedFiles === 0 ? null : <li>{state.changes.unstagedFiles} unstaged</li>}
+                {state.changes.untrackedFiles === 0 ? null : <li>{state.changes.untrackedFiles} untracked</li>}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+      {unavailable ? <p className="workspace-git-warning">Git status unavailable</p> : null}
     </section>
   );
 }

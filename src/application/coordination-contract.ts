@@ -189,6 +189,22 @@ export interface TaskWorkspaceView {
   commit: string;
 }
 
+export interface TaskWorkspaceGitStateView {
+  head:
+    | { kind: "branch"; name: string }
+    | { kind: "detached"; shortHash: string };
+  history:
+    | { kind: "progress"; commitsSinceTaskStart: number }
+    | { kind: "diverged" };
+  changes: {
+    additions: number;
+    deletions: number;
+    stagedFiles: number;
+    unstagedFiles: number;
+    untrackedFiles: number;
+  };
+}
+
 export interface AgentRunRequest {
   activationId: string;
   attemptId: string;
@@ -508,6 +524,11 @@ export type UserTaskInspectionQueryResult =
   | { available: true; task: UserTaskInspectionView }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { available: false; reason: "not-found" };
+
+export type TaskWorkspaceGitStateQueryResult =
+  | { available: true; state: TaskWorkspaceGitStateView }
+  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
+  | { available: false; reason: "not-found" | "workspace-not-provisioned" | "git-status-unavailable" };
 
 export type TaskActivityQueryResult =
   | { available: true; activity: TaskActivityView[] }

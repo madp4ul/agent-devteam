@@ -47,6 +47,7 @@ import type {
   TaskOverviewsQuery,
   TaskOverviewsQueryResult,
   TaskQueryResult,
+  TaskWorkspaceGitStateQueryResult,
   TaskRelationshipMutationResult,
   ArchiveTaskCommand,
   ArchiveTaskResult,
@@ -383,6 +384,25 @@ export class CoordinationApplication {
 
   queryTaskInspectionForUser(taskId: string): UserTaskInspectionQueryResult {
     return this.#discovery.queryTaskInspectionForUser(taskId);
+  }
+
+  async queryTaskWorkspaceGitState(taskId: string): Promise<TaskWorkspaceGitStateQueryResult> {
+    const inspection = this.queryTaskInspectionForUser(taskId);
+    if (!inspection.available) return inspection;
+    if (inspection.task.workspace === null) {
+      return { available: false, reason: "workspace-not-provisioned" };
+    }
+    if (this.#workspaceManager === undefined) {
+      return { available: false, reason: "git-status-unavailable" };
+    }
+    try {
+      return {
+        available: true,
+        state: await this.#workspaceManager.inspectGitState(inspection.task.workspace),
+      };
+    } catch {
+      return { available: false, reason: "git-status-unavailable" };
+    }
   }
 
   queryTaskActivity(taskId: string): TaskActivityQueryResult {
