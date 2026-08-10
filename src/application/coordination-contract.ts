@@ -248,6 +248,7 @@ export interface TaskCommentView {
   body: string;
   actor: Actor;
   occurredAt: string;
+  attemptId?: string;
 }
 
 export interface TaskRelationshipView {
@@ -568,6 +569,7 @@ export interface MoveTaskCommand {
   destinationColumnId: string;
   expectedRevision: number;
   actor: Actor;
+  attemptId?: string;
   idempotencyKey: string;
 }
 
@@ -592,6 +594,7 @@ export interface AddTaskCommentCommand {
   taskId: string;
   body: string;
   actor: Actor;
+  attemptId?: string;
   idempotencyKey: string;
 }
 

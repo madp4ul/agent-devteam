@@ -86,6 +86,7 @@ async function run(arguments_: string[]): Promise<void> {
           const token = agentToolScopes.issue({
             taskId: request.task.id,
             agentId: request.agent.id,
+            attemptId: request.attemptId,
           });
           activationTokens.set(request.activationId, token);
           return [

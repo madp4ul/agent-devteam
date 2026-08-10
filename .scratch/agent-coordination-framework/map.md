@@ -134,6 +134,10 @@ without choosing the implementation yet.
 - [Reshape Task Details Around Agent Activity](./issues/47-reshape-task-details-around-agent-activity.md)
   — Replace automation-profile clutter and oversized movement with a responsive
   task-first layout, truthful current activity, and an ordered activation queue.
+- [Structure Task History by Cause and Attempt](./issues/37-structure-task-history-by-cause-and-attempt.md)
+  — Project durable history into independent, start-positioned attempt blocks
+  with readable outcomes, authored work, compact prose, and backward causal
+  links while folding duplicate lifecycle noise out of the user-facing timeline.
 
 ## Next implementation priority
 
@@ -162,9 +166,6 @@ without choosing the implementation yet.
   — Evaluate lightweight `@` autocomplete against an explicit recipient
   control and highlight submitted mentions so users can address agents and see
   the resulting activation or attention without memorizing stable IDs.
-- [Structure Task History by Cause and Attempt](./issues/37-structure-task-history-by-cause-and-attempt.md)
-  — Prototype a causal timeline that groups attempt work and folds derived
-  activation or attention facts into the comment or movement that caused them.
 - [Discard an Interrupted Activation](./issues/50-discard-interrupted-activation.md)
   — Decide how a user deliberately abandons preserved interrupted work, what
   happens to later queued activations, and how the decision remains auditable.

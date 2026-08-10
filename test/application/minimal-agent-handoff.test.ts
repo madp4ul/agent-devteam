@@ -72,6 +72,7 @@ test("an agent comment and move hand work to the next watched-column agent", asy
     taskId: created.task.id,
     body: "Implementation is complete and the focused tests pass.",
     actor: { kind: "agent", id: "implementer" },
+    attemptId: implementation.attemptId,
     idempotencyKey: "implementation-comment",
   });
   assert.equal(comment.accepted, true);
@@ -81,6 +82,7 @@ test("an agent comment and move hand work to the next watched-column agent", asy
     destinationColumnId: "review",
     expectedRevision: comment.task.revision,
     actor: { kind: "agent", id: "implementer" },
+    attemptId: implementation.attemptId,
     idempotencyKey: "implementation-to-review",
   });
   assert.equal(moved.accepted, true);
@@ -97,6 +99,11 @@ test("an agent comment and move hand work to the next watched-column agent", asy
     { model: "gpt-5.6-terra", reasoningEffort: "high" },
   );
   assert.equal(review.task.columnId, "review");
+  assert.equal(review.task.comments[0]?.attemptId, implementation.attemptId);
+  assert.equal(
+    review.task.activity.find((event) => event.type === "task.moved")?.details.attemptId,
+    implementation.attemptId,
+  );
   assert.deepEqual(
     review.task.comments.map((entry) => ({ body: entry.body, actor: entry.actor })),
     [

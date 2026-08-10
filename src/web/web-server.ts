@@ -592,6 +592,7 @@ async function handleAgentApi(
       body: stringField(body, "body"),
       idempotencyKey: stringField(body, "idempotencyKey"),
       actor: { kind: "agent", id: scope.agentId },
+      ...(scope.attemptId === undefined ? {} : { attemptId: scope.attemptId }),
     });
     sendJson(response, result.accepted ? 200 : 409, result);
     return;
@@ -604,6 +605,7 @@ async function handleAgentApi(
       expectedRevision: numberField(body, "expectedRevision"),
       idempotencyKey: stringField(body, "idempotencyKey"),
       actor: { kind: "agent", id: scope.agentId },
+      ...(scope.attemptId === undefined ? {} : { attemptId: scope.attemptId }),
     });
     sendJson(response, result.accepted ? 200 : 409, result);
     return;

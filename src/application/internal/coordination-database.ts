@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 8;
+const currentSchemaVersion = 9;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -192,7 +192,8 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       body TEXT NOT NULL,
       actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent')),
       actor_id TEXT NOT NULL,
-      occurred_at TEXT NOT NULL
+      occurred_at TEXT NOT NULL,
+      attempt_id TEXT REFERENCES attempts(id) ON DELETE SET NULL
     );
     CREATE TABLE IF NOT EXISTS task_relationships (
       id TEXT PRIMARY KEY,
@@ -310,6 +311,9 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
   const attemptColumns = new Set(
     (database.prepare("PRAGMA table_info(attempts)").all() as Array<{ name: string }>).map(({ name }) => name),
   );
+  const commentColumns = new Set(
+    (database.prepare("PRAGMA table_info(task_comments)").all() as Array<{ name: string }>).map(({ name }) => name),
+  );
   const activityTable = database
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activity_ledger'")
     .get() as { sql: string } | undefined;
@@ -325,6 +329,7 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     activationColumns.has("definition_version") &&
     activationColumns.has("stale") &&
     attemptColumns.has("outcome_kind") &&
+    commentColumns.has("attempt_id") &&
     activityTable?.sql.includes("task.archived") === true;
 }
 

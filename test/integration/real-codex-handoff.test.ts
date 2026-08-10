@@ -32,7 +32,7 @@ test(
             "--base-url",
             baseUrl,
             "--token",
-            scopes.issue({ taskId: request.task.id, agentId: request.agent.id }),
+            scopes.issue({ taskId: request.task.id, agentId: request.agent.id, attemptId: request.attemptId }),
           ];
         },
       },

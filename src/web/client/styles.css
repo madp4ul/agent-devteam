@@ -252,11 +252,32 @@ textarea { resize: vertical; line-height: 1.5; }
 .timeline-entry article { border: 1px solid var(--line); border-radius: .65rem; padding: 1rem; }
 .comment-entry article { border-left: 4px solid var(--amber); }
 .attempt-entry article { border-left: 4px solid var(--forest); }
+.failed-attempt article { border-left-color: var(--coral); }
+.interrupted-attempt article { border-left-color: #9a6a2f; }
+.timeline-entry article:focus, .attempt-history section:focus { outline: 3px solid var(--amber); outline-offset: 3px; }
 .entry-meta { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .entry-meta time, .timeline-entry small { color: var(--muted); font-size: .72rem; }
 .timeline-entry p { margin: .55rem 0; }
 .timeline details { margin-top: .8rem; }
 .timeline summary { color: var(--forest); font-weight: 700; cursor: pointer; }
+.attempt-heading { align-items: flex-start; }
+.attempt-timing { color: var(--muted); font-size: .78rem; text-align: right; }
+.attempt-status { color: var(--ink); font-weight: 800; }
+.failed-attempt .attempt-status { color: #953824; }
+.attempt-outcome { margin-top: 1rem; }
+.attempt-outcome h3 { margin: 0; font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; }
+.attempt-history { margin: 1rem 0 0; border-top: 1px solid var(--line); padding: 0; list-style: none; }
+.attempt-history-item { border-bottom: 1px solid var(--line); padding: .85rem 0; }
+.attempt-history-item .entry-meta strong { font-size: .84rem; }
+.attempt-history-item .entry-meta time { color: var(--muted); font-size: .7rem; }
+.attempt-footer { display: grid; gap: .35rem; margin-top: 1rem; color: var(--muted); font-size: .76rem; }
+.attempt-footer a { color: var(--forest); font-weight: 750; }
+.authored-prose { display: -webkit-box; overflow: hidden; margin-bottom: .2rem; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.authored-prose.expanded { display: block; overflow: visible; -webkit-line-clamp: unset; }
+.text-disclosure { border: 0; border-radius: .3rem; color: var(--forest); background: transparent; padding: .15rem 0; font-size: .76rem; font-weight: 750; }
+.text-disclosure:hover { background: transparent; text-decoration: underline; }
+.canonical-mention { border-radius: .22rem; color: #5d430f; background: #f5d88c; padding: .03rem .12rem; }
+.comment-consequence { color: var(--forest); font-size: .76rem; font-weight: 750; }
 .attempt-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .8rem; }
 .diagnostic { color: #953824; }
 .transcript-modal { width: min(68rem, 100%); height: min(52rem, calc(100vh - 2rem)); display: flex; flex-direction: column; overscroll-behavior: contain; }

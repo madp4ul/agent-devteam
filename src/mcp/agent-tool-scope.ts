@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 export interface AgentToolScope {
   taskId: string;
   agentId: string;
+  attemptId?: string;
 }
 
 export class AgentToolScopeRegistry {

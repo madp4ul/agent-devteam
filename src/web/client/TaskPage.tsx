@@ -190,6 +190,8 @@ export function TaskPage({
               comments={task.comments}
               activity={task.activity}
               activations={task.activations}
+              agents={detail.collaborators}
+              columns={board.columns}
               transcriptsAvailable={!task.archived}
             /></div>
           </div>

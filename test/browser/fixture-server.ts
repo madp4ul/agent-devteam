@@ -76,7 +76,7 @@ const inspected = application.createTask({
 if (!inspected.accepted) throw new Error("Could not create inspected browser fixture");
 const authored = application.addTaskComment({
   taskId: inspected.task.id,
-  body: "Please preserve the authored context beside framework history.",
+  body: "Please preserve the authored context beside framework history. The implementation agent should verify the causal grouping. This intentionally long comment explains that authored text remains readable without allowing one message to dominate the task timeline. It also provides enough prose to exercise the compact preview and inline expansion behavior at ordinary desktop and narrow viewport widths.",
   actor: { kind: "agent", id: "implementer" },
   idempotencyKey: "browser-comment",
 });
@@ -136,6 +136,23 @@ database.prepare(
   attemptCompletedAt,
   "Inspected the task and completed the handoff.",
   "thread-browser-123",
+);
+database.prepare(
+  "UPDATE task_comments SET attempt_id = ?, occurred_at = ? WHERE id = ?",
+).run(
+  "browser-attempt",
+  new Date(Date.parse(attemptStartedAt) + 60_000).toISOString(),
+  authored.comment.id,
+);
+database.prepare(
+  `INSERT INTO task_comments
+    (id, task_id, body, actor_kind, actor_id, occurred_at, attempt_id)
+   VALUES (?, ?, ?, 'user', 'local-user', ?, NULL)`,
+).run(
+  "browser-during-attempt-comment",
+  inspected.task.id,
+  "Please also verify the migration behavior.",
+  new Date(Date.parse(attemptStartedAt) + 30_000).toISOString(),
 );
 database.prepare(
   `INSERT INTO attention_reasons

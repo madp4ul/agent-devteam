@@ -148,6 +148,10 @@ export class TaskCommandStore {
       if (this.taskIsReadOnly(currentTask)) {
         return { accepted: false, reason: "archived-task" };
       }
+      const attemptId = command.actor.kind === "agent" ? command.attemptId : undefined;
+      if (attemptId !== undefined) {
+        this.assertAgentAttemptProvenance(command.taskId, command.actor.id, attemptId);
+      }
       if (currentTask.revision !== command.expectedRevision) {
         return { accepted: false, reason: "revision-conflict", currentTask };
       }
@@ -185,6 +189,7 @@ export class TaskCommandStore {
         {
           fromColumnId: currentTask.columnId,
           toColumnId: command.destinationColumnId,
+          ...(attemptId === undefined ? {} : { attemptId }),
         },
       );
       this.createColumnEntryActivation(
@@ -294,17 +299,22 @@ export class TaskCommandStore {
       if (command.body.trim().length === 0) {
         return { accepted: false, reason: "empty-comment" };
       }
+      const attemptId = command.actor.kind === "agent" ? command.attemptId : undefined;
+      if (attemptId !== undefined) {
+        this.assertAgentAttemptProvenance(command.taskId, command.actor.id, attemptId);
+      }
       const comment = {
         id: randomUUID(),
         body: command.body,
         actor: command.actor,
         occurredAt: new Date().toISOString(),
+        ...(attemptId === undefined ? {} : { attemptId }),
       };
       this.#database
         .prepare(
           `INSERT INTO task_comments
-            (id, task_id, body, actor_kind, actor_id, occurred_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+            (id, task_id, body, actor_kind, actor_id, occurred_at, attempt_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           comment.id,
@@ -313,6 +323,7 @@ export class TaskCommandStore {
           comment.actor.kind,
           comment.actor.id,
           comment.occurredAt,
+          comment.attemptId ?? null,
         );
       const mentions = this.readMentionTargets(comment.body);
       this.createMentionActivations(command.taskId, comment.id, mentions.agentIds);
@@ -328,6 +339,19 @@ export class TaskCommandStore {
       this.#commandResponses.write(commandType, command.idempotencyKey, result);
       return result;
     });
+  }
+
+  private assertAgentAttemptProvenance(taskId: string, agentId: string, attemptId: string): void {
+    const attempt = this.#database
+      .prepare(
+        `SELECT 1
+         FROM attempts attempt
+         JOIN activations activation ON activation.id = attempt.activation_id
+         WHERE attempt.id = ? AND activation.task_id = ?
+           AND activation.target_agent_id = ? AND attempt.status = 'running'`,
+      )
+      .get(attemptId, taskId, agentId);
+    if (attempt === undefined) throw new Error("Agent action attempt provenance is not current");
   }
 
   private taskIsReadOnly(task: TaskView): boolean {

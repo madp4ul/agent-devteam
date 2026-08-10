@@ -441,7 +441,7 @@ export class TaskProjectionStore {
     }
     const comment = this.#database
       .prepare(
-        `SELECT id, body, actor_kind, actor_id, occurred_at
+        `SELECT id, body, actor_kind, actor_id, occurred_at, attempt_id
          FROM task_comments
          WHERE id = ?`,
       )
@@ -452,6 +452,7 @@ export class TaskProjectionStore {
           actor_kind: Actor["kind"];
           actor_id: string;
           occurred_at: string;
+          attempt_id: string | null;
         }
       | undefined;
     return comment === undefined
@@ -461,6 +462,7 @@ export class TaskProjectionStore {
           body: comment.body,
           actor: { kind: comment.actor_kind, id: comment.actor_id },
           occurredAt: comment.occurred_at,
+          ...(comment.attempt_id === null ? {} : { attemptId: comment.attempt_id }),
         };
   }
 
@@ -652,7 +654,7 @@ export class TaskProjectionStore {
   private readTaskComments(taskId: string): TaskView["comments"] {
     const rows = this.#database
       .prepare(
-        `SELECT id, body, actor_kind, actor_id, occurred_at
+        `SELECT id, body, actor_kind, actor_id, occurred_at, attempt_id
          FROM task_comments
          WHERE task_id = ?
          ORDER BY sequence`,
@@ -663,12 +665,14 @@ export class TaskProjectionStore {
       actor_kind: Actor["kind"];
       actor_id: string;
       occurred_at: string;
+      attempt_id: string | null;
     }>;
     return rows.map((row) => ({
       id: row.id,
       body: row.body,
       actor: { kind: row.actor_kind, id: row.actor_id },
       occurredAt: row.occurred_at,
+      ...(row.attempt_id === null ? {} : { attemptId: row.attempt_id }),
     }));
   }
 }

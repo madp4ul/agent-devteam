@@ -268,7 +268,7 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await page.goto("/tasks/T-0002");
   await expect(page.getByRole("region", { name: "Agent activity" })).toContainText("consulting-agent");
   await expect(page.getByRole("region", { name: "Agent activity" })).toContainText(/Running · 0m/);
-  await expect(page.locator(".attempt-entry").filter({ hasText: "consulting-agent · running" })).toBeVisible();
+  await expect(page.locator(".attempt-entry").filter({ hasText: /consulting-agent.*Attempt 1.*Running/ })).toBeVisible();
   await page.getByRole("button", { name: "View transcript" }).click();
   await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText(/consulting-agent · running · 0m/);
   await page.getByRole("button", { name: "Close transcript" }).click();
@@ -546,20 +546,39 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByRole("region", { name: "Relationships" })).toContainText(/Blocked by T-0002/);
   await expect(page.getByText(/Needs attention: user mention/)).toBeVisible();
   await expect(page.getByText("Please preserve the authored context")).toBeVisible();
+  await expect(page.getByText("Please also verify the migration behavior.")).toBeVisible();
   await expect(page.getByText("Task moved")).toBeVisible();
   await expect(page.getByText(/Immutable framework event/)).toHaveCount(0);
-  await expect(page.getByText("Attempt 1")).toBeVisible();
+  await expect(page.getByText(/Implementation Agent.*Attempt 1/)).toBeVisible();
   await expect(page.getByText("2m 30s")).toBeVisible();
-  await expect(page.getByText("Model: Codex default · Reasoning: Codex default")).toBeVisible();
+  await expect(page.getByText("Inspected the task and completed the handoff.")).toBeVisible();
+  await expect(page.getByText(/Model: Codex default/)).toHaveCount(0);
+  await expect(page.getByText("Activation queued")).toHaveCount(0);
+  await expect(page.getByText("Attempt started")).toHaveCount(0);
+  await expect(page.getByText("Attempt completed")).toHaveCount(0);
 
   const movement = page.getByRole("combobox", { name: "Move task" });
   await expect(movement).toHaveValue("implementation");
   await expect(movement.locator("option")).toHaveText(["Backlog", "Implementation", "Completion"]);
 
   const attemptEntry = page.locator(".attempt-entry").filter({ hasText: "Attempt 1" });
+  const userComment = page.locator(".comment-entry").filter({ hasText: "Please also verify the migration behavior." });
+  const [userCommentBox, attemptBox] = await Promise.all([userComment.boundingBox(), attemptEntry.boundingBox()]);
+  expect(userCommentBox).not.toBeNull();
+  expect(attemptBox).not.toBeNull();
+  expect(userCommentBox!.y).toBeLessThan(attemptBox!.y);
+  await expect(attemptEntry).toContainText("Triggered by You moving the task to Implementation");
+  await expect(attemptEntry).toContainText("Started");
+  const nestedComment = attemptEntry.locator(".nested-comment");
+  await expect(nestedComment).toContainText("Requested Implementation Agent");
+  const authoredProse = nestedComment.locator(".authored-prose");
+  expect(await authoredProse.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await nestedComment.getByRole("button", { name: "Show more" }).click();
+  await expect(nestedComment.getByRole("button", { name: "Show less" })).toBeVisible();
+  expect(await authoredProse.evaluate((element) => element.scrollHeight === element.clientHeight)).toBe(true);
   await expect(attemptEntry.getByText("Thread information")).toHaveCount(0);
   await expect(attemptEntry).not.toContainText("thread-browser-123");
-  await expect(attemptEntry.getByRole("button", { name: "Copy thread ID" })).toBeVisible();
+  await expect(attemptEntry.getByRole("button", { name: "Copy thread ID" })).toHaveCount(0);
   await attemptEntry.getByRole("button", { name: "View transcript" }).click();
   const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
   const copyThreadId = dialog.getByRole("button", { name: "Copy thread ID" });
@@ -603,6 +622,39 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   expect(commentBounds).not.toBeNull();
   expect(timelineBounds).not.toBeNull();
   expect(timelineBounds!.y - (commentBounds!.y + commentBounds!.height)).toBeGreaterThanOrEqual(8);
+});
+
+test("task timeline keeps retries separate and links each retry to the preceding attempt", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const activation = detail.task.activations.find((candidate: { attempts: unknown[] }) => candidate.attempts.length > 0);
+    const first = activation?.attempts[0];
+    if (activation !== undefined && first !== undefined) {
+      first.status = "failed";
+      first.outcome = { status: "failed", summary: "The first attempt lost its runtime connection." };
+      activation.attempts.push({
+        ...first,
+        id: "browser-retry-attempt",
+        status: "completed",
+        startedAt: new Date(Date.parse(first.completedAt) + 1_000).toISOString(),
+        completedAt: new Date(Date.parse(first.completedAt) + 121_000).toISOString(),
+        outcome: { status: "completed", summary: "The retry completed the handoff." },
+      });
+    }
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const retry = page.locator("#timeline-source-browser-retry-attempt").locator("..");
+  const first = page.locator("#timeline-source-browser-attempt").locator("..");
+  await expect(retry).toBeVisible();
+  await expect(first).toBeVisible();
+  expect((await retry.boundingBox())!.y).toBeLessThan((await first.boundingBox())!.y);
+  const trigger = retry.getByRole("link", { name: "Attempt 1 failed" });
+  await expect(trigger).toHaveAttribute("href", /timeline-source-browser-attempt/);
+  await trigger.click();
+  await expect(first.locator("article")).toBeFocused();
 });
 
 test("task details keep board navigation pinned while scrolling long history", async ({ page }) => {
@@ -883,7 +935,7 @@ test("an open task reconciles external timeline changes without disturbing a foc
     if (reads >= 3) {
       detail.task.comments.push({
         id: "external-live-comment",
-        body: "An agent added this while the task page remained open.",
+        body: "An agent added this while the task page remained open. @implementer",
         actor: { kind: "agent", id: "implementer" },
         occurredAt: "2026-08-09T12:00:00.000Z",
       });
@@ -894,12 +946,12 @@ test("an open task reconciles external timeline changes without disturbing a foc
         occurredAt: "2026-08-09T12:00:00.001Z",
         details: {
           activationId: "external-live-activation",
-          targetAgentId: "external-reviewer",
+          targetAgentId: "implementer",
         },
       });
       detail.task.activations.push({
         id: "external-live-activation",
-        targetAgentId: "external-reviewer",
+        targetAgentId: "implementer",
         status: "queued",
         reason: { type: "agent-mention", sourceEventId: "external-live-comment" },
         attempts: [],
@@ -917,11 +969,13 @@ test("an open task reconciles external timeline changes without disturbing a foc
   const draft = page.getByRole("textbox", { name: "Comment" });
   await draft.fill("Keep this unfinished user draft.");
   await draft.focus();
-  await expect(page.getByText("An agent added this while the task page remained open.")).toBeVisible();
-  await expect(page.getByText("Queued for external-reviewer.")).toBeVisible();
+  const liveComment = page.locator(".comment-entry").filter({ hasText: "An agent added this while the task page remained open." });
+  await expect(liveComment).toBeVisible();
+  await expect(liveComment.locator(".canonical-mention")).toHaveText("@implementer");
+  await expect(liveComment).toContainText("Requested Implementation Agent");
   await page.waitForTimeout(750);
-  await expect(page.getByText("An agent added this while the task page remained open.")).toBeVisible();
-  await expect(page.getByText("Queued for external-reviewer.")).toHaveCount(1);
+  await expect(liveComment).toBeVisible();
+  await expect(liveComment).toContainText("Requested Implementation Agent");
   await expect(draft).toHaveValue("Keep this unfinished user draft.");
   await expect(draft).toBeFocused();
 });
@@ -1344,7 +1398,7 @@ test("archived tasks toggle into their retained board location and can be unarch
   await expect(archivedCard).toHaveCount(0);
   await archivedToggle.click();
   await completion.getByRole("link", { name: /Archive this completed browser task/ }).click();
-  await expect(page.getByText(/Archived · Revision/)).toBeVisible();
+  await expect(page.locator(".task-heading .eyebrow")).toContainText("Archived");
   await expect(page.getByRole("button", { name: "View transcript" })).toHaveCount(0);
   const archivedEntry = page.locator(".timeline-entry").filter({ hasText: "Task archived" });
   await expect(archivedEntry).toContainText("Removed from the active board");
@@ -1373,7 +1427,7 @@ test("archive is promoted only for completed tasks", async ({ page }) => {
   const taskUrl = page.url();
   await secondaryArchive.click();
   await expect(page).toHaveURL(taskUrl);
-  await expect(page.getByText(/Archived · Revision/)).toBeVisible();
+  await expect(page.locator(".task-heading .eyebrow")).toContainText("Archived");
   await expect(page.getByRole("button", { name: "Unarchive task" })).toBeVisible();
 });
 
