@@ -1695,6 +1695,12 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await expect(relationships.getByRole("heading", { name: "Depends on" })).toBeVisible();
   await expect(relationships.getByRole("link", { name: "Recover a workspace startup failure" })).toBeVisible();
   await expect(relationships.getByRole("region", { name: "Depends on" }).getByText("Blocking", { exact: true })).toBeVisible();
+  const taskTimeline = page.getByRole("region", { name: "Task timeline" });
+  await expect(taskTimeline.getByText("Dependency added", { exact: true })).toBeVisible();
+  await expect(taskTimeline.getByText("Now depends on Recover a workspace startup failure.", { exact: true })).toBeVisible();
+  await expect(taskTimeline.locator("strong.relationship-task-name", {
+    hasText: "Recover a workspace startup failure",
+  })).toBeVisible();
   await expect(finder).toBeVisible();
   await expect(options).not.toBeVisible();
   await expect(relationships.getByText("Selected: Recover a workspace startup failure")).toHaveCount(0);
@@ -1718,11 +1724,16 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await childDialog.getByRole("button", { name: "Create child task", exact: true }).click();
   await expect(page.getByRole("status")).toContainText(/Created child T-\d{4}/);
   await expect(relationships.getByRole("heading", { name: "Child tasks" })).toBeVisible();
+  await expect(taskTimeline.getByText("Child task added", { exact: true })).toBeVisible();
+  await expect(taskTimeline.getByText("Investigate a focused child outcome was added as a child task.", { exact: true })).toBeVisible();
   await relationships.getByRole("link", { name: "Investigate a focused child outcome" }).click();
   const childRelationships = page.getByRole("region", { name: "Relationships" });
+  const childTimeline = page.getByRole("region", { name: "Task timeline" });
   await expect(childRelationships.getByRole("heading", { name: "Parent tasks" })).toBeVisible();
   await expect(childRelationships.getByRole("link", { name: "Drag this task" })).toBeVisible();
   await expect(childRelationships.getByText("Blocking", { exact: true })).toHaveCount(0);
+  await expect(childTimeline.getByText("Parent task added", { exact: true })).toBeVisible();
+  await expect(childTimeline.getByText("Drag this task was added as the parent task.", { exact: true })).toBeVisible();
   await childRelationships.getByRole("link", { name: "Drag this task" }).click();
 
   const removeButton = relationships.getByRole("button", { name: "Remove dependency with Recover a workspace startup failure" });
@@ -1756,6 +1767,8 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await relationships.getByRole("button", { name: "Remove dependency with Recover a workspace startup failure" }).click();
   await page.getByRole("dialog", { name: "Remove dependency?" }).getByRole("button", { name: "Remove relationship" }).click();
   await expect(relationships.getByRole("link", { name: "Recover a workspace startup failure" })).toHaveCount(0);
+  await expect(taskTimeline.getByText("Dependency removed", { exact: true })).toBeVisible();
+  await expect(taskTimeline.getByText("Does not depend on Recover a workspace startup failure anymore.", { exact: true })).toBeVisible();
 });
 
 test("pre-attempt startup diagnostics remain discoverable after navigation", async ({ page }) => {

@@ -7,6 +7,7 @@ import type {
   ProcessColumnView,
   TaskActivityView,
   TaskCommentView,
+  TaskRelationshipView,
 } from "../../application/coordination-contract.ts";
 import { AttemptTranscriptDialog } from "./AttemptTranscriptDialog.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
@@ -16,6 +17,7 @@ import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-
 
 type TimelineAgent = Pick<CollaboratorView, "id" | "name">;
 type TimelineColumn = Pick<ProcessColumnView, "id" | "name">;
+type TimelineTask = { id: string; title: string };
 
 export function TaskTimeline({
   comments,
@@ -23,6 +25,7 @@ export function TaskTimeline({
   activations,
   agents,
   columns,
+  tasks,
   transcriptsAvailable = true,
 }: {
   comments: TaskCommentView[];
@@ -30,12 +33,13 @@ export function TaskTimeline({
   activations: ActivationView[];
   agents: TimelineAgent[];
   columns: TimelineColumn[];
+  tasks: TimelineTask[];
   transcriptsAvailable?: boolean;
 }): ReactNode {
   const [transcriptSelection, setTranscriptSelection] = useState<{ attempt: AttemptView; agentName: string }>();
   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
   const records = buildTimelineRecords(comments, activity, activations);
-  const context: TimelineContext = { comments, activity, activations, agents, columns };
+  const context: TimelineContext = { comments, activity, activations, agents, columns, tasks };
 
   const setTextExpanded = (id: string, expanded: boolean): void => {
     setExpandedText((current) => {
@@ -89,6 +93,7 @@ interface TimelineContext {
   activations: ActivationView[];
   agents: TimelineAgent[];
   columns: TimelineColumn[];
+  tasks: TimelineTask[];
 }
 
 function TimelineRecordView({
@@ -319,13 +324,16 @@ function ActivityCard({ activity, context, nested = false }: {
   context: TimelineContext;
   nested?: boolean;
 }): ReactNode {
+  const relationship = relationshipActivityPresentation(activity, context.tasks);
   const contents = (
     <>
       <div className="entry-meta">
-        <strong>{activityLabel(activity.type)}</strong>
+        <strong>{relationship?.label ?? activityLabel(activity.type)}</strong>
         <RelativeTime value={activity.occurredAt} />
       </div>
-      <p>{activityDescription(activity, context.columns)}</p>
+      <p>{relationship === undefined
+        ? activityDescription(activity, context.columns)
+        : relationshipDescription(relationship)}</p>
       {nested ? null : <small>{actorName(activity.actor, context.agents)}</small>}
     </>
   );
@@ -486,15 +494,84 @@ function activityDescription(activity: TaskActivityView, columns: TimelineColumn
   }
   if (activity.type === "task.created") return `Created in ${columnName(activity.details.columnId, columns)}.`;
   if (activity.type === "task.edited") return "Title or description updated.";
-  if (activity.type === "relationship.created") return "A task relationship was added.";
-  if (activity.type === "relationship.removed") return "A task relationship was removed.";
-  if (activity.type === "relationship.satisfied") return "A blocking relationship was satisfied.";
   if (activity.type === "attention.resolved") return `Resolved ${activity.details.reasonType ?? "attention"}.`;
   if (activity.type === "automation.suspended") return "The interrupted activation remains first in line until continued.";
   if (activity.type === "automation.resumed") return "The interrupted activation was continued.";
   if (activity.type === "task.archived") return "Removed from the active board while retaining coordination history.";
   if (activity.type === "task.unarchived") return "Returned to the active board in its retained workflow position.";
   return activityLabel(activity.type);
+}
+
+type RelationshipActivityEvent = "created" | "removed" | "satisfied";
+type RelationshipActivityRole = "source" | "target";
+type RelationshipPresentationText = { label: string; description: string };
+type RelationshipPresentation = RelationshipPresentationText & { taskName: string };
+type RelationshipPresentationFactory = (taskName: string) => RelationshipPresentationText;
+type DirectionalRelationshipKey = `${TaskRelationshipView["type"]}:${RelationshipActivityRole}:${RelationshipActivityEvent}`;
+type LegacyRelationshipKey = `${TaskRelationshipView["type"]}:${RelationshipActivityEvent}`;
+
+const directionalRelationshipPresentations = {
+  "dependency:source:created": (task) => ({ label: "Dependency added", description: `Now depends on ${task}.` }),
+  "dependency:source:removed": (task) => ({ label: "Dependency removed", description: `Does not depend on ${task} anymore.` }),
+  "dependency:source:satisfied": (task) => ({ label: "Dependency satisfied", description: `${task} completed, satisfying this dependency.` }),
+  "dependency:target:created": (task) => ({ label: "Blocking dependency added", description: `Now blocks ${task}.` }),
+  "dependency:target:removed": (task) => ({ label: "Blocking dependency removed", description: `No longer blocks ${task}.` }),
+  "dependency:target:satisfied": (task) => ({ label: "Blocking dependency satisfied", description: `Completed and stopped blocking ${task}.` }),
+  "parent-child:source:created": (task) => ({ label: "Child task added", description: `${task} was added as a child task.` }),
+  "parent-child:source:removed": (task) => ({ label: "Child task removed", description: `${task} is no longer a child task.` }),
+  "parent-child:source:satisfied": (task) => ({ label: "Child task completed", description: `${task} completed, satisfying this child relationship.` }),
+  "parent-child:target:created": (task) => ({ label: "Parent task added", description: `${task} was added as the parent task.` }),
+  "parent-child:target:removed": (task) => ({ label: "Parent task removed", description: `${task} is no longer the parent task.` }),
+  "parent-child:target:satisfied": (task) => ({ label: "Parent task unblocked", description: `Completed and stopped blocking ${task}.` }),
+} satisfies Record<DirectionalRelationshipKey, RelationshipPresentationFactory>;
+
+const legacyRelationshipPresentations = {
+  "dependency:created": (task) => ({ label: "Dependency added", description: `A dependency with ${task} was added.` }),
+  "dependency:removed": (task) => ({ label: "Dependency removed", description: `The dependency with ${task} was removed.` }),
+  "dependency:satisfied": (task) => ({ label: "Dependency satisfied", description: `The dependency with ${task} was satisfied.` }),
+  "parent-child:created": (task) => ({ label: "Parent-child relationship added", description: `A parent-child relationship with ${task} was added.` }),
+  "parent-child:removed": (task) => ({ label: "Parent-child relationship removed", description: `The parent-child relationship with ${task} was removed.` }),
+  "parent-child:satisfied": (task) => ({ label: "Parent-child relationship satisfied", description: `The parent-child relationship with ${task} was satisfied.` }),
+} satisfies Record<LegacyRelationshipKey, RelationshipPresentationFactory>;
+
+function relationshipActivityPresentation(
+  activity: TaskActivityView,
+  tasks: TimelineTask[],
+): RelationshipPresentation | undefined {
+  if (
+    activity.type !== "relationship.created" &&
+    activity.type !== "relationship.removed" &&
+    activity.type !== "relationship.satisfied"
+  ) return undefined;
+
+  const relatedTaskId = activity.details.relatedTaskId ??
+    activity.details.completedTaskId ?? activity.details.unblockedTaskId;
+  const relatedTask = tasks.find((task) => task.id === relatedTaskId);
+  const taskName = relatedTask?.title ?? relatedTaskId ?? "the related task";
+  const relationshipType = activity.details.relationshipType;
+  const role = activity.details.relationshipRole;
+  if (relationshipType !== "dependency" && relationshipType !== "parent-child") return undefined;
+  const event = activity.type.slice("relationship.".length) as RelationshipActivityEvent;
+  if (role === "source" || role === "target") {
+    return {
+      ...directionalRelationshipPresentations[`${relationshipType}:${role}:${event}`](taskName),
+      taskName,
+    };
+  }
+  return { ...legacyRelationshipPresentations[`${relationshipType}:${event}`](taskName), taskName };
+}
+
+function relationshipDescription(presentation: RelationshipPresentation): ReactNode {
+  const taskStart = presentation.description.indexOf(presentation.taskName);
+  if (taskStart < 0) return presentation.description;
+  const taskEnd = taskStart + presentation.taskName.length;
+  return (
+    <>
+      {presentation.description.slice(0, taskStart)}
+      <strong className="relationship-task-name">{presentation.taskName}</strong>
+      {presentation.description.slice(taskEnd)}
+    </>
+  );
 }
 
 function reasonLabel(reason: ActivationView["reason"]["type"]): string {

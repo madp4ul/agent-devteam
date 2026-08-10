@@ -74,6 +74,7 @@ export class TaskCommandStore {
         command.idempotencyKey,
       );
       if (prior !== undefined) return prior;
+      const attemptId = this.validatedAgentAttemptId(command.parentTaskId, command);
       if (this.#projections.readTask(command.parentTaskId) === undefined) {
         return { accepted: false, reason: "not-found" };
       }
@@ -91,7 +92,7 @@ export class TaskCommandStore {
         { parentTaskId: command.parentTaskId },
         command.startingRef?.trim(),
       );
-      this.insertRelationship("parent-child", command.parentTaskId, task.id, command.actor);
+      this.insertRelationship("parent-child", command.parentTaskId, task.id, command.actor, attemptId);
       const updated = this.#projections.readTask(task.id);
       if (updated === undefined) throw new Error("Created child task could not be read back");
       const result: BoardMutationResult = { accepted: true, task: updated };
@@ -150,10 +151,7 @@ export class TaskCommandStore {
       if (this.taskIsReadOnly(currentTask)) {
         return { accepted: false, reason: "archived-task" };
       }
-      const attemptId = command.actor.kind === "agent" ? command.attemptId : undefined;
-      if (attemptId !== undefined) {
-        this.assertAgentAttemptProvenance(command.taskId, command.actor.id, attemptId);
-      }
+      const attemptId = this.validatedAgentAttemptId(command.taskId, command);
       if (currentTask.revision !== command.expectedRevision) {
         return { accepted: false, reason: "revision-conflict", currentTask };
       }
@@ -175,11 +173,15 @@ export class TaskCommandStore {
       const relationshipsSatisfied = command.destinationColumnId === "completion"
         ? (this.#database
             .prepare(
-              `SELECT id, source_task_id
+              `SELECT id, type, source_task_id
                FROM task_relationships
                WHERE type IN ('dependency', 'parent-child') AND target_task_id = ?`,
             )
-            .all(command.taskId) as Array<{ id: string; source_task_id: string }>)
+            .all(command.taskId) as Array<{
+              id: string;
+              type: TaskRelationshipView["type"];
+              source_task_id: string;
+            }>)
         : [];
       this.#database
         .prepare("UPDATE tasks SET column_id = ?, revision = revision + 1 WHERE id = ?")
@@ -205,13 +207,17 @@ export class TaskCommandStore {
           relationship.source_task_id,
           "relationship.satisfied",
           { kind: "framework", id: "coordination" },
-          { relationshipId: relationship.id, completedTaskId: command.taskId },
+          this.relationshipActivityDetails(relationship, "source", command.taskId, {
+            completedTaskId: command.taskId,
+          }),
         );
         this.appendActivity(
           command.taskId,
           "relationship.satisfied",
           { kind: "framework", id: "coordination" },
-          { relationshipId: relationship.id, unblockedTaskId: relationship.source_task_id },
+          this.relationshipActivityDetails(relationship, "target", relationship.source_task_id, {
+            unblockedTaskId: relationship.source_task_id,
+          }),
         );
         if (this.#projections.readBlockingTaskIds(relationship.source_task_id).length === 0) {
           this.createBlockersClearedActivation(
@@ -244,6 +250,7 @@ export class TaskCommandStore {
         command.idempotencyKey,
       );
       if (prior !== undefined) return prior;
+      const attemptId = this.validatedAgentAttemptId(command.sourceTaskId, command);
       const sourceTask = this.#projections.readTask(command.sourceTaskId);
       const targetTask = this.#projections.readTask(command.targetTaskId);
       let result: TaskRelationshipMutationResult;
@@ -271,6 +278,7 @@ export class TaskCommandStore {
             command.sourceTaskId,
             command.targetTaskId,
             command.actor,
+            attemptId,
           );
           result = {
             accepted: true,
@@ -334,22 +342,14 @@ export class TaskCommandStore {
             row.source_task_id,
             "relationship.removed",
             command.actor,
-            {
-              relationshipId: row.id,
-              relationshipType: row.type,
-              relatedTaskId: row.target_task_id,
-            },
+            this.relationshipActivityDetails(relationship, "source", row.target_task_id),
             occurredAt,
           );
           this.appendActivity(
             row.target_task_id,
             "relationship.removed",
             command.actor,
-            {
-              relationshipId: row.id,
-              relationshipType: row.type,
-              relatedTaskId: row.source_task_id,
-            },
+            this.relationshipActivityDetails(relationship, "target", row.source_task_id),
             occurredAt,
           );
           if (clearedFinalBlocker) {
@@ -385,10 +385,7 @@ export class TaskCommandStore {
       if (command.body.trim().length === 0) {
         return { accepted: false, reason: "empty-comment" };
       }
-      const attemptId = command.actor.kind === "agent" ? command.attemptId : undefined;
-      if (attemptId !== undefined) {
-        this.assertAgentAttemptProvenance(command.taskId, command.actor.id, attemptId);
-      }
+      const attemptId = this.validatedAgentAttemptId(command.taskId, command);
       const comment = {
         id: randomUUID(),
         body: command.body,
@@ -438,6 +435,17 @@ export class TaskCommandStore {
       )
       .get(attemptId, taskId, agentId);
     if (attempt === undefined) throw new Error("Agent action attempt provenance is not current");
+  }
+
+  private validatedAgentAttemptId(
+    taskId: string,
+    command: { actor: Actor; attemptId?: string },
+  ): string | undefined {
+    const attemptId = command.actor.kind === "agent" ? command.attemptId : undefined;
+    if (attemptId !== undefined) {
+      this.assertAgentAttemptProvenance(taskId, command.actor.id, attemptId);
+    }
+    return attemptId;
   }
 
   private taskIsReadOnly(task: TaskView): boolean {
@@ -717,6 +725,7 @@ export class TaskCommandStore {
     sourceTaskId: string,
     targetTaskId: string,
     actor: Actor,
+    sourceAttemptId?: string,
   ): TaskRelationshipView {
     const relationship: TaskRelationshipView = {
       id: randomUUID(),
@@ -727,16 +736,19 @@ export class TaskCommandStore {
     this.#database
       .prepare("INSERT INTO task_relationships VALUES (?, ?, ?, ?)")
       .run(relationship.id, relationship.type, sourceTaskId, targetTaskId);
-    this.appendActivity(sourceTaskId, "relationship.created", actor, {
-      relationshipId: relationship.id,
-      relationshipType: relationship.type,
-      relatedTaskId: targetTaskId,
-    });
-    this.appendActivity(targetTaskId, "relationship.created", actor, {
-      relationshipId: relationship.id,
-      relationshipType: relationship.type,
-      relatedTaskId: sourceTaskId,
-    });
+    this.appendActivity(sourceTaskId, "relationship.created", actor, this.relationshipActivityDetails(
+      relationship,
+      "source",
+      targetTaskId,
+      {
+      ...(sourceAttemptId === undefined ? {} : { attemptId: sourceAttemptId }),
+      },
+    ));
+    this.appendActivity(targetTaskId, "relationship.created", actor, this.relationshipActivityDetails(
+      relationship,
+      "target",
+      sourceTaskId,
+    ));
     return relationship;
   }
 
@@ -756,6 +768,21 @@ export class TaskCommandStore {
       )
       .run(id, taskId, type, actor.kind, actor.id, occurredAt, JSON.stringify(details));
     return id;
+  }
+
+  private relationshipActivityDetails(
+    relationship: Pick<TaskRelationshipView, "id" | "type">,
+    role: "source" | "target",
+    relatedTaskId: string,
+    additional: Record<string, string> = {},
+  ): Record<string, string> {
+    return {
+      relationshipId: relationship.id,
+      relationshipType: relationship.type,
+      relationshipRole: role,
+      relatedTaskId,
+      ...additional,
+    };
   }
 
   private createColumnEntryActivation(

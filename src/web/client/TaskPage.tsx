@@ -207,6 +207,7 @@ export function TaskPage({
               activations={task.activations}
               agents={detail.collaborators}
               columns={board.columns}
+              tasks={detail.relationshipTasks}
               transcriptsAvailable={!task.archived}
             /></div>
           </div>

@@ -145,6 +145,73 @@ test("a child can start from committed Git state without sharing its parent's wo
   if (parentInspection.available) {
     assert.deepEqual(parentInspection.task.blocking, { blocked: false, blockerTaskIds: [] });
   }
+  const completedChildRelationship = application.queryTask(parent.id);
+  assert.equal(completedChildRelationship.available, true);
+  if (completedChildRelationship.available) {
+    const satisfaction = completedChildRelationship.task.activity.findLast(
+      (event) => event.type === "relationship.satisfied",
+    );
+    assert.deepEqual(satisfaction?.details, {
+      relationshipId: child.task.relationships[0]?.id,
+      relationshipType: "parent-child",
+      relationshipRole: "source",
+      relatedTaskId: child.task.id,
+      completedTaskId: child.task.id,
+    });
+  }
+});
+
+test("an agent-created relationship retains attempt provenance for timeline grouping", async (t) => {
+  const fixture = await createGitFixture();
+  const runtime = new HoldingRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.processDefinitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const source = createTask(application, "implementation", "Agent-owned work", "agent-source");
+  const prerequisite = createTask(application, "backlog", "Named prerequisite", "agent-target");
+
+  await application.resumeAutomation();
+  const request = await runtime.waitForRequest();
+  const linked = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: source.id,
+    targetTaskId: prerequisite.id,
+    actor: { kind: "agent", id: "implementer" },
+    attemptId: request.attemptId,
+    idempotencyKey: "agent-link",
+  });
+
+  assert.equal(linked.accepted, true);
+  if (!linked.accepted) return;
+  const activity = linked.sourceTask.activity.findLast((event) => event.type === "relationship.created");
+  assert.equal(activity?.details.attemptId, request.attemptId);
+  const child = application.createChildTask({
+    parentTaskId: source.id,
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Agent-created child",
+    description: "Keep this relationship in the originating agent group.",
+    actor: { kind: "agent", id: "implementer" },
+    attemptId: request.attemptId,
+    idempotencyKey: "agent-child",
+  });
+  assert.equal(child.accepted, true);
+  const parentAfterChild = application.queryTask(source.id);
+  assert.equal(parentAfterChild.available, true);
+  if (!parentAfterChild.available) return;
+  const childActivity = parentAfterChild.task.activity.findLast(
+    (event) => event.type === "relationship.created" && event.details.relationshipType === "parent-child",
+  );
+  assert.equal(childActivity?.details.attemptId, request.attemptId);
+  runtime.complete();
+  await application.waitForAutomationIdle();
 });
 
 test("child creation rejects Completion atomically and retains deliberate workflow placement", async (t) => {
@@ -479,5 +546,24 @@ class RecordingRuntime implements AgentRuntime {
     this.requests.push(request);
     lifecycle.started();
     return Promise.resolve({ status: "completed", summary: "Recorded." });
+  }
+}
+
+class HoldingRuntime implements AgentRuntime {
+  readonly #request = Promise.withResolvers<AgentRunRequest>();
+  readonly #outcome = Promise.withResolvers<AgentRunOutcome>();
+
+  run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
+    lifecycle.started();
+    this.#request.resolve(request);
+    return this.#outcome.promise;
+  }
+
+  waitForRequest(): Promise<AgentRunRequest> {
+    return this.#request.promise;
+  }
+
+  complete(): void {
+    this.#outcome.resolve({ status: "completed", summary: "Recorded." });
   }
 }

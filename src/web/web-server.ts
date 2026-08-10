@@ -273,10 +273,17 @@ async function handleBrowserApi(
     if (result.available && inspection.available) {
       const collaborators = application.queryCollaborators();
       const activeRuns = application.queryActiveRuns();
-      const relationshipTasks = result.task.relationships.flatMap((relationship) => {
-        const relatedTaskId = relationship.sourceTaskId === taskId
+      const relatedTaskIds = new Set([
+        ...result.task.relationships.map((relationship) => relationship.sourceTaskId === taskId
           ? relationship.targetTaskId
-          : relationship.sourceTaskId;
+          : relationship.sourceTaskId),
+        ...result.task.activity.flatMap((activity) => {
+          const relatedTaskId = activity.details.relatedTaskId ??
+            activity.details.completedTaskId ?? activity.details.unblockedTaskId;
+          return relatedTaskId === undefined ? [] : [relatedTaskId];
+        }),
+      ]);
+      const relationshipTasks = [...relatedTaskIds].flatMap((relatedTaskId) => {
         const related = application.queryTask(relatedTaskId);
         const relatedInspection = application.queryTaskInspectionForUser(relatedTaskId);
         if (!related.available || !relatedInspection.available) return [];
@@ -650,6 +657,7 @@ async function handleAgentApi(
       body,
       scope.taskId,
       { kind: "agent", id: scope.agentId },
+      scope.attemptId,
     ));
     sendJson(response, result.accepted ? 201 : result.reason === "not-found" ? 404 : 409, result);
     return;
@@ -661,6 +669,7 @@ async function handleAgentApi(
       "dependency",
       scope.taskId,
       { kind: "agent", id: scope.agentId },
+      scope.attemptId,
     ));
     sendRelationshipMutation(response, result);
     return;
@@ -722,6 +731,7 @@ function childTaskCommand(
   body: Record<string, unknown>,
   parentTaskId: string,
   actor: Actor,
+  attemptId?: string,
 ): CreateChildTaskCommand {
   return {
     parentTaskId,
@@ -732,6 +742,7 @@ function childTaskCommand(
     ...(body.startingRef === undefined ? {} : { startingRef: stringField(body, "startingRef") }),
     idempotencyKey: stringField(body, "idempotencyKey"),
     actor,
+    ...(attemptId === undefined ? {} : { attemptId }),
   };
 }
 
@@ -740,6 +751,7 @@ function relationshipCommand(
   type: CreateTaskRelationshipCommand["type"],
   sourceTaskId: string,
   actor: Actor,
+  attemptId?: string,
 ): CreateTaskRelationshipCommand {
   return {
     type,
@@ -747,6 +759,7 @@ function relationshipCommand(
     targetTaskId: stringField(body, "targetTaskId"),
     idempotencyKey: stringField(body, "idempotencyKey"),
     actor,
+    ...(attemptId === undefined ? {} : { attemptId }),
   };
 }
 

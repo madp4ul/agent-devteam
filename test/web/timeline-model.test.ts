@@ -28,6 +28,12 @@ test("timeline groups explicit attempt work and orders top-level records by star
       fromColumnId: "implementation",
       toColumnId: "review",
     }),
+    activityEntry("relationship", "relationship.created", "2026-01-01T10:06:30.000Z", {
+      attemptId: "attempt-1",
+      relationshipType: "dependency",
+      relationshipRole: "source",
+      relatedTaskId: "prerequisite",
+    }),
     activityEntry("activation", "activation.created", "2026-01-01T10:05:00.000Z", {}),
     activityEntry("attempt-completed", "attempt.completed", "2026-01-01T10:08:00.000Z", { attemptId: "attempt-1" }),
   ];
@@ -40,7 +46,7 @@ test("timeline groups explicit attempt work and orders top-level records by star
   if (attempt?.kind !== "attempt") return;
   assert.deepEqual(
     attempt.content.map((content) => content.kind === "comment" ? content.comment.id : content.activity.id),
-    ["agent-comment", "move"],
+    ["agent-comment", "relationship", "move"],
   );
 });
 

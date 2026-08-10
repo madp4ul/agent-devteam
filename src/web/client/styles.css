@@ -268,6 +268,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .event-entry .timeline-marker { background: #718078; }
 .movement-entry .timeline-marker { background: #547c9b; }
 .timeline-entry article { border: 1px solid var(--line); border-radius: .65rem; padding: 1rem; }
+.relationship-task-name { font-weight: 800; }
 .comment-entry article { background: #fff9e8; }
 .movement-entry article { background: #f3f7fa; }
 .attempt-entry article { border-left: 4px solid var(--forest); }

@@ -94,6 +94,14 @@ label/description dispatch.
 
 ## User review follow-ups
 
+Relationship timeline entries now name both the relationship meaning and the
+related task from the current task's perspective. Dependency, blocking,
+parent, child, satisfaction, and removal events use directional sentences such
+as **Does not depend on Recover a workspace startup failure anymore.** Related
+task references include historical relationships so names remain available
+after removal. Agent-created dependency and child relationships retain their
+attempt provenance and appear inside the originating agent attempt group.
+
 The dependency finder is now always visible. Its filtered task overlay appears
 only while the finder has keyboard focus, so relationship creation no longer
 needs a disclosure control. Escape dismisses the overlay without hiding the

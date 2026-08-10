@@ -563,6 +563,7 @@ export interface CreateTaskCommand {
 export interface CreateChildTaskCommand extends CreateTaskCommand {
   parentTaskId: string;
   startingRef?: string;
+  attemptId?: string;
 }
 
 export interface MoveTaskCommand {
@@ -579,6 +580,7 @@ export interface CreateTaskRelationshipCommand {
   sourceTaskId: string;
   targetTaskId: string;
   actor: Actor;
+  attemptId?: string;
   idempotencyKey: string;
 }
 
