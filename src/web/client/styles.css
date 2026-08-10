@@ -242,6 +242,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .attention-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .highlighted { outline: 3px solid #d79a14; outline-offset: 3px; }
 .move-select { display: grid; gap: .42rem; margin-top: .8rem; color: #435049; font-size: .8rem; font-weight: 800; }
+.current-column-source { display: inline-block; margin-top: .7rem; color: var(--forest); font-size: .76rem; font-weight: 750; }
 .timeline-section { padding: clamp(1.2rem, 3vw, 2rem); }
 .timeline { position: relative; margin: 1.5rem 0 0; padding: 0; list-style: none; }
 .timeline::before { position: absolute; top: .5rem; bottom: .5rem; left: 1rem; width: 1px; content: ""; background: var(--line); }
@@ -249,25 +250,33 @@ textarea { resize: vertical; line-height: 1.5; }
 .timeline-marker { z-index: 1; display: grid; width: 2rem; height: 2rem; place-items: center; border: 3px solid var(--paper); border-radius: 50%; color: white; background: var(--forest); font-size: .7rem; }
 .comment-entry .timeline-marker { color: #5d430f; background: var(--amber); }
 .event-entry .timeline-marker { background: #718078; }
+.movement-entry .timeline-marker { background: #547c9b; }
 .timeline-entry article { border: 1px solid var(--line); border-radius: .65rem; padding: 1rem; }
-.comment-entry article { border-left: 4px solid var(--amber); }
+.comment-entry article { background: #fff9e8; }
+.movement-entry article { background: #f3f7fa; }
 .attempt-entry article { border-left: 4px solid var(--forest); }
 .failed-attempt article { border-left-color: var(--coral); }
 .interrupted-attempt article { border-left-color: #9a6a2f; }
-.timeline-entry article:focus, .attempt-history section:focus { outline: 3px solid var(--amber); outline-offset: 3px; }
+.timeline-entry article:focus, .attempt-history section:focus { outline: none; }
+.timeline-entry article:focus-visible, .attempt-history section:focus-visible { outline: 2px solid #547c9b; outline-offset: 2px; }
+.timeline-source-target { box-shadow: 0 0 0 3px rgb(84 124 155 / 24%); transition: box-shadow .2s ease; }
 .entry-meta { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .entry-meta time, .timeline-entry small { color: var(--muted); font-size: .72rem; }
 .timeline-entry p { margin: .55rem 0; }
 .timeline details { margin-top: .8rem; }
 .timeline summary { color: var(--forest); font-weight: 700; cursor: pointer; }
 .attempt-heading { align-items: flex-start; }
+.attempt-agent-name { font-size: 1.05rem; letter-spacing: -.01em; }
 .attempt-timing { color: var(--muted); font-size: .78rem; text-align: right; }
 .attempt-status { color: var(--ink); font-weight: 800; }
+.attempt-number { font-size: .72rem; font-weight: 650; }
 .failed-attempt .attempt-status { color: #953824; }
 .attempt-outcome { margin-top: 1rem; }
 .attempt-outcome h3 { margin: 0; font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; }
 .attempt-history { margin: 1rem 0 0; border-top: 1px solid var(--line); padding: 0; list-style: none; }
 .attempt-history-item { border-bottom: 1px solid var(--line); padding: .85rem 0; }
+.attempt-history-item.nested-comment { margin: .35rem 0; border: 0; border-radius: .35rem; background: #fff9e8; padding: .65rem .75rem; }
+.attempt-history-item.nested-movement { margin: .35rem 0; border: 0; border-radius: .35rem; background: #f3f7fa; padding: .65rem .75rem; }
 .attempt-history-item .entry-meta strong { font-size: .84rem; }
 .attempt-history-item .entry-meta time { color: var(--muted); font-size: .7rem; }
 .attempt-footer { display: grid; gap: .35rem; margin-top: 1rem; color: var(--muted); font-size: .76rem; }
@@ -277,7 +286,8 @@ textarea { resize: vertical; line-height: 1.5; }
 .text-disclosure { border: 0; border-radius: .3rem; color: var(--forest); background: transparent; padding: .15rem 0; font-size: .76rem; font-weight: 750; }
 .text-disclosure:hover { background: transparent; text-decoration: underline; }
 .canonical-mention { border-radius: .22rem; color: #5d430f; background: #f5d88c; padding: .03rem .12rem; }
-.comment-consequence { color: var(--forest); font-size: .76rem; font-weight: 750; }
+.comment-consequence { display: flex; gap: .35rem; align-items: baseline; color: var(--muted); font-size: .74rem; font-weight: 600; }
+.comment-consequence::before { color: #8b948f; content: "↳"; }
 .attempt-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .8rem; }
 .diagnostic { color: #953824; }
 .transcript-modal { width: min(68rem, 100%); height: min(52rem, calc(100vh - 2rem)); display: flex; flex-direction: column; overscroll-behavior: contain; }

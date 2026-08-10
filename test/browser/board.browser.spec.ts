@@ -560,17 +560,39 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   const movement = page.getByRole("combobox", { name: "Move task" });
   await expect(movement).toHaveValue("implementation");
   await expect(movement.locator("option")).toHaveText(["Backlog", "Implementation", "Completion"]);
+  const currentColumnSource = page.getByRole("link", { name: "View move to Implementation in timeline" });
+  await expect(currentColumnSource).toHaveAttribute("href", /#timeline-source-/);
+  await currentColumnSource.click();
+  const movementSourceId = (await currentColumnSource.getAttribute("href"))!;
+  await expect(page.locator(movementSourceId)).toBeFocused();
+
+  const movementEntry = page.locator(".movement-entry").first();
+  await expect(movementEntry.locator(".timeline-marker")).toHaveText("→");
+  await expect(movementEntry.locator("article")).toHaveCSS("background-color", "rgb(243, 247, 250)");
+  await expect(movementEntry.locator("article")).toHaveCSS("border-left-width", "1px");
+  await expect(movementEntry.locator("article")).toHaveCSS("outline-style", "none");
+  await expect(movementEntry.locator("article")).toHaveClass(/timeline-source-target/);
+  const relativeTimestamp = page.getByRole("region", { name: "Task timeline" }).locator("time").first();
+  await expect(relativeTimestamp).toHaveAttribute("datetime", /T/);
+  await expect(relativeTimestamp).toHaveAttribute("title", /\d/);
+  await expect(relativeTimestamp).not.toHaveText(/\b20\d{2}\b/);
 
   const attemptEntry = page.locator(".attempt-entry").filter({ hasText: "Attempt 1" });
   const userComment = page.locator(".comment-entry").filter({ hasText: "Please also verify the migration behavior." });
+  await expect(userComment.locator("article")).toHaveCSS("background-color", "rgb(255, 249, 232)");
   const [userCommentBox, attemptBox] = await Promise.all([userComment.boundingBox(), attemptEntry.boundingBox()]);
   expect(userCommentBox).not.toBeNull();
   expect(attemptBox).not.toBeNull();
   expect(userCommentBox!.y).toBeLessThan(attemptBox!.y);
   await expect(attemptEntry).toContainText("Triggered by You moving the task to Implementation");
   await expect(attemptEntry).toContainText("Started");
+  await expect(attemptEntry.locator(".attempt-agent-name")).toHaveText("Implementation Agent");
+  await expect(attemptEntry.locator(".attempt-number")).toHaveText("Attempt 1");
   const nestedComment = attemptEntry.locator(".nested-comment");
+  await expect(nestedComment.locator(".entry-meta strong")).toHaveText("Commented");
   await expect(nestedComment).toContainText("Requested Implementation Agent");
+  await expect(nestedComment).toHaveCSS("background-color", "rgb(255, 249, 232)");
+  await expect(nestedComment.locator(".comment-consequence")).toHaveCSS("font-weight", "600");
   const authoredProse = nestedComment.locator(".authored-prose");
   expect(await authoredProse.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   await nestedComment.getByRole("button", { name: "Show more" }).click();
@@ -622,6 +644,43 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   expect(commentBounds).not.toBeNull();
   expect(timelineBounds).not.toBeNull();
   expect(timelineBounds!.y - (commentBounds!.y + commentBounds!.height)).toBeGreaterThanOrEqual(8);
+});
+
+test("task timeline keeps the centered record stable when polling inserts newer history", async ({ page }) => {
+  let addNewHistory = false;
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    if (addNewHistory) {
+      const occurredAt = new Date().toISOString();
+      for (let index = 0; index < 4; index += 1) {
+        detail.task.comments.push({
+          id: `polling-comment-${index}`,
+          body: `New polling history ${index}`,
+          actor: { kind: "user", id: "local-user" },
+          occurredAt,
+        });
+      }
+    }
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const attempt = page.locator(".attempt-entry").filter({ hasText: "Attempt 1" });
+  await attempt.scrollIntoViewIfNeeded();
+  await attempt.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const centerBefore = await attempt.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.top + bounds.height / 2;
+  });
+
+  addNewHistory = true;
+  await expect(page.getByText("New polling history 3")).toBeVisible();
+  const centerAfter = await attempt.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.top + bounds.height / 2;
+  });
+  expect(Math.abs(centerAfter - centerBefore)).toBeLessThanOrEqual(2);
 });
 
 test("task timeline keeps retries separate and links each retry to the preceding attempt", async ({ page }) => {

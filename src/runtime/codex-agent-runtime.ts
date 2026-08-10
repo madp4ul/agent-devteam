@@ -383,9 +383,12 @@ ${request.board.guidance}
 Available collaborators (identity, role, and summary):
 ${JSON.stringify(request.collaborators, null, 2)}
 
+To request the human user's attention in a task comment, mention exactly
+\`@user\`.
+
 ## Immutable activation trigger
 
-${JSON.stringify({ reason: request.reason, sourceEvent: request.sourceEvent }, null, 2)}
+${JSON.stringify({ reason: request.reason, sourceEvent: agentFacingRecord(request.sourceEvent) }, null, 2)}
 
 ## Current task
 
@@ -398,7 +401,7 @@ ${JSON.stringify(
       columnId: request.task.columnId,
       revision: request.task.revision,
       relationships: request.task.relationships,
-      comments: request.task.comments,
+      comments: request.task.comments.map(agentFacingRecord),
     },
     null,
     2,
@@ -412,6 +415,14 @@ Preceding outcome: ${JSON.stringify(request.attempt.precedingOutcome)}
 Continuation message: ${JSON.stringify(request.attempt.continuationMessage)}
 
 Use the coordination MCP tools to inspect the current task again before changing it, add authored comments, and move only this task. If the Codex permission policy denies a required action and user action or a policy change is necessary, call coordination.report_permission_block with a concise summary and do not retry the denied action. A successful Codex response has no implicit board effect, so perform every process-required comment or movement explicitly.`;
+}
+
+function agentFacingRecord<RecordType extends { actor: AgentRunRequest["sourceEvent"]["actor"] }>(record: RecordType): RecordType {
+  return { ...record, actor: agentFacingActor(record.actor) };
+}
+
+function agentFacingActor<ActorType extends AgentRunRequest["sourceEvent"]["actor"]>(actor: ActorType): ActorType {
+  return actor.kind === "user" ? { ...actor, id: "user" } : actor;
 }
 
 function createCodexClient(options: CodexClientOptionsLike): CodexClientLike {

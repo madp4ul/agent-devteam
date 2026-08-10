@@ -1,15 +1,20 @@
 import type { ReactNode } from "react";
 
 import type { BoardColumnView } from "../../application/coordination-contract.ts";
+import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
 
 export function MoveTaskPanel({
   columns,
   currentColumnId,
+  currentColumnName,
+  currentColumnSourceId,
   pending,
   onMove,
 }: {
   columns: BoardColumnView[];
   currentColumnId: string;
+  currentColumnName: string;
+  currentColumnSourceId?: string;
   pending: boolean;
   onMove(column: BoardColumnView): Promise<void>;
 }): ReactNode {
@@ -30,6 +35,16 @@ export function MoveTaskPanel({
           {columns.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
         </select>
       </label>
+      {currentColumnSourceId === undefined ? null : (
+        <a
+          className="current-column-source"
+          href={`#${timelineSourceElementId(currentColumnSourceId)}`}
+          onClick={(event) => {
+            event.preventDefault();
+            focusTimelineSource(currentColumnSourceId);
+          }}
+        >View move to {currentColumnName} in timeline</a>
+      )}
     </section>
   );
 }

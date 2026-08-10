@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import {
   addTaskComment,
@@ -21,6 +21,11 @@ import { TaskTimeline } from "./Timeline.tsx";
 import { TaskCreationDialog } from "./TaskCreationDialog.tsx";
 import { TaskWorkspacePanel } from "./TaskWorkspacePanel.tsx";
 import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
+import {
+  captureTimelineViewportAnchor,
+  restoreTimelineViewportAnchor,
+  type TimelineViewportAnchor,
+} from "./timeline-scroll-anchor.ts";
 
 export function TaskPage({
   taskId,
@@ -36,16 +41,24 @@ export function TaskPage({
   const [archivalPending, setArchivalPending] = useState(false);
   const [discardConfirmation, setDiscardConfirmation] = useState(false);
   const refreshSequence = useRef(0);
+  const pendingTimelineAnchor = useRef<TimelineViewportAnchor | null>(null);
   const refresh = useCallback(async () => {
     const sequence = ++refreshSequence.current;
     const next = await readTask(taskId);
-    if (sequence === refreshSequence.current) setDetail(next);
+    if (sequence === refreshSequence.current) {
+      pendingTimelineAnchor.current = captureTimelineViewportAnchor();
+      setDetail(next);
+    }
   }, [taskId]);
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
 
   useEffect(() => {
     void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
   }, [refresh, setFeedback]);
+  useLayoutEffect(() => {
+    restoreTimelineViewportAnchor(pendingTimelineAnchor.current);
+    pendingTimelineAnchor.current = null;
+  }, [detail]);
   useEffect(() => {
     const timer = window.setInterval(() => {
       void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
@@ -67,6 +80,9 @@ export function TaskPage({
     );
   }
   const { task, board, inspection } = detail;
+  const currentColumnMovement = task.activity
+    .filter((entry) => entry.type === "task.moved" && entry.details.toColumnId === task.columnId)
+    .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))[0];
   const highlightedReasonId = new URLSearchParams(window.location.search).get("attention");
 
   const performArchive = (discardWorkspaceChanges = false): void => {
@@ -209,6 +225,8 @@ export function TaskPage({
                 <MoveTaskPanel
                   columns={board.columns}
                   currentColumnId={task.columnId}
+                  currentColumnName={board.columns.find((column) => column.id === task.columnId)?.name ?? task.columnId}
+                  {...(currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id })}
                   pending={pendingTaskId !== undefined}
                   onMove={async (column) => move({ id: task.id, revision: task.revision }, column)}
                 />

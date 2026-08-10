@@ -10,7 +10,9 @@ import type {
 } from "../../application/coordination-contract.ts";
 import { AttemptTranscriptDialog } from "./AttemptTranscriptDialog.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
+import { RelativeTime } from "./RelativeTime.tsx";
 import { buildTimelineRecords, type AttemptTimelineContent, type TimelineRecord } from "./timeline-model.ts";
+import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
 
 type TimelineAgent = Pick<CollaboratorView, "id" | "name">;
 type TimelineColumn = Pick<ProcessColumnView, "id" | "name">;
@@ -46,9 +48,7 @@ export function TaskTimeline({
   const followSource = (sourceId: string): void => {
     setTextExpanded(`comment-${sourceId}`, true);
     window.setTimeout(() => {
-      const source = document.getElementById(sourceElementId(sourceId));
-      source?.focus({ preventScroll: true });
-      source?.scrollIntoView({ behavior: "smooth", block: "center" });
+      focusTimelineSource(sourceId);
     });
   };
 
@@ -108,7 +108,7 @@ function TimelineRecordView({
 }): ReactNode {
   if (record.kind === "comment") {
     return (
-      <li className="timeline-entry comment-entry">
+      <li className="timeline-entry comment-entry" data-timeline-record={record.comment.id}>
         <div className="timeline-marker" aria-hidden="true">✎</div>
         <CommentCard
           comment={record.comment}
@@ -121,8 +121,11 @@ function TimelineRecordView({
   }
   if (record.kind === "activity") {
     return (
-      <li className="timeline-entry event-entry">
-        <div className="timeline-marker" aria-hidden="true">◆</div>
+      <li
+        className={`timeline-entry event-entry${record.activity.type === "task.moved" ? " movement-entry" : ""}`}
+        data-timeline-record={record.activity.id}
+      >
+        <div className="timeline-marker" aria-hidden="true">{record.activity.type === "task.moved" ? "→" : "◆"}</div>
         <ActivityCard activity={record.activity} context={context} />
       </li>
     );
@@ -130,12 +133,12 @@ function TimelineRecordView({
   if (record.kind === "startup-failure") {
     const agentName = nameForAgent(record.activation.targetAgentId, context.agents);
     return (
-      <li className="timeline-entry attempt-entry failed-attempt">
+      <li className="timeline-entry attempt-entry failed-attempt" data-timeline-record={record.activation.id}>
         <div className="timeline-marker" aria-hidden="true">!</div>
-        <article id={sourceElementId(record.activation.id)} tabIndex={-1}>
+        <article id={timelineSourceElementId(record.activation.id)} tabIndex={-1}>
           <div className="entry-meta">
             <strong>{agentName} · Startup failed before attempt</strong>
-            <time>{formatDate(record.occurredAt)}</time>
+            <RelativeTime value={record.occurredAt} />
           </div>
           <div className="diagnostic">
             <TextPreview
@@ -184,20 +187,23 @@ function AttemptCard({
   const status = attemptStatus(attempt);
   const outcomeTextId = `outcome-${attempt.id}`;
   return (
-    <li className={`timeline-entry attempt-entry ${status.className}`}>
+    <li className={`timeline-entry attempt-entry ${status.className}`} data-timeline-record={attempt.id}>
       <div className="timeline-marker" aria-hidden="true">▶</div>
-      <article id={sourceElementId(attempt.id)} tabIndex={-1}>
+      <article id={timelineSourceElementId(attempt.id)} tabIndex={-1}>
         <div className="entry-meta attempt-heading">
-          <strong>{agentName} · Attempt {record.number}</strong>
+          <strong className="attempt-agent-name">{agentName}</strong>
           <span className="attempt-timing">
             <span className="attempt-status">{status.label}</span>
-            {attempt.completedAt === null ? " · " : <> at <time>{formatDate(attempt.completedAt)}</time> · </>}
-            <ElapsedTime startedAt={attempt.startedAt} completedAt={attempt.completedAt} />
-            {attempt.completedAt === null ? " elapsed" : null}
+            {" · "}<span className="attempt-number">Attempt {record.number}</span>{" · "}
+            {attempt.completedAt === null ? (
+              <><ElapsedTime startedAt={attempt.startedAt} completedAt={attempt.completedAt} /> elapsed</>
+            ) : (
+              <><RelativeTime value={attempt.completedAt} />{" · "}<ElapsedTime startedAt={attempt.startedAt} completedAt={attempt.completedAt} /></>
+            )}
           </span>
         </div>
         {attempt.outcome === null ? null : (
-          <section className="attempt-outcome" aria-label="Outcome">
+          <section className="attempt-outcome" aria-label="Outcome" data-timeline-record={`outcome-${attempt.id}`}>
             <h3>Outcome</h3>
             <TextPreview
               id={outcomeTextId}
@@ -223,7 +229,7 @@ function AttemptCard({
         )}
         <footer className="attempt-footer">
           <TriggerLink record={record} context={context} onSource={onSource} />
-          <span>Started <time>{formatDate(attempt.startedAt)}</time></span>
+          <span>Started <RelativeTime value={attempt.startedAt} /></span>
         </footer>
         {onTranscript === undefined ? null : (
           <div className="attempt-actions">
@@ -263,7 +269,7 @@ function AttemptContentView({
     );
   }
   return (
-    <li className="attempt-history-item nested-activity">
+    <li className={`attempt-history-item nested-activity${content.activity.type === "task.moved" ? " nested-movement" : ""}`}>
       <ActivityCard activity={content.activity} context={context} nested />
     </li>
   );
@@ -284,8 +290,8 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
   const contents = (
     <>
       <div className="entry-meta">
-        <strong>{author} commented</strong>
-        <time>{formatDate(comment.occurredAt)}</time>
+        <strong>{nested ? "Commented" : `${author} commented`}</strong>
+        <RelativeTime value={comment.occurredAt} />
       </div>
       <TextPreview
         id={`comment-${comment.id}`}
@@ -302,9 +308,9 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
     </>
   );
   return nested ? (
-    <section id={sourceElementId(comment.id)} tabIndex={-1}>{contents}</section>
+    <section id={timelineSourceElementId(comment.id)} data-timeline-record={comment.id} tabIndex={-1}>{contents}</section>
   ) : (
-    <article id={sourceElementId(comment.id)} tabIndex={-1}>{contents}</article>
+    <article id={timelineSourceElementId(comment.id)} tabIndex={-1}>{contents}</article>
   );
 }
 
@@ -317,16 +323,16 @@ function ActivityCard({ activity, context, nested = false }: {
     <>
       <div className="entry-meta">
         <strong>{activityLabel(activity.type)}</strong>
-        <time>{formatDate(activity.occurredAt)}</time>
+        <RelativeTime value={activity.occurredAt} />
       </div>
       <p>{activityDescription(activity, context.columns)}</p>
       {nested ? null : <small>{actorName(activity.actor, context.agents)}</small>}
     </>
   );
   return nested ? (
-    <section id={sourceElementId(activity.id)} tabIndex={-1}>{contents}</section>
+    <section id={timelineSourceElementId(activity.id)} data-timeline-record={activity.id} tabIndex={-1}>{contents}</section>
   ) : (
-    <article id={sourceElementId(activity.id)} tabIndex={-1}>{contents}</article>
+    <article id={timelineSourceElementId(activity.id)} tabIndex={-1}>{contents}</article>
   );
 }
 
@@ -345,7 +351,7 @@ function TriggerLink({
       <span>
         Triggered by retry after{" "}
         <a
-          href={`#${sourceElementId(record.previousAttempt.id)}`}
+          href={`#${timelineSourceElementId(record.previousAttempt.id)}`}
           onClick={(event) => {
             event.preventDefault();
             onSource(record.previousAttempt!.id);
@@ -377,7 +383,7 @@ function SourceLink({ sourceId, label, onSource }: {
     <span>
       Triggered by{" "}
       <a
-        href={`#${sourceElementId(sourceId)}`}
+        href={`#${timelineSourceElementId(sourceId)}`}
         onClick={(event) => {
           event.preventDefault();
           onSource(sourceId);
@@ -514,15 +520,4 @@ function columnName(columnId: string | undefined, columns: TimelineColumn[]): st
 
 function participantIds(agents: TimelineAgent[]): Set<string> {
   return new Set(["user", ...agents.map((agent) => agent.id)]);
-}
-
-function sourceElementId(sourceId: string): string {
-  return `timeline-source-${sourceId}`;
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }

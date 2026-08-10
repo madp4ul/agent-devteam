@@ -103,6 +103,32 @@ technical event or losing the underlying audit evidence.
   preceding attempt as its trigger rather than repeating the original comment,
   movement, or column-entry trigger. The presentation does not call every retry
   automatic because user recovery can also produce a later attempt.
+- Follow-up live use found four small navigation and readability gaps. Preserve
+  the visible timeline record across authoritative polling, render timestamps as
+  live relative time with exact time still available, make movements subtly
+  distinct from authored comments, and link the Move task panel to the movement
+  that established the current column. Project user-authored prompt records
+  under the canonical agent-facing identity `user` and tell agents explicitly
+  that the actionable user mention is `@user`.
+
+- [x] Keep the visible top-level timeline record nearest the viewport center at
+  the same viewport-relative position when polling inserts or expands history.
+- [x] Use responsive live relative timestamps while retaining the exact local
+  date and time as machine-readable and hover-accessible context.
+- [x] Give task movements a restrained visual treatment distinct from comments
+  without changing the attempt-block design.
+- [x] Link the Move task panel to the durable movement that established the
+  current column when such an event exists.
+- [x] Correct runtime prompt projection and coverage so internal persistence
+  identities never enter agent context and agents address the user with `@user`.
+- Final visual review kept source focus semantics but removed the unexplained
+  yellow pointer-focus frame. Ordinary pointer focus is quiet, keyboard focus
+  uses the timeline's muted blue, and following a causal link gives its source a
+  short blue target highlight. Comments and movements use related pale amber and
+  blue backgrounds without additional left accent bars. Attempt ownership is
+  emphasized in the header; attempt number joins status and timing, nested
+  comments simply say `Commented`, and requested-agent consequences use muted
+  continuation styling rather than link-like green emphasis.
 
 ## Answer
 
@@ -121,7 +147,22 @@ live refresh. The projection and rendering keep raw identifiers, stack traces,
 and duplicate lifecycle records out of the ordinary timeline without removing
 their authoritative stored evidence.
 
-Verification passed all 124 runnable non-browser tests, with the credentialed
-real-Codex scenario skipped, all 36 browser scenarios, TypeScript typechecking,
+Verification passed all 125 runnable non-browser tests, with the credentialed
+real-Codex scenario skipped, all 37 browser scenarios, TypeScript typechecking,
 and the production build. Live visual review passed at desktop and narrow
 viewport sizes.
+
+The live-use follow-up now anchors the visible top-level or nested timeline
+record nearest the viewport center across polling updates. Timeline timestamps
+update from seconds through minutes, hours, and days while retaining exact local
+time in their semantic markup and hover text. Movement records use the existing
+card design with a restrained blue arrow and accent, and Move task links to the
+latest durable movement into the current column. The runtime prompt projects
+user-authored trigger and comment records as the canonical `user` identity and
+names only `@user` as the human mention token; persistence identities never enter
+agent context.
+
+The final styling refinement preserves the established attempt-card design while
+reducing competing lines and labels. Pointer, causal-target, desktop, and narrow
+viewport states passed focused browser coverage and live visual review without
+browser warnings; typechecking and the production build also passed.

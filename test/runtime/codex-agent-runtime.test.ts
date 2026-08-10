@@ -67,6 +67,9 @@ test("each activation starts a fresh streamed Codex thread without overriding us
   assert.match(prompt, /Earlier authored comment\./);
   assert.match(prompt, /dependency/);
   assert.match(prompt, /attempt number: 1/i);
+  assert.match(prompt, /mention exactly\s+`@user`/);
+  assert.doesNotMatch(prompt, /local-user/);
+  assert.equal(prompt.match(/"id": "user"/g)?.length, 2);
 });
 
 test("an unusable interrupted thread falls back to a fresh thread with honest context", async () => {
@@ -752,7 +755,7 @@ function request(activationId: string, taskId: string): AgentRunRequest {
     sourceEvent: {
       id: "source-event-1",
       type: "task.moved",
-      actor: { kind: "user", id: "paul" },
+      actor: { kind: "user", id: "local-user" },
       occurredAt: "2026-08-02T12:00:00.000Z",
       details: { fromColumnId: "backlog", toColumnId: "implementation" },
     },
@@ -767,7 +770,7 @@ function request(activationId: string, taskId: string): AgentRunRequest {
         {
           id: "comment-1",
           body: "Earlier authored comment.",
-          actor: { kind: "user", id: "paul" },
+          actor: { kind: "user", id: "local-user" },
           occurredAt: "2026-08-02T11:00:00.000Z",
         },
       ],
