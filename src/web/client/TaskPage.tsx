@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import type { BoardColumnView } from "../../application/coordination-contract.ts";
 import {
   addTaskComment,
   addTaskDependency,
   ApiError,
   archiveTask,
   editTask,
-  interruptTask,
-  continueInterruptedTask,
   readTask,
   type BrowserTaskDetail,
   unarchiveTask,
 } from "./api.ts";
-import { ElapsedTime } from "./ElapsedTime.tsx";
-import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
+import { AgentActivityPanel } from "./AgentActivityPanel.tsx";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
@@ -22,6 +18,7 @@ import { useTaskMovement } from "./task-movement.ts";
 import { TaskTimeline } from "./Timeline.tsx";
 import { TaskCreationDialog } from "./TaskCreationDialog.tsx";
 import { TaskWorkspacePanel } from "./TaskWorkspacePanel.tsx";
+import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
 
 export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navigate }): ReactNode {
   const [detail, setDetail] = useState<BrowserTaskDetail>();
@@ -60,13 +57,8 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
     );
   }
   const { task, board, inspection } = detail;
-  const currentIndex = board.columns.findIndex((column) => column.id === task.columnId);
-  const currentColumn = board.columns[currentIndex];
   const highlightedReasonId = new URLSearchParams(window.location.search).get("attention");
 
-  const performMove = async (column: BoardColumnView): Promise<void> => {
-    await move({ id: task.id, revision: task.revision }, column);
-  };
   const performArchive = (discardWorkspaceChanges = false): void => {
     setArchivalPending(true);
     void archiveTask(task.id, crypto.randomUUID(), discardWorkspaceChanges)
@@ -95,14 +87,14 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
         <span className="revision">{task.archived ? "Archived · " : ""}Revision {task.revision}</span>
       </header>
       <main className="task-detail">
-        {feedback === undefined ? null : (
-          <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>
-        )}
-        <section className="task-hero">
+        <section className="task-overview" data-task-section="overview">
+          {feedback === undefined ? null : (
+            <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>
+          )}
+          <div className="task-hero">
           <div className="task-heading">
             <p className="eyebrow">{task.id}</p>
             <h1>{task.title}</h1>
-            <p className="description">{task.description}</p>
           </div>
           <div className="form-actions">
             {task.archived ? (
@@ -137,93 +129,49 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
               </>
             )}
           </div>
+          </div>
+          <section className="task-description" aria-labelledby="description-heading">
+            <h2 id="description-heading">Description</h2>
+            <p className="description">{task.description}</p>
+          </section>
         </section>
 
         <div className="detail-grid">
-          <section className="detail-panel" aria-labelledby="state-heading">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Current state</p>
-                <h2 id="state-heading">{currentColumn?.name ?? task.columnId}</h2>
-              </div>
-              <span className={`run-pill ${inspection.run.status}`}>{inspection.run.status}</span>
-            </div>
-            <dl className="facts">
-              <div><dt>Active agent</dt><dd>{inspection.run.activeAgentId ?? "None"}</dd></div>
-              <div><dt>Queued activations</dt><dd>{inspection.run.queuedActivationCount}</dd></div>
-              <div><dt>Failed activations</dt><dd>{inspection.run.failedActivationCount}</dd></div>
-              {inspection.currentActivation === null ? null : (
-                <>
-                  <div>
-                    <dt>Current activation</dt>
-                    <dd>{inspection.currentActivation.targetAgentId}</dd>
-                  </div>
-                  <div>
-                    <dt>Requested model</dt>
-                    <dd>{inspection.currentActivation.model ?? "Codex default"}</dd>
-                  </div>
-                  <div>
-                    <dt>Requested reasoning</dt>
-                    <dd>{inspection.currentActivation.reasoningEffort ?? "Codex default"}</dd>
-                  </div>
-                </>
-              )}
-            </dl>
-            {detail.activeRun === null ? null : (
-              <div className="attempt-control">
-                <p>
-                  Current attempt · {detail.activeRun.agentId} · {detail.activeRun.status} ·{" "}
-                  <ElapsedTime startedAt={detail.activeRun.startedAt} />
-                </p>
-                <button
-                  disabled={detail.activeRun.status === "interrupting"}
-                  onClick={() => {
-                    setFeedback({ role: "status", text: `Interrupting ${task.id}…` });
-                    void interruptTask(task.id, crypto.randomUUID())
-                      .then(async () => {
-                        await refresh();
-                        setFeedback({ role: "status", text: `Interrupted ${task.id}. Automation is suspended.` });
-                      })
-                      .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
-                  }}
-                >
-                  {detail.activeRun.status === "interrupting" ? "Interrupting…" : "Interrupt current attempt"}
-                </button>
-              </div>
-            )}
-            {inspection.automationSuspended ? (
-              <ContinueAutomationControl
-                taskId={task.id}
-                onContinued={async () => {
-                  await refresh();
-                  setFeedback({ role: "status", text: `Continued ${task.id}.` });
-                }}
-                onError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })}
-              />
-            ) : null}
-            {inspection.unresolvedAttention.length === 0 ? (
-              <p className="quiet">No unresolved attention.</p>
-            ) : (
-              <ul className="attention-list">
-                {inspection.unresolvedAttention.map((attention) => (
-                  <li
-                    key={attention.id}
-                    className={highlightedReasonId === attention.id ? "highlighted" : ""}
-                  >
-                    <AttentionReasonResolution
-                      reason={attention}
-                      labelPrefix="Needs attention: "
-                      onResolved={refresh}
-                      onError={(error) =>
-                        setFeedback({ role: "alert", text: errorMessage(error) })}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <div data-task-section="activity">
+            <AgentActivityPanel
+              state={{
+                taskId: task.id,
+                automation: detail.automation,
+                collaborators: detail.collaborators,
+                inspection,
+                activeRun: detail.activeRun,
+                activations: task.activations,
+                highlightedReasonId,
+              }}
+              onChanged={refresh}
+              onFeedback={setFeedback}
+            />
+          </div>
 
           <div className="detail-column">
+            <div data-task-section="workspace">
+              <TaskWorkspacePanel
+                taskId={task.id}
+                workspace={inspection.workspace}
+                attemptRunning={detail.activeRun !== null}
+              />
+            </div>
+            {task.archived ? null : (
+              <div data-task-section="move">
+                <MoveTaskPanel
+                  columns={board.columns}
+                  currentColumnId={task.columnId}
+                  pending={pendingTaskId !== undefined}
+                  onMove={async (column) => move({ id: task.id, revision: task.revision }, column)}
+                />
+              </div>
+            )}
+            <div data-task-section="relationships">
             <section className="detail-panel" aria-labelledby="relationships-heading">
             <p className="eyebrow">Coordination</p>
             <h2 id="relationships-heading">Relationships</h2>
@@ -250,58 +198,24 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
               }}
             />}
             </section>
-            <TaskWorkspacePanel
-              taskId={task.id}
-              workspace={inspection.workspace}
-              attemptRunning={detail.activeRun !== null}
-            />
+            </div>
           </div>
         </div>
 
-        {task.archived ? null : <section className="move-panel" aria-labelledby="move-heading" aria-busy={pendingTaskId !== undefined}>
-          <div>
-            <p className="eyebrow">Contextual movement</p>
-            <h2 id="move-heading">Move task</h2>
-            <p>Choose any defined destination. Dragging on the board uses this same revision-checked command.</p>
-          </div>
-          <ol className="move-chooser" aria-label="Move task to column">
-            {board.columns.map((column, index) => {
-              const marker = index === currentIndex
-                ? "Current"
-                : index === currentIndex - 1
-                  ? "Previous"
-                  : index === currentIndex + 1
-                    ? "Next"
-                    : "Destination";
-              return (
-                <li key={column.id}>
-                  <button
-                    disabled={pendingTaskId !== undefined || index === currentIndex}
-                    onClick={() => void performMove(column)}
-                    aria-label={`${column.name} · ${marker}`}
-                  >
-                    <span>{column.name}</span><small>{marker}</small>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </section>}
+        {task.archived ? null : <div data-task-section="comment"><CommentForm
+            taskId={task.id}
+            onCommented={async () => {
+              await refresh();
+              setFeedback({ role: "status", text: `Commented on ${task.id}.` });
+            }}
+          /></div>}
 
-        {task.archived ? null : <CommentForm
-          taskId={task.id}
-          onCommented={async () => {
-            await refresh();
-            setFeedback({ role: "status", text: `Commented on ${task.id}.` });
-          }}
-        />}
-
-        <TaskTimeline
-          comments={task.comments}
-          activity={task.activity}
-          activations={task.activations}
-          transcriptsAvailable={!task.archived}
-        />
+        <div data-task-section="timeline"><TaskTimeline
+            comments={task.comments}
+            activity={task.activity}
+            activations={task.activations}
+            transcriptsAvailable={!task.archived}
+          /></div>
       </main>
       {editing ? (
         <EditDialog
@@ -360,40 +274,6 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
           </section>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function ContinueAutomationControl({
-  taskId,
-  onContinued,
-  onError,
-}: {
-  taskId: string;
-  onContinued(): Promise<void>;
-  onError(error: unknown): void;
-}): ReactNode {
-  const [message, setMessage] = useState("");
-  const [pending, setPending] = useState(false);
-  return (
-    <div className="attempt-control">
-      <p>Task automation is suspended. The interrupted activation remains first in line.</p>
-      <label>
-        Continuation message (optional)
-        <textarea rows={3} value={message} onChange={(event) => setMessage(event.currentTarget.value)} />
-      </label>
-      <button
-        disabled={pending}
-        onClick={() => {
-          setPending(true);
-          void continueInterruptedTask(taskId, message, crypto.randomUUID())
-            .then(onContinued)
-            .catch(onError)
-            .finally(() => setPending(false));
-        }}
-      >
-        {pending ? "Continuing…" : "Continue interrupted activation"}
-      </button>
     </div>
   );
 }

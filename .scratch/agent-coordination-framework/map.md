@@ -131,12 +131,12 @@ without choosing the implementation yet.
 - [Prevent Tasks from Starting in Completion and Unify Creation](./issues/46-prevent-completion-task-creation.md)
   — Make Completion an application-owned creation invariant across user and
   agent interfaces while giving ordinary and child tasks one shared dialog.
-
-## Next implementation priority
-
 - [Reshape Task Details Around Agent Activity](./issues/47-reshape-task-details-around-agent-activity.md)
   — Replace automation-profile clutter and oversized movement with a responsive
   task-first layout, truthful current activity, and an ordered activation queue.
+
+## Next implementation priority
+
 - [Make Task Relationships Discoverable and Recoverable](./issues/48-make-task-relationships-discoverable-recoverable.md)
   — After issues 46 and 47, group relationships by meaning, add project-wide
   task finding, and let users safely remove mistaken blocking relationships.

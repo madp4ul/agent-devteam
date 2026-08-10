@@ -69,7 +69,7 @@ export function ActivationRecoveryActions({
           disabled={pending !== null}
           onClick={() => void act(action)}
         >
-          {pending === action ? `${label(action)}â€¦` : label(action)}
+          {pending === action ? `${label(action)}…` : label(action)}
         </button>
       ))}
     </span>
@@ -97,7 +97,7 @@ export function AttentionReasonResolution({
         {labelPrefix}{reason.type === "automation-suspended"
           ? "automation suspended — Continue required"
           : reason.type.replaceAll("-", " ")}
-        {reason.recovery === undefined ? "" : ` â€” ${reason.recovery.summary}`}
+        {reason.recovery === undefined ? "" : ` — ${reason.recovery.summary}`}
       </span>
       {reason.recovery?.explanation === undefined ? null : (
         <small className="recovery-explanation">{reason.recovery.explanation}</small>

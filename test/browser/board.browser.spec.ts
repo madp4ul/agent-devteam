@@ -102,8 +102,8 @@ test("actual definition removal, user remapping, and identity restoration stay r
   await expect(impact).toContainText(`${created.task.id} Â· Recover changed process state`);
   await impact.getByRole("button", { name: "Dismiss stale activation" }).click();
   await impact.getByRole("button", { name: new RegExp(created.task.id) }).click();
-  await page.getByRole("button", { name: /Backlog/ }).click();
-  await expect(page.getByText("Backlog", { exact: true }).first()).toBeVisible();
+  await page.getByRole("combobox", { name: "Move task" }).selectOption("backlog");
+  await expect(page.getByRole("combobox", { name: "Move task" })).toHaveValue("backlog");
   await removedServer.close();
   removed.close();
 
@@ -266,7 +266,8 @@ test("task interruption waits for confirmation and offers contextual continuatio
   });
 
   await page.goto("/tasks/T-0002");
-  await expect(page.getByText(/Current attempt · consulting-agent · running/)).toBeVisible();
+  await expect(page.getByRole("region", { name: "Agent activity" })).toContainText("consulting-agent");
+  await expect(page.getByRole("region", { name: "Agent activity" })).toContainText(/Running · 0m/);
   await expect(page.locator(".attempt-entry").filter({ hasText: "consulting-agent · running" })).toBeVisible();
   await page.getByRole("button", { name: "View transcript" }).click();
   await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText(/consulting-agent · running · 0m/);
@@ -274,7 +275,7 @@ test("task interruption waits for confirmation and offers contextual continuatio
   const interruptClick = page.getByRole("button", { name: "Interrupt current attempt" }).click();
   await expect(page.getByRole("button", { name: "Interrupting…" })).toBeDisabled();
   await interruptClick;
-  await expect(page.getByText(/Task automation is suspended/)).toBeVisible();
+  await expect(page.getByText("Task automation is suspended. The interrupted activation remains first in line.")).toBeVisible();
   await page.getByRole("link", { name: "Back to board" }).click();
   const suspendedCard = page.getByRole("link", { name: /T-0002 Drag this task/ }).locator("..");
   await expect(suspendedCard).not.toContainText("Automation suspended");
@@ -536,7 +537,7 @@ test("automatic board refresh preserves the user's current horizontal position",
 test("details keep contextual controls, one timeline, and readable transcript evidence", async ({ page }) => {
   await page.goto("/tasks/T-0001");
   await expect(page.getByText("Understand the full task history")).toBeVisible();
-  await expect(page.getByText(/Blocked by T-0002/)).toBeVisible();
+  await expect(page.getByRole("region", { name: "Relationships" })).toContainText(/Blocked by T-0002/);
   await expect(page.getByText(/Needs attention: user mention/)).toBeVisible();
   await expect(page.getByText("Please preserve the authored context")).toBeVisible();
   await expect(page.getByText("Task moved")).toBeVisible();
@@ -544,10 +545,9 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByText("2m 30s")).toBeVisible();
   await expect(page.getByText("Model: Codex default · Reasoning: Codex default")).toBeVisible();
 
-  const current = page.getByRole("button", { name: /Implementation.*Current/ });
-  await expect(current).toBeDisabled();
-  await expect(page.getByRole("button", { name: /Backlog.*Previous/ })).toBeEnabled();
-  await expect(page.getByRole("button", { name: /Completion.*Next/ })).toBeEnabled();
+  const movement = page.getByRole("combobox", { name: "Move task" });
+  await expect(movement).toHaveValue("implementation");
+  await expect(movement.locator("option")).toHaveText(["Backlog", "Implementation", "Completion"]);
 
   const attemptEntry = page.locator(".attempt-entry").filter({ hasText: "Attempt 1" });
   await expect(attemptEntry.getByText("Thread information")).toHaveCount(0);
@@ -588,8 +588,14 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await page.getByRole("button", { name: "Save task" }).click();
   await expect(page.getByRole("heading", { name: "Inspect all coordination evidence" })).toBeVisible();
 
-  await page.getByRole("button", { name: /Completion.*Next/ }).click();
+  await movement.press("ArrowDown");
   await expect(page.getByText(/Moved T-0001 to Completion/)).toBeVisible();
+
+  const commentBounds = await page.getByRole("region", { name: "Add comment" }).boundingBox();
+  const timelineBounds = await page.getByRole("region", { name: "Task timeline" }).boundingBox();
+  expect(commentBounds).not.toBeNull();
+  expect(timelineBounds).not.toBeNull();
+  expect(timelineBounds!.y - (commentBounds!.y + commentBounds!.height)).toBeGreaterThanOrEqual(8);
 });
 
 test("task details keep board navigation pinned while scrolling long history", async ({ page }) => {
@@ -601,6 +607,214 @@ test("task details keep board navigation pinned while scrolling long history", a
   const topbar = page.locator(".detail-topbar");
   await expect(page.getByRole("link", { name: "Back to board" })).toBeVisible();
   await expect.poll(() => topbar.evaluate((element) => element.getBoundingClientRect().top)).toBe(0);
+});
+
+test("task details prioritize agent activity and preserve the responsive reading order", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.automation = { state: "paused", attemptsMayStart: false };
+    detail.collaborators = [
+      { id: "implementer", name: "Implementation Agent", summary: "Builds verified changes." },
+      { id: "reviewer", name: "Review Agent", summary: "Reviews completed changes." },
+    ];
+    detail.activeRun = null;
+    detail.inspection.blocking = { blocked: true, blockerTaskIds: ["T-0002"] };
+    detail.inspection.automationSuspended = true;
+    detail.task.activations.push(
+      {
+        id: "queued-implementation-one",
+        targetAgentId: "implementer",
+        status: "queued",
+        reason: { type: "agent-mention", sourceEventId: "queued-comment-one" },
+        attempts: [],
+        startupFailure: null,
+        recovery: null,
+        model: "gpt-5.6",
+        reasoningEffort: "high",
+        stale: false,
+      },
+      {
+        id: "queued-implementation-two",
+        targetAgentId: "implementer",
+        status: "queued",
+        reason: { type: "column-entry", sourceEventId: "queued-move-two" },
+        attempts: [],
+        startupFailure: null,
+        recovery: null,
+        model: null,
+        reasoningEffort: null,
+        stale: false,
+      },
+      {
+        id: "queued-review",
+        targetAgentId: "reviewer",
+        status: "queued",
+        reason: { type: "agent-mention", sourceEventId: "queued-comment-three" },
+        attempts: [],
+        startupFailure: null,
+        recovery: null,
+        model: null,
+        reasoningEffort: null,
+        stale: false,
+      },
+    );
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await expect(page.getByRole("heading", { name: "Description" })).toBeVisible();
+  const activity = page.getByRole("region", { name: "Agent activity" });
+  await expect(activity.getByText("Waiting", { exact: true })).toBeVisible();
+  await expect(activity).toContainText("Process automation is paused");
+  await activity.getByText(/more reasons?/).click();
+  await expect(activity).toContainText("Blocked by T-0002");
+  await expect(activity).toContainText("Task automation is suspended");
+  await expect(activity.getByText("Implementation Agent", { exact: true })).toHaveCount(2);
+  await expect(activity.getByText("Review Agent", { exact: true })).toHaveCount(1);
+  await expect(activity).not.toContainText("Requested model");
+  await expect(activity).not.toContainText("Requested reasoning");
+  await expect(activity).not.toContainText("Failed activations");
+
+  await page.setViewportSize({ width: 600, height: 900 });
+  const readingOrder = await page.locator("[data-task-section]").evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-task-section")),
+  );
+  expect(readingOrder).toEqual([
+    "overview",
+    "activity",
+    "workspace",
+    "move",
+    "relationships",
+    "comment",
+    "timeline",
+  ]);
+});
+
+test("running agent activity uses the configured agent name and interruption control", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.automation = { state: "running", attemptsMayStart: true };
+    detail.collaborators = [
+      { id: "implementer", name: "Implementation Agent", summary: "Builds verified changes." },
+    ];
+    detail.inspection.blocking = { blocked: false, blockerTaskIds: [] };
+    detail.inspection.automationSuspended = false;
+    detail.activeRun = {
+      attemptId: "live-attempt",
+      taskId: "T-0001",
+      taskTitle: detail.task.title,
+      boardId: detail.board.id,
+      boardName: detail.board.name,
+      columnId: detail.task.columnId,
+      columnName: "Implementation",
+      agentId: "implementer",
+      status: "running",
+      startedAt: new Date(Date.now() - 65_000).toISOString(),
+    };
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const activity = page.getByRole("region", { name: "Agent activity" });
+  await expect(activity).toContainText("Implementation Agent");
+  await expect(activity).toContainText(/1m \d+s/);
+  await expect(activity.getByRole("button", { name: "Interrupt current attempt" })).toBeVisible();
+});
+
+test("live task refresh moves a singly blocked activity to idle without disturbing the reader", async ({ page }) => {
+  let reads = 0;
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    reads += 1;
+    detail.automation = reads < 3
+      ? { state: "running", attemptsMayStart: true }
+      : { state: "paused", attemptsMayStart: false };
+    detail.activeRun = null;
+    detail.inspection.automationSuspended = false;
+    detail.inspection.unresolvedAttention = [];
+    detail.inspection.run = reads < 3
+      ? { status: "queued", activeAgentId: null, queuedActivationCount: 1, failedActivationCount: 0 }
+      : { status: "idle", activeAgentId: null, queuedActivationCount: 0, failedActivationCount: 0 };
+    detail.task.activations = detail.task.activations.filter(
+      (activation: { status: string }) => activation.status !== "queued" && activation.status !== "failed",
+    );
+    if (reads < 3) {
+      detail.task.activations.push({
+        id: "single-blocked-queue",
+        targetAgentId: "implementer",
+        status: "queued",
+        reason: { type: "column-entry", sourceEventId: "single-blocked-move" },
+        attempts: [],
+        startupFailure: null,
+        recovery: null,
+        model: null,
+        reasoningEffort: null,
+        stale: false,
+      });
+    }
+    detail.inspection.blocking = reads < 3
+      ? { blocked: true, blockerTaskIds: ["T-0002"] }
+      : { blocked: false, blockerTaskIds: [] };
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const activity = page.getByRole("region", { name: "Agent activity" });
+  await expect(activity.getByText("Waiting", { exact: true })).toBeVisible();
+  await expect(activity).toContainText("Blocked by T-0002");
+  const draft = page.getByRole("textbox", { name: "Comment" });
+  await draft.fill("Keep the reader's in-progress comment.");
+  await draft.focus();
+  const readingPosition = await page.evaluate(() => {
+    window.scrollTo(0, 320);
+    return window.scrollY;
+  });
+  await expect(activity).toContainText("No agent work is running or queued.");
+  await expect(draft).toHaveValue("Keep the reader's in-progress comment.");
+  await expect(draft).toBeFocused();
+  expect(await page.evaluate(() => window.scrollY)).toBe(readingPosition);
+});
+
+test("waiting reason disclosure survives authoritative reason-count changes", async ({ page }) => {
+  let reads = 0;
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    reads += 1;
+    detail.activeRun = null;
+    detail.inspection.blocking = { blocked: true, blockerTaskIds: ["T-0002"] };
+    detail.inspection.automationSuspended = false;
+    detail.automation = reads === 3
+      ? { state: "running", attemptsMayStart: true }
+      : { state: "paused", attemptsMayStart: false };
+    detail.task.activations = detail.task.activations.filter(
+      (activation: { status: string }) => activation.status !== "queued" && activation.status !== "failed",
+    );
+    detail.task.activations.push({
+      id: "disclosure-queue",
+      targetAgentId: "implementer",
+      status: "queued",
+      reason: { type: "column-entry", sourceEventId: "disclosure-move" },
+      attempts: [],
+      startupFailure: null,
+      recovery: null,
+      model: null,
+      reasoningEffort: null,
+      stale: false,
+    });
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const activity = page.getByRole("region", { name: "Agent activity" });
+  await activity.getByText("1 more reason").click();
+  await expect(activity.getByText("Process automation is paused")).toBeVisible();
+  await expect(activity.getByText("1 more reason")).toHaveCount(0);
+  await expect(activity.getByText("1 more reason")).toBeVisible();
+  await expect(activity.getByText("Process automation is paused")).toBeVisible();
 });
 
 test("an open task reconciles external timeline changes without disturbing a focused draft", async ({ page }) => {
@@ -1145,7 +1359,7 @@ test("task details create children and dependencies through contextual controls"
   const dependencyForm = page.locator("form").filter({ has: page.getByRole("heading", { name: "Add dependency" }) });
   await dependencyForm.getByLabel("Blocking task ID").fill("T-0003");
   await dependencyForm.getByRole("button", { name: "Add dependency" }).click();
-  await expect(page.getByText("Blocked by T-0003")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Relationships" })).toContainText("Blocked by T-0003");
 
   await page.getByRole("button", { name: "Create child task" }).click();
   const childDialog = page.getByRole("dialog", { name: "Create child task" });
@@ -1175,9 +1389,10 @@ test("pre-attempt startup diagnostics remain discoverable after navigation", asy
   await expect(page.getByText(/Boundary: repository-access/)).toBeVisible();
   await expect(page.locator(".diagnostic").filter({ hasText: "Could not access project repository" }))
     .toBeVisible();
-  const currentState = page.getByRole("region", { name: "Implementation" });
-  await expect(currentState.getByText("Requested model").locator("..")).toContainText("Codex default");
-  await expect(currentState.getByText("Requested reasoning").locator("..")).toContainText("Codex default");
+  const activity = page.getByRole("region", { name: "Agent activity" });
+  await expect(activity).toContainText("Startup failed at repository-access");
+  await expect(activity).not.toContainText("Requested model");
+  await expect(activity).not.toContainText("Requested reasoning");
   await page.getByRole("link", { name: "Back to board" }).click();
   await page.goto("/tasks/T-0003");
   await expect(page.locator(".diagnostic").filter({ hasText: "missing-project-repository" }))
@@ -1391,7 +1606,7 @@ test("pointer dragging moves through the same command and conflicts stay actiona
       idempotencyKey: "concurrent-browser-move",
     },
   });
-  await page.getByRole("button", { name: /Completion.*Next/ }).click();
+  await page.getByRole("combobox", { name: "Move task" }).selectOption("completion");
   await expect(page.getByRole("alert")).toContainText(/changed since this page loaded/i);
 
   await page.getByRole("button", { name: "Edit task" }).click();

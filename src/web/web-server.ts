@@ -271,10 +271,13 @@ async function handleBrowserApi(
     const result = application.queryTask(taskId);
     const inspection = application.queryTaskInspectionForUser(taskId);
     if (result.available && inspection.available) {
+      const collaborators = application.queryCollaborators();
       sendJson(response, 200, {
         ...result,
         inspection: inspection.task,
         activeRun: application.queryActiveRuns().find((run) => run.taskId === taskId) ?? null,
+        automation: application.queryAutomation(),
+        collaborators: collaborators.available ? collaborators.collaborators : [],
       });
     } else {
       const reason = !result.available ? result.reason : "not-found";

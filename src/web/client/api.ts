@@ -14,6 +14,7 @@ import type {
   NeedsAttentionTaskView,
   ArchiveCompletedTasksResult,
   TaskWorkspaceGitStateView,
+  CollaboratorView,
 } from "../../application/coordination-contract.ts";
 
 export interface BrowserColumnView extends BoardSummaryColumnView {
@@ -37,6 +38,8 @@ export interface BrowserTaskDetail {
   board: BoardView;
   inspection: UserTaskInspectionView;
   activeRun: ActiveRunView | null;
+  automation: AutomationView;
+  collaborators: CollaboratorView[];
 }
 
 export class ApiError extends Error {
@@ -68,6 +71,8 @@ export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
     board: result.board,
     inspection: result.inspection,
     activeRun: result.activeRun,
+    automation: result.automation,
+    collaborators: result.collaborators,
   };
 }
 
