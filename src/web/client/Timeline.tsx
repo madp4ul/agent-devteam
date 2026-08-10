@@ -466,6 +466,7 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "task.edited": "Task edited",
     "task.moved": "Task moved",
     "relationship.created": "Relationship created",
+    "relationship.removed": "Relationship removed",
     "relationship.satisfied": "Relationship satisfied",
     "attention.created": "Attention requested",
     "attention.resolved": "Attention resolved",
@@ -486,6 +487,7 @@ function activityDescription(activity: TaskActivityView, columns: TimelineColumn
   if (activity.type === "task.created") return `Created in ${columnName(activity.details.columnId, columns)}.`;
   if (activity.type === "task.edited") return "Title or description updated.";
   if (activity.type === "relationship.created") return "A task relationship was added.";
+  if (activity.type === "relationship.removed") return "A task relationship was removed.";
   if (activity.type === "relationship.satisfied") return "A blocking relationship was satisfied.";
   if (activity.type === "attention.resolved") return `Resolved ${activity.details.reasonType ?? "attention"}.`;
   if (activity.type === "automation.suspended") return "The interrupted activation remains first in line until continued.";

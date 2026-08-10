@@ -543,7 +543,10 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(description.getByRole("button", { name: "Edit task" })).toBeVisible();
   await expect(description.getByText("More actions", { exact: true })).toBeVisible();
   await expect(page.getByText("Understand the full task history")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Relationships" })).toContainText(/Blocked by T-0002/);
+  const relationships = page.getByRole("region", { name: "Relationships" });
+  await expect(relationships.getByRole("heading", { name: "Depends on" })).toBeVisible();
+  await expect(relationships.getByRole("link", { name: "Drag this task" })).toBeVisible();
+  await expect(relationships).toContainText("Blocking");
   await expect(page.getByText(/Needs attention: user mention/)).toBeVisible();
   await expect(page.getByText("Please preserve the authored context")).toBeVisible();
   await expect(page.getByText("Please also verify the migration behavior.")).toBeVisible();
@@ -1574,20 +1577,135 @@ test("a dirty workspace requires explicit discard confirmation before archival",
   expect(archiveRequests[2]?.discardWorkspaceChanges).toBe(true);
 });
 
-test("task details create children and dependencies through contextual controls", async ({ page }) => {
+test("task relationships are discoverable, searchable, and recoverable", async ({ page }) => {
+  await page.route("**/api/board", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json() as {
+      boards: Array<{ id: string; name: string; columns: Array<{ id: string; name: string; tasks: unknown[] }> }>;
+    };
+    body.boards.push({
+      id: "operations",
+      name: "Operations",
+      columns: [
+        {
+          id: "investigation",
+          name: "Investigation",
+          tasks: [
+            {
+              id: "T-9001",
+              title: "Cross-board investigation",
+              boardId: "operations",
+              column: { id: "investigation", name: "Investigation" },
+              revision: 1,
+              blocking: { blocked: false, blockerTaskIds: [] },
+              relationships: [],
+              unresolvedAttention: [],
+              automationSuspended: false,
+              run: { status: "idle", queuedActivationCount: 0, activeAttemptId: null },
+            },
+            ...Array.from({ length: 8 }, (_, index) => ({
+              id: `T-91${index.toString().padStart(2, "0")}`,
+              title: `Additional investigation ${index + 1}`,
+              boardId: "operations",
+              column: { id: "investigation", name: "Investigation" },
+              revision: 1,
+              blocking: { blocked: false, blockerTaskIds: [] },
+              relationships: [],
+              unresolvedAttention: [],
+              automationSuspended: false,
+              run: { status: "idle", queuedActivationCount: 0, activeAttemptId: null },
+            })),
+          ],
+        },
+        {
+          id: "completion",
+          name: "Completion",
+          tasks: [{
+            id: "T-9002",
+            title: "Completed prerequisite",
+            boardId: "operations",
+            column: { id: "completion", name: "Completion" },
+            revision: 2,
+            blocking: { blocked: false, blockerTaskIds: [] },
+            relationships: [],
+            unresolvedAttention: [],
+            automationSuspended: false,
+            run: { status: "idle", queuedActivationCount: 0, activeAttemptId: null },
+          }],
+        },
+      ],
+    });
+    await route.fulfill({ response, json: body });
+  });
   await page.goto("/tasks/T-0002");
 
-  await expect(page.getByText("Dependency: T-0001 → T-0002")).toBeVisible();
-  await expect(page.getByLabel("Blocking task ID")).not.toBeVisible();
+  const relationships = page.getByRole("region", { name: "Relationships" });
+  await expect(relationships.getByRole("heading", { name: "Blocking tasks" })).toBeVisible();
+  await expect(relationships.getByRole("link", { name: "Inspect existing coordination" })).toHaveAttribute("href", "/tasks/T-0001");
+  await expect(relationships).toContainText("T-0001 · Product delivery / Implementation");
+  await expect(relationships.getByRole("region", { name: "Blocking tasks" }).getByText("Blocking", { exact: true })).toHaveCount(0);
+  const relationshipActions = relationships.getByRole("group", { name: "Add relationship" });
+  const finder = relationshipActions.getByRole("combobox", { name: "Depends on" });
+  const createChild = relationshipActions.getByRole("button", { name: "Create child task" });
+  await expect(finder).toBeVisible();
+  await expect(createChild).toBeVisible();
+  const [createChildBox, finderBox] = await Promise.all([createChild.boundingBox(), finder.boundingBox()]);
+  expect(createChildBox?.x).toBeLessThan(finderBox?.x ?? 0);
+  const actionFrames = await relationshipActions.locator(":scope > *").evaluateAll((elements) =>
+    elements.map((element) => ({
+      borderWidth: getComputedStyle(element).borderWidth,
+      backgroundColor: getComputedStyle(element).backgroundColor,
+    })),
+  );
+  expect(actionFrames).toEqual([
+    { borderWidth: "0px", backgroundColor: "rgba(0, 0, 0, 0)" },
+    { borderWidth: "0px", backgroundColor: "rgba(0, 0, 0, 0)" },
+  ]);
+  await expect(relationshipActions.getByRole("listbox", { name: "Available dependency tasks" })).not.toBeVisible();
   await expect(page.getByLabel("Starting Git ref (optional)")).not.toBeVisible();
-  await page.getByText("Manage relationships", { exact: true }).click();
+  await relationships.getByRole("button", { name: "Remove blocking dependency with Inspect existing coordination" }).click();
+  const finalBlockerPreview = page.getByRole("dialog", { name: "Remove blocking dependency?" });
+  await expect(finalBlockerPreview).toContainText("Neither task will be deleted");
+  await expect(finalBlockerPreview).toContainText("clear the final blocker");
+  await finalBlockerPreview.getByRole("button", { name: "Cancel" }).click();
+  await finder.focus();
+  const options = page.getByRole("listbox", { name: "Available dependency tasks" });
+  await expect(options).toBeVisible();
+  expect(await options.evaluate((element) => getComputedStyle(element).position)).toBe("absolute");
+  expect(await options.evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
+  const overlayScroll = await options.evaluate((element) => {
+    const overflow = element.scrollHeight > element.clientHeight;
+    element.scrollTop = element.scrollHeight;
+    return { overflow, scrollTop: element.scrollTop };
+  });
+  expect(overlayScroll.overflow).toBe(true);
+  expect(overlayScroll.scrollTop).toBeGreaterThan(0);
+  await finder.fill("Cross-board");
+  await expect(options.getByRole("option", { name: /Cross-board investigation/ })).toContainText("T-9001 · Operations / Investigation");
+  await finder.fill("Completed prerequisite");
+  await expect(options.getByRole("option", { name: /Completed prerequisite/ })).toContainText("Completed · nonblocking");
+  await finder.press("Escape");
+  await expect(finder).toBeVisible();
+  await expect(options).not.toBeVisible();
+  await finder.focus();
+  await finder.fill("Recover");
+  const recoverOption = options.getByRole("option", { name: /Recover a workspace startup failure/ });
+  await expect(recoverOption).toContainText("T-0003 · Product delivery / Implementation");
+  await recoverOption.click();
+  await expect(relationships.getByRole("heading", { name: "Depends on" })).toBeVisible();
+  await expect(relationships.getByRole("link", { name: "Recover a workspace startup failure" })).toBeVisible();
+  await expect(relationships.getByRole("region", { name: "Depends on" }).getByText("Blocking", { exact: true })).toBeVisible();
+  await expect(finder).toBeVisible();
+  await expect(options).not.toBeVisible();
+  await expect(relationships.getByText("Selected: Recover a workspace startup failure")).toHaveCount(0);
+  await expect(relationships.getByRole("button", { name: "Add dependency" })).toHaveCount(0);
+  await expect(relationships.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+  await finder.focus();
+  await finder.fill("Recover");
+  await expect(options.getByRole("option", { name: /Recover a workspace startup failure/ })).toHaveCount(0);
+  await finder.press("Escape");
 
-  const dependencyForm = page.locator("form").filter({ has: page.getByRole("heading", { name: "Add dependency" }) });
-  await dependencyForm.getByLabel("Blocking task ID").fill("T-0003");
-  await dependencyForm.getByRole("button", { name: "Add dependency" }).click();
-  await expect(page.getByRole("region", { name: "Relationships" })).toContainText("Blocked by T-0003");
-
-  await page.getByRole("button", { name: "Create child task" }).click();
+  await createChild.click();
   const childDialog = page.getByRole("dialog", { name: "Create child task" });
   await expect(childDialog).toContainText("Parent T-0002");
   await expect(childDialog.getByLabel("Starting column")).toHaveValue("backlog");
@@ -1599,7 +1717,45 @@ test("task details create children and dependencies through contextual controls"
   await childDialog.getByLabel("Starting Git ref (optional)").fill("main");
   await childDialog.getByRole("button", { name: "Create child task", exact: true }).click();
   await expect(page.getByRole("status")).toContainText(/Created child T-\d{4}/);
-  await expect(page.getByText(/Parent \/ child: T-0002/)).toBeVisible();
+  await expect(relationships.getByRole("heading", { name: "Child tasks" })).toBeVisible();
+  await relationships.getByRole("link", { name: "Investigate a focused child outcome" }).click();
+  const childRelationships = page.getByRole("region", { name: "Relationships" });
+  await expect(childRelationships.getByRole("heading", { name: "Parent tasks" })).toBeVisible();
+  await expect(childRelationships.getByRole("link", { name: "Drag this task" })).toBeVisible();
+  await expect(childRelationships.getByText("Blocking", { exact: true })).toHaveCount(0);
+  await childRelationships.getByRole("link", { name: "Drag this task" }).click();
+
+  const removeButton = relationships.getByRole("button", { name: "Remove dependency with Recover a workspace startup failure" });
+  const removeIcon = removeButton.locator("svg");
+  const [buttonBounds, iconBounds] = await Promise.all([removeButton.boundingBox(), removeIcon.boundingBox()]);
+  expect(buttonBounds).not.toBeNull();
+  expect(iconBounds).not.toBeNull();
+  if (buttonBounds !== null && iconBounds !== null) {
+    expect(Math.abs((buttonBounds.x + buttonBounds.width / 2) - (iconBounds.x + iconBounds.width / 2))).toBeLessThanOrEqual(1);
+    expect(Math.abs((buttonBounds.y + buttonBounds.height / 2) - (iconBounds.y + iconBounds.height / 2))).toBeLessThanOrEqual(1);
+  }
+
+  await removeButton.click();
+  const confirmation = page.getByRole("dialog", { name: "Remove dependency?" });
+  await expect(confirmation).toContainText("Neither task will be deleted");
+  await expect(confirmation).toContainText("remain blocked by other unresolved work");
+  await confirmation.getByRole("button", { name: "Cancel" }).click();
+  await expect(relationships.getByRole("link", { name: "Recover a workspace startup failure" })).toBeVisible();
+  let removalAttempts = 0;
+  await page.route("**/api/tasks/T-0002/relationships/*", async (route) => {
+    if (route.request().method() === "DELETE" && removalAttempts++ === 0) {
+      await route.fulfill({ status: 409, json: { accepted: false, reason: "relationship-conflict" } });
+      return;
+    }
+    await route.continue();
+  });
+  await relationships.getByRole("button", { name: "Remove dependency with Recover a workspace startup failure" }).click();
+  await page.getByRole("dialog", { name: "Remove dependency?" }).getByRole("button", { name: "Remove relationship" }).click();
+  await expect(page.getByRole("alert")).toContainText("Relationship state was refreshed");
+  await expect(relationships.getByRole("link", { name: "Recover a workspace startup failure" })).toBeVisible();
+  await relationships.getByRole("button", { name: "Remove dependency with Recover a workspace startup failure" }).click();
+  await page.getByRole("dialog", { name: "Remove dependency?" }).getByRole("button", { name: "Remove relationship" }).click();
+  await expect(relationships.getByRole("link", { name: "Recover a workspace startup failure" })).toHaveCount(0);
 });
 
 test("pre-attempt startup diagnostics remain discoverable after navigation", async ({ page }) => {

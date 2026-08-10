@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 9;
+const currentSchemaVersion = 10;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -108,6 +108,7 @@ function initializeCurrentSchema(database: DatabaseSync): void {
           'task.edited',
           'task.moved',
           'relationship.created',
+          'relationship.removed',
           'relationship.satisfied',
           'attention.created',
           'attention.resolved',
@@ -330,7 +331,8 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     activationColumns.has("stale") &&
     attemptColumns.has("outcome_kind") &&
     commentColumns.has("attempt_id") &&
-    activityTable?.sql.includes("task.archived") === true;
+    activityTable?.sql.includes("task.archived") === true &&
+    activityTable.sql.includes("relationship.removed") === true;
 }
 
 function replaceIncompatibleDatabase(path: string): void {

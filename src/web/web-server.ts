@@ -273,9 +273,27 @@ async function handleBrowserApi(
     if (result.available && inspection.available) {
       const collaborators = application.queryCollaborators();
       const activeRuns = application.queryActiveRuns();
+      const relationshipTasks = result.task.relationships.flatMap((relationship) => {
+        const relatedTaskId = relationship.sourceTaskId === taskId
+          ? relationship.targetTaskId
+          : relationship.sourceTaskId;
+        const related = application.queryTask(relatedTaskId);
+        const relatedInspection = application.queryTaskInspectionForUser(relatedTaskId);
+        if (!related.available || !relatedInspection.available) return [];
+        return [{
+          id: related.task.id,
+          title: related.task.title,
+          boardId: related.task.boardId,
+          boardName: related.board.name,
+          column: relatedInspection.task.column,
+          blocking: relatedInspection.task.blocking,
+          ...(related.task.archived ? { archived: true as const } : {}),
+        }];
+      });
       sendJson(response, 200, {
         ...result,
         inspection: inspection.task,
+        relationshipTasks,
         activeRun: activeRuns.find((run) => run.taskId === taskId) ?? null,
         activeRuns,
         automation: application.queryAutomation(),
@@ -366,6 +384,22 @@ async function handleBrowserApi(
       { kind: "user", id: "local-user" },
     ));
     sendRelationshipMutation(response, result);
+    return;
+  }
+  const relationshipRemovalMatch = /^\/api\/tasks\/([^/]+)\/relationships\/([^/]+)$/.exec(url.pathname);
+  if (method === "DELETE" && relationshipRemovalMatch?.[1] !== undefined && relationshipRemovalMatch[2] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.removeTaskRelationship({
+      taskId: decodeURIComponent(relationshipRemovalMatch[1]),
+      relationshipId: decodeURIComponent(relationshipRemovalMatch[2]),
+      idempotencyKey: stringField(body, "idempotencyKey"),
+      actor: { kind: "user", id: "local-user" },
+    });
+    sendJson(
+      response,
+      result.accepted ? 200 : result.reason === "not-found" ? 404 : 409,
+      result,
+    );
     return;
   }
   const commentsMatch = /^\/api\/tasks\/([^/]+)\/comments$/.exec(url.pathname);

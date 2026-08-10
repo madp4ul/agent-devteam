@@ -259,6 +259,152 @@ test("fully unblocking a task in an unwatched column records no activation", asy
   if (result.available) assert.equal(result.task.activations.length, 0);
 });
 
+test("removing the final unresolved relationship preserves history and queues one activation", async (t) => {
+  const fixture = await createFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+  const dependent = createTask(application, "implementation", "Recover dependent", "remove-dependent");
+  const blocker = createTask(application, "backlog", "Mistaken blocker", "remove-blocker");
+  const created = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: dependent.id,
+    targetTaskId: blocker.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "remove-link",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  const command = {
+    taskId: blocker.id,
+    relationshipId: created.relationship.id,
+    actor: { kind: "user" as const, id: "paul" },
+    idempotencyKey: "remove-final-blocker",
+  };
+  const removed = application.removeTaskRelationship(command);
+  assert.equal(removed.accepted, true);
+  if (!removed.accepted) return;
+  assert.equal(removed.clearedFinalBlocker, true);
+  assert.deepEqual(removed.sourceTask.relationships, []);
+  assert.deepEqual(removed.targetTask.relationships, []);
+  assert.equal(removed.sourceTask.activations.at(-1)?.reason.type, "blockers-cleared");
+  const removal = removed.sourceTask.activity.findLast(
+    (event) => event.type === "relationship.removed",
+  );
+  assert.ok(removal);
+  assert.equal(removed.sourceTask.activations.at(-1)?.reason.sourceEventId, removal.id);
+  assert.equal(
+    removed.targetTask.activity.filter((event) => event.type === "relationship.removed").length,
+    1,
+  );
+  assert.equal(application.queryTask(dependent.id).available, true);
+  assert.equal(application.queryTask(blocker.id).available, true);
+
+  assert.deepEqual(application.removeTaskRelationship(command), removed);
+  assert.deepEqual(application.removeTaskRelationship({
+    ...command,
+    idempotencyKey: "remove-final-blocker-again",
+  }), { accepted: false, reason: "relationship-conflict" });
+});
+
+test("relationship removal only reactivates an unresolved final blocker in a watched column", async (t) => {
+  const fixture = await createFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+
+  const watched = createTask(application, "implementation", "Watched dependent", "remove-watched");
+  const first = createTask(application, "backlog", "First blocker", "remove-first");
+  const second = createTask(application, "backlog", "Second blocker", "remove-second");
+  const firstLink = application.createTaskRelationship({
+    type: "parent-child",
+    sourceTaskId: watched.id,
+    targetTaskId: first.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "remove-first-link",
+  });
+  const secondLink = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: watched.id,
+    targetTaskId: second.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "remove-second-link",
+  });
+  assert.equal(firstLink.accepted, true);
+  assert.equal(secondLink.accepted, true);
+  if (!firstLink.accepted || !secondLink.accepted) return;
+
+  const oneOfSeveral = application.removeTaskRelationship({
+    taskId: watched.id,
+    relationshipId: firstLink.relationship.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "remove-one-of-several",
+  });
+  assert.equal(oneOfSeveral.accepted, true);
+  if (!oneOfSeveral.accepted) return;
+  assert.equal(oneOfSeveral.clearedFinalBlocker, false);
+  assert.equal(oneOfSeveral.sourceTask.activations.length, 1);
+  assert.deepEqual(
+    oneOfSeveral.sourceTask.relationships.map((relationship) => relationship.id),
+    [secondLink.relationship.id],
+  );
+  assert.deepEqual(oneOfSeveral.targetTask.relationships, []);
+  assert.equal(
+    oneOfSeveral.sourceTask.activity.filter((event) => event.type === "relationship.removed").length,
+    1,
+  );
+  assert.equal(
+    oneOfSeveral.targetTask.activity.filter((event) => event.type === "relationship.removed").length,
+    1,
+  );
+  assert.equal(application.queryTask(watched.id).available, true);
+  assert.equal(application.queryTask(first.id).available, true);
+
+  const unwatched = createTask(application, "backlog", "Unwatched dependent", "remove-unwatched");
+  const unwatchedLink = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: unwatched.id,
+    targetTaskId: first.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "remove-unwatched-link",
+  });
+  assert.equal(unwatchedLink.accepted, true);
+  if (!unwatchedLink.accepted) return;
+  const unwatchedRemoval = application.removeTaskRelationship({
+    taskId: unwatched.id,
+    relationshipId: unwatchedLink.relationship.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "remove-unwatched-link-command",
+  });
+  assert.equal(unwatchedRemoval.accepted, true);
+  if (unwatchedRemoval.accepted) assert.equal(unwatchedRemoval.sourceTask.activations.length, 0);
+
+  const completed = application.moveTask({
+    taskId: second.id,
+    destinationColumnId: "completion",
+    expectedRevision: second.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "complete-second-before-removal",
+  });
+  assert.equal(completed.accepted, true);
+  const beforeSatisfiedRemoval = application.queryTask(watched.id);
+  assert.equal(beforeSatisfiedRemoval.available, true);
+  if (!beforeSatisfiedRemoval.available) return;
+  const satisfiedRemoval = application.removeTaskRelationship({
+    taskId: watched.id,
+    relationshipId: secondLink.relationship.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "remove-satisfied-link",
+  });
+  assert.equal(satisfiedRemoval.accepted, true);
+  if (satisfiedRemoval.accepted) {
+    assert.equal(satisfiedRemoval.clearedFinalBlocker, false);
+    assert.equal(
+      satisfiedRemoval.sourceTask.activations.length,
+      beforeSatisfiedRemoval.task.activations.length,
+    );
+  }
+});
+
 function createTask(
   application: CoordinationApplication,
   columnId: string,

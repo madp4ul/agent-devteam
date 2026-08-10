@@ -26,6 +26,8 @@ import type {
   CreateTaskCommand,
   CreateChildTaskCommand,
   CreateTaskRelationshipCommand,
+  RemoveTaskRelationshipCommand,
+  RemoveTaskRelationshipResult,
   EditTaskCommand,
   MoveTaskCommand,
   MoveTaskResult,
@@ -521,6 +523,18 @@ export class CoordinationApplication {
     }
     const result = this.#persistence.taskCommands.createTaskRelationship(command);
     if (result.accepted && result.sourceTask.activations.some((activation) => activation.status === "queued")) {
+      this.#automation.kick();
+    }
+    return result;
+  }
+
+  removeTaskRelationship(command: RemoveTaskRelationshipCommand): RemoveTaskRelationshipResult {
+    const gated = this.configurationErrorRejection();
+    const result = gated ?? this.#persistence.taskCommands.removeTaskRelationship(command);
+    if (
+      result.accepted &&
+      result.sourceTask.activations.some((activation) => activation.status === "queued")
+    ) {
       this.#automation.kick();
     }
     return result;

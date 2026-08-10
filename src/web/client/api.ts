@@ -41,6 +41,17 @@ export interface BrowserTaskDetail {
   activeRuns: ActiveRunView[];
   automation: AutomationView;
   collaborators: CollaboratorView[];
+  relationshipTasks: BrowserRelationshipTask[];
+}
+
+export interface BrowserRelationshipTask {
+  id: string;
+  title: string;
+  boardId: string;
+  boardName: string;
+  column: { id: string; name: string };
+  blocking: TaskOverviewView["blocking"];
+  archived?: true;
 }
 
 export class ApiError extends Error {
@@ -75,6 +86,7 @@ export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
     activeRuns: result.activeRuns ?? (result.activeRun === null ? [] : [result.activeRun]),
     automation: result.automation,
     collaborators: result.collaborators,
+    relationshipTasks: result.relationshipTasks ?? [],
   };
 }
 
@@ -168,6 +180,17 @@ export async function addTaskDependency(
     method: "POST",
     body: JSON.stringify({ type: "dependency", targetTaskId, idempotencyKey }),
   });
+}
+
+export async function removeTaskRelationship(
+  taskId: string,
+  relationshipId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await request(
+    `/api/tasks/${encodeURIComponent(taskId)}/relationships/${encodeURIComponent(relationshipId)}`,
+    { method: "DELETE", body: JSON.stringify({ idempotencyKey }) },
+  );
 }
 
 export async function editTask(

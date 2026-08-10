@@ -332,6 +332,14 @@ continuing. Satisfying one blocking relationship is recorded in the task
 activity history but does not activate the task while another blocking
 relationship remains unresolved.
 
+**Relationship removal**:
+An idempotent user recovery command that removes one current dependency or
+parent-child relationship without deleting either task or rewriting earlier
+history. Both tasks receive immutable removal activity. Removing the final
+unresolved blocker follows the same watched-column activation rule as satisfying
+it; removing one of several blockers or an already satisfied relationship does
+not activate work.
+
 **Board handoff**:
 A transition in which work on one board leads to work on another, normally by
 creating one or more new tasks while the source task stays in place.

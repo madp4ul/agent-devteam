@@ -72,6 +72,7 @@ export interface TaskActivityView {
     | "task.edited"
     | "task.moved"
     | "relationship.created"
+    | "relationship.removed"
     | "relationship.satisfied"
     | "attention.created"
     | "attention.resolved"
@@ -581,6 +582,13 @@ export interface CreateTaskRelationshipCommand {
   idempotencyKey: string;
 }
 
+export interface RemoveTaskRelationshipCommand {
+  taskId: string;
+  relationshipId: string;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
 export interface EditTaskCommand {
   taskId: string;
   title: string;
@@ -684,6 +692,17 @@ export type TaskRelationshipMutationResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { accepted: false; reason: "not-found" | "archived-task" | "self-relationship" | "duplicate-relationship" };
+
+export type RemoveTaskRelationshipResult =
+  | {
+      accepted: true;
+      relationship: TaskRelationshipView;
+      sourceTask: TaskView;
+      targetTask: TaskView;
+      clearedFinalBlocker: boolean;
+    }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
+  | { accepted: false; reason: "not-found" | "archived-task" | "relationship-conflict" };
 
 export type AddTaskCommentResult =
   | { accepted: true; task: TaskView; comment: TaskCommentView }

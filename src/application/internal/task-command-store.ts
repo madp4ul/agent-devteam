@@ -15,6 +15,8 @@ import type {
   CreateTaskCommand,
   CreateChildTaskCommand,
   CreateTaskRelationshipCommand,
+  RemoveTaskRelationshipCommand,
+  RemoveTaskRelationshipResult,
   EditTaskCommand,
   MoveTaskCommand,
   MoveTaskResult,
@@ -275,6 +277,90 @@ export class TaskCommandStore {
             relationship,
             sourceTask: this.#projections.readTask(command.sourceTaskId)!,
             targetTask: this.#projections.readTask(command.targetTaskId)!,
+          };
+        }
+      }
+      this.#commandResponses.write(commandType, command.idempotencyKey, result);
+      return result;
+    });
+  }
+
+  removeTaskRelationship(command: RemoveTaskRelationshipCommand): RemoveTaskRelationshipResult {
+    return this.transaction(() => {
+      const commandType = "remove-task-relationship";
+      const prior = this.#commandResponses.read<RemoveTaskRelationshipResult>(
+        commandType,
+        command.idempotencyKey,
+      );
+      if (prior !== undefined) return prior;
+      const currentTask = this.#projections.readTask(command.taskId);
+      let result: RemoveTaskRelationshipResult;
+      if (currentTask === undefined) {
+        result = { accepted: false, reason: "not-found" };
+      } else if (this.taskIsReadOnly(currentTask)) {
+        result = { accepted: false, reason: "archived-task" };
+      } else {
+        const row = this.#database
+          .prepare(
+            `SELECT relationship.id, relationship.type,
+                    relationship.source_task_id, relationship.target_task_id,
+                    target.column_id AS target_column_id
+             FROM task_relationships relationship
+             JOIN tasks target ON target.id = relationship.target_task_id
+             WHERE relationship.id = ?
+               AND (relationship.source_task_id = ? OR relationship.target_task_id = ?)`,
+          )
+          .get(command.relationshipId, command.taskId, command.taskId) as {
+            id: string;
+            type: TaskRelationshipView["type"];
+            source_task_id: string;
+            target_task_id: string;
+            target_column_id: string;
+          } | undefined;
+        if (row === undefined) {
+          result = { accepted: false, reason: "relationship-conflict" };
+        } else {
+          const relationship: TaskRelationshipView = {
+            id: row.id,
+            type: row.type,
+            sourceTaskId: row.source_task_id,
+            targetTaskId: row.target_task_id,
+          };
+          const clearedFinalBlocker = row.target_column_id !== "completion" &&
+            this.#projections.readBlockingTaskIds(row.source_task_id).length === 1;
+          this.#database.prepare("DELETE FROM task_relationships WHERE id = ?").run(row.id);
+          const occurredAt = new Date().toISOString();
+          const sourceEventId = this.appendActivity(
+            row.source_task_id,
+            "relationship.removed",
+            command.actor,
+            {
+              relationshipId: row.id,
+              relationshipType: row.type,
+              relatedTaskId: row.target_task_id,
+            },
+            occurredAt,
+          );
+          this.appendActivity(
+            row.target_task_id,
+            "relationship.removed",
+            command.actor,
+            {
+              relationshipId: row.id,
+              relationshipType: row.type,
+              relatedTaskId: row.source_task_id,
+            },
+            occurredAt,
+          );
+          if (clearedFinalBlocker) {
+            this.createBlockersClearedActivation(row.source_task_id, sourceEventId);
+          }
+          result = {
+            accepted: true,
+            relationship,
+            sourceTask: this.#projections.readTask(row.source_task_id)!,
+            targetTask: this.#projections.readTask(row.target_task_id)!,
+            clearedFinalBlocker,
           };
         }
       }

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEve
 
 import {
   addTaskComment,
-  addTaskDependency,
   ApiError,
   archiveTask,
   editTask,
@@ -18,9 +17,9 @@ import { Loading } from "./Loading.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
 import { useTaskMovement } from "./task-movement.ts";
 import { TaskTimeline } from "./Timeline.tsx";
-import { TaskCreationDialog } from "./TaskCreationDialog.tsx";
 import { TaskWorkspacePanel } from "./TaskWorkspacePanel.tsx";
 import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
+import { TaskRelationshipsPanel } from "./TaskRelationshipsPanel.tsx";
 import {
   captureTimelineViewportAnchor,
   restoreTimelineViewportAnchor,
@@ -233,31 +232,12 @@ export function TaskPage({
               </div>
             )}
             <div data-task-section="relationships">
-            <section className="detail-panel" aria-labelledby="relationships-heading">
-            <h2 id="relationships-heading">Relationships</h2>
-            {task.relationships.length === 0 ? (
-              <p className="quiet">No task relationships.</p>
-            ) : (
-              <ul className="relationship-list">
-                {task.relationships.map((relationship) => (
-                  <li key={relationship.id}>
-                    {relationship.type === "dependency" && relationship.sourceTaskId === task.id
-                      ? `${inspection.blocking.blockerTaskIds.includes(relationship.targetTaskId) ? "Blocked by" : "Depends on"} ${relationship.targetTaskId}`
-                      : relationship.type === "parent-child"
-                        ? `Parent / child: ${relationship.sourceTaskId} → ${relationship.targetTaskId}`
-                        : `Dependency: ${relationship.sourceTaskId} → ${relationship.targetTaskId}`}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {task.archived ? null : <RelationshipForms
+            <TaskRelationshipsPanel
               detail={detail}
-              onChanged={async (message) => {
-                await refresh();
-                setFeedback({ role: "status", text: message });
-              }}
-            />}
-            </section>
+              navigate={navigate}
+              onChanged={refresh}
+              onFeedback={setFeedback}
+            />
             </div>
           </div>
         </div>
@@ -320,68 +300,6 @@ export function TaskPage({
         </div>
       ) : null}
     </div>
-  );
-}
-
-function RelationshipForms({
-  detail,
-  onChanged,
-}: {
-  detail: BrowserTaskDetail;
-  onChanged(message: string): Promise<void>;
-}): ReactNode {
-  const [targetTaskId, setTargetTaskId] = useState("");
-  const [creatingChild, setCreatingChild] = useState(false);
-  const [error, setError] = useState<string>();
-  const [pending, setPending] = useState(false);
-
-  const addDependency = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    setPending(true);
-    setError(undefined);
-    try {
-      await addTaskDependency(detail.task.id, targetTaskId.trim(), crypto.randomUUID());
-      setTargetTaskId("");
-      await onChanged(`Added dependency for ${detail.task.id}.`);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <>
-      <details className="relationship-actions">
-        <summary>Manage relationships</summary>
-        <div className="relationship-action-content">
-          <form onSubmit={(event) => void addDependency(event)}>
-            <h3>Add dependency</h3>
-            <label>Blocking task ID<input value={targetTaskId} onChange={(event) => setTargetTaskId(event.currentTarget.value)} /></label>
-            <button disabled={pending || targetTaskId.trim().length === 0}>Add dependency</button>
-          </form>
-          <button type="button" className="secondary" onClick={() => setCreatingChild(true)}>
-            Create child task
-          </button>
-          {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
-        </div>
-      </details>
-      {creatingChild ? (
-        <TaskCreationDialog
-          initial={{
-            boardId: detail.task.boardId,
-            columnId: detail.board.columns.find((column) => column.taskCreationAllowed)?.id ?? "",
-          }}
-          columns={detail.board.columns}
-          parent={{ id: detail.task.id, title: detail.task.title }}
-          onClose={() => setCreatingChild(false)}
-          onCreated={async (task) => {
-            setCreatingChild(false);
-            await onChanged(`Created child ${task.id}.`);
-          }}
-        />
-      ) : null}
-    </>
   );
 }
 
