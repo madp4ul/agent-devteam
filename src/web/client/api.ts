@@ -38,6 +38,7 @@ export interface BrowserTaskDetail {
   board: BoardView;
   inspection: UserTaskInspectionView;
   activeRun: ActiveRunView | null;
+  activeRuns: ActiveRunView[];
   automation: AutomationView;
   collaborators: CollaboratorView[];
 }
@@ -71,6 +72,7 @@ export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
     board: result.board,
     inspection: result.inspection,
     activeRun: result.activeRun,
+    activeRuns: result.activeRuns ?? (result.activeRun === null ? [] : [result.activeRun]),
     automation: result.automation,
     collaborators: result.collaborators,
   };

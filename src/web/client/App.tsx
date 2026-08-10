@@ -26,6 +26,7 @@ export function App(): ReactNode {
       key={`task-${locationKey}`}
       taskId={decodeURIComponent(taskMatch[1])}
       navigate={navigate}
+      notifications={notifications}
     />
   );
 }

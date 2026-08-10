@@ -537,13 +537,17 @@ test("automatic board refresh preserves the user's current horizontal position",
 test("details keep contextual controls, one timeline, and readable transcript evidence", async ({ page }) => {
   await page.goto("/tasks/T-0001");
   const topbar = page.locator(".detail-topbar");
-  await expect(topbar.getByRole("button", { name: "Edit task" })).toBeVisible();
-  await expect(topbar.getByText("More actions", { exact: true })).toBeVisible();
+  await expect(topbar.getByText(/Automation (running|paused)/)).toBeVisible();
+  await expect(topbar.getByText(/Current runs · \d+/)).toBeVisible();
+  const description = page.getByRole("region", { name: "Description" });
+  await expect(description.getByRole("button", { name: "Edit task" })).toBeVisible();
+  await expect(description.getByText("More actions", { exact: true })).toBeVisible();
   await expect(page.getByText("Understand the full task history")).toBeVisible();
   await expect(page.getByRole("region", { name: "Relationships" })).toContainText(/Blocked by T-0002/);
   await expect(page.getByText(/Needs attention: user mention/)).toBeVisible();
   await expect(page.getByText("Please preserve the authored context")).toBeVisible();
   await expect(page.getByText("Task moved")).toBeVisible();
+  await expect(page.getByText(/Immutable framework event/)).toHaveCount(0);
   await expect(page.getByText("Attempt 1")).toBeVisible();
   await expect(page.getByText("2m 30s")).toBeVisible();
   await expect(page.getByText("Model: Codex default · Reasoning: Codex default")).toBeVisible();
@@ -586,7 +590,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await page.locator(".transcript-backdrop").click({ position: { x: 4, y: 4 } });
   await expect(dialog).toBeHidden();
 
-  await topbar.getByRole("button", { name: "Edit task" }).click();
+  await description.getByRole("button", { name: "Edit task" }).click();
   await page.getByLabel("Task title").fill("Inspect all coordination evidence");
   await page.getByRole("button", { name: "Save task" }).click();
   await expect(page.getByRole("heading", { name: "Inspect all coordination evidence" })).toBeVisible();
@@ -685,7 +689,7 @@ test("task details prioritize agent activity and preserve the responsive reading
   await expect(activity).toContainText("Task automation is suspended");
   await expect(activity.getByText("Implementation Agent", { exact: true })).toHaveCount(2);
   await expect(activity.getByText("Review Agent", { exact: true })).toHaveCount(1);
-  await expect(activity.getByText("Activation reason: Column entry", { exact: true })).toBeVisible();
+  await expect(activity.getByText("Activated by column entry", { exact: true })).toBeVisible();
   await expect(activity).not.toContainText("Requested model");
   await expect(activity).not.toContainText("Requested reasoning");
   await expect(activity).not.toContainText("Failed activations");
@@ -696,18 +700,44 @@ test("task details prioritize agent activity and preserve the responsive reading
   expect(activityBounds).not.toBeNull();
   expect(activityBounds!.y - (descriptionBounds!.y + descriptionBounds!.height)).toBeLessThanOrEqual(24);
 
+  const workspaceBounds = await workspace.boundingBox();
+  expect(workspaceBounds).not.toBeNull();
+  expect(Math.abs(workspaceBounds!.y - descriptionBounds!.y)).toBeLessThanOrEqual(2);
+  const overviewBounds = await page.locator('[data-task-section="overview"]').boundingBox();
+  expect(overviewBounds).not.toBeNull();
+  expect(overviewBounds!.width).toBeGreaterThan(descriptionBounds!.width * 1.25);
+  await expect(page.getByText(/Revision \d+/)).toHaveCount(0);
+
+  const primaryGaps = await page.locator(".detail-primary-column > [data-task-section]").evaluateAll((elements) =>
+    elements.slice(1).map((element, index) => {
+      const previous = elements[index]!.getBoundingClientRect();
+      const current = element.getBoundingClientRect();
+      return current.top - previous.bottom;
+    }),
+  );
+  const secondaryGaps = await page.locator(".detail-column > [data-task-section]").evaluateAll((elements) =>
+    elements.slice(1).map((element, index) => {
+      const previous = elements[index]!.getBoundingClientRect();
+      const current = element.getBoundingClientRect();
+      return current.top - previous.bottom;
+    }),
+  );
+  expect(new Set(primaryGaps.map(Math.round)).size).toBe(1);
+  expect(new Set(secondaryGaps.map(Math.round)).size).toBe(1);
+
   await page.setViewportSize({ width: 600, height: 900 });
   const readingOrder = await page.locator("[data-task-section]").evaluateAll((elements) =>
     elements.map((element) => element.getAttribute("data-task-section")),
   );
   expect(readingOrder).toEqual([
     "overview",
+    "description",
     "activity",
+    "comment",
+    "timeline",
     "workspace",
     "move",
     "relationships",
-    "comment",
-    "timeline",
   ]);
 });
 
@@ -786,6 +816,7 @@ test("live task refresh moves a singly blocked activity to idle without disturbi
   await expect(activity.getByText("Waiting", { exact: true })).toBeVisible();
   await expect(activity).toContainText("Blocked by T-0002");
   const draft = page.getByRole("textbox", { name: "Comment" });
+  await expect(draft).toHaveAttribute("rows", "2");
   await draft.fill("Keep the reader's in-progress comment.");
   await draft.focus();
   const readingPosition = await page.evaluate(() => {
@@ -793,6 +824,9 @@ test("live task refresh moves a singly blocked activity to idle without disturbi
     return window.scrollY;
   });
   await expect(activity).toContainText("No agent work is running or queued.");
+  const idleBounds = await activity.boundingBox();
+  expect(idleBounds).not.toBeNull();
+  expect(idleBounds!.height).toBeLessThanOrEqual(90);
   await expect(draft).toHaveValue("Keep the reader's in-progress comment.");
   await expect(draft).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(readingPosition);
@@ -1068,9 +1102,13 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
   const workspaceBounds = await workspace.boundingBox();
   const headingBounds = await workspace.getByRole("heading", { name: "Workspace" }).boundingBox();
   const actionBounds = await workspace.locator(".workspace-actions").boundingBox();
+  const copyBounds = await workspace.getByRole("button", { name: "Copy path" }).boundingBox();
+  const openBounds = await workspace.getByRole("button", { name: "Open folder" }).boundingBox();
   expect(workspaceBounds).not.toBeNull();
   expect(headingBounds).not.toBeNull();
   expect(actionBounds).not.toBeNull();
+  expect(copyBounds).not.toBeNull();
+  expect(openBounds).not.toBeNull();
   if (workspaceBounds !== null && actionBounds !== null) {
     expect(actionBounds.x).toBeGreaterThanOrEqual(workspaceBounds.x);
     expect(actionBounds.x + actionBounds.width).toBeLessThanOrEqual(
@@ -1079,7 +1117,9 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
   }
   if (headingBounds !== null && actionBounds !== null) {
     expect(actionBounds.y).toBeGreaterThanOrEqual(headingBounds.y + headingBounds.height);
+    expect(Math.abs(actionBounds.x - headingBounds.x)).toBeLessThanOrEqual(2);
   }
+  expect(Math.abs(copyBounds!.height - openBounds!.height)).toBeLessThanOrEqual(1);
 });
 
 test("task workspace Git summary refreshes branch, detached, history, and clean change state", async ({ page }) => {
@@ -1324,7 +1364,7 @@ test("archive is promoted only for completed tasks", async ({ page }) => {
   await page.getByLabel("Complete description").fill("Archive remains available without being promoted before Completion.");
   await page.getByRole("button", { name: "Create task", exact: true }).click();
   await page.getByRole("link", { name: /Keep archival secondary/ }).click();
-  const actions = page.locator(".detail-topbar .task-actions");
+  const actions = page.getByRole("region", { name: "Description" }).locator(".task-actions");
   await expect(actions.getByRole("button", { name: "Archive task" })).toHaveCount(0);
   await actions.getByText("More actions", { exact: true }).click();
   const secondaryArchive = actions.getByRole("button", { name: "Archive task" });
@@ -1486,7 +1526,10 @@ test("desktop notifications are opt-in, privacy-safe, suppressed on the active t
   await page.getByRole("link", { name: /T-0002 Drag this task/ }).click();
   await expect(page).toHaveURL(/\/tasks\/T-0002$/);
   await page.getByRole("textbox", { name: "Comment" }).fill("@user please inspect this while I am open.");
-  await page.getByRole("button", { name: "Add comment" }).click();
+  const commentRegion = page.getByRole("region", { name: "Add comment" });
+  await expect(commentRegion.getByText("Mention a collaborator", { exact: false })).toHaveCount(0);
+  await expect(commentRegion.getByText("Comment", { exact: true })).toHaveCount(0);
+  await commentRegion.getByRole("button", { name: "Post" }).click();
   await page.waitForTimeout(1_700);
   expect(await page.evaluate(() => (window as typeof window & { __controlledNotifications: unknown[] }).__controlledNotifications.length)).toBe(0);
 
@@ -1635,9 +1678,10 @@ test("pointer dragging moves through the same command and conflicts stay actiona
   await expect(page.getByRole("alert")).toContainText(/changed since this page loaded/i);
 
   await page.getByRole("button", { name: "Edit task" }).click();
-  const latestRevision = Number(
-    (await page.getByText(/Revision \d+/).textContent())?.replace("Revision ", ""),
-  );
+  const latestDetail = await (await request.get("/api/tasks/T-0002")).json() as {
+    task: { revision: number };
+  };
+  const latestRevision = latestDetail.task.revision;
   await request.patch("/api/tasks/T-0002", {
     data: {
       title: "Concurrent authoritative title",

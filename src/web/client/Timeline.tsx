@@ -169,7 +169,7 @@ function TimelineEntry({
             <time>{formatDate(entry.occurredAt)}</time>
           </div>
           <p>{activityDescription(entry.activity)}</p>
-          <small>Immutable framework event · {entry.activity.actor.id}</small>
+          <small>{entry.activity.actor.id}</small>
         </article>
       </li>
     );

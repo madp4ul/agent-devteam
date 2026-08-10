@@ -6,16 +6,14 @@ import {
 import {
   archiveCompletedTasks,
   dismissStaleActivation,
-  pauseAutomation,
   readBoard,
   readArchivedTasks,
-  resumeAutomation,
   resumeWithCurrentProcess,
   type BrowserBoardState,
 } from "./api.ts";
 import type { TaskOverviewView } from "../../application/coordination-contract.ts";
 import { BoardColumn, type BoardLayout } from "./BoardColumn.tsx";
-import { ElapsedTime } from "./ElapsedTime.tsx";
+import { AutomationControls } from "./AutomationControls.tsx";
 import { errorMessage } from "./feedback.ts";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { Loading } from "./Loading.tsx";
@@ -250,56 +248,15 @@ export function BoardPage({
           <h1>{state.startup.processName}</h1>
           <span>Coordination board</span>
         </div>
-        <div className="automation-control">
-          <span className={`status-dot ${state.automation.state}`} aria-hidden="true" />
-          <span>Automation {state.automation.state}</span>
-          {state.automation.state === "paused" && (processImpact?.staleActivations.length ?? 0) === 0 ? (
-            <button
-              className="secondary"
-              onClick={() =>
-                void resumeAutomation()
-                  .then(refresh)
-                  .catch((error) =>
-                    setFeedback({ role: "alert", text: errorMessage(error) }),
-                  )}
-            >
-              Resume
-            </button>
-          ) : null}
-          {state.automation.state === "running" || state.automation.state === "pausing" ? (
-            <button
-              className="secondary"
-              disabled={state.automation.state === "pausing"}
-              onClick={() => void pauseAutomation().then(refresh).catch((error) =>
-                setFeedback({ role: "alert", text: errorMessage(error) }))}
-            >
-              {state.automation.state === "pausing" ? "Draining active runs…" : "Pause"}
-            </button>
-          ) : null}
-          {state.automation.state === "paused" ? <span>No agents are changing boards.</span> : null}
-          <details className="live-runs">
-            <summary>Current runs · {state.activeRuns.length}</summary>
-            {state.activeRuns.length === 0 ? <p>No active agents.</p> : (
-              <ul>
-                {state.activeRuns.map((run) => (
-                  <li key={run.attemptId}>
-                    <button className="secondary" onClick={() => openTask(run.taskId, run.boardId)}>
-                      {run.agentId} · {run.taskId} · {run.boardName} / {run.columnName} · {run.status} ·{" "}
-                      <ElapsedTime startedAt={run.startedAt} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </details>
-          {notifications.available ? (
-            <button className="secondary" onClick={() => void notifications.toggle()}>
-              Desktop notifications {notifications.enabled ? "on" : "off"}
-            </button>
-          ) : (
-            <span>Desktop notifications unavailable</span>
-          )}
-        </div>
+        <AutomationControls
+          automation={state.automation}
+          activeRuns={state.activeRuns}
+          canResume={(processImpact?.staleActivations.length ?? 0) === 0}
+          notifications={notifications}
+          onChanged={refresh}
+          onFeedback={setFeedback}
+          onOpenTask={openTask}
+        />
       </header>
       <main>
         {processImpact === undefined ? null : (

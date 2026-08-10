@@ -40,9 +40,14 @@ export function AgentActivityPanel({
   const hasWaitingWork = queued.length > 0 || state.inspection.run.status === "failed" ||
     state.inspection.automationSuspended ||
     state.activations.some((activation) => activation.recovery !== null);
+  const isIdle = state.activeRun === null && !hasWaitingWork &&
+    state.inspection.unresolvedAttention.length === 0;
 
   return (
-    <section className="detail-panel agent-activity-panel" aria-labelledby="agent-activity-heading">
+    <section
+      className={`detail-panel agent-activity-panel${isIdle ? " idle" : ""}`}
+      aria-labelledby="agent-activity-heading"
+    >
       <h2 id="agent-activity-heading">Agent activity</h2>
 
       {state.activeRun !== null ? (
@@ -107,7 +112,7 @@ export function AgentActivityPanel({
             {queued.map((activation) => (
               <li key={activation.id}>
                 <strong>{agentName(activation.targetAgentId)}</strong>
-                <span>Activation reason: {activationReasonLabel(activation)}</span>
+                <span>Activated by {activationReasonLabel(activation).toLocaleLowerCase()}</span>
               </li>
             ))}
           </ol>

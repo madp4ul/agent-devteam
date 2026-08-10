@@ -11,6 +11,8 @@ import {
   unarchiveTask,
 } from "./api.ts";
 import { AgentActivityPanel } from "./AgentActivityPanel.tsx";
+import { AutomationControls } from "./AutomationControls.tsx";
+import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
@@ -20,7 +22,15 @@ import { TaskCreationDialog } from "./TaskCreationDialog.tsx";
 import { TaskWorkspacePanel } from "./TaskWorkspacePanel.tsx";
 import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
 
-export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navigate }): ReactNode {
+export function TaskPage({
+  taskId,
+  navigate,
+  notifications,
+}: {
+  taskId: string;
+  navigate: Navigate;
+  notifications: DesktopNotificationControl;
+}): ReactNode {
   const [detail, setDetail] = useState<BrowserTaskDetail>();
   const [editing, setEditing] = useState(false);
   const [archivalPending, setArchivalPending] = useState(false);
@@ -82,44 +92,16 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
 
   return (
     <div className="app-shell task-shell">
-      <header className="detail-topbar">
+      <header className="topbar detail-topbar">
         <a href="/" className="back-link" onClick={back}>← Back to board</a>
-        <div className="detail-topbar-tools">
-          <span className="revision">{task.archived ? "Archived · " : ""}Revision {task.revision}</span>
-          <div className="task-actions">
-            {task.archived ? (
-              <button
-                disabled={archivalPending}
-                onClick={() => {
-                  setArchivalPending(true);
-                  void unarchiveTask(task.id, crypto.randomUUID())
-                    .then(async () => {
-                      await refresh();
-                      setFeedback({ role: "status", text: `Unarchived ${task.id}. A later activation will create a new workspace from the process starting ref.` });
-                    })
-                    .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }))
-                    .finally(() => setArchivalPending(false));
-                }}
-              >{archivalPending ? "Unarchiving…" : "Unarchive task"}</button>
-            ) : (
-              <>
-                <button className="secondary" onClick={() => setEditing(true)}>Edit task</button>
-                {task.columnId === "completion" ? (
-                  <button disabled={archivalPending} onClick={() => performArchive()}>
-                    {archivalPending ? "Archiving…" : "Archive task"}
-                  </button>
-                ) : (
-                  <details className="more-actions">
-                    <summary>More actions</summary>
-                    <button className="secondary" disabled={archivalPending} onClick={() => performArchive()}>
-                      {archivalPending ? "Archiving…" : "Archive task"}
-                    </button>
-                  </details>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+        <AutomationControls
+          automation={detail.automation}
+          activeRuns={detail.activeRuns}
+          notifications={notifications}
+          onChanged={refresh}
+          onFeedback={setFeedback}
+          onOpenTask={(activeTaskId) => navigate(`/tasks/${encodeURIComponent(activeTaskId)}`)}
+        />
       </header>
       <main className="task-detail">
         <section className="task-overview" data-task-section="overview">
@@ -128,31 +110,88 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
           )}
           <div className="task-hero">
             <div className="task-heading">
-              <p className="eyebrow">{task.id}</p>
+              <p className="eyebrow">{task.id}{task.archived ? " · Archived" : ""}</p>
               <h1>{task.title}</h1>
             </div>
           </div>
-          <section className="detail-panel task-description" aria-labelledby="description-heading">
-            <h2 id="description-heading">Description</h2>
-            <p className="description">{task.description}</p>
-          </section>
         </section>
 
         <div className="detail-grid">
-          <div data-task-section="activity">
-            <AgentActivityPanel
-              state={{
-                taskId: task.id,
-                automation: detail.automation,
-                collaborators: detail.collaborators,
-                inspection,
-                activeRun: detail.activeRun,
-                activations: task.activations,
-                highlightedReasonId,
+          <div className="detail-primary-column">
+            <section
+              className="detail-panel task-description"
+              data-task-section="description"
+              aria-labelledby="description-heading"
+            >
+              <div className="detail-panel-heading">
+                <h2 id="description-heading">Description</h2>
+                <div className="task-actions">
+                  {task.archived ? (
+                    <button
+                      disabled={archivalPending}
+                      onClick={() => {
+                        setArchivalPending(true);
+                        void unarchiveTask(task.id, crypto.randomUUID())
+                          .then(async () => {
+                            await refresh();
+                            setFeedback({ role: "status", text: `Unarchived ${task.id}. A later activation will create a new workspace from the process starting ref.` });
+                          })
+                          .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }))
+                          .finally(() => setArchivalPending(false));
+                      }}
+                    >{archivalPending ? "Unarchiving…" : "Unarchive task"}</button>
+                  ) : (
+                    <>
+                      <button className="secondary" onClick={() => setEditing(true)}>Edit task</button>
+                      {task.columnId === "completion" ? (
+                        <button disabled={archivalPending} onClick={() => performArchive()}>
+                          {archivalPending ? "Archiving…" : "Archive task"}
+                        </button>
+                      ) : (
+                        <details className="more-actions">
+                          <summary>More actions</summary>
+                          <button className="secondary" disabled={archivalPending} onClick={() => performArchive()}>
+                            {archivalPending ? "Archiving…" : "Archive task"}
+                          </button>
+                        </details>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+              <p className="description">{task.description}</p>
+            </section>
+
+            <div data-task-section="activity">
+              <AgentActivityPanel
+                state={{
+                  taskId: task.id,
+                  automation: detail.automation,
+                  collaborators: detail.collaborators,
+                  inspection,
+                  activeRun: detail.activeRun,
+                  activations: task.activations,
+                  highlightedReasonId,
+                }}
+                onChanged={refresh}
+                onFeedback={setFeedback}
+              />
+            </div>
+
+            {task.archived ? null : <div data-task-section="comment"><CommentForm
+              taskId={task.id}
+              onCommented={async () => {
+                await refresh();
+                setFeedback({ role: "status", text: `Commented on ${task.id}.` });
               }}
-              onChanged={refresh}
-              onFeedback={setFeedback}
-            />
+            /></div>}
+
+            <div data-task-section="timeline"><TaskTimeline
+              comments={task.comments}
+              activity={task.activity}
+              activations={task.activations}
+              transcriptsAvailable={!task.archived}
+            /></div>
           </div>
 
           <div className="detail-column">
@@ -202,21 +241,6 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
             </div>
           </div>
         </div>
-
-        {task.archived ? null : <div data-task-section="comment"><CommentForm
-            taskId={task.id}
-            onCommented={async () => {
-              await refresh();
-              setFeedback({ role: "status", text: `Commented on ${task.id}.` });
-            }}
-          /></div>}
-
-        <div data-task-section="timeline"><TaskTimeline
-            comments={task.comments}
-            activity={task.activity}
-            activations={task.activations}
-            transcriptsAvailable={!task.archived}
-          /></div>
       </main>
       {editing ? (
         <EditDialog
@@ -370,15 +394,11 @@ function CommentForm({
   return (
     <section className="detail-panel comment-panel" aria-labelledby="comment-heading">
       <h2 id="comment-heading">Add comment</h2>
-      <p>Mention a collaborator by stable ID, such as <code>@implementer</code>, or use <code>@user</code> for user attention.</p>
       <form onSubmit={(event) => void submit(event)}>
-        <label>
-          Comment
-          <textarea rows={5} value={body} onChange={(event) => setBody(event.currentTarget.value)} />
-        </label>
+        <textarea aria-label="Comment" rows={2} value={body} onChange={(event) => setBody(event.currentTarget.value)} />
         {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
         <button disabled={pending || body.trim().length === 0} type="submit">
-          {pending ? "Commenting…" : "Add comment"}
+          {pending ? "Posting…" : "Post"}
         </button>
       </form>
     </section>
