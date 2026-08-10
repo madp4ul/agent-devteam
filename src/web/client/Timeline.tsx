@@ -59,7 +59,6 @@ export function TaskTimeline({
   return (
     <>
       <section className="timeline-section" aria-labelledby="timeline-heading">
-        <p className="eyebrow">Complete history</p>
         <h2 id="timeline-heading">Task timeline</h2>
         <ol className="timeline">
           {timeline.map((entry) => (

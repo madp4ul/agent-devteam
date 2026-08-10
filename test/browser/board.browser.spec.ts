@@ -536,6 +536,9 @@ test("automatic board refresh preserves the user's current horizontal position",
 
 test("details keep contextual controls, one timeline, and readable transcript evidence", async ({ page }) => {
   await page.goto("/tasks/T-0001");
+  const topbar = page.locator(".detail-topbar");
+  await expect(topbar.getByRole("button", { name: "Edit task" })).toBeVisible();
+  await expect(topbar.getByText("More actions", { exact: true })).toBeVisible();
   await expect(page.getByText("Understand the full task history")).toBeVisible();
   await expect(page.getByRole("region", { name: "Relationships" })).toContainText(/Blocked by T-0002/);
   await expect(page.getByText(/Needs attention: user mention/)).toBeVisible();
@@ -583,7 +586,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await page.locator(".transcript-backdrop").click({ position: { x: 4, y: 4 } });
   await expect(dialog).toBeHidden();
 
-  await page.getByRole("button", { name: "Edit task" }).click();
+  await topbar.getByRole("button", { name: "Edit task" }).click();
   await page.getByLabel("Task title").fill("Inspect all coordination evidence");
   await page.getByRole("button", { name: "Save task" }).click();
   await expect(page.getByRole("heading", { name: "Inspect all coordination evidence" })).toBeVisible();
@@ -663,8 +666,18 @@ test("task details prioritize agent activity and preserve the responsive reading
   });
 
   await page.goto("/tasks/T-0001");
-  await expect(page.getByRole("heading", { name: "Description" })).toBeVisible();
+  const description = page.getByRole("region", { name: "Description" });
+  await expect(description).toBeVisible();
   const activity = page.getByRole("region", { name: "Agent activity" });
+  const workspace = page.getByRole("region", { name: "Workspace", exact: true });
+  const movement = page.getByRole("region", { name: "Move task" });
+  const relationships = page.getByRole("region", { name: "Relationships" });
+  await expect(activity.getByText("Current work", { exact: true })).toHaveCount(0);
+  await expect(workspace.getByText("Development files", { exact: true })).toHaveCount(0);
+  await expect(movement.getByText("Workflow", { exact: true })).toHaveCount(0);
+  await expect(relationships.getByText("Coordination", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Add comment" }).getByText("Authored communication", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Task timeline" }).getByText("Complete history", { exact: true })).toHaveCount(0);
   await expect(activity.getByText("Waiting", { exact: true })).toBeVisible();
   await expect(activity).toContainText("Process automation is paused");
   await activity.getByText(/more reasons?/).click();
@@ -672,9 +685,16 @@ test("task details prioritize agent activity and preserve the responsive reading
   await expect(activity).toContainText("Task automation is suspended");
   await expect(activity.getByText("Implementation Agent", { exact: true })).toHaveCount(2);
   await expect(activity.getByText("Review Agent", { exact: true })).toHaveCount(1);
+  await expect(activity.getByText("Activation reason: Column entry", { exact: true })).toBeVisible();
   await expect(activity).not.toContainText("Requested model");
   await expect(activity).not.toContainText("Requested reasoning");
   await expect(activity).not.toContainText("Failed activations");
+
+  const descriptionBounds = await description.boundingBox();
+  const activityBounds = await activity.boundingBox();
+  expect(descriptionBounds).not.toBeNull();
+  expect(activityBounds).not.toBeNull();
+  expect(activityBounds!.y - (descriptionBounds!.y + descriptionBounds!.height)).toBeLessThanOrEqual(24);
 
   await page.setViewportSize({ width: 600, height: 900 });
   const readingOrder = await page.locator("[data-task-section]").evaluateAll((elements) =>
@@ -994,14 +1014,14 @@ test("a live transcript follows appended items only while the reader is at the b
 
 test("task details expose lazy and provisioned task workspaces", async ({ page, context }) => {
   await page.goto("/tasks/T-0002");
-  const unprovisioned = page.getByRole("region", { name: "Task workspace" });
+  const unprovisioned = page.getByRole("region", { name: "Workspace", exact: true });
   await expect(unprovisioned).toContainText("No task workspace exists yet");
   await expect(unprovisioned).toContainText("created before the first runnable activation");
   await expect(unprovisioned.getByRole("button", { name: "Copy path" })).toHaveCount(0);
 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/tasks/T-0001");
-  const workspace = page.getByRole("region", { name: "Task workspace" });
+  const workspace = page.getByRole("region", { name: "Workspace", exact: true });
   const expectedPath = await page.evaluate(async () => {
     const response = await fetch("/api/tasks/T-0001");
     const detail = await response.json();
@@ -1046,14 +1066,19 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
 
   await page.setViewportSize({ width: 360, height: 760 });
   const workspaceBounds = await workspace.boundingBox();
+  const headingBounds = await workspace.getByRole("heading", { name: "Workspace" }).boundingBox();
   const actionBounds = await workspace.locator(".workspace-actions").boundingBox();
   expect(workspaceBounds).not.toBeNull();
+  expect(headingBounds).not.toBeNull();
   expect(actionBounds).not.toBeNull();
   if (workspaceBounds !== null && actionBounds !== null) {
     expect(actionBounds.x).toBeGreaterThanOrEqual(workspaceBounds.x);
     expect(actionBounds.x + actionBounds.width).toBeLessThanOrEqual(
       workspaceBounds.x + workspaceBounds.width,
     );
+  }
+  if (headingBounds !== null && actionBounds !== null) {
+    expect(actionBounds.y).toBeGreaterThanOrEqual(headingBounds.y + headingBounds.height);
   }
 });
 
@@ -1156,7 +1181,7 @@ test("running workspace Git scans pause while hidden and never overlap", async (
   await expect.poll(() => reads).toBe(2);
   await page.clock.fastForward(20_000);
   expect(reads).toBe(2);
-  const workspace = page.getByRole("region", { name: "Task workspace" });
+  const workspace = page.getByRole("region", { name: "Workspace", exact: true });
   await workspace.getByRole("button", { name: "Copy path" }).click();
   await expect(workspace.getByRole("status")).toContainText("Copied task workspace path");
   await workspace.getByRole("button", { name: "Open folder" }).click();
@@ -1197,7 +1222,7 @@ test("a failed workspace Git scan retains its result and recovers automatically"
   await page.clock.fastForward(30_000);
   await expect(summary.getByText("Git status unavailable")).toBeVisible();
   await expect(summary).toContainText("No uncommitted changes");
-  const workspace = page.getByRole("region", { name: "Task workspace" });
+  const workspace = page.getByRole("region", { name: "Workspace", exact: true });
   await workspace.getByRole("button", { name: "More ways to open workspace" }).click();
   await workspace.getByRole("menuitem", { name: "Open in Visual Studio Code" }).click();
   await expect(workspace.getByRole("status")).toContainText("Visual Studio Code");
@@ -1299,7 +1324,7 @@ test("archive is promoted only for completed tasks", async ({ page }) => {
   await page.getByLabel("Complete description").fill("Archive remains available without being promoted before Completion.");
   await page.getByRole("button", { name: "Create task", exact: true }).click();
   await page.getByRole("link", { name: /Keep archival secondary/ }).click();
-  const actions = page.locator(".task-hero .form-actions");
+  const actions = page.locator(".detail-topbar .task-actions");
   await expect(actions.getByRole("button", { name: "Archive task" })).toHaveCount(0);
   await actions.getByText("More actions", { exact: true }).click();
   const secondaryArchive = actions.getByRole("button", { name: "Archive task" });

@@ -43,7 +43,6 @@ export function AgentActivityPanel({
 
   return (
     <section className="detail-panel agent-activity-panel" aria-labelledby="agent-activity-heading">
-      <p className="eyebrow">Current work</p>
       <h2 id="agent-activity-heading">Agent activity</h2>
 
       {state.activeRun !== null ? (
@@ -108,7 +107,7 @@ export function AgentActivityPanel({
             {queued.map((activation) => (
               <li key={activation.id}>
                 <strong>{agentName(activation.targetAgentId)}</strong>
-                <span>{activationReasonLabel(activation)}</span>
+                <span>Activation reason: {activationReasonLabel(activation)}</span>
               </li>
             ))}
           </ol>

@@ -105,12 +105,10 @@ export function TaskWorkspacePanel({
   return (
     <section className="detail-panel workspace-panel" aria-labelledby="workspace-heading">
       <div className="workspace-heading">
-        <div>
-          <p className="eyebrow">Development files</p>
-          <h2 id="workspace-heading">Task workspace</h2>
-        </div>
-        {workspace === null ? null : (
-          <div className="workspace-actions">
+        <h2 id="workspace-heading">Workspace</h2>
+      </div>
+      {workspace === null ? null : (
+        <div className="workspace-actions">
             <button
               className="secondary workspace-copy-button"
               onClick={() => {
@@ -151,9 +149,8 @@ export function TaskWorkspacePanel({
                 </div> : null}
               </div>
             </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
       {workspace === null ? (
         <p className="quiet">
           No task workspace exists yet. A Git worktree will be created before the first runnable activation.

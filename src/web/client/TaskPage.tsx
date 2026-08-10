@@ -84,19 +84,9 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
     <div className="app-shell task-shell">
       <header className="detail-topbar">
         <a href="/" className="back-link" onClick={back}>← Back to board</a>
-        <span className="revision">{task.archived ? "Archived · " : ""}Revision {task.revision}</span>
-      </header>
-      <main className="task-detail">
-        <section className="task-overview" data-task-section="overview">
-          {feedback === undefined ? null : (
-            <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>
-          )}
-          <div className="task-hero">
-          <div className="task-heading">
-            <p className="eyebrow">{task.id}</p>
-            <h1>{task.title}</h1>
-          </div>
-          <div className="form-actions">
+        <div className="detail-topbar-tools">
+          <span className="revision">{task.archived ? "Archived · " : ""}Revision {task.revision}</span>
+          <div className="task-actions">
             {task.archived ? (
               <button
                 disabled={archivalPending}
@@ -129,8 +119,20 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
               </>
             )}
           </div>
+        </div>
+      </header>
+      <main className="task-detail">
+        <section className="task-overview" data-task-section="overview">
+          {feedback === undefined ? null : (
+            <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>
+          )}
+          <div className="task-hero">
+            <div className="task-heading">
+              <p className="eyebrow">{task.id}</p>
+              <h1>{task.title}</h1>
+            </div>
           </div>
-          <section className="task-description" aria-labelledby="description-heading">
+          <section className="detail-panel task-description" aria-labelledby="description-heading">
             <h2 id="description-heading">Description</h2>
             <p className="description">{task.description}</p>
           </section>
@@ -173,7 +175,6 @@ export function TaskPage({ taskId, navigate }: { taskId: string; navigate: Navig
             )}
             <div data-task-section="relationships">
             <section className="detail-panel" aria-labelledby="relationships-heading">
-            <p className="eyebrow">Coordination</p>
             <h2 id="relationships-heading">Relationships</h2>
             {task.relationships.length === 0 ? (
               <p className="quiet">No task relationships.</p>
@@ -368,7 +369,6 @@ function CommentForm({
   };
   return (
     <section className="detail-panel comment-panel" aria-labelledby="comment-heading">
-      <p className="eyebrow">Authored communication</p>
       <h2 id="comment-heading">Add comment</h2>
       <p>Mention a collaborator by stable ID, such as <code>@implementer</code>, or use <code>@user</code> for user attention.</p>
       <form onSubmit={(event) => void submit(event)}>

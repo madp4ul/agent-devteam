@@ -15,7 +15,6 @@ export function MoveTaskPanel({
 }): ReactNode {
   return (
     <section className="detail-panel move-panel" aria-labelledby="move-heading" aria-busy={pending}>
-      <p className="eyebrow">Workflow</p>
       <h2 id="move-heading">Move task</h2>
       <label className="move-select">
         Column
