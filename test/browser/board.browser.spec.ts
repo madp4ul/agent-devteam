@@ -683,6 +683,54 @@ test("task timeline keeps the centered record stable when polling inserts newer 
   expect(Math.abs(centerAfter - centerBefore)).toBeLessThanOrEqual(2);
 });
 
+test("attempt comments and movements form full-width color bands without separators", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const activation = detail.task.activations.find((candidate: { attempts: unknown[] }) => candidate.attempts.length > 0);
+    const attempt = activation?.attempts[0];
+    if (attempt !== undefined) {
+      detail.task.activity.push({
+        id: "nested-browser-movement",
+        type: "task.moved",
+        actor: { kind: "agent", id: "implementer" },
+        occurredAt: new Date(Date.parse(attempt.startedAt) + 90_000).toISOString(),
+        details: {
+          fromColumnId: "implementation",
+          toColumnId: "completion",
+          attemptId: attempt.id,
+        },
+      });
+    }
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const attempt = page.locator(".attempt-entry").filter({ hasText: "Attempt 1" });
+  const article = attempt.locator("article");
+  const history = attempt.locator(".attempt-history");
+  const movement = attempt.locator(".nested-movement");
+  const comment = attempt.locator(".nested-comment");
+  await expect(movement).toHaveCSS("background-color", "rgb(243, 247, 250)");
+  await expect(comment).toHaveCSS("background-color", "rgb(255, 249, 232)");
+  await expect(history).toHaveCSS("border-top-width", "0px");
+  await expect(movement).toHaveCSS("border-bottom-width", "0px");
+
+  const [articleBounds, movementBounds, commentBounds] = await Promise.all([
+    article.boundingBox(),
+    movement.boundingBox(),
+    comment.boundingBox(),
+  ]);
+  expect(articleBounds).not.toBeNull();
+  expect(movementBounds).not.toBeNull();
+  expect(commentBounds).not.toBeNull();
+  expect(movementBounds!.x - articleBounds!.x).toBeLessThanOrEqual(4);
+  expect(articleBounds!.x + articleBounds!.width - movementBounds!.x - movementBounds!.width).toBeLessThanOrEqual(1);
+  expect(commentBounds!.x - articleBounds!.x).toBeLessThanOrEqual(4);
+  expect(articleBounds!.x + articleBounds!.width - commentBounds!.x - commentBounds!.width).toBeLessThanOrEqual(1);
+  expect(Math.abs(movementBounds!.y + movementBounds!.height - commentBounds!.y)).toBeLessThanOrEqual(1);
+});
+
 test("task timeline keeps retries separate and links each retry to the preceding attempt", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();

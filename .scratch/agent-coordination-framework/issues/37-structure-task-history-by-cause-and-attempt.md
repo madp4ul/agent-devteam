@@ -166,3 +166,10 @@ The final styling refinement preserves the established attempt-card design while
 reducing competing lines and labels. Pointer, causal-target, desktop, and narrow
 viewport states passed focused browser coverage and live visual review without
 browser warnings; typechecking and the production build also passed.
+
+Nested attempt comments and movements now render as full-width amber or blue
+bands against the attempt card's inner edges. The attempt-history and per-event
+separator lines, inset margins, and inner corner rounding were removed because
+the event backgrounds already communicate their structure. Consecutive event
+bands meet directly, while outcome and footer spacing retain the larger
+narrative sections.

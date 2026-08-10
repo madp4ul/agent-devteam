@@ -273,10 +273,10 @@ textarea { resize: vertical; line-height: 1.5; }
 .failed-attempt .attempt-status { color: #953824; }
 .attempt-outcome { margin-top: 1rem; }
 .attempt-outcome h3 { margin: 0; font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; }
-.attempt-history { margin: 1rem 0 0; border-top: 1px solid var(--line); padding: 0; list-style: none; }
-.attempt-history-item { border-bottom: 1px solid var(--line); padding: .85rem 0; }
-.attempt-history-item.nested-comment { margin: .35rem 0; border: 0; border-radius: .35rem; background: #fff9e8; padding: .65rem .75rem; }
-.attempt-history-item.nested-movement { margin: .35rem 0; border: 0; border-radius: .35rem; background: #f3f7fa; padding: .65rem .75rem; }
+.attempt-history { margin: 1rem -1rem 0; padding: 0; list-style: none; }
+.attempt-history-item { padding: .85rem 1rem; }
+.attempt-history-item.nested-comment { margin: 0; background: #fff9e8; }
+.attempt-history-item.nested-movement { margin: 0; background: #f3f7fa; }
 .attempt-history-item .entry-meta strong { font-size: .84rem; }
 .attempt-history-item .entry-meta time { color: var(--muted); font-size: .7rem; }
 .attempt-footer { display: grid; gap: .35rem; margin-top: 1rem; color: var(--muted); font-size: .76rem; }
