@@ -59,6 +59,11 @@ existing Git tools.
   interaction and implementation cost without enough value. The agreed polling
   design favors seamless background freshness and graceful automatic recovery
   over exact age indicators or manual retry controls.
+- Follow-up visual review on 2026-08-10 prepared the panel for issue 47's
+  narrower utility sidebar. Starting ref is process configuration and is no
+  longer repeated. A compact unframed history flow shows short task-start and
+  current-HEAD identities with commit distance or explicit divergence; the
+  Workspace changes summary remains the only framed Git card.
 
 ## Answer
 
@@ -67,6 +72,12 @@ provisioned task workspace. It presents branch or detached-HEAD identity,
 progress or divergence from the persisted task-start commit, net tracked-line
 changes, and separate staged, unstaged, and untracked file counts without
 exposing filenames or duplicating repository-browser behavior.
+
+The workspace panel is a dedicated deep module behind a task ID, workspace
+identity, and running-attempt flag. Its width-conservative presentation stacks
+an unframed task-start-to-current-HEAD history above the single changes card,
+uses seven-character commit identities, and omits the redundant configured
+starting ref.
 
 The application reads this state through bounded ordinary Git commands. The
 browser scans immediately, every five seconds during a running attempt, and
@@ -77,5 +88,6 @@ Open actions remain independent.
 
 Verification passed both TypeScript typechecks, the production build, 121 local
 tests with one intentional credentialed integration skip, all 31 browser
-scenarios, and `git diff --check`. Independent Standards and Spec reviews report
-no remaining findings after their two spec-review partials were resolved.
+scenarios, `git diff --check`, and live visual QA at the current two-column and
+420-pixel sidebar-like widths. Independent Standards and Spec reviews report no
+remaining findings after the initial and follow-up implementations.

@@ -29,13 +29,14 @@ test("a task workspace reports branch progress and overlapping working changes",
   await git(workspacePath, "add", "README.md");
   await writeFile(join(workspacePath, "README.md"), "# Test project\nstaged line\nunstaged line\n");
   await writeFile(join(workspacePath, "untracked.txt"), "not tracked\n");
+  const headHash = (await git(workspacePath, "rev-parse", "--short=7", "HEAD")).trim();
 
   const result = await application.queryTaskWorkspaceGitState(taskId);
 
   assert.deepEqual(result, {
     available: true,
     state: {
-      head: { kind: "branch", name: "task-33" },
+      head: { kind: "branch", name: "task-33", shortHash: headHash },
       history: { kind: "progress", commitsSinceTaskStart: 1 },
       changes: {
         additions: 2,

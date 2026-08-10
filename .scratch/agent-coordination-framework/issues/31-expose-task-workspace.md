@@ -37,6 +37,10 @@ leaving the task-details context or knowing Git worktree commands.
   task worktree but the user could not discover the file from the board or task
   page. Opening the task workspace in the user's existing Git tools is the
   intended bridge; the framework does not need to reproduce an IDE.
+- The issue 33 UI follow-up on 2026-08-10 superseded the visible starting-ref
+  detail: the configured ref remains persisted but is not repeated in the task
+  workspace panel. The starting and current commit identities are shown as
+  short hashes in the richer live Git summary instead.
 
 ## Answer
 

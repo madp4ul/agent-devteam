@@ -254,7 +254,7 @@ export class GitTaskWorkspaceManager {
     return {
       head: branch === "(detached)"
         ? { kind: "detached", shortHash: oid.slice(0, 7) }
-        : { kind: "branch", name: branch },
+        : { kind: "branch", name: branch, shortHash: oid.slice(0, 7) },
       history,
       changes: { additions, deletions, stagedFiles, unstagedFiles, untrackedFiles },
     };

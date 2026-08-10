@@ -168,15 +168,22 @@ textarea { resize: vertical; line-height: 1.5; }
 .workspace-open-options { position: absolute; z-index: 5; top: calc(100% + .4rem); right: 0; min-width: 14rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); padding: .35rem; box-shadow: var(--shadow); }
 .workspace-open-options button { width: 100%; color: var(--ink); background: transparent; text-align: left; white-space: nowrap; }
 .workspace-open-options button:hover:not(:disabled) { background: #e9ede7; }
-.workspace-meta { margin: .65rem 0 0; color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
-.workspace-meta code { font-size: inherit; }
-.workspace-git-summary { height: 9.6rem; margin-top: .8rem; overflow: hidden; }
-.workspace-git-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+.workspace-git-summary { height: 14rem; margin-top: .9rem; overflow: hidden; }
+.workspace-history-flow { display: grid; grid-template-rows: auto 2.25rem auto; margin: 0 .15rem .85rem; }
+.workspace-history-node { display: grid; grid-template-columns: .8rem minmax(0, 1fr); align-items: center; gap: .55rem; min-width: 0; }
+.workspace-history-node > div { display: flex; align-items: baseline; min-width: 0; gap: .5rem; }
+.workspace-history-marker { width: .58rem; height: .58rem; border: 2px solid var(--forest); border-radius: 50%; background: var(--paper); }
+.workspace-history-node.current .workspace-history-marker { background: var(--forest); }
+.workspace-history-connector { display: grid; grid-template-columns: .8rem minmax(0, 1fr); align-items: center; gap: .55rem; color: var(--muted); font-size: .72rem; }
+.workspace-history-connector::before { width: 2px; height: 100%; justify-self: center; background: #b7c2ba; content: ""; }
+.workspace-history-connector.diverged { color: #8c2e1d; font-weight: 700; }
+.workspace-history-connector.diverged::before { background: repeating-linear-gradient(to bottom, #b55a49 0 3px, transparent 3px 6px); }
+.workspace-head { display: flex; align-items: baseline; min-width: 0; gap: .45rem; }
+.workspace-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-head code, .workspace-history-node code { flex: 0 0 auto; color: var(--muted); font-size: .72rem; }
 .workspace-git-card { height: 7.6rem; overflow: hidden; border: 1px solid var(--line); border-radius: .65rem; background: #f8faf7; padding: .7rem .8rem; }
-.workspace-git-card > strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-git-card code { color: var(--muted); font-size: .78em; font-weight: 600; }
-.workspace-git-label { margin: 0 0 .4rem; color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.workspace-history, .workspace-clean { margin: .45rem 0 0; color: var(--muted); font-size: .78rem; }
+.workspace-git-label { margin: 0; color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.workspace-clean { margin: .45rem 0 0; color: var(--muted); font-size: .78rem; }
 .workspace-line-totals { display: flex; align-items: baseline; flex-wrap: wrap; gap: .35rem; margin: 0; font-size: .78rem; }
 .workspace-line-totals .additions { color: #17623f; }
 .workspace-line-totals .deletions { color: #9a3827; }
@@ -267,8 +274,6 @@ pre { max-height: 18rem; overflow: auto; border-radius: .5rem; color: #d9eee3; b
   .detail-grid { grid-template-columns: 1fr; }
   .workspace-heading { align-items: flex-start; flex-direction: column; }
   .workspace-actions { width: 100%; justify-content: flex-end; }
-  .workspace-git-summary { height: 17.9rem; }
-  .workspace-git-cards { grid-template-columns: 1fr; }
   .move-panel { grid-template-columns: 1fr; gap: .8rem; }
   .facts { grid-template-columns: 1fr; }
   .entry-meta { align-items: flex-start; flex-direction: column; gap: .2rem; }

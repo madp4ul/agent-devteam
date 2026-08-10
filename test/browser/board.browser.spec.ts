@@ -794,8 +794,9 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
     return detail.inspection.workspace.path as string;
   });
   await expect(workspace).not.toContainText(expectedPath);
-  await expect(workspace).toContainText("main");
-  await expect(workspace).toContainText("0123456789abcdef0123456789abcdef01234567");
+  await expect(workspace).not.toContainText("Starting ref");
+  await expect(workspace).toContainText("0123456");
+  await expect(workspace).not.toContainText("0123456789abcdef0123456789abcdef01234567");
 
   await workspace.getByRole("button", { name: "Copy path" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(expectedPath);
@@ -853,7 +854,7 @@ test("task workspace Git summary refreshes branch, detached, history, and clean 
         ? {
             available: true,
             state: {
-              head: { kind: "branch", name: "codex/issue-33" },
+              head: { kind: "branch", name: "codex/issue-33", shortHash: "def5678" },
               history: { kind: "progress", commitsSinceTaskStart: 3 },
               changes: {
                 additions: 14,
@@ -883,13 +884,23 @@ test("task workspace Git summary refreshes branch, detached, history, and clean 
 
   await page.goto("/tasks/T-0001");
   const summary = page.getByRole("region", { name: "Workspace Git summary" });
+  await expect(summary).toContainText("Task start");
+  await expect(summary).toContainText("0123456");
   await expect(summary).toContainText("codex/issue-33");
+  await expect(summary).toContainText("def5678");
   await expect(summary).toContainText("3 commits since task start");
   await expect(summary).toContainText("+14");
   await expect(summary).toContainText("−5");
   await expect(summary).toContainText("2 staged");
   await expect(summary).toContainText("2 unstaged");
   await expect(summary).toContainText("1 untracked");
+  const historyBounds = await summary.locator(".workspace-history-flow").boundingBox();
+  const changesBounds = await summary.locator(".workspace-changes-card").boundingBox();
+  expect(historyBounds).not.toBeNull();
+  expect(changesBounds).not.toBeNull();
+  if (historyBounds !== null && changesBounds !== null) {
+    expect(historyBounds.y + historyBounds.height).toBeLessThanOrEqual(changesBounds.y);
+  }
 
   await page.clock.fastForward(30_000);
   await expect(summary).toContainText("Detached at abc1234");
@@ -985,7 +996,7 @@ function cleanGitState(): object {
   return {
     available: true,
     state: {
-      head: { kind: "branch", name: "main" },
+      head: { kind: "branch", name: "main", shortHash: "0123456" },
       history: { kind: "progress", commitsSinceTaskStart: 0 },
       changes: {
         additions: 0,

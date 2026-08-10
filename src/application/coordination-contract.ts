@@ -191,7 +191,7 @@ export interface TaskWorkspaceView {
 
 export interface TaskWorkspaceGitStateView {
   head:
-    | { kind: "branch"; name: string }
+    | { kind: "branch"; name: string; shortHash: string }
     | { kind: "detached"; shortHash: string };
   history:
     | { kind: "progress"; commitsSinceTaskStart: number }
