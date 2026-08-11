@@ -1,15 +1,20 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 import {
   CoordinationApplication,
+  type AgentRunLifecycle,
+  type AgentRunOutcome,
   type AgentRunRequest,
+  type AgentRuntime,
 } from "../../src/application/coordination-application.ts";
 import { AgentToolScopeRegistry } from "../../src/mcp/agent-tool-scope.ts";
 import {
@@ -18,6 +23,8 @@ import {
   type CodexEventLike,
 } from "../../src/runtime/codex-agent-runtime.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
+
+const execFileAsync = promisify(execFile);
 
 test("the project MCP exposes bounded discovery while mutations stay current-task scoped", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "coordination-mcp-"));
@@ -427,6 +434,129 @@ boards:
   ]);
 });
 
+test("move_current_task reports a mentioned agent's responsibility claim without a redundant activation", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "coordination-mcp-mention-claim-"));
+  const repositoryPath = join(directory, "project");
+  await execFileAsync("git", ["init", "--initial-branch=main", repositoryPath]);
+  await writeFile(join(repositoryPath, "README.md"), "# MCP mention claim test\n");
+  await execFileAsync("git", ["-C", repositoryPath, "add", "README.md"]);
+  await execFileAsync("git", [
+    "-C", repositoryPath,
+    "-c", "user.name=Coordination Test",
+    "-c", "user.email=coordination@example.invalid",
+    "commit", "-m", "Initial commit",
+  ]);
+  const definitionPath = join(directory, "process.yaml");
+  await writeFile(join(directory, "implementer.md"), "Implement mentioned work.\n");
+  await writeFile(definitionPath, `schemaVersion: 1
+name: MCP mention claim process
+defaultTaskWorkspaceStartingRef: main
+coordinationGuidance: Let mentioned specialists claim responsibility explicitly.
+agents:
+  - id: implementer
+    name: Implementation Agent
+    role: Implements changes
+    summary: Builds the current task.
+    instructions: ./implementer.md
+boards:
+  - id: delivery
+    name: Delivery
+    guidance: Keep movement explicit.
+    columns:
+      - id: backlog
+        name: Backlog
+      - id: implementation
+        name: Implementation
+        watchingAgent: implementer
+`);
+  const runtime = new ControlledMentionRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: definitionPath,
+    databasePath: join(directory, "coordination.sqlite3"),
+    runtimeDispatch: {
+      projectRepositoryPath: repositoryPath,
+      taskWorkspaceRoot: join(directory, "workspaces"),
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Claim responsibility through MCP",
+    description: "The tool result must describe one continuing expectation.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-mcp-mention-claim",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const mentioned = application.addTaskComment({
+    taskId: created.task.id,
+    body: "@implementer please take responsibility for this work.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "mention-mcp-claiming-agent",
+  });
+  assert.equal(mentioned.accepted, true);
+  if (!mentioned.accepted) return;
+  await application.resumeAutomation();
+  const request = await runtime.waitForRequest();
+
+  const scopes = new AgentToolScopeRegistry();
+  const server = await startWebServer(application, {
+    host: "127.0.0.1",
+    port: 0,
+    agentToolScopes: scopes,
+  });
+  t.after(() => server.close());
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [
+      "--experimental-strip-types",
+      join(process.cwd(), "src/mcp/stdio-server.ts"),
+      "--base-url",
+      server.baseUrl,
+      "--token",
+      scopes.issue({
+        taskId: request.task.id,
+        agentId: request.agent.id,
+        attemptId: request.attemptId,
+      }),
+    ],
+    stderr: "pipe",
+  });
+  const client = new Client({ name: "mention-claim-test", version: "1.0.0" });
+  await client.connect(transport);
+  t.after(() => client.close());
+
+  const result = await client.callTool({
+    name: "move_current_task",
+    arguments: {
+      destinationColumnId: "implementation",
+      expectedRevision: mentioned.task.revision,
+      idempotencyKey: "claim-through-mcp",
+    },
+  });
+
+  assert.notEqual(result.isError, true);
+  const payload = JSON.parse(textContent(result.content)) as {
+    transition: { taskId: string; fromColumnId: string; toColumnId: string };
+    task: { activations: Array<{ id: string; status: string; reason: { type: string } }> };
+  };
+  assert.deepEqual(payload.transition, {
+    taskId: created.task.id,
+    fromColumnId: "backlog",
+    toColumnId: "implementation",
+  });
+  assert.deepEqual(payload.task.activations.map((activation) => ({
+    id: activation.id,
+    status: activation.status,
+    reasonType: activation.reason.type,
+  })), [{ id: request.activationId, status: "running", reasonType: "agent-mention" }]);
+
+  runtime.complete({ status: "completed", summary: "Claimed responsibility through MCP." });
+  await application.waitForAutomationIdle();
+});
+
 function controlledMcpClient(options: CodexClientOptionsLike) {
   return {
     startThread: () => ({
@@ -582,4 +712,31 @@ function textContent(content: unknown): string {
   assert.equal(first?.type, "text");
   assert.ok(typeof first?.text === "string");
   return first.text;
+}
+
+class ControlledMentionRuntime implements AgentRuntime {
+  #request: AgentRunRequest | undefined;
+  #requestReady: ((request: AgentRunRequest) => void) | undefined;
+  #complete: ((outcome: AgentRunOutcome) => void) | undefined;
+
+  run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
+    this.#request = request;
+    lifecycle.started("mcp-mention-claim-thread");
+    this.#requestReady?.(request);
+    return new Promise((resolve) => {
+      this.#complete = resolve;
+    });
+  }
+
+  waitForRequest(): Promise<AgentRunRequest> {
+    if (this.#request !== undefined) return Promise.resolve(this.#request);
+    return new Promise((resolve) => {
+      this.#requestReady = resolve;
+    });
+  }
+
+  complete(outcome: AgentRunOutcome): void {
+    assert.ok(this.#complete);
+    this.#complete(outcome);
+  }
 }

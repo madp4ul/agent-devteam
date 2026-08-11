@@ -6,37 +6,37 @@ queuing a redundant second activation for itself.
 
 **Blocked by:** 20 — Consult Agents and Notify the User
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] When the currently running activation has reason `agent-mention` and its
+- [x] When the currently running activation has reason `agent-mention` and its
   target agent moves the current task into a different watched column assigned
   to that same agent, the move succeeds and records the ordinary task movement,
   current column, revision, and activity while creating no column-entry
   activation.
-- [ ] The running mention activation remains the one expectation responsible
+- [x] The running mention activation remains the one expectation responsible
   for work after the move. Success has no implicit effect; failure,
   interruption, continuation, and retry preserve that activation under the
   normal lifecycle.
-- [ ] Suppression is deliberately narrow. A column-entry or final-blocker-
+- [x] Suppression is deliberately narrow. A column-entry or final-blocker-
   clearance activation that moves between two columns watched by its own target
   agent still creates the existing distinct column-entry activation. This
   preserves valid processes with consecutive same-agent columns.
-- [ ] A move into a column watched by a different agent still creates that
+- [x] A move into a column watched by a different agent still creates that
   destination agent's activation. User moves and moves performed outside the
   currently running mentioned-agent case retain ordinary column-entry
   semantics.
-- [ ] Merely having an activation for the destination watcher queued, running,
+- [x] Merely having an activation for the destination watcher queued, running,
   failed, or suspended does not generally suppress a new column-entry
   activation. The exception is based on the actor's current mention activation,
   destination watcher identity, and successful responsibility-changing move.
-- [ ] A move to the task's already-current column remains the inert adapter
+- [x] A move to the task's already-current column remains the inert adapter
   interaction owned by issue 39. It performs no mutation and is not treated as
   a responsibility claim.
-- [ ] Application-level lifecycle tests cover the suppressed claim, the
+- [x] Application-level lifecycle tests cover the suppressed claim, the
   same-agent column-entry counterexample, a different destination watcher,
   retry or interruption after a claim, and exact task activity and activation
   ordering.
-- [ ] MCP contract coverage proves `move_current_task` reports the successful
+- [x] MCP contract coverage proves `move_current_task` reports the successful
   move without implying that a redundant activation was queued.
 
 ## Comments
@@ -57,3 +57,19 @@ queuing a redundant second activation for itself.
   watched-column entry, including same-agent re-entry. This ticket changes only
   the mention-activated responsibility-claim case; it does not remove general
   support for consecutive columns watched by the same agent.
+
+## Answer
+
+The authoritative move command now recognizes a responsibility claim only
+when a validated running `agent-mention` attempt moves its task into a
+different column watched by that activation's target agent. The movement,
+revision, attempt provenance, and ordinary task activity are preserved while
+the existing mention activation remains solely responsible for the work; no
+column-entry activation or activation-created activity is added.
+
+Application behavior tests cover the claim, retrying the same activation after
+failure, the consecutive same-agent column-entry counterexample, and handoff to
+a different destination watcher. An MCP contract test exercises
+`move_current_task` through a live attempt-scoped transport and confirms its
+success payload exposes only the continuing mention activation. The lifecycle
+specification and domain glossary now record the narrow exception.

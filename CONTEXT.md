@@ -75,8 +75,12 @@ column activates its agent; a task in an unwatched column simply remains there.
 Moving a task to another watched column transfers primary responsibility to
 that column's agent. Every entry creates an activation, including creation in a
 watched column, re-entry into a column, and entry into a column watched by the
-currently active agent. Processes are responsible for avoiding unintended
-self-handoff loops.
+currently active agent. The one exception is a currently running agent-mention
+activation whose target agent moves the task into a different column watched by
+that same agent: the move explicitly claims primary responsibility, so the
+existing mention activation continues without a redundant column-entry
+activation. Processes are responsible for avoiding unintended self-handoff
+loops in every other case.
 
 **Completion column**:
 The framework-owned final column present on every board. It has a stable
@@ -287,6 +291,9 @@ transferring primary responsibility, so the mention itself does not move the
 task. During the resulting run, the mentioned agent may change the task,
 including moving it, when the process calls for that action. The coordination
 framework does not enforce role-specific restrictions on those capabilities.
+Moving into a different column watched by that mentioned agent explicitly
+claims primary responsibility without creating a second activation; moving to
+another agent's watched column remains an ordinary handoff.
 A comment creates at most one activation for each agent it mentions; when it
 mentions several agents, their activations enter the task's order by textual
 mention order. Mentioning the user creates a notification rather than an agent

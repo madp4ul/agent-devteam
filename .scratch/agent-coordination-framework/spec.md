@@ -488,10 +488,16 @@ what changed without reconstructing the call from its name alone.
   use textual mention order. Different tasks may run concurrently.
 - Column entry creates an activation when the destination has a watcher,
   including task creation, re-entry, and entry into a column watched by the
-  currently running agent. Movement does not terminate the current run.
+  currently running agent. The narrow exception is a running agent-mention
+  activation whose target moves into a different column watched by that same
+  agent: the move claims primary responsibility and the existing mention
+  activation continues without a redundant column-entry activation. A move by
+  any other activation reason, or into another agent's watched column, retains
+  ordinary column-entry behavior. Movement does not terminate the current run.
 - An agent mention creates at most one activation for that agent per comment,
   including in unwatched or completed columns. It retains primary
-  responsibility in the current column. A user mention creates attention
+  responsibility in the current column until the mentioned agent explicitly
+  claims a watched column as described above. A user mention creates attention
   instead. Mentions on unmapped tasks create no activation.
 - Clearing the final blocking relationship creates an activation only when the
   task's current column has a watcher. Clearing an earlier blocker records

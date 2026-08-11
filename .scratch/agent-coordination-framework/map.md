@@ -149,12 +149,14 @@ without choosing the implementation yet.
   — Compose product-owned invariant mechanics, authored process and board
   guidance, role instructions, and readable activation facts in one explicit
   hierarchy, with compact same-process continuation.
+- [Let Mentioned Agents Claim Primary Responsibility](./issues/52-let-mentioned-agents-claim-primary-responsibility.md)
+  — Treat a mentioned agent's move into its own watched column as an explicit
+  responsibility claim that continues the mention activation without queuing
+  redundant work, while preserving ordinary handoffs in every other case.
 
 ## Next implementation priority
 
-- [Let Mentioned Agents Claim Primary Responsibility](./issues/52-let-mentioned-agents-claim-primary-responsibility.md)
-  — Suppress the redundant column-entry activation only when a currently
-  mentioned agent explicitly moves into a watched column it owns.
+No implementation-ready ticket is currently prioritized.
 
 ## Clarified delivery follow-ups
 
