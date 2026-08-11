@@ -87,8 +87,12 @@ async function expectConfigurationError(arguments_: string[], patterns: RegExp[]
   }
 }
 
-function spawnHost(arguments_: string[]): ChildProcessByStdio<null, Readable, Readable> {
+function spawnHost(
+  arguments_: string[],
+  environment: NodeJS.ProcessEnv = {},
+): ChildProcessByStdio<null, Readable, Readable> {
   return spawn(process.execPath, ["--experimental-strip-types", cliPath, "start", ...arguments_], {
+    env: { ...process.env, ...environment },
     stdio: ["ignore", "pipe", "pipe"],
   });
 }

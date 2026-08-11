@@ -126,8 +126,13 @@ Back up and restore retained state using the
 [project-state backup and restore procedure](../project-state-backup-and-restore.md).
 
 The application uses the installed Codex SDK and the user's existing Codex
-authentication, sandbox, and approval configuration. Process roles provide
-behavioral instructions only; they do not grant additional technical access.
+authentication, sandbox, and approval configuration. Every dispatched run also
+supplies the exact current task-workspace path as process-local Git trust. It
+never sets `safe.directory=*`, edits Git configuration, or modifies the user's
+Codex configuration. This allows the sandbox identity to inspect Git without a
+first-command ownership failure; branch, stage, and commit operations remain
+subject to the user's ordinary Codex permissions. Process roles provide
+behavioral instructions only and do not grant additional technical access.
 When **Resume automation** is accepted, the header changes to Automation
 running. If the runtime is unavailable or a worktree cannot be provisioned,
 the page remains paused and displays an actionable error.

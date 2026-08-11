@@ -101,6 +101,10 @@ without choosing the implementation yet.
   — Let each process agent optionally select a Codex model and reasoning effort,
   snapshot the requested profile on activations and attempts, and preserve the
   launching user's ordinary Codex defaults when either value is omitted.
+- [Trust Task Workspaces for Git Inspection](./issues/49-enable-agent-git-operations-in-task-workspaces.md)
+  — Give every SDK attempt exact process-local Git ownership trust for its task
+  workspace while leaving sandbox and approval authority under the user's
+  ordinary Codex configuration.
 - [Split, Relate, and Unblock Work](./issues/21-split-relate-unblock-work.md)
   — Add typed child and dependency relationships, task-specific child starting
   refs, immutable blocker history, and reliable reactivation exactly when the
@@ -169,6 +173,10 @@ without choosing the implementation yet.
 - [Discard an Interrupted Activation](./issues/50-discard-interrupted-activation.md)
   — Decide how a user deliberately abandons preserved interrupted work, what
   happens to later queued activations, and how the decision remains auditable.
+- [Investigate SDK Capability Parity and Automatic Approvals](./issues/51-investigate-sdk-capability-parity-and-automatic-approvals.md)
+  — Prove the smallest supported SDK policy for app-like development capability,
+  automatically reviewed Git escalation, and permission-block recovery before
+  considering App Server or independent clones.
 - [Separate Framework, Process, and Role Instructions](./issues/38-separate-framework-process-role-instructions.md)
   — Define a product-owned framework-instruction layer and deliberate prompt
   precedence so process and role authors do not repeat invariant mechanics.

@@ -15,11 +15,16 @@ type CodexConfigObject = { [key: string]: CodexConfigValue };
 
 export interface CodexClientOptionsLike {
   config?: CodexConfigObject;
+  env?: Record<string, string>;
 }
 
 export type CodexThreadOptionsLike = Pick<
   ThreadOptions,
-  "workingDirectory" | "sandboxMode" | "approvalPolicy" | "model" | "modelReasoningEffort"
+  | "workingDirectory"
+  | "sandboxMode"
+  | "approvalPolicy"
+  | "model"
+  | "modelReasoningEffort"
 >;
 
 export type CodexEventLike =
@@ -71,7 +76,15 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     const mcpArguments = this.#options.mcpServer.args(request);
     const mcpEnvironment = this.#options.mcpServer.environment?.(request);
     const clientOptions: CodexClientOptionsLike = {
+      env: definedProcessEnvironment(),
       config: {
+        shell_environment_policy: {
+          set: {
+            GIT_CONFIG_COUNT: "1",
+            GIT_CONFIG_KEY_0: "safe.directory",
+            GIT_CONFIG_VALUE_0: gitSafeDirectoryPath(request.workspace.path),
+          },
+        },
         mcp_servers: {
           coordination: {
             command: this.#options.mcpServer.command,
@@ -234,6 +247,19 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
   #remember(attemptId: string, transcript: AttemptTranscriptItem[]): void {
     this.#transcripts.set(attemptId, structuredClone(transcript));
   }
+}
+
+function definedProcessEnvironment(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined && !/^GIT_CONFIG_(?:COUNT|KEY_\d+|VALUE_\d+)$/iu.test(entry[0]),
+    ),
+  );
+}
+
+function gitSafeDirectoryPath(path: string): string {
+  return /^(?:[A-Za-z]:\\|\\\\)/u.test(path) ? path.replaceAll("\\", "/") : path;
 }
 
 function runtimeFailure(diagnostic: string, threadId?: string): AgentRunOutcome {

@@ -4,6 +4,7 @@ import test from "node:test";
 import type { AgentRunRequest } from "../../src/application/coordination-application.ts";
 import {
   CodexAgentRuntime,
+  type CodexAgentRuntimeOptions,
   type CodexClientLike,
   type CodexClientOptionsLike,
   type CodexEventLike,
@@ -11,9 +12,9 @@ import {
   type CodexThreadOptionsLike,
 } from "../../src/runtime/codex-agent-runtime.ts";
 
-test("each activation starts a fresh streamed Codex thread without overriding user permissions", async () => {
+test("each activation receives exact process-local Git trust without overriding Codex permissions", async () => {
   const clients: FakeCodexClient[] = [];
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: {
       command: "node",
       args: (request) => ["coordination-mcp.ts", "--task", request.task.id],
@@ -27,7 +28,9 @@ test("each activation starts a fresh streamed Codex thread without overriding us
   });
 
   const first = await runtime.run(request("activation-1", "T-0001"), { started() {} });
-  const second = await runtime.run(request("activation-2", "T-0002"), { started() {} });
+  const secondRequest = request("activation-2", "T-0002");
+  secondRequest.workspace.path = "C:\\tasks\\worktree two [review]";
+  const second = await runtime.run(secondRequest, { started() {} });
 
   assert.deepEqual(first, {
     status: "completed",
@@ -39,24 +42,51 @@ test("each activation starts a fresh streamed Codex thread without overriding us
   ]);
   assert.equal(second.threadId, "thread-2");
   assert.equal(clients.length, 2);
+  assert.deepEqual(clients[0]?.threadOptions, {
+    workingDirectory: "C:\\tasks\\worktree",
+  });
+  assert.deepEqual(clients[1]?.threadOptions, {
+    workingDirectory: "C:\\tasks\\worktree two [review]",
+  });
   for (const client of clients) {
-    assert.deepEqual(client.threadOptions, { workingDirectory: "C:\\tasks\\worktree" });
     assert.equal("sandboxMode" in client.threadOptions, false);
     assert.equal("approvalPolicy" in client.threadOptions, false);
   }
-  assert.deepEqual(clients[0]?.options, {
-    config: {
-      mcp_servers: {
-        coordination: {
-          command: "node",
-          args: ["coordination-mcp.ts", "--task", "T-0001"],
-          env: { CURRENT_TASK: "T-0001" },
-          required: true,
-          default_tools_approval_mode: "approve",
-        },
+  assert.deepEqual(clients[0]?.options.config, {
+    shell_environment_policy: {
+      set: {
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "safe.directory",
+        GIT_CONFIG_VALUE_0: "C:/tasks/worktree",
+      },
+    },
+    mcp_servers: {
+      coordination: {
+        command: "node",
+        args: ["coordination-mcp.ts", "--task", "T-0001"],
+        env: { CURRENT_TASK: "T-0001" },
+        required: true,
+        default_tools_approval_mode: "approve",
       },
     },
   });
+  for (const key of ["approval_policy", "default_permissions", "permissions"]) {
+    assert.equal(key in (clients[0]?.options.config ?? {}), false);
+  }
+  assert.deepEqual(
+    Object.keys(clients[0]?.options.env ?? {}).filter((key) => /^GIT_CONFIG_(?:COUNT|KEY_\d+|VALUE_\d+)$/iu.test(key)),
+    [],
+  );
+  assert.deepEqual(
+    clients[1]?.options.config?.shell_environment_policy,
+    {
+      set: {
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "safe.directory",
+        GIT_CONFIG_VALUE_0: "C:/tasks/worktree two [review]",
+      },
+    },
+  );
   const prompt = clients[0]?.prompt ?? "";
   assert.match(prompt, /Implementation Agent/);
   assert.match(prompt, /Implement the requested task in full\./);
@@ -75,7 +105,7 @@ test("each activation starts a fresh streamed Codex thread without overriding us
 test("an unusable interrupted thread falls back to a fresh thread with honest context", async () => {
   let prompt = "";
   let freshStarts = 0;
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       resumeThread: (threadId) => {
@@ -118,7 +148,7 @@ test("an unusable interrupted thread falls back to a fresh thread with honest co
 
 test("explicit agent execution profiles become SDK thread options", async () => {
   const clients: FakeCodexClient[] = [];
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: (options) => {
       const client = new FakeCodexClient(options, "thread-profiled");
@@ -142,7 +172,7 @@ test("explicit agent execution profiles become SDK thread options", async () => 
 });
 
 test("an unavailable requested model remains an actionable runtime-start failure", async () => {
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       startThread: () => {
@@ -160,7 +190,7 @@ test("an unavailable requested model remains an actionable runtime-start failure
 });
 
 test("streamed Codex failures become failed attempt outcomes with retained thread identity", async () => {
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => new FailingCodexClient(),
   });
@@ -176,7 +206,7 @@ test("streamed Codex failures become failed attempt outcomes with retained threa
 });
 
 test("an explicit coordination permission report becomes a permission-blocked outcome", async () => {
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       startThread: () => ({
@@ -213,7 +243,7 @@ test("an explicit coordination permission report becomes a permission-blocked ou
 });
 
 test("an exception after thread startup becomes an inspectable failed outcome", async () => {
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       startThread: () => ({
@@ -242,7 +272,7 @@ test("an exception after thread startup becomes an inspectable failed outcome", 
 });
 
 test("a stream that ends without turn.completed is a failed outcome", async () => {
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       startThread: () => ({
@@ -274,7 +304,7 @@ test("a stream that ends without turn.completed is a failed outcome", async () =
 });
 
 test("a failed required coordination call makes the attempt fail with actionable evidence", async () => {
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       startThread: () => ({
@@ -330,7 +360,7 @@ test("a failed required coordination call makes the attempt fail with actionable
 });
 
 test("transcript capture keeps useful tool activity and truncates large command output", async () => {
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       startThread: () => ({
@@ -383,7 +413,7 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
   const toolIsRunning = new Promise<void>((resolve) => {
     toolStarted = resolve;
   });
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       startThread: () => ({
@@ -421,7 +451,7 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
 });
 
 test("a completed coordination move summarizes the authoritative task transition", async () => {
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       startThread: () => ({
@@ -472,7 +502,7 @@ test("a completed coordination move summarizes the authoritative task transition
 });
 
 test("coordination summaries distinguish successful reads from rejected commands", async () => {
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       startThread: () => ({
@@ -535,7 +565,7 @@ test("a completed agent message is inspectable before the Codex turn finishes", 
   const messageIsReady = new Promise<void>((resolve) => {
     messageCompleted = resolve;
   });
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
       startThread: () => ({
@@ -561,6 +591,8 @@ test("a completed agent message is inspectable before the Codex turn finishes", 
 
 test("continued attempts sharing one Codex thread retain isolated transcripts", async () => {
   let runNumber = 0;
+  let resumedThreadOptions: CodexThreadOptionsLike | undefined;
+  let resumedClientOptions: CodexClientOptionsLike | undefined;
   const sharedThread = (): CodexThreadLike => ({
     runStreamed: async () => {
       runNumber += 1;
@@ -580,17 +612,24 @@ test("continued attempts sharing one Codex thread retain isolated transcripts", 
       };
     },
   });
-  const runtime = new CodexAgentRuntime({
+  const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
-    createClient: () => ({
-      startThread: sharedThread,
-      resumeThread: sharedThread,
-    }),
+    createClient: (options) => {
+      resumedClientOptions = options;
+      return {
+        startThread: sharedThread,
+        resumeThread: (_threadId, options) => {
+          resumedThreadOptions = options;
+          return sharedThread();
+        },
+      };
+    },
   });
   const first = request("activation-shared", "T-0010");
   const continued = request("activation-shared", "T-0010");
   continued.attemptId = "attempt-activation-shared-2";
   continued.resumeThreadId = "shared-thread";
+  continued.workspace.path = "C:\\tasks\\resumed workspace (2)";
 
   await runtime.run(first, { started() {} });
   await runtime.run(continued, { started() {} });
@@ -607,7 +646,21 @@ test("continued attempts sharing one Codex thread retain isolated transcripts", 
     role: "agent",
     text: "Attempt 2 evidence.",
   }]);
+  assert.deepEqual(resumedThreadOptions, {
+    workingDirectory: "C:\\tasks\\resumed workspace (2)",
+  });
+  assert.deepEqual(resumedClientOptions?.config?.shell_environment_policy, {
+    set: {
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "safe.directory",
+      GIT_CONFIG_VALUE_0: "C:/tasks/resumed workspace (2)",
+    },
+  });
 });
+
+function createRuntime(options: CodexAgentRuntimeOptions): CodexAgentRuntime {
+  return new CodexAgentRuntime(options);
+}
 
 class FakeCodexClient implements CodexClientLike {
   threadOptions: CodexThreadOptionsLike = {};

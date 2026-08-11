@@ -70,6 +70,12 @@ around the mismatch. An exact safe-directory exception bypasses only Git's
 ownership check; it does not grant the `.git/worktrees` write permission the
 application requires.
 
+Framework-launched agents inject the exact task-workspace path through Git's
+process environment as `safe.directory`. Trust ends with the Codex process; the
+application does not change global or repository Git configuration. This fixes
+Git ownership inspection only. Writes to linked-worktree metadata remain
+subject to the user's ordinary Codex sandbox and approval policy.
+
 From the repository root, install exactly the dependency graph in
 `pnpm-lock.yaml`:
 

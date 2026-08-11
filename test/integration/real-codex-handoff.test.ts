@@ -6,7 +6,10 @@ import { join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
-import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import {
+  CoordinationApplication,
+  type AttemptTranscriptItem,
+} from "../../src/application/coordination-application.ts";
 import { AgentToolScopeRegistry } from "../../src/mcp/agent-tool-scope.ts";
 import { CodexAgentRuntime } from "../../src/runtime/codex-agent-runtime.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
@@ -15,7 +18,7 @@ const execFileAsync = promisify(execFile);
 const runRealCodex = process.env.COORDINATION_RUN_CODEX_INTEGRATION === "1";
 
 test(
-  "a real Codex SDK activation comments and hands the task to the next watched column",
+  "a real Codex activation can inspect Git before coordinating a handoff",
   { skip: !runRealCodex, timeout: 10 * 60 * 1_000 },
   async (t) => {
     const fixture = await createFixture();
@@ -59,7 +62,7 @@ test(
       columnId: "implementation",
       title: "Prove the real Codex handoff",
       description:
-        "Do not change repository files. Follow the role instructions exactly using only the coordination MCP tools.",
+        "Do not change repository files. Follow the role instructions exactly using only the requested Git inspection and coordination MCP tools.",
       actor: { kind: "user", id: "integration-test" },
       idempotencyKey: "create-real-codex-handoff",
     });
@@ -102,14 +105,21 @@ test(
     const implementationTranscript = await runtime.read(
       completed.task.activations[0]?.attempts[0]?.id as string,
     );
+    const gitStatus = implementationTranscript
+      ?.filter(isToolNamed("command_execution"))
+      .find((item) => /git status --short/i.test(item.summary));
+    assert.equal(gitStatus?.status, "completed");
     assert.deepEqual(
       implementationTranscript
-        ?.filter((item) => item.kind === "tool")
+        ?.filter(isToolNamed("mcp_tool_call"))
         .map((item) => ({ summary: item.summary, status: item.status })),
       [
-        { summary: "coordination.inspect_current_task", status: "completed" },
-        { summary: "coordination.add_comment", status: "completed" },
-        { summary: "coordination.move_current_task", status: "completed" },
+        { summary: `${created.task.id}: current task inspected`, status: "completed" },
+        { summary: `${created.task.id}: comment confirmed`, status: "completed" },
+        {
+          summary: `${created.task.id}: implementation → review (confirmed)`,
+          status: "completed",
+        },
       ],
     );
     const reviewTranscript = await runtime.read(
@@ -117,12 +127,19 @@ test(
     );
     assert.deepEqual(
       reviewTranscript
-        ?.filter((item) => item.kind === "tool")
+        ?.filter(isToolNamed("mcp_tool_call"))
         .map((item) => ({ summary: item.summary, status: item.status })),
-      [{ summary: "coordination.inspect_current_task", status: "completed" }],
+      [{ summary: `${created.task.id}: current task inspected`, status: "completed" }],
     );
   },
 );
+
+function isToolNamed(name: string) {
+  return (
+    item: AttemptTranscriptItem,
+  ): item is Extract<AttemptTranscriptItem, { kind: "tool" }> =>
+    item.kind === "tool" && item.name === name;
+}
 
 async function createFixture(): Promise<{
   definitionPath: string;
@@ -148,11 +165,13 @@ async function createFixture(): Promise<{
   ]);
   await writeFile(
     join(directory, "implementer.md"),
-    `Do not edit files or use shell commands.
-First call inspect_current_task. Then call add_comment exactly once with a body
-containing "Real Codex SDK handoff complete" and a unique idempotency key. Then
-call move_current_task exactly once to move the task to review using the current
-revision and another unique idempotency key. Finally report completion.
+    `First run exactly one Git inspection command: git status --short. Do not add
+a safe.directory command-line override. Do not edit repository files or run
+other shell commands. Then call inspect_current_task. Call add_comment exactly
+once with a body containing "Real Codex SDK handoff complete" and a unique
+idempotency key. Then call move_current_task exactly once to move the task to
+review using the current revision and another unique idempotency key. Finally
+report completion.
 `,
   );
   await writeFile(
