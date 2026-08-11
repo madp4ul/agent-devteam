@@ -92,6 +92,7 @@ export function AttemptTranscriptDialog({ attempt, agentName, onClose }: {
             <p>{agentName} · {attempt.status} · <ElapsedTime startedAt={attempt.startedAt} completedAt={attempt.completedAt} /></p>
           </div>
           <div className="transcript-header-actions">
+            {usage === undefined ? null : <TokenUsageSummary usage={usage} />}
             {attempt.threadId === null ? null : <CopyThreadIdButton threadId={attempt.threadId} />}
             <button className="icon-button" aria-label="Close transcript" onClick={onClose}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -100,7 +101,6 @@ export function AttemptTranscriptDialog({ attempt, agentName, onClose }: {
             </button>
           </div>
         </header>
-        {usage === undefined ? null : <TokenUsageSummary usage={usage} />}
         <div ref={contentRef} className="transcript-content">
           {error !== undefined ? (
             <p className="unavailable" role="alert">{error}</p>
@@ -146,20 +146,13 @@ export function AttemptTranscriptDialog({ attempt, agentName, onClose }: {
 
 function TokenUsageSummary({ usage }: { usage: AttemptTokenUsage }): ReactNode {
   const format = (value: number): string => value.toLocaleString("en-US");
+  const uncachedInputTokens = Math.max(0, usage.inputTokens - usage.cachedInputTokens);
   return (
-    <section className="token-usage" role="region" aria-labelledby="token-usage-title">
-      <div>
-        <p className="eyebrow" id="token-usage-title">Token usage</p>
-        <strong>{format(usage.inputTokens + usage.outputTokens)} total tokens</strong>
-      </div>
-      <div className="token-usage-breakdown" aria-label="Token usage breakdown">
-        <span>Input <strong>{format(usage.inputTokens)}</strong></span>
-        <span>Cached input <strong>{format(usage.cachedInputTokens)}</strong></span>
-        <span>Cache-write input <strong>{format(usage.cacheWriteInputTokens)}</strong></span>
-        <span>Output <strong>{format(usage.outputTokens)}</strong></span>
-        <span>Reasoning output <strong>{format(usage.reasoningOutputTokens)}</strong></span>
-      </div>
-    </section>
+    <div className="token-usage" role="region" aria-label="Token usage">
+      <span>Input <strong>{format(uncachedInputTokens)}</strong></span>
+      <span aria-hidden="true">·</span>
+      <span>Output <strong>{format(usage.outputTokens)}</strong></span>
+    </div>
   );
 }
 

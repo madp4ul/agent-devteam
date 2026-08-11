@@ -1,9 +1,9 @@
 # 53 — Show Token Usage in Attempt Transcripts
 
 **What to build:** Capture the token usage reported by Codex for each completed
-attempt turn and show a compact usage summary inside that attempt's transcript
-overlay, without promoting token usage to the board, task overview, or Agent
-activity surfaces.
+attempt turn and show a compact, cache-aware usage summary inside that attempt's
+transcript overlay, without promoting token usage to the board, task overview,
+or Agent activity surfaces.
 
 **Blocked by:** None
 
@@ -17,15 +17,17 @@ activity surfaces.
 - [x] Keep usage scoped by attempt ID. Continued or retried activations never
   overwrite or combine the usage of earlier attempts, even when they reuse the
   same Codex thread.
-- [x] Establish from authoritative Codex SDK semantics whether the reported
-  token categories have a correct, non-overlapping formula for one
-  representative total. If so, show that total as the primary usage number and
-  keep its component breakdown secondary; do not invent a formula or
-  double-count categories that are subsets of other reported values.
-- [x] If no accurate representative total can be established, show every
-  reported token category rather than presenting a misleading total. Keep the
-  complete set visually small and compact so usage does not compete with the
-  transcript's messages, tool activity, and diagnostics.
+- [x] Show only two compact values in the transcript header beside the thread
+  controls: `Input`, meaning input minus cached-input reads, and `Output`,
+  meaning the reported output count. Do not call the displayed input actual or
+  total model input.
+- [x] Do not show a summed total, cache-reuse percentage, or detailed category
+  disclosure. Continue persisting the complete reported payload so a later
+  reporting feature can use it without changing this deliberately minimal UI.
+- [x] Present these values as cumulative usage for the completed attempt. Do
+  not show them as a context-window gauge or percentage: repeated model calls
+  let an attempt's aggregate usage exceed one context window, and the completed
+  SDK event does not expose the final call's live context occupancy.
 - [x] Label the information as token usage rather than monetary cost. Do not
   infer currency spend from token counts or imply that SDK-reported tokens map
   directly to a particular billing arrangement.
@@ -55,11 +57,10 @@ resource footprint of one concrete run. Broader reporting, budgets, alerts,
 pricing metadata, and process- or agent-level aggregation should be proposed
 separately if they become useful.
 
-A single number is preferable when it faithfully represents the reported
-usage. Cached input, cache-write input, and reasoning output may overlap with
-broader input or output categories, so the implementation must verify their
-semantics before summing them. When no such total is defensible, compactness
-comes from presentation rather than from hiding categories.
+The raw SDK total remains input plus output, but the transcript does not need a
+representative total. Its compact header shows only uncached input and output.
+Cached input, cache-write input, and reasoning output overlap with broader
+input or output categories and remain persisted rather than displayed.
 
 ## Comments
 
@@ -70,14 +71,19 @@ comes from presentation rather than from hiding categories.
 
 ## Answer
 
-Implemented per-attempt token usage capture, durable persistence, and a compact
-transcript-only summary. The primary total is `input_tokens + output_tokens`;
-cached input, cache-write input, and reasoning output remain secondary detail
-because they overlap those broader categories. The SDK's cumulative resumed-
-thread snapshots are converted to attempt deltas only when the immediately
-preceding attempt has a trustworthy baseline; otherwise usage is omitted.
+Implemented per-attempt token usage capture, durable persistence, and a minimal
+transcript-header readout. It shows only `Input`, calculated as reported input
+minus cached-input reads, and reported `Output` beside the thread controls. It
+does not show a total, cache percentage, or category disclosure. The complete
+SDK payload remains durable but is not promoted into this UI.
+
+The SDK's cumulative resumed-thread snapshots are converted to attempt deltas
+only when the immediately preceding attempt has a trustworthy baseline;
+otherwise usage is omitted.
 
 Authoritative semantics and source links are recorded in
 [`../research/codex-sdk-token-usage-semantics.md`](../research/codex-sdk-token-usage-semantics.md).
+Comparable Codex CLI and Claude Code presentation patterns are recorded in
+[`../research/token-usage-ui-patterns.md`](../research/token-usage-ui-patterns.md).
 Runtime, restart persistence, resumed-thread isolation, missing-usage, and
 browser presentation coverage were added.

@@ -609,20 +609,22 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
   const copyThreadId = dialog.getByRole("button", { name: "Copy thread ID" });
   const closeTranscript = dialog.getByRole("button", { name: "Close transcript" });
-  const [copyBox, closeBox] = await Promise.all([copyThreadId.boundingBox(), closeTranscript.boundingBox()]);
+  const tokenUsage = dialog.getByRole("region", { name: "Token usage" });
+  const [usageBox, copyBox, closeBox] = await Promise.all([
+    tokenUsage.boundingBox(),
+    copyThreadId.boundingBox(),
+    closeTranscript.boundingBox(),
+  ]);
+  expect(usageBox).not.toBeNull();
   expect(copyBox).not.toBeNull();
   expect(closeBox).not.toBeNull();
+  expect(Math.abs((usageBox!.y + usageBox!.height / 2) - (copyBox!.y + copyBox!.height / 2))).toBeLessThanOrEqual(2);
   expect(Math.abs((copyBox!.y + copyBox!.height / 2) - (closeBox!.y + closeBox!.height / 2))).toBeLessThanOrEqual(2);
   await expect(closeTranscript.locator("svg")).toBeVisible();
   await expect(dialog).not.toContainText("thread-browser-123");
   await expect(dialog).toContainText("I inspected the current task.");
-  const tokenUsage = dialog.getByRole("region", { name: "Token usage" });
-  await expect(tokenUsage).toContainText("3,000 total tokens");
-  await expect(tokenUsage).toContainText("Input 2,400");
-  await expect(tokenUsage).toContainText("Cached input 1,800");
-  await expect(tokenUsage).toContainText("Cache-write input 200");
-  await expect(tokenUsage).toContainText("Output 600");
-  await expect(tokenUsage).toContainText("Reasoning output 350");
+  await expect(tokenUsage).toHaveText(/Input 600\s*·\s*Output 600/);
+  await expect(tokenUsage).not.toContainText(/cached|reasoning|total|used|%/i);
   await expect(tokenUsage).not.toContainText(/cost|currency|\$/i);
   await expect(dialog).toContainText("pnpm test (exit 0)");
   await expect(dialog.getByText("output truncated")).toBeHidden();

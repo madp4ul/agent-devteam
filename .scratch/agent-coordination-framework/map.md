@@ -161,6 +161,9 @@ without choosing the implementation yet.
   — Treat a mentioned agent's move into its own watched column as an explicit
   responsibility claim that continues the mention activation without queuing
   redundant work, while preserving ordinary handoffs in every other case.
+- [Show Token Usage in Attempt Transcripts](./issues/53-show-token-usage-in-attempt-transcripts.md)
+  — Persist complete per-attempt SDK usage and show only uncached input and
+  output in a compact field beside the transcript's thread controls.
 
 - [Prove the First Usable Workflow](./issues/28-prove-first-usable-workflow.md)
   — Drive the architecture-led example through design, implementation rework,
@@ -184,13 +187,13 @@ No implementation-ready ticket is currently prioritized.
   — Add an accessible system-aware light/dark appearance preference while
   preserving the few intentional semantic color relationships and leaving the
   broader palette to implementation judgment.
+- [Reduce Agent-Run Context Overhead](./issues/56-reduce-agent-run-context-overhead.md)
+  — Measure and reduce broad tool discovery, oversized mutation responses, and
+  redundant startup context while preserving raw usage and coordination
+  correctness.
 
 ## Not yet specified
 
-- [Show Token Usage in Attempt Transcripts](./issues/53-show-token-usage-in-attempt-transcripts.md)
-  — Persist Codex-reported usage per attempt and present it compactly in that
-  attempt's transcript, without adding token or cost information to overview
-  surfaces.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.
