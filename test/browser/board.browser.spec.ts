@@ -1807,12 +1807,31 @@ test("failed activation recovery is explicit on the current attention reason", a
 });
 
 test("permission attention explains why automatic retry is unavailable", async ({ page }) => {
+  let continuationBody: unknown;
+  await page.route("**/api/attention/browser-permission-attention/continue", async (route) => {
+    continuationBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      json: { accepted: true, activationId: "browser-permission-activation" },
+    });
+  });
   await page.goto("/tasks/T-0001?attention=browser-permission-attention");
   const reason = page.locator(".attention-list li").filter({
     hasText: "Writing the protected release file requires user approval.",
   });
   await expect(reason).toContainText("Automatic retry is unavailable for permission blocks.");
-  await expect(reason.getByRole("button", { name: "Continue" })).toBeVisible();
+  await expect(reason).toContainText("managed policy");
+  await expect(reason).toContainText("completed externally");
+  await expect(reason).toContainText("Auto-review can still deny the retry");
+  const continueButton = reason.getByRole("button", { name: "Continue" });
+  await expect(continueButton).toBeDisabled();
+  await reason.getByRole("textbox", { name: "Authorization or change" }).fill(
+    "I reviewed and authorize retrying the exact release-file write.",
+  );
+  await continueButton.click();
+  await expect.poll(() => continuationBody).toMatchObject({
+    message: "I reviewed and authorize retrying the exact release-file write.",
+  });
   await expect(reason.getByRole("button", { name: "Retry" })).toHaveCount(0);
 });
 

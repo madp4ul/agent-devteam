@@ -105,6 +105,14 @@ without choosing the implementation yet.
   — Give every SDK attempt exact process-local Git ownership trust for its task
   workspace while leaving sandbox and approval authority under the user's
   ordinary Codex configuration.
+- [Investigate SDK Capability Parity and Automatic Approvals](./issues/51-investigate-sdk-capability-parity-and-automatic-approvals.md)
+  — Keep the supported TypeScript SDK, inherit ambient capability settings, and
+  add only on-request Auto-review for scoped escalation; retain explicit
+  permission-block continuation because the SDK exposes no approval events.
+- [Enable Automatic Approval Review for Agent Runs](./issues/54-enable-automatic-approval-review-for-agent-runs.md)
+  — Route unattended SDK escalations through on-request Auto-review while
+  preserving inherited capabilities, and require durable explicit user context
+  before retrying an unresolved permission block.
 - [Split, Relate, and Unblock Work](./issues/21-split-relate-unblock-work.md)
   — Add typed child and dependency relationships, task-specific child starting
   refs, immutable blocker history, and reliable reactivation exactly when the
@@ -174,6 +182,10 @@ No implementation-ready ticket is currently prioritized.
   finished attempt's captured transcript until task archival.
 ## Not yet specified
 
+- [Show Token Usage in Attempt Transcripts](./issues/53-show-token-usage-in-attempt-transcripts.md)
+  — Persist Codex-reported usage per attempt and present it compactly in that
+  attempt's transcript, without adding token or cost information to overview
+  surfaces.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.
@@ -187,10 +199,6 @@ No implementation-ready ticket is currently prioritized.
 - [Discard an Interrupted Activation](./issues/50-discard-interrupted-activation.md)
   — Decide how a user deliberately abandons preserved interrupted work, what
   happens to later queued activations, and how the decision remains auditable.
-- [Investigate SDK Capability Parity and Automatic Approvals](./issues/51-investigate-sdk-capability-parity-and-automatic-approvals.md)
-  — Prove the smallest supported SDK policy for app-like development capability,
-  automatically reviewed Git escalation, and permission-block recovery before
-  considering App Server or independent clones.
 ## Deferred release engineering
 
 - [Support Released Schema Upgrades](./issues/42-support-released-schema-upgrades.md)

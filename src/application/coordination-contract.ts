@@ -654,11 +654,15 @@ export interface ActivationRecoveryCommand {
   idempotencyKey: string;
 }
 
+export interface ContinuePermissionBlockedActivationCommand extends ActivationRecoveryCommand {
+  message: string;
+}
+
 export type ActivationRecoveryResult =
   | { accepted: true; activationId: string; resolvedAt: string }
   | {
       accepted: false;
-      reason: "not-found" | "wrong-recovery-type" | "already-resolved";
+      reason: "not-found" | "wrong-recovery-type" | "already-resolved" | "message-required";
     }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 

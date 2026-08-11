@@ -19,6 +19,7 @@ import type {
   BoardSummariesQueryResult,
   BoardsQueryResult,
   CollaboratorsQueryResult,
+  ContinuePermissionBlockedActivationCommand,
   ContinueInterruptedTaskCommand,
   ContinueInterruptedTaskResult,
   DismissStaleActivationCommand,
@@ -580,7 +581,7 @@ export class CoordinationApplication {
   }
 
   continuePermissionBlockedActivation(
-    command: ActivationRecoveryCommand,
+    command: ContinuePermissionBlockedActivationCommand,
   ): ActivationRecoveryResult {
     return this.recoverActivation(
       () => this.#persistence.taskCommands.continuePermissionBlockedActivation(command),

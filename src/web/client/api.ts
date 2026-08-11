@@ -273,10 +273,11 @@ export async function recoverFailedActivation(
   attentionReasonId: string,
   action: ActivationRecoveryAction,
   idempotencyKey: string,
+  message?: string,
 ): Promise<void> {
   await request(`/api/attention/${encodeURIComponent(attentionReasonId)}/${action}`, {
     method: "POST",
-    body: JSON.stringify({ idempotencyKey }),
+    body: JSON.stringify({ idempotencyKey, ...(message === undefined ? {} : { message }) }),
   });
 }
 

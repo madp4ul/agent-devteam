@@ -220,6 +220,10 @@ textarea { resize: vertical; line-height: 1.5; }
 .agent-activity-panel.idle .quiet { margin: 0; font-size: .85rem; }
 .agent-activity-panel .recovery-explanation { grid-column: 1; color: var(--muted); line-height: 1.4; }
 .agent-activity-panel .inline-actions { grid-column: 2; grid-row: 1 / span 2; }
+.permission-continuation { display: grid; gap: .55rem; width: min(100%, 42rem); }
+.permission-continuation label { display: grid; gap: .35rem; font-weight: 700; }
+.permission-continuation button { justify-self: end; }
+.agent-activity-panel .permission-continuation { grid-column: 1 / -1; }
 .relationship-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; margin-top: 1.25rem; border-top: 1px solid #d8ddd9; padding-top: 1rem; }
 .relationship-action { display: grid; align-content: start; gap: .42rem; min-width: 0; }
 .relationship-action label, .relationship-action-label { color: var(--forest); font-size: .78rem; font-weight: 800; }

@@ -485,6 +485,7 @@ test("failed and user-interrupted activations become stale after a semantic chan
   assert.ok(permissionReason);
   assert.equal(changed.continuePermissionBlockedActivation({
     attentionReasonId: permissionReason.id,
+    message: "I authorize retrying the blocked action under the approved current process.",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "continue-version-tagged-rebase",
   }).accepted, true);

@@ -220,6 +220,21 @@ test("ordinary resumed attempts receive compact context while process-rebased re
   assert.match(retryPrompt, /Use the failure facts below to recover/);
   assert.doesNotMatch(retryPrompt, /Reassess current task and workspace state/);
 
+  const permissionContinuation = request("activation-permission-retry", "T-0038");
+  permissionContinuation.resumeThreadId = "thread-permission";
+  permissionContinuation.attempt = {
+    number: 2,
+    precedingOutcome: {
+      status: "permission-blocked",
+      summary: "Auto-review denied the protected Git metadata update.",
+    },
+    thread: "resumed",
+    continuationMessage: "I reviewed and authorize retrying the exact Git command.",
+  };
+  const permissionPrompt = composeActivationPrompt(permissionContinuation);
+  assert.match(permissionPrompt, /Preceding outcome: permission-blocked/);
+  assert.match(permissionPrompt, /User continuation: I reviewed and authorize retrying the exact Git command\./);
+
   resumed.attempt.fullCompositionReason = "process-rebased";
   const rebased = composeActivationPrompt(resumed);
   assert.match(rebased, /^# Coordination framework/);
@@ -275,7 +290,7 @@ test("a later-satisfied mention can complete inertly without duplicate coordinat
   ]);
 });
 
-test("each activation receives exact process-local Git trust without overriding Codex permissions", async () => {
+test("each activation receives automatic approval review and exact Git trust without overriding other capabilities", async () => {
   const clients: FakeCodexClient[] = [];
   const runtime = createRuntime({
     mcpServer: {
@@ -316,6 +331,8 @@ test("each activation receives exact process-local Git trust without overriding 
     assert.equal("approvalPolicy" in client.threadOptions, false);
   }
   assert.deepEqual(clients[0]?.options.config, {
+    approval_policy: "on-request",
+    approvals_reviewer: "auto_review",
     shell_environment_policy: {
       set: {
         GIT_CONFIG_COUNT: "1",
@@ -333,7 +350,7 @@ test("each activation receives exact process-local Git trust without overriding 
       },
     },
   });
-  for (const key of ["approval_policy", "default_permissions", "permissions"]) {
+  for (const key of ["default_permissions", "permissions", "sandbox_mode", "web_search"]) {
     assert.equal(key in (clients[0]?.options.config ?? {}), false);
   }
   assert.deepEqual(
@@ -919,6 +936,11 @@ test("continued attempts sharing one Codex thread retain isolated transcripts", 
       GIT_CONFIG_VALUE_0: "C:/tasks/resumed workspace (2)",
     },
   });
+  assert.equal(resumedClientOptions?.config?.approval_policy, "on-request");
+  assert.equal(resumedClientOptions?.config?.approvals_reviewer, "auto_review");
+  for (const key of ["default_permissions", "permissions", "sandbox_mode", "web_search"]) {
+    assert.equal(key in (resumedClientOptions?.config ?? {}), false);
+  }
 });
 
 function createRuntime(options: CodexAgentRuntimeOptions): CodexAgentRuntime {

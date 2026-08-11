@@ -38,11 +38,13 @@ export function MarkUserMentionAddressed({
 export function ActivationRecoveryActions({
   attentionReasonId,
   actions,
+  recoveryKind,
   onResolved,
   onError,
 }: {
   attentionReasonId: string;
   actions: ActivationRecoveryAction[];
+  recoveryKind: "technical-failure" | "permission-block";
   onResolved(): Promise<void>;
   onError(error: unknown): void;
 }): ReactNode {
@@ -50,16 +52,41 @@ export function ActivationRecoveryActions({
     actions.map((action) => [action, crypto.randomUUID()]),
   ));
   const [pending, setPending] = useState<string | null>(null);
-  const act = async (action: ActivationRecoveryAction): Promise<void> => {
+  const [continuationMessage, setContinuationMessage] = useState("");
+  const act = async (action: ActivationRecoveryAction, message?: string): Promise<void> => {
     setPending(action);
     try {
-      await recoverFailedActivation(attentionReasonId, action, idempotencyKeys.get(action)!);
+      await recoverFailedActivation(attentionReasonId, action, idempotencyKeys.get(action)!, message);
       await onResolved();
     } catch (error) {
       setPending(null);
       onError(error);
     }
   };
+  if (recoveryKind === "permission-block") {
+    return (
+      <form
+        className="permission-continuation"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void act("continue", continuationMessage.trim());
+        }}
+      >
+        <label>
+          Authorization or change
+          <textarea
+            value={continuationMessage}
+            onChange={(event) => setContinuationMessage(event.target.value)}
+            placeholder="Describe the exact retry you authorize, the managed policy you changed, or the operation you completed externally."
+            rows={3}
+          />
+        </label>
+        <button disabled={pending !== null || continuationMessage.trim().length === 0} type="submit">
+          {pending === "continue" ? "Continuing…" : "Continue"}
+        </button>
+      </form>
+    );
+  }
   return (
     <span className="inline-actions">
       {actions.map((action) => (
@@ -112,6 +139,7 @@ export function AttentionReasonResolution({
         <ActivationRecoveryActions
           attentionReasonId={reason.id}
           actions={reason.recovery.actions}
+          recoveryKind={reason.recovery.kind}
           onResolved={onResolved}
           onError={onError}
         />

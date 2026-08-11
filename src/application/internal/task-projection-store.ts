@@ -260,7 +260,7 @@ export class TaskProjectionStore {
                   summary: typed.failure_summary,
                   actions: ["continue"],
                   explanation:
-                    "Automatic retry is unavailable for permission blocks. Complete the required action or change Codex policy, then Continue.",
+                    "Automatic retry is unavailable for permission blocks. Describe the exact retry you authorize, the managed policy you changed, or the operation you completed externally, then Continue. Auto-review can still deny the retry; continuation does not bypass policy.",
                 }
               : {
                   kind: "technical-failure",

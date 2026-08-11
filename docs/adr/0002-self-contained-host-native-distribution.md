@@ -44,7 +44,9 @@ interfaces.
   checkout. Its default should be on the same filesystem and near the project
   when practical, while allowing the user to choose another location.
 - Git and the Codex SDK run host-native under the user's existing filesystem,
-  authentication, sandbox, and permission environment. Each agent process adds
-  only its exact task-workspace path as process-local Git trust.
+  authentication, sandbox, and capability environment. Each unattended agent
+  run routes scoped escalation requests through automatic review and adds only
+  its exact task-workspace path as process-local Git trust. Managed permission
+  restrictions remain authoritative.
 - A later packaging ticket must produce and verify the self-contained artifact.
   Source-based `pnpm` commands remain the developer workflow, not end-user setup.

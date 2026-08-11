@@ -216,7 +216,7 @@ test("permission block requires explicit continuation and never retries automati
     summary: "Writing the protected file requires user approval.",
     actions: ["continue"],
     explanation:
-      "Automatic retry is unavailable for permission blocks. Complete the required action or change Codex policy, then Continue.",
+      "Automatic retry is unavailable for permission blocks. Describe the exact retry you authorize, the managed policy you changed, or the operation you completed externally, then Continue. Auto-review can still deny the retry; continuation does not bypass policy.",
   });
   assert.deepEqual(await application.queryAttemptTranscript(first.attemptId), {
     available: true,
@@ -224,32 +224,67 @@ test("permission block requires explicit continuation and never retries automati
     items: [{ kind: "message", role: "agent", text: "Attempt 1 runtime evidence." }],
   });
 
-  const continued = application.continuePermissionBlockedActivation({
+  application.close();
+  const pausedAfterRestart = await startControlledApplication(fixture, runtime, clock);
+  assert.deepEqual(pausedAfterRestart.continuePermissionBlockedActivation({
     attentionReasonId: reason!.id,
+    message: "   ",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-without-authorization",
+  }), { accepted: false, reason: "message-required" });
+  const continued = pausedAfterRestart.continuePermissionBlockedActivation({
+    attentionReasonId: reason!.id,
+    message: "I authorize retrying the exact protected-file write after reviewing the requested action.",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "continue-after-policy-change",
   });
   assert.equal(continued.accepted, true);
+  pausedAfterRestart.close();
+  const restarted = await startControlledApplication(fixture, runtime, clock);
+  t.after(() => restarted.close());
+  assert.equal((await restarted.resumeAutomation()).accepted, true);
   const resumed = await runtime.waitForRequest(2);
   assert.equal(resumed.activationId, firstActivationId);
   assert.equal(resumed.resumeThreadId, "permission-thread");
   assert.equal(resumed.workspace.path, first.workspace.path);
+  assert.equal(
+    resumed.attempt.continuationMessage,
+    "I authorize retrying the exact protected-file write after reviewing the requested action.",
+  );
+  await runtime.finish({
+    status: "permission-blocked",
+    summary: "Auto-review denied the protected-file write after reassessment.",
+    threadId: "permission-thread",
+  });
+  await restarted.waitForAutomationIdle();
+  clock.advanceTo("2026-01-03T12:00:00.000Z");
+  assert.equal(runtime.requests.length, 2);
+  const repeatedAttention = restarted.queryNeedsAttention();
+  assert.equal(repeatedAttention.available, true);
+  if (!repeatedAttention.available) return;
+  const repeatedReason = repeatedAttention.tasks[0]?.reasons[0];
+  assert.equal(repeatedReason?.recovery?.kind, "permission-block");
+  assert.equal(restarted.continuePermissionBlockedActivation({
+    attentionReasonId: repeatedReason!.id,
+    message: "I completed the protected-file write externally; reassess the workspace and continue.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-after-external-action",
+  }).accepted, true);
+  const recovered = await runtime.waitForRequest(3);
+  assert.equal(
+    recovered.attempt.continuationMessage,
+    "I completed the protected-file write externally; reassess the workspace and continue.",
+  );
   await runtime.finish({ status: "completed", summary: "Permission supplied." });
-  const later = await runtime.waitForRequest(3);
+  const later = await runtime.waitForRequest(4);
   assert.equal(later.activationId, laterActivationId);
   await runtime.finish({ status: "completed", summary: "Later work completed." });
-  await application.waitForAutomationIdle();
-  const inspected = application.queryTask(taskId);
+  await restarted.waitForAutomationIdle();
+  const inspected = restarted.queryTask(taskId);
   assert.equal(inspected.available, true);
   if (inspected.available) {
     assert.equal(inspected.task.activations[0]?.attempts[0]?.outcome?.status, "permission-blocked");
   }
-  application.close();
-  const restarted = await CoordinationApplication.start({
-    processDefinitionPath: fixture.definitionPath,
-    databasePath: fixture.databasePath,
-  });
-  t.after(() => restarted.close());
   assert.deepEqual(await restarted.queryAttemptTranscript(first.attemptId), {
     available: true,
     threadId: "permission-thread",

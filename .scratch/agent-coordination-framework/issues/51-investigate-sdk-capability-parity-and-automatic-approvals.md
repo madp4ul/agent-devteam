@@ -10,7 +10,7 @@ vendor patches or an unnecessary App Server migration.
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Goal
 
@@ -84,3 +84,32 @@ If the SDK is sufficient, refine this issue or create a focused implementation
 ticket for that policy and its recovery UI. If it is not sufficient, document
 the exact missing supported surface before proposing App Server or cloned task
 repositories.
+
+## Answer
+
+The published TypeScript SDK is sufficient; App Server and independent clones
+are not justified for the current product. Preserve ambient sandbox, web,
+network, project, and unrelated MCP configuration; keep the coordination MCP
+and exact Git ownership trust; and force only `approval_policy = "on-request"`
+plus `approvals_reviewer = "auto_review"`.
+
+The repeatable native-Windows SDK 0.146.0 probe in
+[`test/integration/real-codex-linked-worktree-git.test.ts`](../../../test/integration/real-codex-linked-worktree-git.test.ts)
+proved read/edit/test capability and the full linked-worktree Git lifecycle.
+Branch creation, staging, and commit each failed first at protected Git
+metadata, were allowed by scoped Auto-review, succeeded on retry, and left a
+clean committed branch. The internal denial-and-retry is operationally reliable
+and acceptable because it remains invisible to the user and does not broaden
+the ordinary writable roots.
+
+The exact remaining SDK gap is structured approval lifecycle access: SDK
+events expose neither approval requests/decisions nor a callback to answer
+them. Unresolved denials, timeouts, or reviewer failures must therefore remain
+agent-reported permission blocks. A later continuation should carry an explicit
+user authorization/change message into the resumed thread; it is a policy-aware
+retry, not an approval bypass.
+
+Full sources, the capability matrix, version boundary, and proof details are in
+[SDK Capability Parity and Automatic Approvals](../research/sdk-capability-parity-and-automatic-approvals.md).
+Implementation is scoped in
+[54 — Enable Automatic Approval Review for Agent Runs](./54-enable-automatic-approval-review-for-agent-runs.md).

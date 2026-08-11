@@ -17,10 +17,13 @@ reimplementing it.
 **Agent permission policy**:
 The user-controlled policy of the agent runtime that determines agents'
 technical capabilities and when approval is required. The coordination
-framework reuses this shared policy for every agent run rather than defining
-permissions per agent, role, or process. It supplies only the exact current
-task-workspace path as process-local Git trust so the sandbox identity can run
-Git inspection without changing global or repository configuration.
+framework reuses the user's shared capability boundaries for every agent run
+rather than defining permissions per agent, role, or process. Because agent
+runs are unattended, requests to cross those boundaries receive automatic
+approval review; managed restrictions remain authoritative. The framework also
+supplies the exact current task-workspace path as process-local Git trust so
+the sandbox identity can run Git inspection without changing global or
+repository configuration.
 
 **Board**:
 A configurable workflow containing columns and tasks. Different parts of the

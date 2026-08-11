@@ -8,6 +8,7 @@ import type {
   ActivationRecoveryCommand,
   ActivationRecoveryAction,
   ActivationRecoveryResult,
+  ContinuePermissionBlockedActivationCommand,
   AddTaskCommentCommand,
   AddTaskCommentResult,
   Actor,
@@ -565,15 +566,18 @@ export class TaskCommandStore {
   }
 
   continuePermissionBlockedActivation(
-    command: ActivationRecoveryCommand,
+    command: ContinuePermissionBlockedActivationCommand,
   ): ActivationRecoveryResult {
-    return this.recoverActivation("continue", command, "permission");
+    const message = command.message.trim();
+    if (message.length === 0) return { accepted: false, reason: "message-required" };
+    return this.recoverActivation("continue", command, "permission", message);
   }
 
   private recoverActivation(
     action: ActivationRecoveryAction,
     command: ActivationRecoveryCommand,
     expectedFailureKind: "technical" | "permission",
+    continuationMessage: string | null = null,
   ): ActivationRecoveryResult {
     return this.transaction(() => {
       const commandType = `${action}-failed-activation`;
@@ -636,10 +640,11 @@ export class TaskCommandStore {
             .prepare(
               `UPDATE activations
                SET status = 'queued', retry_cycle_start = ?, retry_due_at = NULL,
-                   failure_kind = NULL, failure_summary = NULL, resolution = NULL
+                   failure_kind = NULL, failure_summary = NULL, resolution = NULL,
+                   continuation_message = ?
                WHERE id = ?`,
             )
-            .run(attempts.count, reason.activation_id);
+            .run(attempts.count, continuationMessage, reason.activation_id);
         }
         this.appendActivity(
           reason.task_id,

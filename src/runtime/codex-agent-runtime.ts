@@ -81,6 +81,8 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     const clientOptions: CodexClientOptionsLike = {
       env: definedProcessEnvironment(),
       config: {
+        approval_policy: "on-request",
+        approvals_reviewer: "auto_review",
         shell_environment_policy: {
           set: {
             GIT_CONFIG_COUNT: "1",

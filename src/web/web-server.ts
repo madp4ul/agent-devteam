@@ -7,8 +7,6 @@ import { fileURLToPath } from "node:url";
 import {
   CoordinationApplication,
   type Actor,
-  type ActivationRecoveryAction,
-  type ActivationRecoveryCommand,
   type CreateChildTaskCommand,
   type CreateTaskRelationshipCommand,
   type TaskWorkspaceView,
@@ -446,33 +444,24 @@ async function handleBrowserApi(
   const recoveryMatch = /^\/api\/attention\/([^/]+)\/(retry|dismiss|continue)$/.exec(url.pathname);
   if (method === "POST" && recoveryMatch?.[1] !== undefined && recoveryMatch[2] !== undefined) {
     const body = await readJsonBody(request);
+    const action = recoveryMatch[2] as "retry" | "dismiss" | "continue";
     const command = {
       attentionReasonId: decodeURIComponent(recoveryMatch[1]),
       actor: { kind: "user" as const, id: "local-user" },
       idempotencyKey: stringField(body, "idempotencyKey"),
     };
-    const result = recoverActivation(
-      application,
-      recoveryMatch[2] as ActivationRecoveryAction,
-      command,
-    );
+    const result = action === "continue"
+      ? application.continuePermissionBlockedActivation({
+          ...command,
+          message: stringField(body, "message"),
+        })
+      : action === "retry"
+        ? application.retryFailedActivation(command)
+        : application.dismissFailedActivation(command);
     sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
     return;
   }
   sendJson(response, 404, { error: "unknown-browser-api" });
-}
-
-function recoverActivation(
-  application: CoordinationApplication,
-  action: ActivationRecoveryAction,
-  command: ActivationRecoveryCommand,
-): ReturnType<CoordinationApplication["retryFailedActivation"]> {
-  const handlers = {
-    retry: () => application.retryFailedActivation(command),
-    dismiss: () => application.dismissFailedActivation(command),
-    continue: () => application.continuePermissionBlockedActivation(command),
-  } satisfies Record<ActivationRecoveryAction, () => ReturnType<CoordinationApplication["retryFailedActivation"]>>;
-  return handlers[action]();
 }
 
 function readAllColumnTaskOverviews(
