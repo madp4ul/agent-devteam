@@ -13,6 +13,7 @@ import {
   type AgentRuntime,
   type AttemptTranscriptAccess,
   type AttemptTranscriptItem,
+  type AttemptTokenUsage,
   type AutomationClock,
   CoordinationApplication,
 } from "../../src/application/coordination-application.ts";
@@ -162,7 +163,15 @@ test("a finished attempt transcript remains inspectable after application restar
   const expectedTranscript: AttemptTranscriptItem[] = [
     { kind: "message", role: "agent", text: "The implementation is ready for review." },
   ];
+  const expectedUsage: AttemptTokenUsage = {
+    inputTokens: 2_400,
+    cachedInputTokens: 1_800,
+    cacheWriteInputTokens: 200,
+    outputTokens: 600,
+    reasoningOutputTokens: 350,
+  };
   runtime.setTranscript(request.attemptId, expectedTranscript);
+  runtime.setUsage(request.attemptId, expectedUsage);
   runtime.complete({
     status: "completed",
     summary: "Implementation complete.",
@@ -178,6 +187,7 @@ test("a finished attempt transcript remains inspectable after application restar
     available: true,
     threadId: "reused-codex-thread",
     items: expectedTranscript,
+    usage: expectedUsage,
   });
   application.close();
 
@@ -193,6 +203,7 @@ test("a finished attempt transcript remains inspectable after application restar
     available: true,
     threadId: "reused-codex-thread",
     items: expectedTranscript,
+    usage: expectedUsage,
   });
 });
 
@@ -351,6 +362,7 @@ test("agent command idempotency replays stay scoped to the current task", async 
 class ControlledAgentRuntime implements AgentRuntime, AttemptTranscriptAccess {
   readonly requests: AgentRunRequest[] = [];
   readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
+  readonly #usage = new Map<string, AttemptTokenUsage>();
   #complete: ((outcome: AgentRunOutcome) => void) | undefined;
   readonly #waiters: Array<{
     count: number;
@@ -386,9 +398,17 @@ class ControlledAgentRuntime implements AgentRuntime, AttemptTranscriptAccess {
     this.#transcripts.set(attemptId, structuredClone(transcript));
   }
 
+  setUsage(attemptId: string, usage: AttemptTokenUsage): void {
+    this.#usage.set(attemptId, structuredClone(usage));
+  }
+
   async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {
     const transcript = this.#transcripts.get(attemptId);
     return transcript === undefined ? null : structuredClone(transcript);
+  }
+
+  async readUsage(attemptId: string): Promise<AttemptTokenUsage | null> {
+    return this.#usage.get(attemptId) ?? null;
   }
 }
 

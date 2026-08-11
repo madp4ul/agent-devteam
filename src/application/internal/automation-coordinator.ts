@@ -403,6 +403,9 @@ export class AutomationCoordinator {
         const transcript = this.#transcriptAccess === undefined
           ? undefined
           : await this.#transcriptAccess.read(attempt.id) ?? undefined;
+        const usage = this.#transcriptAccess?.readUsage === undefined
+          ? undefined
+          : await this.#transcriptAccess.readUsage(attempt.id) ?? undefined;
         if (activeRun.state === "interrupting") {
           if (
             activeRun.interruptedBy === undefined ||
@@ -416,9 +419,19 @@ export class AutomationCoordinator {
             activeRun.interruptedBy,
             activeRun.interruptIdempotencyKey,
             transcript,
+            usage,
+            precedingAttempt?.threadId ?? undefined,
           );
         } else {
-          this.#stateStore.completeAttempt(attempt.id, outcome, this.#clock.now(), true, transcript);
+          this.#stateStore.completeAttempt(
+            attempt.id,
+            outcome,
+            this.#clock.now(),
+            true,
+            transcript,
+            usage,
+            precedingAttempt?.threadId ?? undefined,
+          );
         }
         activeRun.confirm();
       } catch (error) {

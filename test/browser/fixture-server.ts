@@ -63,6 +63,15 @@ const application = await CoordinationApplication.start({
   },
   transcriptAccess: {
     read: async (attemptId) => attemptId === "browser-attempt" ? browserTranscript : null,
+    readUsage: async (attemptId) => attemptId === "browser-attempt"
+      ? {
+          inputTokens: 2_400,
+          cachedInputTokens: 1_800,
+          cacheWriteInputTokens: 200,
+          outputTokens: 600,
+          reasoningOutputTokens: 350,
+        }
+      : null,
   },
 });
 const inspected = application.createTask({

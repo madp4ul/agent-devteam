@@ -9,6 +9,7 @@ import type {
   AgentRunOutcome,
   AttemptContextView,
   AttemptTranscriptItem,
+  AttemptTokenUsage,
   RuntimeStartupBoundary,
   RuntimeStartupDiagnostic,
   TaskActivityView,
@@ -356,21 +357,37 @@ export class AutomationStateStore {
     actor: Actor & { kind: "user" },
     idempotencyKey: string,
     transcript?: AttemptTranscriptItem[],
+    usage?: AttemptTokenUsage,
+    resumedThreadId?: string,
   ): void {
     this.#owner.transaction(() => {
       const attempt = this.#database
         .prepare(
-          `SELECT attempt.activation_id, activation.task_id, activation.target_agent_id
+          `SELECT attempt.activation_id, attempt.thread_id,
+                  activation.task_id, activation.target_agent_id
            FROM attempts attempt
            JOIN activations activation ON activation.id = attempt.activation_id
            WHERE attempt.id = ? AND attempt.status = 'running'
              AND activation.status = 'running'`,
         )
         .get(attemptId) as
-        | { activation_id: string; task_id: string; target_agent_id: string }
+        | {
+            activation_id: string;
+            thread_id: string | null;
+            task_id: string;
+            target_agent_id: string;
+          }
         | undefined;
       if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
-      if (transcript !== undefined) this.persistAttemptTranscript(attemptId, transcript);
+      if (transcript !== undefined || usage !== undefined) {
+        this.persistAttemptTranscript(
+          attemptId,
+          transcript ?? [],
+          usage,
+          resumedThreadId,
+          attempt.thread_id ?? undefined,
+        );
+      }
       const occurredAt = now.toISOString();
       const summary = "The user interrupted this attempt.";
       this.#database
@@ -627,11 +644,14 @@ export class AutomationStateStore {
     now: Date,
     automaticRetry = true,
     transcript?: AttemptTranscriptItem[],
+    usage?: AttemptTokenUsage,
+    resumedThreadId?: string,
   ): void {
     this.#owner.transaction(() => {
       const attempt = this.#database
         .prepare(
-          `SELECT attempt.activation_id, a.task_id, a.target_agent_id,
+          `SELECT attempt.activation_id, attempt.thread_id,
+                  a.task_id, a.target_agent_id,
                   a.retry_cycle_start
            FROM attempts attempt
            JOIN activations a ON a.id = attempt.activation_id
@@ -640,13 +660,22 @@ export class AutomationStateStore {
         .get(attemptId) as
         | {
             activation_id: string;
+            thread_id: string | null;
             task_id: string;
             target_agent_id: string;
             retry_cycle_start: number;
           }
         | undefined;
       if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
-      if (transcript !== undefined) this.persistAttemptTranscript(attemptId, transcript);
+      if (transcript !== undefined || usage !== undefined) {
+        this.persistAttemptTranscript(
+          attemptId,
+          transcript ?? [],
+          usage,
+          resumedThreadId,
+          outcome.threadId ?? attempt.thread_id ?? undefined,
+        );
+      }
       const occurredAt = now.toISOString();
       const persistedStatus = outcome.status === "completed" ? "completed" : "failed";
       const outcomeKind = outcome.status === "permission-blocked" ? "permission" : outcome.status;
@@ -730,14 +759,69 @@ export class AutomationStateStore {
     });
   }
 
-  private persistAttemptTranscript(attemptId: string, transcript: AttemptTranscriptItem[]): void {
+  private persistAttemptTranscript(
+    attemptId: string,
+    transcript: AttemptTranscriptItem[],
+    reportedUsage?: AttemptTokenUsage,
+    resumedThreadId?: string,
+    completedThreadId?: string,
+  ): void {
+    const usage = reportedUsage === undefined
+      ? undefined
+      : this.isolateAttemptUsage(
+          attemptId,
+          reportedUsage,
+          resumedThreadId,
+          completedThreadId,
+        );
     this.#database
       .prepare(
-        `INSERT INTO attempt_transcripts (attempt_id, items_json)
-         VALUES (?, ?)
-         ON CONFLICT(attempt_id) DO UPDATE SET items_json = excluded.items_json`,
+        `INSERT INTO attempt_transcripts
+           (attempt_id, items_json, usage_json, reported_usage_json)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(attempt_id) DO UPDATE SET
+           items_json = excluded.items_json,
+           usage_json = excluded.usage_json,
+           reported_usage_json = excluded.reported_usage_json`,
       )
-      .run(attemptId, JSON.stringify(transcript));
+      .run(
+        attemptId,
+        JSON.stringify(transcript),
+        usage === undefined ? null : JSON.stringify(usage),
+        reportedUsage === undefined ? null : JSON.stringify(reportedUsage),
+      );
+  }
+
+  private isolateAttemptUsage(
+    attemptId: string,
+    reportedUsage: AttemptTokenUsage,
+    resumedThreadId?: string,
+    completedThreadId?: string,
+  ): AttemptTokenUsage | undefined {
+    if (resumedThreadId === undefined || completedThreadId !== resumedThreadId) {
+      return reportedUsage;
+    }
+    const prior = this.#database
+      .prepare(
+        `SELECT transcript.reported_usage_json
+         FROM attempts attempt
+         LEFT JOIN attempt_transcripts transcript ON transcript.attempt_id = attempt.id
+         WHERE attempt.thread_id = ?
+           AND attempt.id <> ?
+         ORDER BY attempt.rowid DESC
+         LIMIT 1`,
+      )
+      .get(resumedThreadId, attemptId) as { reported_usage_json: string | null } | undefined;
+    if (prior?.reported_usage_json === null || prior === undefined) return undefined;
+    const baseline = JSON.parse(prior.reported_usage_json) as AttemptTokenUsage;
+    const delta: AttemptTokenUsage = {
+      inputTokens: reportedUsage.inputTokens - baseline.inputTokens,
+      cachedInputTokens: reportedUsage.cachedInputTokens - baseline.cachedInputTokens,
+      cacheWriteInputTokens: reportedUsage.cacheWriteInputTokens - baseline.cacheWriteInputTokens,
+      outputTokens: reportedUsage.outputTokens - baseline.outputTokens,
+      reasoningOutputTokens: reportedUsage.reasoningOutputTokens - baseline.reasoningOutputTokens,
+    };
+    return Object.values(delta).every((value) => value >= 0) ? delta : undefined;
   }
 
   private createFailureAttention(taskId: string, activationId: string, occurredAt: string): void {

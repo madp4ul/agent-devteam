@@ -431,15 +431,23 @@ export class CoordinationApplication {
     }
     const persisted = this.#persistence.taskProjections.readPersistedAttemptTranscript(attemptId);
     if (persisted !== undefined && attempt.threadId !== null) {
-      return { available: true, threadId: attempt.threadId, items: persisted };
+      return { available: true, threadId: attempt.threadId, ...persisted };
     }
     if (attempt.threadId === null || this.#transcriptAccess === undefined) {
       return { available: false, reason: "unavailable" };
     }
     const items = await this.#transcriptAccess.read(attemptId);
+    const usage = this.#transcriptAccess.readUsage === undefined
+      ? null
+      : await this.#transcriptAccess.readUsage(attemptId);
     return items === null
       ? { available: false, reason: "unavailable" }
-      : { available: true, threadId: attempt.threadId, items };
+      : {
+          available: true,
+          threadId: attempt.threadId,
+          items,
+          ...(usage === null ? {} : { usage }),
+        };
   }
 
   queryCollaborators(): CollaboratorsQueryResult {

@@ -3,6 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type {
   ActivationView,
   AttemptTranscriptItem,
+  AttemptTokenUsage,
   Actor,
   AttemptView,
   NeedsAttentionTaskView,
@@ -383,11 +384,20 @@ export class TaskProjectionStore {
       .get(attemptId) as { threadId: string | null } | undefined;
   }
 
-  readPersistedAttemptTranscript(attemptId: string): AttemptTranscriptItem[] | undefined {
+  readPersistedAttemptTranscript(attemptId: string):
+    | { items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage }
+    | undefined {
     const row = this.#database
-      .prepare("SELECT items_json FROM attempt_transcripts WHERE attempt_id = ?")
-      .get(attemptId) as { items_json: string } | undefined;
-    return row === undefined ? undefined : JSON.parse(row.items_json) as AttemptTranscriptItem[];
+      .prepare("SELECT items_json, usage_json FROM attempt_transcripts WHERE attempt_id = ?")
+      .get(attemptId) as { items_json: string; usage_json: string | null } | undefined;
+    return row === undefined
+      ? undefined
+      : {
+          items: JSON.parse(row.items_json) as AttemptTranscriptItem[],
+          ...(row.usage_json === null
+            ? {}
+            : { usage: JSON.parse(row.usage_json) as AttemptTokenUsage }),
+        };
   }
 
   isTaskAutomationSuspended(taskId: string): boolean {

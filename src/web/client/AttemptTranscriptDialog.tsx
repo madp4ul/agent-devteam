@@ -1,6 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import type { AttemptTranscriptItem, AttemptView } from "../../application/coordination-contract.ts";
+import type {
+  AttemptTokenUsage,
+  AttemptTranscriptItem,
+  AttemptView,
+} from "../../application/coordination-contract.ts";
 import { readAttemptTranscript } from "./api.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
@@ -11,6 +15,7 @@ export function AttemptTranscriptDialog({ attempt, agentName, onClose }: {
   onClose(): void;
 }): ReactNode {
   const [items, setItems] = useState<AttemptTranscriptItem[]>();
+  const [usage, setUsage] = useState<AttemptTokenUsage>();
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string>();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -46,6 +51,7 @@ export function AttemptTranscriptDialog({ attempt, agentName, onClose }: {
               ? "bottom"
               : content.scrollTop;
           setItems(result.items);
+          setUsage(result.usage);
           setUnavailable(false);
           setError(undefined);
         } else {
@@ -94,6 +100,7 @@ export function AttemptTranscriptDialog({ attempt, agentName, onClose }: {
             </button>
           </div>
         </header>
+        {usage === undefined ? null : <TokenUsageSummary usage={usage} />}
         <div ref={contentRef} className="transcript-content">
           {error !== undefined ? (
             <p className="unavailable" role="alert">{error}</p>
@@ -134,6 +141,25 @@ export function AttemptTranscriptDialog({ attempt, agentName, onClose }: {
         </div>
       </section>
     </div>
+  );
+}
+
+function TokenUsageSummary({ usage }: { usage: AttemptTokenUsage }): ReactNode {
+  const format = (value: number): string => value.toLocaleString("en-US");
+  return (
+    <section className="token-usage" role="region" aria-labelledby="token-usage-title">
+      <div>
+        <p className="eyebrow" id="token-usage-title">Token usage</p>
+        <strong>{format(usage.inputTokens + usage.outputTokens)} total tokens</strong>
+      </div>
+      <div className="token-usage-breakdown" aria-label="Token usage breakdown">
+        <span>Input <strong>{format(usage.inputTokens)}</strong></span>
+        <span>Cached input <strong>{format(usage.cachedInputTokens)}</strong></span>
+        <span>Cache-write input <strong>{format(usage.cacheWriteInputTokens)}</strong></span>
+        <span>Output <strong>{format(usage.outputTokens)}</strong></span>
+        <span>Reasoning output <strong>{format(usage.reasoningOutputTokens)}</strong></span>
+      </div>
+    </section>
   );
 }
 

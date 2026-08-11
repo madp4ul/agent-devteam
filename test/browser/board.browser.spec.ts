@@ -604,6 +604,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(attemptEntry.getByText("Thread information")).toHaveCount(0);
   await expect(attemptEntry).not.toContainText("thread-browser-123");
   await expect(attemptEntry.getByRole("button", { name: "Copy thread ID" })).toHaveCount(0);
+  await expect(page.getByText("Token usage", { exact: true })).toHaveCount(0);
   await attemptEntry.getByRole("button", { name: "View transcript" }).click();
   const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
   const copyThreadId = dialog.getByRole("button", { name: "Copy thread ID" });
@@ -615,6 +616,14 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(closeTranscript.locator("svg")).toBeVisible();
   await expect(dialog).not.toContainText("thread-browser-123");
   await expect(dialog).toContainText("I inspected the current task.");
+  const tokenUsage = dialog.getByRole("region", { name: "Token usage" });
+  await expect(tokenUsage).toContainText("3,000 total tokens");
+  await expect(tokenUsage).toContainText("Input 2,400");
+  await expect(tokenUsage).toContainText("Cached input 1,800");
+  await expect(tokenUsage).toContainText("Cache-write input 200");
+  await expect(tokenUsage).toContainText("Output 600");
+  await expect(tokenUsage).toContainText("Reasoning output 350");
+  await expect(tokenUsage).not.toContainText(/cost|currency|\$/i);
   await expect(dialog).toContainText("pnpm test (exit 0)");
   await expect(dialog.getByText("output truncated")).toBeHidden();
   await dialog.getByText("View command output").click();
@@ -647,6 +656,22 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   expect(commentBounds).not.toBeNull();
   expect(timelineBounds).not.toBeNull();
   expect(timelineBounds!.y - (commentBounds!.y + commentBounds!.height)).toBeGreaterThanOrEqual(8);
+});
+
+test("a transcript without reported usage does not present zero as measured usage", async ({ page }) => {
+  await page.route("**/api/attempts/browser-attempt/transcript", async (route) => {
+    const response = await route.fetch();
+    const transcript = await response.json();
+    delete transcript.usage;
+    await route.fulfill({ response, json: transcript });
+  });
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View transcript" }).click();
+  const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
+
+  await expect(dialog).toContainText("I inspected the current task.");
+  await expect(dialog.getByRole("region", { name: "Token usage" })).toHaveCount(0);
+  await expect(dialog).not.toContainText("0 total tokens");
 });
 
 test("task timeline keeps the centered record stable when polling inserts newer history", async ({ page }) => {

@@ -7,6 +7,7 @@ import type {
   AgentRuntime,
   AttemptTranscriptAccess,
   AttemptTranscriptItem,
+  AttemptTokenUsage,
 } from "../application/coordination-application.ts";
 import { summarizeCoordinationTool } from "./coordination-tool-transcript.ts";
 import { composeActivationPrompt } from "../application/activation-prompt.ts";
@@ -66,6 +67,7 @@ export interface CodexAgentRuntimeOptions {
 export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess {
   readonly #options: CodexAgentRuntimeOptions;
   readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
+  readonly #usage = new Map<string, AttemptTokenUsage>();
 
   constructor(options: CodexAgentRuntimeOptions) {
     this.#options = options;
@@ -188,6 +190,8 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           }
         } else if (event.type === "turn.completed") {
           turnCompleted = true;
+          const usage = tokenUsageFrom(event.usage);
+          if (usage !== undefined) this.#usage.set(request.attemptId, usage);
         } else if (event.type === "turn.failed" || event.type === "error") {
           const diagnostic = event.type === "turn.failed" ? event.error.message : event.message;
           if (threadId !== undefined) {
@@ -249,9 +253,41 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     return transcript === undefined ? null : structuredClone(transcript);
   }
 
+  async readUsage(attemptId: string): Promise<AttemptTokenUsage | null> {
+    return this.#usage.get(attemptId) ?? null;
+  }
+
   #remember(attemptId: string, transcript: AttemptTranscriptItem[]): void {
     this.#transcripts.set(attemptId, structuredClone(transcript));
   }
+}
+
+function tokenUsageFrom(value: unknown): AttemptTokenUsage | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const usage = value as Record<string, unknown>;
+  const inputTokens = tokenCount(usage.input_tokens);
+  const cachedInputTokens = tokenCount(usage.cached_input_tokens);
+  const cacheWriteInputTokens = tokenCount(usage.cache_write_input_tokens);
+  const outputTokens = tokenCount(usage.output_tokens);
+  const reasoningOutputTokens = tokenCount(usage.reasoning_output_tokens);
+  if (
+    inputTokens === undefined ||
+    cachedInputTokens === undefined ||
+    cacheWriteInputTokens === undefined ||
+    outputTokens === undefined ||
+    reasoningOutputTokens === undefined
+  ) return undefined;
+  return {
+    inputTokens,
+    cachedInputTokens,
+    cacheWriteInputTokens,
+    outputTokens,
+    reasoningOutputTokens,
+  };
+}
+
+function tokenCount(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 function definedProcessEnvironment(): Record<string, string> {

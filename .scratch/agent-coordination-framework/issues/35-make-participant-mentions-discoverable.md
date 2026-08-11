@@ -1,8 +1,9 @@
 # 35 — Make Participant Mentions Discoverable
 
 **What to build:** Help a user address the intended agent or the user from the
-comment composer without memorizing exact participant IDs, while preserving the
-comment and activation semantics established by issue 20.
+comment composer without memorizing exact participant IDs, and let the user
+start a reply to an agent that mentioned them, while preserving the comment and
+activation semantics established by issue 20.
 
 **Blocked by:** 20 — Consult Agents and Notify the User
 
@@ -31,12 +32,20 @@ comment and activation semantics established by issue 20.
   attention, without turning every consequence into another full-size comment.
 - [ ] Plain display names and email-like text remain ordinary prose, so users
   can distinguish discussion *about* an agent from an explicit request *to* it.
+- [ ] An agent-authored comment that canonically mentions the user offers an
+  accessible Reply action. Activating it moves focus to Add comment and inserts
+  the authoring agent's exact canonical mention token, ready for the user's
+  response; it does not submit the comment or create an activation by itself.
+- [ ] Reply insertion never discards an existing draft. Repeated use avoids
+  inserting an accidental duplicate mention, and an agent that is no longer in
+  the current participant directory is not silently mapped to another agent.
 - [ ] Choosing or editing a suggestion creates no activation by itself.
   Submission remains one atomic comment command with the same deduplication,
   textual ordering, user-attention, and idempotency behavior as issue 20.
 - [ ] Focused interaction or browser tests cover discovery, insertion, keyboard
   and pointer use, cancellation, multiple/one-recipient behavior as decided,
-  email-like text, unknown identities, and the resulting submitted activation.
+  email-like text, unknown identities, reply-to-agent draft insertion and focus,
+  draft preservation, and the resulting submitted activation.
 
 ## Comments
 
@@ -52,3 +61,8 @@ comment and activation semantics established by issue 20.
   issue 38 separately prevent agents from emitting such accidental requests.
 - This ticket improves mention entry only. Timeline freshness after submission
   belongs to issue 32.
+- Follow-up task-detail feedback added the reciprocal user flow: when an agent
+  mentions `@user`, the source comment should provide a Reply shortcut that
+  prepares a canonical mention of that agent in the existing composer. The
+  shortcut prepares a draft only; the user remains in control of its content
+  and submission.

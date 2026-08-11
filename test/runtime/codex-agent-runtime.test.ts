@@ -583,6 +583,97 @@ test("a stream that ends without turn.completed is a failed outcome", async () =
   ]);
 });
 
+test("a completed turn retains its reported token usage for the current attempt", async () => {
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-with-usage" },
+            {
+              type: "turn.completed",
+              usage: {
+                input_tokens: 1_200,
+                cached_input_tokens: 900,
+                cache_write_input_tokens: 100,
+                output_tokens: 300,
+                reasoning_output_tokens: 180,
+              },
+            },
+          ),
+        }),
+      }),
+    }),
+  });
+
+  await runtime.run(request("activation-with-usage", "T-0053"), { started() {} });
+
+  const usageAccess = runtime as unknown as {
+    readUsage(attemptId: string): Promise<unknown>;
+  };
+  assert.deepEqual(await usageAccess.readUsage("attempt-activation-with-usage"), {
+    inputTokens: 1_200,
+    cachedInputTokens: 900,
+    cacheWriteInputTokens: 100,
+    outputTokens: 300,
+    reasoningOutputTokens: 180,
+  });
+  assert.equal(await usageAccess.readUsage("attempt-without-reported-usage"), null);
+});
+
+test("resumed attempts keep separate usage even when they reuse one Codex thread", async () => {
+  const streamed = (inputTokens: number) => async () => ({
+    events: events(
+      { type: "thread.started", thread_id: "shared-usage-thread" },
+      {
+        type: "turn.completed",
+        usage: {
+          input_tokens: inputTokens,
+          cached_input_tokens: 0,
+          cache_write_input_tokens: 0,
+          output_tokens: 20,
+          reasoning_output_tokens: 10,
+        },
+      },
+    ),
+  });
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({ runStreamed: streamed(100) }),
+      resumeThread: () => ({ runStreamed: streamed(250) }),
+    }),
+  });
+  const first = request("activation-usage-first", "T-0053");
+  const second = request("activation-usage-second", "T-0053");
+  second.resumeThreadId = "shared-usage-thread";
+  second.attempt = {
+    number: 2,
+    precedingOutcome: { status: "completed", summary: "First pass", threadId: "shared-usage-thread" },
+    thread: "resumed",
+    continuationMessage: "Continue the task.",
+  };
+
+  await runtime.run(first, { started() {} });
+  await runtime.run(second, { started() {} });
+
+  assert.deepEqual(await runtime.readUsage(first.attemptId), {
+    inputTokens: 100,
+    cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    outputTokens: 20,
+    reasoningOutputTokens: 10,
+  });
+  assert.deepEqual(await runtime.readUsage(second.attemptId), {
+    inputTokens: 250,
+    cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    outputTokens: 20,
+    reasoningOutputTokens: 10,
+  });
+});
+
 test("a failed required coordination call makes the attempt fail with actionable evidence", async () => {
   const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },

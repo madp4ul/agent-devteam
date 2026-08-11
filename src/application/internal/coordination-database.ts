@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 10;
+const currentSchemaVersion = 11;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -172,7 +172,9 @@ function initializeCurrentSchema(database: DatabaseSync): void {
     );
     CREATE TABLE IF NOT EXISTS attempt_transcripts (
       attempt_id TEXT PRIMARY KEY REFERENCES attempts(id) ON DELETE CASCADE,
-      items_json TEXT NOT NULL
+      items_json TEXT NOT NULL,
+      usage_json TEXT,
+      reported_usage_json TEXT
     );
     CREATE TABLE IF NOT EXISTS activation_dispatch_claims (
       attempt_id TEXT PRIMARY KEY REFERENCES attempts(id) ON DELETE CASCADE,
@@ -315,6 +317,10 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
   const commentColumns = new Set(
     (database.prepare("PRAGMA table_info(task_comments)").all() as Array<{ name: string }>).map(({ name }) => name),
   );
+  const transcriptColumns = new Set(
+    (database.prepare("PRAGMA table_info(attempt_transcripts)").all() as Array<{ name: string }>)
+      .map(({ name }) => name),
+  );
   const activityTable = database
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activity_ledger'")
     .get() as { sql: string } | undefined;
@@ -330,6 +336,8 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     activationColumns.has("definition_version") &&
     activationColumns.has("stale") &&
     attemptColumns.has("outcome_kind") &&
+    transcriptColumns.has("usage_json") &&
+    transcriptColumns.has("reported_usage_json") &&
     commentColumns.has("attempt_id") &&
     activityTable?.sql.includes("task.archived") === true &&
     activityTable.sql.includes("relationship.removed") === true;

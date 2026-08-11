@@ -13,6 +13,7 @@ import {
   type AgentRuntime,
   type AttemptTranscriptAccess,
   type AttemptTranscriptItem,
+  type AttemptTokenUsage,
   type AutomationClock,
   CoordinationApplication,
 } from "../../src/application/coordination-application.ts";
@@ -199,6 +200,13 @@ test("permission block requires explicit continuation and never retries automati
 
   await application.resumeAutomation();
   const first = await runtime.waitForRequest(1);
+  runtime.setUsage(first.attemptId, {
+    inputTokens: 1_000,
+    cachedInputTokens: 800,
+    cacheWriteInputTokens: 50,
+    outputTokens: 200,
+    reasoningOutputTokens: 100,
+  });
   await runtime.finish({
     status: "permission-blocked",
     summary: "Writing the protected file requires user approval.",
@@ -222,6 +230,13 @@ test("permission block requires explicit continuation and never retries automati
     available: true,
     threadId: "permission-thread",
     items: [{ kind: "message", role: "agent", text: "Attempt 1 runtime evidence." }],
+    usage: {
+      inputTokens: 1_000,
+      cachedInputTokens: 800,
+      cacheWriteInputTokens: 50,
+      outputTokens: 200,
+      reasoningOutputTokens: 100,
+    },
   });
 
   application.close();
@@ -251,6 +266,13 @@ test("permission block requires explicit continuation and never retries automati
     resumed.attempt.continuationMessage,
     "I authorize retrying the exact protected-file write after reviewing the requested action.",
   );
+  runtime.setUsage(resumed.attemptId, {
+    inputTokens: 1_600,
+    cachedInputTokens: 1_100,
+    cacheWriteInputTokens: 90,
+    outputTokens: 350,
+    reasoningOutputTokens: 180,
+  });
   await runtime.finish({
     status: "permission-blocked",
     summary: "Auto-review denied the protected-file write after reassessment.",
@@ -275,8 +297,37 @@ test("permission block requires explicit continuation and never retries automati
     recovered.attempt.continuationMessage,
     "I completed the protected-file write externally; reassess the workspace and continue.",
   );
-  await runtime.finish({ status: "completed", summary: "Permission supplied." });
-  const later = await runtime.waitForRequest(4);
+  runtime.omitTranscript(recovered.attemptId);
+  await runtime.finish({
+    status: "permission-blocked",
+    summary: "The resumed attempt ended before Codex reported usage.",
+    threadId: "permission-thread",
+  });
+  await restarted.waitForAutomationIdle();
+  const thirdAttention = restarted.queryNeedsAttention();
+  assert.equal(thirdAttention.available, true);
+  if (!thirdAttention.available) return;
+  const thirdReason = thirdAttention.tasks[0]?.reasons[0];
+  assert.equal(restarted.continuePermissionBlockedActivation({
+    attentionReasonId: thirdReason!.id,
+    message: "Continue once more without treating missing usage as a zero-token baseline.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-after-missing-usage",
+  }).accepted, true);
+  const finalAttempt = await runtime.waitForRequest(4);
+  runtime.setUsage(finalAttempt.attemptId, {
+    inputTokens: 2_100,
+    cachedInputTokens: 1_400,
+    cacheWriteInputTokens: 120,
+    outputTokens: 500,
+    reasoningOutputTokens: 250,
+  });
+  await runtime.finish({
+    status: "completed",
+    summary: "Permission supplied.",
+    threadId: "permission-thread",
+  });
+  const later = await runtime.waitForRequest(5);
   assert.equal(later.activationId, laterActivationId);
   await runtime.finish({ status: "completed", summary: "Later work completed." });
   await restarted.waitForAutomationIdle();
@@ -289,12 +340,41 @@ test("permission block requires explicit continuation and never retries automati
     available: true,
     threadId: "permission-thread",
     items: [{ kind: "message", role: "agent", text: "Attempt 1 runtime evidence." }],
+    usage: {
+      inputTokens: 1_000,
+      cachedInputTokens: 800,
+      cacheWriteInputTokens: 50,
+      outputTokens: 200,
+      reasoningOutputTokens: 100,
+    },
+  });
+  assert.deepEqual(await restarted.queryAttemptTranscript(resumed.attemptId), {
+    available: true,
+    threadId: "permission-thread",
+    items: [{ kind: "message", role: "agent", text: "Attempt 2 runtime evidence." }],
+    usage: {
+      inputTokens: 600,
+      cachedInputTokens: 300,
+      cacheWriteInputTokens: 40,
+      outputTokens: 150,
+      reasoningOutputTokens: 80,
+    },
+  });
+  assert.deepEqual(await restarted.queryAttemptTranscript(recovered.attemptId), {
+    available: false,
+    reason: "unavailable",
+  });
+  assert.deepEqual(await restarted.queryAttemptTranscript(finalAttempt.attemptId), {
+    available: true,
+    threadId: "permission-thread",
+    items: [{ kind: "message", role: "agent", text: "Attempt 4 runtime evidence." }],
   });
 });
 
 class ControlledRuntime implements AgentRuntime, AttemptTranscriptAccess {
   readonly requests: AgentRunRequest[] = [];
   readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
+  readonly #usage = new Map<string, AttemptTokenUsage>();
   #complete: ((outcome: AgentRunOutcome) => void) | undefined;
   #completed: Promise<void> = Promise.resolve();
   readonly #waiters: Array<{ count: number; resolve(request: AgentRunRequest): void }> = [];
@@ -319,6 +399,18 @@ class ControlledRuntime implements AgentRuntime, AttemptTranscriptAccess {
 
   async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {
     return structuredClone(this.#transcripts.get(attemptId) ?? null);
+  }
+
+  omitTranscript(attemptId: string): void {
+    this.#transcripts.delete(attemptId);
+  }
+
+  setUsage(attemptId: string, usage: AttemptTokenUsage): void {
+    this.#usage.set(attemptId, structuredClone(usage));
+  }
+
+  async readUsage(attemptId: string): Promise<AttemptTokenUsage | null> {
+    return structuredClone(this.#usage.get(attemptId) ?? null);
   }
 
   complete(outcome: AgentRunOutcome): void {

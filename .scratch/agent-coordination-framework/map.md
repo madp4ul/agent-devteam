@@ -180,6 +180,11 @@ No implementation-ready ticket is currently prioritized.
   — Keep an open task timeline current across comments, activations, activity,
   and attempt changes; update transcript activity during a run and persist every
   finished attempt's captured transcript until task archival.
+- [Support Dark Mode](./issues/55-support-dark-mode.md)
+  — Add an accessible system-aware light/dark appearance preference while
+  preserving the few intentional semantic color relationships and leaving the
+  broader palette to implementation judgment.
+
 ## Not yet specified
 
 - [Show Token Usage in Attempt Transcripts](./issues/53-show-token-usage-in-attempt-transcripts.md)

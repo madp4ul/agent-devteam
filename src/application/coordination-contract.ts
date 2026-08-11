@@ -139,6 +139,14 @@ export type AttemptTranscriptItem =
     }
   | { id?: string; kind: "diagnostic"; text: string };
 
+export interface AttemptTokenUsage {
+  inputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+}
+
 export interface ActivationView extends AgentExecutionProfile {
   id: string;
   targetAgentId: string;
@@ -365,6 +373,7 @@ export interface AgentRuntime {
 
 export interface AttemptTranscriptAccess {
   read(attemptId: string): Promise<AttemptTranscriptItem[] | null>;
+  readUsage?(attemptId: string): Promise<AttemptTokenUsage | null>;
 }
 
 export interface AgentRunLifecycle {
@@ -544,7 +553,12 @@ export type TaskAttachmentsQueryResult =
   | { available: false; reason: "not-found" };
 
 export type AttemptTranscriptQueryResult =
-  | { available: true; threadId: string; items: AttemptTranscriptItem[] }
+  | {
+      available: true;
+      threadId: string;
+      items: AttemptTranscriptItem[];
+      usage?: AttemptTokenUsage;
+    }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { available: false; reason: "not-found" | "unavailable" };
 
