@@ -268,7 +268,7 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await page.goto("/tasks/T-0002");
   await expect(page.getByRole("region", { name: "Agent activity" })).toContainText("consulting-agent");
   await expect(page.getByRole("region", { name: "Agent activity" })).toContainText(/Running · 0m/);
-  await expect(page.locator(".attempt-entry").filter({ hasText: /consulting-agent.*Attempt 1.*Running/ })).toBeVisible();
+  await expect(page.locator(".attempt-entry").filter({ hasText: /consulting-agent.*Running.*Attempt 1/ })).toBeVisible();
   await page.getByRole("button", { name: "View transcript" }).click();
   await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText(/consulting-agent · running · 0m/);
   await page.getByRole("button", { name: "Close transcript" }).click();

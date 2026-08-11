@@ -154,6 +154,11 @@ without choosing the implementation yet.
   responsibility claim that continues the mention activation without queuing
   redundant work, while preserving ordinary handoffs in every other case.
 
+- [Prove the First Usable Workflow](./issues/28-prove-first-usable-workflow.md)
+  — Drive the architecture-led example through design, implementation rework,
+  in-place consultation, explicit user approval, verified Git integration, and
+  Completion in a controlled browser proof backed by a live operating guide.
+
 ## Next implementation priority
 
 No implementation-ready ticket is currently prioritized.

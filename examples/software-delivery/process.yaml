@@ -3,8 +3,13 @@ schemaVersion: 1
 name: Software Delivery
 defaultTaskWorkspaceStartingRef: main
 coordinationGuidance: >-
-  Keep primary responsibility visible through board position. Record outcomes
-  on the task and use explicit handoffs; user approval is required before merge.
+  Keep primary responsibility visible through board position and record every
+  outcome on the task. The normal route is Architecture Design, Implementation,
+  Code Review, Architecture Verification, Awaiting User Approval, Ready to
+  Merge, and Completion. Requested changes return to Implementation; Code
+  Review resumes in place after consultations. Awaiting User Approval is a hard
+  automation stop: only the user moves reviewed work to Ready to Merge, and user
+  approval is required before merge.
 agents:
   - id: architecture-designer
     name: Architecture Designer
