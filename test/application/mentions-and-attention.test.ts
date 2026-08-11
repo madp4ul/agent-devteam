@@ -50,6 +50,80 @@ test("one comment activates each mentioned agent once in textual mention order",
   );
 });
 
+test("a controlled consultation distinguishes prose from deliberate executable requests", async (t) => {
+  const fixture = await createFixture("controlled-consultation");
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Consult without duplicate expectations",
+    description: "Keep primary responsibility visible while specialists exchange bounded requests.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-controlled-consultation",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  const prose = application.addTaskComment({
+    taskId: created.task.id,
+    body: "No implementation defect requires return to Implementation Agent; Code Reviewer is only being discussed.",
+    actor: { kind: "agent", id: "implementer" },
+    idempotencyKey: "non-executable-prose",
+  });
+  assert.equal(prose.accepted, true);
+  if (!prose.accepted) return;
+  assert.deepEqual(prose.task.activations, []);
+
+  const request = application.addTaskComment({
+    taskId: created.task.id,
+    body: "Please inspect the revised boundary @reviewer.",
+    actor: { kind: "agent", id: "implementer" },
+    idempotencyKey: "one-deliberate-request",
+  });
+  assert.equal(request.accepted, true);
+  if (!request.accepted) return;
+  assert.deepEqual(request.task.activations.map((activation) => activation.targetAgentId), ["reviewer"]);
+
+  const satisfied = application.addTaskComment({
+    taskId: created.task.id,
+    body: "The boundary is sound. Implementation Agent does not need another response.",
+    actor: { kind: "agent", id: "reviewer" },
+    idempotencyKey: "consultation-satisfied-inertly",
+  });
+  assert.equal(satisfied.accepted, true);
+  if (!satisfied.accepted) return;
+  assert.deepEqual(satisfied.task.activations.map((activation) => activation.targetAgentId), ["reviewer"]);
+  assert.equal(satisfied.task.comments.at(-1)?.body.includes("@reviewer"), false);
+
+  const revisionRequest = application.addTaskComment({
+    taskId: created.task.id,
+    body: "A separate validation gap now needs correction. @implementer please revise it.",
+    actor: { kind: "agent", id: "reviewer" },
+    idempotencyKey: "canonical-reply-when-needed",
+  });
+  assert.equal(revisionRequest.accepted, true);
+  if (!revisionRequest.accepted) return;
+  const pendingStatus = application.addTaskComment({
+    taskId: created.task.id,
+    body: "The revision request for Implementation Agent remains pending.",
+    actor: { kind: "agent", id: "reviewer" },
+    idempotencyKey: "do-not-repeat-pending-request",
+  });
+  assert.equal(pendingStatus.accepted, true);
+  if (!pendingStatus.accepted) return;
+  assert.deepEqual(
+    pendingStatus.task.activations.map((activation) => activation.targetAgentId),
+    ["reviewer", "implementer"],
+  );
+  assert.equal(
+    pendingStatus.task.comments
+      .filter((comment) => comment.actor.kind === "agent" && comment.actor.id === "reviewer")
+      .some((comment) => comment.body.includes("@reviewer")),
+    false,
+  );
+});
+
 test("a user mention creates one durable attention reason that only mark-addressed resolves", async (t) => {
   const fixture = await createFixture("user-attention");
   const first = await CoordinationApplication.start(fixture);

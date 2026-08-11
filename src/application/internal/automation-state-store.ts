@@ -7,6 +7,7 @@ import type {
   Actor,
   AgentRunAgent,
   AgentRunOutcome,
+  AttemptContextView,
   AttemptTranscriptItem,
   RuntimeStartupBoundary,
   RuntimeStartupDiagnostic,
@@ -24,6 +25,7 @@ export interface RunnableActivation {
   agent: AgentRunAgent;
   sourceEvent: TaskActivityView | TaskView["comments"][number];
   continuationMessage: string | null;
+  fullCompositionReason?: NonNullable<AttemptContextView["fullCompositionReason"]>;
 }
 
 export class AutomationStateStore {
@@ -122,7 +124,7 @@ export class AutomationStateStore {
     const row = this.#database
       .prepare(
         `SELECT a.id, a.task_id, a.target_agent_id, a.source_event_id,
-                a.model, a.reasoning_effort, a.continuation_message
+                a.model, a.reasoning_effort, a.continuation_message, a.definition_version
          FROM activations a
          JOIN tasks task ON task.id = a.task_id
          JOIN mapped_tasks mapped ON mapped.id = task.id
@@ -158,6 +160,7 @@ export class AutomationStateStore {
           model: string | null;
           reasoning_effort: NonNullable<AgentRunAgent["reasoningEffort"]> | null;
           continuation_message: string | null;
+          definition_version: string;
         }
       | undefined;
     if (row === undefined) return undefined;
@@ -187,6 +190,7 @@ export class AutomationStateStore {
     ) {
       throw new Error(`Activation ${row.id} has incomplete durable provenance`);
     }
+    const precedingAttemptVersion = this.#readLatestAttemptDefinitionVersion(row.task_id, row.id);
     return {
       activation,
       task,
@@ -203,7 +207,26 @@ export class AutomationStateStore {
       },
       sourceEvent,
       continuationMessage: row.continuation_message,
+      ...(precedingAttemptVersion !== undefined && precedingAttemptVersion !== row.definition_version
+        ? { fullCompositionReason: "process-rebased" as const }
+        : {}),
     };
+  }
+
+  #readLatestAttemptDefinitionVersion(taskId: string, activationId: string): string | undefined {
+    const runStarts = this.#database
+      .prepare(
+        `SELECT details_json
+         FROM activity_ledger
+         WHERE task_id = ? AND type = 'attempt.started'
+         ORDER BY sequence DESC`,
+      )
+      .all(taskId) as Array<{ details_json: string }>;
+    for (const runStart of runStarts) {
+      const details = JSON.parse(runStart.details_json) as Record<string, string>;
+      if (details.activationId === activationId) return details.definitionVersion;
+    }
+    return undefined;
   }
 
   readNextRetryDueAt(now: string): string | undefined {
@@ -413,9 +436,7 @@ export class AutomationStateStore {
         )
         .get(taskId) as { suspended_activation_id: string | null } | undefined;
       if (row?.suspended_activation_id === null || row === undefined) return undefined;
-      const continuationMessage = message.trim().length === 0
-        ? "Reassess the current task and workspace state before proceeding."
-        : message.trim();
+      const continuationMessage = message.trim().length === 0 ? null : message.trim();
       this.#database
         .prepare("UPDATE activations SET continuation_message = ? WHERE id = ?")
         .run(continuationMessage, row.suspended_activation_id);
@@ -489,7 +510,8 @@ export class AutomationStateStore {
     return this.#owner.transaction(() => {
       const activation = this.#database
         .prepare(
-          `SELECT activation.id, activation.task_id, activation.target_agent_id
+          `SELECT activation.id, activation.task_id, activation.target_agent_id,
+                  activation.definition_version
            FROM attempts attempt
            JOIN activations activation ON activation.id = attempt.activation_id
            JOIN activation_dispatch_claims claim ON claim.attempt_id = attempt.id
@@ -497,7 +519,7 @@ export class AutomationStateStore {
              AND activation.status = 'running'`,
         )
         .get(attemptId) as
-        | { id: string; task_id: string; target_agent_id: string }
+        | { id: string; task_id: string; target_agent_id: string; definition_version: string }
         | undefined;
       if (activation === undefined) throw new Error(`Attempt ${attemptId} is not starting`);
       const occurredAt = new Date().toISOString();
@@ -508,7 +530,7 @@ export class AutomationStateStore {
         activation.task_id,
         "attempt.started",
         { kind: "agent", id: activation.target_agent_id },
-        { activationId: activation.id, attemptId },
+        { activationId: activation.id, attemptId, definitionVersion: activation.definition_version },
         occurredAt,
       );
       this.#database

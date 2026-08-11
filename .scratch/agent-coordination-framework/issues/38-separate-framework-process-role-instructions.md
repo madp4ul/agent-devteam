@@ -8,7 +8,7 @@ and each agent receives a clear statement of its role and current expectation.
 **Blocked by:** 20 — Consult Agents and Notify the User; 36 — Configure Agent
 Models and Reasoning
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Composition contract
 
@@ -223,24 +223,24 @@ internals solely for traceability.
 
 ## Acceptance proof
 
-- [ ] One product-owned composer produces the complete full-thread prompt, and
+- [x] One product-owned composer produces the complete full-thread prompt, and
   every supported fresh or replacement runtime path uses it.
-- [ ] Prompt-composition tests prove exact section ordering, precedence
+- [x] Prompt-composition tests prove exact section ordering, precedence
   statements, source framing, conditional sections, and readable rendering for
   every activation and attempt-context type.
-- [ ] Tests use at least two processes and roles to prove invariant framework
+- [x] Tests use at least two processes and roles to prove invariant framework
   inclusion, distinct process/board/role specialization, self-exclusion from
   the participant directory, canonical tokens, and the compact board map.
-- [ ] Tests prove comments and task descriptions remain attributed facts,
+- [x] Tests prove comments and task descriptions remain attributed facts,
   activation source records follow current task history, later activity can
   make an expectation inert, and raw JSON or irrelevant null attempt fields do
   not leak into the rendered prompt.
-- [ ] Runtime tests prove full composition for fresh, replacement, and
+- [x] Runtime tests prove full composition for fresh, replacement, and
   process-rebased threads and compact attempt continuation for an ordinary
   same-process resume.
-- [ ] Example process and role files retain process-specific behavior while all
+- [x] Example process and role files retain process-specific behavior while all
   copied framework mechanics are removed.
-- [ ] A controlled consultation scenario proves that negative prose and plain
+- [x] A controlled consultation scenario proves that negative prose and plain
   display names create no activation, one deliberate canonical mention creates
   exactly one targeted activation, the responding agent uses a canonical reply
   only when another response is required, agents do not mention themselves, and
@@ -270,3 +270,29 @@ internals solely for traceability.
   mention-versus-move semantics, readable fact presentation, retry and
   continuation composition, and framework-upgrade behavior. The ticket is now
   ready for an implementation agent.
+- User follow-up on 2026-08-11 confirmed that retained pre-change attempt
+  compatibility is intentionally unsupported while issue 28 remains unresolved;
+  development state is reset instead of adding fallback prompt semantics.
+
+## Answer
+
+The application now owns one complete activation-prompt composer with explicit
+framework, process, board, role, participant, task, trigger, and conditional
+attempt sections. Fresh and replacement threads receive the full composition;
+ordinary same-process resumes receive concise retry or user-continuation facts;
+and approved process rebases receive the authoritative current composition,
+with the originating process version recorded in immutable attempt activity.
+
+Board summaries expose the same ordered watcher identities and canonical
+participant tokens used by the prompt. The software-delivery example retains
+only process-specific routing and approval guidance, while invariant mechanics
+live in the product template. Focused prompt, runtime, process-evolution,
+discovery, example, and consultation tests cover the agreed acceptance proof.
+
+Both TypeScript typechecks, the production build, and all 135 runnable tests
+pass; the credentialed real-Codex integration remains intentionally skipped.
+User review then refined the framework introduction and next-step model, exposed
+other unfinished activations as duplicate-request context, removed unsupported
+task-description attribution, and corrected creation-trigger provenance after a
+later task move. Those refinements are covered at the deterministic prompt seam
+without invoking a paid agent run.

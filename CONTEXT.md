@@ -178,7 +178,11 @@ whether it follows an interruption or failure, the preceding outcome, whether
 its Codex thread was resumed or replaced, and any continuation message from the
 user. It does not change the activation reason. When an interrupted activation
 is continued without a user message, it tells the agent to reassess the current
-task and workspace state before proceeding.
+task and workspace state before proceeding. A fresh or replacement thread
+receives the complete current framework, process, board, and role composition;
+an ordinary same-process resumed thread receives only concise attempt context.
+The first resumed attempt after explicit process-version approval receives the
+complete current composition so rebased instructions are authoritative.
 
 **User interruption**:
 The deliberate termination of an active run attempt by the user. It preserves

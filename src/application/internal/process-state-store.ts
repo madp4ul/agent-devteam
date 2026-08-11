@@ -346,8 +346,9 @@ export class ProcessStateStore {
           column.agent_id === null || column.agent_name === null || column.agent_summary === null
             ? null
             : {
-                id: column.agent_id,
-                name: column.agent_name,
+              id: column.agent_id,
+              token: `@${column.agent_id}`,
+              name: column.agent_name,
                 summary: column.agent_summary,
               },
         frameworkOwned: column.framework_owned === 1,

@@ -368,6 +368,9 @@ export class AutomationCoordinator {
               ? "fresh"
               : "resumed",
             continuationMessage: runnable.continuationMessage,
+            ...(runnable.fullCompositionReason === undefined
+              ? {}
+              : { fullCompositionReason: runnable.fullCompositionReason }),
           },
         },
         {

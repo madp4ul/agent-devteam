@@ -453,13 +453,14 @@ test("failed and user-interrupted activations become stale after a semantic chan
   first.close();
 
   await writeFile(join(fixture.directory, "implementer.md"), "Use changed instructions.\n");
+  const rebasedRuntime = new RecordingRuntime();
   const changed = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
     runtimeDispatch: {
       projectRepositoryPath: repositoryPath,
       taskWorkspaceRoot: workspaceRoot,
-      agentRuntime: new RecordingRuntime(),
+      agentRuntime: rebasedRuntime,
     },
   });
   t.after(() => changed.close());
@@ -474,6 +475,34 @@ test("failed and user-interrupted activations become stale after a semantic chan
       ],
     );
   }
+  assert.equal((await changed.resumeWithCurrentProcess()).accepted, true);
+  const rebasedAttention = changed.queryNeedsAttention();
+  assert.equal(rebasedAttention.available, true);
+  if (!rebasedAttention.available) return;
+  const permissionReason = rebasedAttention.tasks
+    .find(({ task }) => task.id === failed.task.id)
+    ?.reasons.find((reason) => reason.recovery?.kind === "permission-block");
+  assert.ok(permissionReason);
+  assert.equal(changed.continuePermissionBlockedActivation({
+    attentionReasonId: permissionReason.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-version-tagged-rebase",
+  }).accepted, true);
+  await changed.waitForAutomationIdle();
+  const versionTaggedRebase = rebasedRuntime.requests.find((request) => request.task.id === failed.task.id);
+  assert.equal(versionTaggedRebase?.resumeThreadId, "process-evolution-thread-1");
+  assert.equal(versionTaggedRebase?.attempt.fullCompositionReason, "process-rebased");
+  const continued = changed.continueInterruptedTask({
+    taskId: interrupted.task.id,
+    message: "Continue under the approved current process.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-rebased-interruption",
+  });
+  assert.equal(continued.accepted, true);
+  await changed.waitForAutomationIdle();
+  const resumedRequest = rebasedRuntime.requests.find((request) => request.task.id === interrupted.task.id);
+  assert.equal(resumedRequest?.resumeThreadId, "process-evolution-thread-2");
+  assert.equal(resumedRequest?.attempt.fullCompositionReason, "process-rebased");
 });
 
 async function createFixture(): Promise<{

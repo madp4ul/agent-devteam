@@ -5,13 +5,6 @@ defaultTaskWorkspaceStartingRef: main
 coordinationGuidance: >-
   Keep primary responsibility visible through board position. Record outcomes
   on the task and use explicit handoffs; user approval is required before merge.
-  A canonical participant token—an @ immediately followed by a stable
-  participant ID—is an executable request that queues an agent activation or
-  user attention. Use one only when deliberately requesting a new response.
-  When discussing a participant without requesting action—including stating
-  that no response or revision is needed—use its plain display name without @.
-  Never mention yourself, and do not repeat a request whose activation or
-  attention reason is already pending.
 agents:
   - id: architecture-designer
     name: Architecture Designer

@@ -48,7 +48,7 @@ export interface ProcessBoardView {
 export interface BoardSummaryColumnView {
   id: string;
   name: string;
-  watchingAgent: Pick<AgentRunAgent, "id" | "name" | "summary"> | null;
+  watchingAgent: (Pick<AgentRunAgent, "id" | "name" | "summary"> & { token: string }) | null;
   frameworkOwned: boolean;
   taskCreationAllowed: boolean;
   taskCount: number;
@@ -242,6 +242,7 @@ export interface AttemptContextView {
   precedingOutcome: AttemptOutcomeView | null;
   thread: "fresh" | "resumed" | "replaced";
   continuationMessage: string | null;
+  fullCompositionReason?: "process-rebased";
 }
 
 export interface TaskCommentView {

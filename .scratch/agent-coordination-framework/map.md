@@ -142,12 +142,19 @@ without choosing the implementation yet.
   — Project durable history into independent, start-positioned attempt blocks
   with readable outcomes, authored work, compact prose, and backward causal
   links while folding duplicate lifecycle noise out of the user-facing timeline.
+- [Make Task Relationships Discoverable and Recoverable](./issues/48-make-task-relationships-discoverable-recoverable.md)
+  — Group relationships by meaning, add project-wide task finding, and let
+  users safely remove mistaken blocking relationships.
+- [Separate Framework, Process, and Role Instructions](./issues/38-separate-framework-process-role-instructions.md)
+  — Compose product-owned invariant mechanics, authored process and board
+  guidance, role instructions, and readable activation facts in one explicit
+  hierarchy, with compact same-process continuation.
 
 ## Next implementation priority
 
-- [Make Task Relationships Discoverable and Recoverable](./issues/48-make-task-relationships-discoverable-recoverable.md)
-  — After issues 46 and 47, group relationships by meaning, add project-wide
-  task finding, and let users safely remove mistaken blocking relationships.
+- [Let Mentioned Agents Claim Primary Responsibility](./issues/52-let-mentioned-agents-claim-primary-responsibility.md)
+  — Suppress the redundant column-entry activation only when a currently
+  mentioned agent explicitly moves into a watched column it owns.
 
 ## Clarified delivery follow-ups
 
@@ -177,10 +184,6 @@ without choosing the implementation yet.
   — Prove the smallest supported SDK policy for app-like development capability,
   automatically reviewed Git escalation, and permission-block recovery before
   considering App Server or independent clones.
-- [Separate Framework, Process, and Role Instructions](./issues/38-separate-framework-process-role-instructions.md)
-  — Define a product-owned framework-instruction layer and deliberate prompt
-  precedence so process and role authors do not repeat invariant mechanics.
-
 ## Deferred release engineering
 
 - [Support Released Schema Upgrades](./issues/42-support-released-schema-upgrades.md)

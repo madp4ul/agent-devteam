@@ -139,7 +139,7 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   assert.equal(second.resumeThreadId, "thread-1");
   assert.equal(second.attempt.number, 2);
   assert.equal(second.attempt.precedingOutcome?.status, "user-interrupted");
-  assert.match(second.attempt.continuationMessage ?? "", /reassess the current task and workspace/i);
+  assert.equal(second.attempt.continuationMessage, null);
   const secondInterrupt = application.interruptTask({
     taskId: created.task.id,
     actor: { kind: "user", id: "paul" },

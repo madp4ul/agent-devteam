@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -17,6 +17,9 @@ test("the example process validates and constructs the documented delivery workf
   const startup = application.queryStartup();
   assert.equal(startup.mode, "paused");
   if (startup.mode !== "paused") return;
+  const authoredDefinition = await readFile(resolve("examples/software-delivery/process.yaml"), "utf8");
+  assert.doesNotMatch(authoredDefinition, /canonical participant token|Never mention yourself/);
+  assert.match(authoredDefinition, /user approval is required before merge/);
   assert.deepEqual(
     startup.boards[0]?.columns.map((column) => ({
       id: column.id,

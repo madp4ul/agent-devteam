@@ -51,6 +51,7 @@ test("board summaries orient agents without returning task payloads", async (t) 
             name: "Implementation",
             watchingAgent: {
               id: "implementer",
+              token: "@implementer",
               name: "Implementation Agent",
               summary: "Builds scoped changes.",
             },
@@ -63,6 +64,7 @@ test("board summaries orient agents without returning task payloads", async (t) 
             name: "Review",
             watchingAgent: {
               id: "reviewer",
+              token: "@reviewer",
               name: "Code Reviewer",
               summary: "Reviews completed changes.",
             },

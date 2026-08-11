@@ -9,6 +9,9 @@ import type {
   AttemptTranscriptItem,
 } from "../application/coordination-application.ts";
 import { summarizeCoordinationTool } from "./coordination-tool-transcript.ts";
+import { composeActivationPrompt } from "../application/activation-prompt.ts";
+
+export { composeActivationPrompt } from "../application/activation-prompt.ts";
 
 type CodexConfigValue = string | number | boolean | CodexConfigValue[] | CodexConfigObject;
 type CodexConfigObject = { [key: string]: CodexConfigValue };
@@ -384,71 +387,6 @@ function readableToolSummary(item: { type: string; [key: string]: unknown }): st
 
 function truncateOutput(output: string): string {
   return output.length <= 4_000 ? output : `${output.slice(0, 4_000)}\n… output truncated`;
-}
-
-export function composeActivationPrompt(request: AgentRunRequest): string {
-  return `# Current responsibility
-
-You are ${request.agent.name} (${request.agent.id}).
-Role: ${request.agent.role}
-Summary: ${request.agent.summary}
-
-## Role instructions
-
-${request.agent.instructions}
-
-## Coordination guidance
-
-Process: ${request.process.name}
-Process definition version: ${request.process.definitionVersion}
-${request.process.guidance}
-
-Board: ${request.board.name} (${request.board.id})
-${request.board.guidance}
-
-Available collaborators (identity, role, and summary):
-${JSON.stringify(request.collaborators, null, 2)}
-
-To request the human user's attention in a task comment, mention exactly
-\`@user\`.
-
-## Immutable activation trigger
-
-${JSON.stringify({ reason: request.reason, sourceEvent: agentFacingRecord(request.sourceEvent) }, null, 2)}
-
-## Current task
-
-${JSON.stringify(
-    {
-      id: request.task.id,
-      title: request.task.title,
-      description: request.task.description,
-      boardId: request.task.boardId,
-      columnId: request.task.columnId,
-      revision: request.task.revision,
-      relationships: request.task.relationships,
-      comments: request.task.comments.map(agentFacingRecord),
-    },
-    null,
-    2,
-  )}
-
-## Attempt context
-
-Attempt number: ${request.attempt.number}
-Thread: ${request.attempt.thread}
-Preceding outcome: ${JSON.stringify(request.attempt.precedingOutcome)}
-Continuation message: ${JSON.stringify(request.attempt.continuationMessage)}
-
-Use the coordination MCP tools to inspect the current task again before changing it, add authored comments, and move only this task. If the Codex permission policy denies a required action and user action or a policy change is necessary, call coordination.report_permission_block with a concise summary and do not retry the denied action. A successful Codex response has no implicit board effect, so perform every process-required comment or movement explicitly.`;
-}
-
-function agentFacingRecord<RecordType extends { actor: AgentRunRequest["sourceEvent"]["actor"] }>(record: RecordType): RecordType {
-  return { ...record, actor: agentFacingActor(record.actor) };
-}
-
-function agentFacingActor<ActorType extends AgentRunRequest["sourceEvent"]["actor"]>(actor: ActorType): ActorType {
-  return actor.kind === "user" ? { ...actor, id: "user" } : actor;
 }
 
 function createCodexClient(options: CodexClientOptionsLike): CodexClientLike {

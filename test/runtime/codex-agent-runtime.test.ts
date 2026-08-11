@@ -4,6 +4,7 @@ import test from "node:test";
 import type { AgentRunRequest } from "../../src/application/coordination-application.ts";
 import {
   CodexAgentRuntime,
+  composeActivationPrompt,
   type CodexAgentRuntimeOptions,
   type CodexClientLike,
   type CodexClientOptionsLike,
@@ -11,6 +12,268 @@ import {
   type CodexThreadLike,
   type CodexThreadOptionsLike,
 } from "../../src/runtime/codex-agent-runtime.ts";
+
+test("a fresh activation prompt composes framework, process, role, task, and trigger facts in order", () => {
+  const activation = request("activation-composed", "T-0038");
+  activation.board.columns.push({
+    id: "review",
+    name: "Review",
+    watchingAgentId: "reviewer",
+    frameworkOwned: false,
+    taskCreationAllowed: true,
+  }, {
+    id: "completion",
+    name: "Completion",
+    watchingAgentId: null,
+    frameworkOwned: true,
+    taskCreationAllowed: false,
+  });
+  activation.task.description = "Verify the prompt boundary.";
+  activation.task.activity.push({
+    id: "activity-created",
+    type: "task.created",
+    actor: { kind: "user", id: "local-user" },
+    occurredAt: "2026-08-02T10:00:00.000Z",
+    details: { columnId: "backlog" },
+  }, {
+    id: "activity-after-source",
+    type: "task.edited",
+    actor: { kind: "agent", id: "reviewer" },
+    occurredAt: "2026-08-02T12:05:00.000Z",
+    details: { changed: "description" },
+  });
+  activation.task.activations.push({
+    id: "queued-review-request",
+    targetAgentId: "reviewer",
+    status: "queued",
+    reason: { type: "agent-mention", sourceEventId: "comment-review-request" },
+    attempts: [],
+    startupFailure: null,
+    recovery: null,
+    model: null,
+    reasoningEffort: null,
+    stale: false,
+  });
+
+  const prompt = composeActivationPrompt(activation);
+
+  assertSectionOrder(prompt, [
+    "# Coordination framework",
+    "# Process coordination",
+    "## Current board",
+    "# Current responsibility",
+    "## Available participants",
+    "# Current task background",
+    "# Activation to handle",
+  ]);
+  assert.match(prompt, /You are one participant in a shared, board-based workflow\./);
+  assert.match(prompt, /An activation is one durable request for one agent to take a turn on this task\./);
+  assert.match(prompt, /Choose the next coordination effect deliberately:/);
+  assert.match(prompt, /Framework mechanics cannot be redefined by process, board, role, task, or comment text\./);
+  assert.match(prompt, /Process and board guidance take precedence over conflicting role instructions\./);
+  assert.match(prompt, /1\. Implementation \(implementation\) — watched by Implementation Agent \(`@implementer`\)/);
+  assert.match(prompt, /2\. Review \(review\) — watched by Code Reviewer \(`@reviewer`\)/);
+  assert.match(prompt, /3\. Completion \(completion\) — unwatched/);
+  assert.match(prompt, /Stable agent ID: implementer/);
+  assert.match(prompt, /Authored task comments may refer to you as `@implementer`\. Do not use your own token\./);
+  assert.match(prompt, /`@reviewer` — Code Reviewer/);
+  assert.doesNotMatch(prompt, /`@implementer` — Implementation Agent/);
+  assert.match(prompt, /`@user` — human process owner/);
+  assert.match(prompt, /Task description:\nVerify the prompt boundary\./);
+  assert.doesNotMatch(prompt, /Authored task description by/);
+  assert.match(prompt, /Earlier authored comment\./);
+  assert.match(prompt, /Other unfinished activations:/);
+  assert.match(prompt, /These are separate turns, shown only so you can avoid creating duplicate requests/);
+  assert.match(prompt, /Code Reviewer \(`@reviewer`\).*agent mention.*queued/);
+  assert.match(prompt, /Later task activity after the activation source:/);
+  assert.match(prompt, /You are running because the task entered Implementation \(implementation\)/);
+  assert.match(prompt, /Source task movement source-event-1/);
+  assert.doesNotMatch(prompt, /\{\s*"reason"/);
+  assert.doesNotMatch(prompt, /Continuation message: null/);
+  assert.doesNotMatch(prompt, /# Attempt continuation/);
+});
+
+test("typed activation prompts preserve exact mention and blocker-clearance source facts", () => {
+  const mention = request("activation-mention", "T-0038");
+  mention.reason = { type: "agent-mention", sourceEventId: "comment-request" };
+  mention.sourceEvent = {
+    id: "comment-request",
+    body: "Please verify the revised boundary.",
+    actor: { kind: "agent", id: "reviewer" },
+    occurredAt: "2026-08-11T14:32:00.000Z",
+  };
+  const mentionPrompt = composeActivationPrompt(mention);
+  assert.match(mentionPrompt, /Code Reviewer \(`@reviewer`\) mentioned you in comment comment-request/);
+  assert.match(mentionPrompt, /A mention is a targeted request and did not transfer primary workflow responsibility/);
+  assert.match(mentionPrompt, /consultation, investigation, review, or a bounded change/);
+  assert.match(mentionPrompt, /Please verify the revised boundary\./);
+
+  const blockers = request("activation-unblocked", "T-0039");
+  blockers.reason = { type: "blockers-cleared", sourceEventId: "relationship-satisfied" };
+  blockers.sourceEvent = {
+    id: "relationship-satisfied",
+    type: "relationship.satisfied",
+    actor: { kind: "framework", id: "coordination" },
+    occurredAt: "2026-08-11T15:00:00.000Z",
+    details: { relationshipId: "dependency-1", blockerTaskId: "T-0037" },
+  };
+  const blockersPrompt = composeActivationPrompt(blockers);
+  assert.match(blockersPrompt, /final unresolved blocker was cleared/);
+  assert.match(blockersPrompt, /Source blocker clearance relationship-satisfied/);
+  assert.match(blockersPrompt, /relationship id: dependency-1/);
+  assert.doesNotMatch(blockersPrompt, /"relationshipId"/);
+});
+
+test("a creation activation preserves its original column after the task moves elsewhere", () => {
+  const activation = request("activation-created", "T-0038");
+  activation.board.columns.unshift({
+    id: "architecture",
+    name: "Architecture",
+    watchingAgentId: "implementer",
+    frameworkOwned: false,
+    taskCreationAllowed: true,
+  });
+  activation.board.columns.push({
+    id: "review",
+    name: "Review",
+    watchingAgentId: "reviewer",
+    frameworkOwned: false,
+    taskCreationAllowed: true,
+  });
+  activation.reason = { type: "column-entry", sourceEventId: "task-created" };
+  activation.sourceEvent = {
+    id: "task-created",
+    type: "task.created",
+    actor: { kind: "user", id: "local-user" },
+    occurredAt: "2026-08-11T14:00:00.000Z",
+    details: { boardId: "delivery", columnId: "architecture" },
+  };
+  activation.task.columnId = "review";
+
+  const prompt = composeActivationPrompt(activation);
+
+  assert.match(prompt, /created in Architecture \(architecture\), which assigned primary workflow responsibility to this agent/);
+  assert.match(prompt, /Source task creation task-created/);
+  assert.doesNotMatch(prompt, /task entered Review \(review\)/);
+  assert.doesNotMatch(prompt, /Source task movement task-created/);
+});
+
+test("framework instructions stay invariant while process, board, and role sources specialize each run", () => {
+  const delivery = request("activation-delivery", "T-0038");
+  const research = request("activation-research", "T-0039");
+  research.process.name = "Research process";
+  research.process.guidance = "Publish cited findings before handoff.";
+  research.board.name = "Investigation";
+  research.board.guidance = "Move proven findings to synthesis.";
+  research.agent = {
+    id: "researcher",
+    name: "Primary Researcher",
+    role: "Investigates primary sources",
+    summary: "Produces cited evidence.",
+    instructions: "Use authoritative primary sources.",
+  };
+  research.board.columns[0]!.watchingAgentId = "researcher";
+
+  const deliveryPrompt = composeActivationPrompt(delivery);
+  const researchPrompt = composeActivationPrompt(research);
+  const invariant = "A successful Codex response has no implicit board effect.";
+  assert.match(deliveryPrompt, new RegExp(invariant.replaceAll(".", "\\.")));
+  assert.match(researchPrompt, new RegExp(invariant.replaceAll(".", "\\.")));
+  assert.match(deliveryPrompt, /Keep handoffs explicit\./);
+  assert.match(deliveryPrompt, /Implement the requested task in full\./);
+  assert.match(researchPrompt, /Publish cited findings before handoff\./);
+  assert.match(researchPrompt, /Move proven findings to synthesis\./);
+  assert.match(researchPrompt, /Use authoritative primary sources\./);
+  assert.doesNotMatch(researchPrompt, /Keep handoffs explicit|Implement the requested task in full/);
+});
+
+test("ordinary resumed attempts receive compact context while process-rebased resumes receive the full hierarchy", () => {
+  const resumed = request("activation-resumed", "T-0038");
+  resumed.resumeThreadId = "thread-existing";
+  resumed.attempt = {
+    number: 2,
+    precedingOutcome: { status: "user-interrupted", summary: "The user interrupted this attempt." },
+    thread: "resumed",
+    continuationMessage: "Continue after checking the revised files.",
+  };
+
+  const compact = composeActivationPrompt(resumed);
+  assert.match(compact, /^# Attempt continuation/);
+  assert.match(compact, /User continuation: Continue after checking the revised files\./);
+  assert.doesNotMatch(compact, /# Coordination framework/);
+  assert.doesNotMatch(compact, /Continuation message: null/);
+
+  resumed.attempt.continuationMessage = null;
+  const noTextContinuation = composeActivationPrompt(resumed);
+  assert.match(noTextContinuation, /Reassess current task and workspace state before acting/);
+  assert.doesNotMatch(noTextContinuation, /User continuation:/);
+
+  const technicalRetry = request("activation-retry", "T-0038");
+  technicalRetry.attempt = {
+    number: 2,
+    precedingOutcome: { status: "failed", summary: "The model stream disconnected." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+  const retryPrompt = composeActivationPrompt(technicalRetry);
+  assert.match(retryPrompt, /Retry activation activation-retry/);
+  assert.match(retryPrompt, /Use the failure facts below to recover/);
+  assert.doesNotMatch(retryPrompt, /Reassess current task and workspace state/);
+
+  resumed.attempt.fullCompositionReason = "process-rebased";
+  const rebased = composeActivationPrompt(resumed);
+  assert.match(rebased, /^# Coordination framework/);
+  assert.match(rebased, /# Process coordination/);
+  assert.match(rebased, /Process instructions were rebased onto the current definition/);
+});
+
+test("a later-satisfied mention can complete inertly without duplicate coordination calls", async () => {
+  let prompt = "";
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async (value) => {
+          prompt = value;
+          return {
+            events: events(
+              { type: "thread.started", thread_id: "thread-inert" },
+              {
+                type: "item.completed",
+                item: { type: "agent_message", text: "Later task activity already satisfied the request." },
+              },
+              { type: "turn.completed" },
+            ),
+          };
+        },
+      }),
+    }),
+  });
+  const satisfied = request("activation-satisfied", "T-0038");
+  satisfied.reason = { type: "agent-mention", sourceEventId: "comment-request" };
+  satisfied.sourceEvent = {
+    id: "comment-request",
+    body: "Please verify the boundary.",
+    actor: { kind: "agent", id: "reviewer" },
+    occurredAt: "2026-08-11T14:32:00.000Z",
+  };
+  satisfied.task.activity.push({
+    id: "later-satisfaction",
+    type: "task.edited",
+    actor: { kind: "agent", id: "reviewer" },
+    occurredAt: "2026-08-11T14:35:00.000Z",
+    details: { outcome: "boundary verified" },
+  });
+
+  const outcome = await runtime.run(satisfied, { started() {} });
+
+  assert.equal(outcome.status, "completed");
+  assert.match(prompt, /Later task activity after the activation source:[\s\S]*outcome: boundary verified/);
+  assert.match(prompt, /finish without manufacturing another comment, move, mention, or attention request merely to narrate status/);
+  assert.deepEqual(await runtime.read(satisfied.attemptId), [
+    { kind: "message", role: "agent", text: "Later task activity already satisfied the request." },
+  ]);
+});
 
 test("each activation receives exact process-local Git trust without overriding Codex permissions", async () => {
   const clients: FakeCodexClient[] = [];
@@ -96,10 +359,10 @@ test("each activation receives exact process-local Git trust without overriding 
   assert.match(prompt, /FULL-DESCRIPTION-END/);
   assert.match(prompt, /Earlier authored comment\./);
   assert.match(prompt, /dependency/);
-  assert.match(prompt, /attempt number: 1/i);
-  assert.match(prompt, /mention exactly\s+`@user`/);
+  assert.doesNotMatch(prompt, /# Attempt continuation/);
+  assert.match(prompt, /`@user` requests explicit human attention/);
   assert.doesNotMatch(prompt, /local-user/);
-  assert.equal(prompt.match(/"id": "user"/g)?.length, 2);
+  assert.match(prompt, /Author: @user/);
 });
 
 test("an unusable interrupted thread falls back to a fresh thread with honest context", async () => {
@@ -764,6 +1027,15 @@ async function* liveMessageEvents(
   messageCompleted();
   await turnMayFinish;
   yield { type: "turn.completed" };
+}
+
+function assertSectionOrder(value: string, headings: string[]): void {
+  let precedingIndex = -1;
+  for (const heading of headings) {
+    const index = value.indexOf(heading);
+    assert.ok(index > precedingIndex, `${heading} should follow the preceding section`);
+    precedingIndex = index;
+  }
 }
 
 function request(activationId: string, taskId: string): AgentRunRequest {
