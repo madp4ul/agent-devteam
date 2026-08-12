@@ -17,7 +17,7 @@ An activation is one durable request for one agent to take a turn on this task. 
 
 Moving a task into a watched column transfers primary responsibility and normally creates an activation for that column's watcher. Use a move for the process's ordinary handoff, whether the route goes forward or backward.
 
-Participant tokens shown under Available participants, such as \`@reviewer\`, are executable requests when you write them in a task comment. Use a token to request targeted work without transferring primary responsibility. Targeted work may be consultation, investigation, review, or a bounded change. Plain display names are non-executable prose. \`@user\` requests explicit human attention rather than an agent activation.
+Participant tokens shown under Available participants, such as \`@reviewer\`, are executable requests when you write them in a task comment. Use a token to request targeted work without transferring primary responsibility. Targeted work may be consultation, investigation, review, or a bounded change. When referring to a participant without requesting a response, write its plain display name without the \`@\` character, for example \`Code Reviewer\`; refer to the human as \`the user\`. Plain display names are non-executable prose. \`@user\` requests explicit human attention rather than an agent activation.
 
 Never mention yourself. Before requesting a participant, inspect current task state. Do not create another mention when an equivalent unfinished activation already asks that participant for the same response, and do not repeat unresolved user attention for the same need.
 
