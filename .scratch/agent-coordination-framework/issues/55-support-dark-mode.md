@@ -7,7 +7,7 @@ status, attention, and interaction treatment.
 
 **Blocked by:** None
 
-**Status:** open
+**Status:** resolved
 
 - [ ] Provide one discoverable theme control available from both the board and
   task-detail views with `System`, `Light`, and `Dark` choices. Its accessible
@@ -78,3 +78,12 @@ per-board themes, scheduled theme changes, or additional color themes.
 - The current purple archived treatment, soft user-responsibility treatment,
   green/red run outcome sidebars, and distinct comment/movement treatments are
   useful reference points, not immutable color values.
+
+## Answer
+
+Implemented an application-wide `System` / `Light` / `Dark` appearance
+preference with a pre-paint bootstrap, local persistence, live operating-system
+preference updates, matching native controls, and semantic dark-theme roles
+across the complete browser UI. The accepted light appearance remains
+unchanged, and browser coverage verifies selection, persistence, keyboard use,
+state preservation, semantic relationships, and representative surfaces.

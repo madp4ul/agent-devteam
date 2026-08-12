@@ -187,6 +187,9 @@ No implementation-ready ticket is currently prioritized.
   — Add an accessible system-aware light/dark appearance preference while
   preserving the few intentional semantic color relationships and leaving the
   broader palette to implementation judgment.
+  **Resolved:** Added a pre-paint, locally persisted system/light/dark preference
+  and a semantic dark palette across the browser UI while preserving the
+  accepted light appearance and interaction state.
 - [Reduce Agent-Run Context Overhead](./issues/56-reduce-agent-run-context-overhead.md)
   — Measure and reduce broad tool discovery, oversized mutation responses, and
   redundant startup context while preserving raw usage and coordination

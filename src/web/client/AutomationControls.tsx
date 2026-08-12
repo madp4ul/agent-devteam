@@ -5,6 +5,7 @@ import { pauseAutomation, resumeAutomation } from "./api.ts";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage, type Feedback } from "./feedback.ts";
+import { ThemeControl } from "./ThemeControl.tsx";
 
 export function AutomationControls({
   automation,
@@ -69,6 +70,7 @@ export function AutomationControls({
       ) : (
         <span>Desktop notifications unavailable</span>
       )}
+      <ThemeControl />
     </div>
   );
 }
