@@ -158,11 +158,17 @@ user attention and explicit continuation rather than automatic retry.
 A request for an agent to inspect and act on a task because a relevant event
 occurred. Activations for a task are handled individually in strict
 chronological order; an activation waits while that task already has an active
-run. The coordination framework does not reprioritize, cancel, or supersede
-queued activations when later events change the task. The addressed agent
-receives the current task state and decides whether the original request still
-requires action. Its target agent is fixed when the activation is created and
-is not re-resolved when the run begins.
+run. The coordination framework does not generally reprioritize, cancel,
+coalesce, or supersede queued activations when later events change the task.
+The narrow exception is final-blocker clearance: if an untouched queued
+column-entry activation already represents responsibility for the task's
+current column and watching agent, clearance releases that activation instead
+of creating a duplicate `blockers-cleared` activation. The relationship
+satisfaction or removal remains immutable activity, and the original
+activation's reason, source event, target, process version, and position remain
+unchanged. The addressed agent receives the current task state and decides
+whether the original request still requires action. Its target agent is fixed
+when the activation is created and is not re-resolved when the run begins.
 
 **Stale activation**:
 An activation created under a different process-definition version from the

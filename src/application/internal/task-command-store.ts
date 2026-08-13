@@ -883,6 +883,23 @@ export class TaskCommandStore {
       )
       .get(taskId) as { watching_agent_id: string | null } | undefined;
     if (task?.watching_agent_id == null) return;
+    const queuedColumnEntryAlreadyOwnsResponsibility = this.#database
+      .prepare(
+        `SELECT 1
+         FROM activations activation
+         WHERE activation.task_id = ?
+           AND activation.target_agent_id = ?
+           AND activation.reason_type = 'column-entry'
+           AND activation.status = 'queued'
+           AND activation.stale = 0
+           AND NOT EXISTS (
+             SELECT 1 FROM attempts attempt
+             WHERE attempt.activation_id = activation.id
+           )
+         LIMIT 1`,
+      )
+      .get(taskId, task.watching_agent_id) !== undefined;
+    if (queuedColumnEntryAlreadyOwnsResponsibility) return;
     const occurredAt = new Date().toISOString();
     const activationId = this.queueActivation(
       taskId,

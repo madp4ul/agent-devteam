@@ -500,8 +500,15 @@ what changed without reconstructing the call from its name alone.
   claims a watched column as described above. A user mention creates attention
   instead. Mentions on unmapped tasks create no activation.
 - Clearing the final blocking relationship creates an activation only when the
-  task's current column has a watcher. Clearing an earlier blocker records
-  activity without activation.
+  task's current column has a watcher and no untouched queued `column-entry`
+  activation already represents responsibility for that task and watcher. If
+  one exists, it becomes runnable without changing its reason, source event,
+  target, process version, or position; immutable relationship satisfaction or
+  removal activity records the later clearance. Queued mentions, activations
+  for another agent, and column-entry activations that already started remain
+  separate expectations. Clearing an earlier blocker records activity without
+  activation. This is a narrow reuse rule, not general activation coalescing,
+  reprioritization, cancellation, or supersession.
 - The target agent, typed reason, exact source-event pointer, process version,
   and activation position are fixed at creation. A run additionally receives
   current task state and attempt context.
