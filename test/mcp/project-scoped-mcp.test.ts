@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -123,6 +123,14 @@ boards:
       "report_permission_block",
     ],
   );
+  const reference = await readFile(
+    join(process.cwd(), "docs/agent-mcp-reference.md"),
+    "utf8",
+  );
+  assert.deepEqual(
+    [...reference.matchAll(/^\| `([^`]+)` \|/gmu)].map((match) => match[1]),
+    listed.tools.map((tool) => tool.name),
+  );
   const toolByName = new Map(listed.tools.map((tool) => [tool.name, tool]));
   assert.deepEqual(
     Object.fromEntries(
@@ -200,7 +208,6 @@ boards:
   assert.deepEqual(JSON.parse(textContent(permissionReport.content)), {
     accepted: true,
     taskId: created.task.id,
-    summary: "A required protected action needs user approval.",
   });
 
   const summary = await client.callTool({ name: "summarize_boards", arguments: {} });
@@ -318,8 +325,25 @@ boards:
   assert.equal(inspectedTask.id, created.task.id);
 
   const dependencyArguments = { targetTaskId: "T-0002", idempotencyKey: "agent-dependency" };
-  await client.callTool({ name: "add_dependency", arguments: dependencyArguments });
-  await client.callTool({ name: "add_dependency", arguments: dependencyArguments });
+  const dependencyResult = await client.callTool({ name: "add_dependency", arguments: dependencyArguments });
+  const repeatedDependencyResult = await client.callTool({ name: "add_dependency", arguments: dependencyArguments });
+  const dependencyPayload = JSON.parse(textContent(dependencyResult.content)) as {
+    accepted: true;
+    relationship: { id: string; type: string; sourceTaskId: string; targetTaskId: string };
+  };
+  assert.deepEqual(dependencyPayload, {
+    accepted: true,
+    relationship: {
+      id: dependencyPayload.relationship.id,
+      type: "dependency",
+      sourceTaskId: created.task.id,
+      targetTaskId: "T-0002",
+    },
+  });
+  assert.deepEqual(
+    JSON.parse(textContent(repeatedDependencyResult.content)),
+    dependencyPayload,
+  );
   const childResult = await client.callTool({
     name: "create_child_task",
     arguments: {
@@ -331,7 +355,15 @@ boards:
       idempotencyKey: "agent-child",
     },
   });
-  assert.match(textContent(childResult.content), /Scoped child/);
+  assert.deepEqual(JSON.parse(textContent(childResult.content)), {
+    accepted: true,
+    task: {
+      id: "T-0005",
+      boardId: "delivery",
+      columnId: "implementation",
+      revision: 1,
+    },
+  });
   const rejectedCompletedChild = await client.callTool({
     name: "create_child_task",
     arguments: {
@@ -352,8 +384,21 @@ boards:
     body: "Implementation complete; handing off for review.",
     idempotencyKey: "agent-comment",
   };
-  await client.callTool({ name: "add_comment", arguments: commentArguments });
-  await client.callTool({ name: "add_comment", arguments: commentArguments });
+  const commentResult = await client.callTool({ name: "add_comment", arguments: commentArguments });
+  const repeatedCommentResult = await client.callTool({ name: "add_comment", arguments: commentArguments });
+  const commentPayload = JSON.parse(textContent(commentResult.content)) as {
+    accepted: true;
+    taskId: string;
+    revision: number;
+    commentId: string;
+  };
+  assert.deepEqual(commentPayload, {
+    accepted: true,
+    taskId: created.task.id,
+    revision: inspectedTask.revision,
+    commentId: commentPayload.commentId,
+  });
+  assert.deepEqual(JSON.parse(textContent(repeatedCommentResult.content)), commentPayload);
   const moveResult = await client.callTool({
     name: "move_current_task",
     arguments: {
@@ -362,10 +407,14 @@ boards:
       idempotencyKey: "agent-move",
     },
   });
-  assert.deepEqual(JSON.parse(textContent(moveResult.content)).transition, {
-    taskId: created.task.id,
-    fromColumnId: "implementation",
-    toColumnId: "review",
+  assert.deepEqual(JSON.parse(textContent(moveResult.content)), {
+    accepted: true,
+    revision: inspectedTask.revision + 1,
+    transition: {
+      taskId: created.task.id,
+      fromColumnId: "implementation",
+      toColumnId: "review",
+    },
   });
 
   const updated = application.queryTask(created.task.id);
@@ -539,15 +588,23 @@ boards:
 
   assert.notEqual(result.isError, true);
   const payload = JSON.parse(textContent(result.content)) as {
+    accepted: true;
+    revision: number;
     transition: { taskId: string; fromColumnId: string; toColumnId: string };
-    task: { activations: Array<{ id: string; status: string; reason: { type: string } }> };
   };
-  assert.deepEqual(payload.transition, {
-    taskId: created.task.id,
-    fromColumnId: "backlog",
-    toColumnId: "implementation",
+  assert.deepEqual(payload, {
+    accepted: true,
+    revision: mentioned.task.revision + 1,
+    transition: {
+      taskId: created.task.id,
+      fromColumnId: "backlog",
+      toColumnId: "implementation",
+    },
   });
-  assert.deepEqual(payload.task.activations.map((activation) => ({
+  const claimed = application.queryTask(created.task.id);
+  assert.equal(claimed.available, true);
+  if (!claimed.available) return;
+  assert.deepEqual(claimed.task.activations.map((activation) => ({
     id: activation.id,
     status: activation.status,
     reasonType: activation.reason.type,

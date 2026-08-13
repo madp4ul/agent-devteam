@@ -1,39 +1,23 @@
 # 56 — Reduce Agent-Run Context Overhead
 
-**What to build:** Measure and reduce avoidable context supplied to coordination
-agent runs so short tasks remain proportionate, without hiding real usage or
-removing instructions and evidence required for correct autonomous work.
+**What to build:** Remove obvious avoidable payload from agent coordination
+calls and document the complete MCP surface concisely, without turning this
+ticket into a broad measurement or prompt-optimization project.
 
 **Blocked by:** None
 
-**Status:** open
+**Status:** resolved
 
-- [ ] Add controlled real-run instrumentation that separates model-call count,
-  cumulative input, cached input, uncached input, output, and tool-result size
-  for one attempt. Preserve raw SDK usage as the source of truth.
-- [ ] Give activated agents direct, exact affordances for the coordination
-  operations they need so routine runs do not begin with broad tool discovery.
-- [ ] Make successful coordination mutations return compact acknowledgements
-  containing only the identifiers, revision, state transition, and created
-  records needed to continue. Keep full task inspection available explicitly
-  rather than returning the complete task after every mutation.
-- [ ] Measure the fixed startup contribution from framework, process, board,
-  role, task, runtime, skill/plugin, and tool-schema context, then reduce or
-  defer redundant material without weakening precedence, safety, or activation
-  provenance.
-- [ ] Evaluate compact task-history and instruction composition against the
-  current complete forms. On-demand inspection must remain available when an
-  agent needs omitted detail.
-- [ ] Compare representative runs before and after each optimization. Record
-  both absolute usage and behavior/correctness evidence so lower token counts
-  are not accepted when they cause extra calls, missed requirements, or unsafe
-  coordination.
-- [ ] Do not treat cached input as free, convert counts into currency without
-  the actual model and billing arrangement, or optimize a display by changing
-  the underlying measurement.
-- [ ] Add regression coverage at the narrowest public seams for compact tool
-  responses and prompt composition, plus at least one controlled end-to-end
-  run demonstrating the combined effect.
+- [x] Successful agent comment, move, child-task, dependency, and permission-
+  block calls return compact acknowledgements instead of full task projections.
+- [x] Keep full task inspection explicit and leave browser/application command
+  contracts, rejection detail, persistence, and idempotency unchanged.
+- [x] Add a concise reference covering every available agent MCP tool, its
+  inputs, behavior, successful result, and shared record shapes.
+- [x] Add MCP contract coverage for the compact results and ensure the reference
+  tool list stays synchronized with the server's advertised tools.
+- [x] Do not add telemetry, cost calculation, lossy history composition, or a
+  broader runtime-context rewrite as part of this ticket.
 
 ## Context
 
@@ -51,10 +35,9 @@ roughly 17,000 characters of runtime instructions, 4,000 characters of project
 context, and 12,000 characters of activation composition before hidden tool
 schemas were counted.
 
-The investigation establishes promising seams, not a predetermined rewrite.
-This ticket should quantify which reductions materially improve whole-run
-usage and preserve the coordination behavior that the context exists to
-support.
+The investigation established several possible seams. User follow-up narrowed
+this ticket to the obvious agent-tool response waste and a complete compact MCP
+reference; detailed measurement and speculative context tuning are not needed.
 
 ## Comments
 
@@ -63,3 +46,22 @@ support.
 - Cached input is a subset of input usage and may be cheaper under a particular
   API model price, but it still represents repeated model context and should
   remain measurable.
+- The agent adapter is the compaction boundary. Rich application mutation
+  results remain available to existing user-facing callers, and rejected moves
+  retain current task state for conflict recovery.
+
+## Answer
+
+Successful current-task mutations now return only what an agent needs to
+continue: comment identity and revision, move revision and transition, compact
+child identity, the created dependency relationship, or permission-block
+confirmation. Full task projections remain available through
+`inspect_current_task` and `inspect_task`, but are no longer repeated after
+each successful mutation.
+
+`docs/agent-mcp-reference.md` documents all thirteen MCP tools in one compact
+table plus the shared returned-record shapes and rejection conventions. MCP
+tests assert the exact compact acknowledgements, idempotent replay, preserved
+responsibility-claim behavior, and equality between the documented and
+advertised tool lists. Typechecking, the production build, and all 143 runnable
+tests pass; the two credentialed real-Codex tests remain intentionally skipped.

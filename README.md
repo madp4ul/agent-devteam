@@ -31,7 +31,9 @@ project state root and its registered task worktrees.
 Open `http://127.0.0.1:3000`. See the
 [process-definition reference](docs/process-definition-reference.md) and
 [start-a-process tutorial](docs/tutorials/start-a-process.md) for authoring and
-startup details. To exercise the complete architecture-led example, follow the
+startup details. The [agent MCP tool reference](docs/agent-mcp-reference.md)
+lists every coordination tool and its response contract. To exercise the
+complete architecture-led example, follow the
 [software-delivery proof procedure](docs/tutorials/prove-software-delivery-workflow.md).
 
 Every startup remains paused until the user explicitly resumes automation.

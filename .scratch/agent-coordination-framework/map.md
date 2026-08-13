@@ -191,9 +191,10 @@ No implementation-ready ticket is currently prioritized.
   and a semantic dark palette across the browser UI while preserving the
   accepted light appearance and interaction state.
 - [Reduce Agent-Run Context Overhead](./issues/56-reduce-agent-run-context-overhead.md)
-  — Measure and reduce broad tool discovery, oversized mutation responses, and
-  redundant startup context while preserving raw usage and coordination
-  correctness.
+  — Replace oversized successful agent-mutation results with compact
+  acknowledgements and document the complete MCP tool surface.
+  **Resolved:** Agent mutations no longer repeat full task projections; the
+  concise MCP reference and contract tests cover all thirteen tools.
 
 ## Not yet specified
 

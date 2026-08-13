@@ -623,7 +623,15 @@ async function handleAgentApi(
       actor: { kind: "agent", id: scope.agentId },
       ...(scope.attemptId === undefined ? {} : { attemptId: scope.attemptId }),
     });
-    sendJson(response, result.accepted ? 200 : 409, result);
+    if (!result.accepted) sendJson(response, 409, result);
+    else {
+      sendJson(response, 200, {
+        accepted: true,
+        taskId: result.task.id,
+        revision: result.task.revision,
+        commentId: result.comment.id,
+      });
+    }
     return;
   }
   if (method === "POST" && url.pathname === "/agent-api/current-task/move") {
@@ -636,7 +644,14 @@ async function handleAgentApi(
       actor: { kind: "agent", id: scope.agentId },
       ...(scope.attemptId === undefined ? {} : { attemptId: scope.attemptId }),
     });
-    sendJson(response, result.accepted ? 200 : 409, result);
+    if (!result.accepted) sendJson(response, 409, result);
+    else {
+      sendJson(response, 200, {
+        accepted: true,
+        revision: result.task.revision,
+        transition: result.transition,
+      });
+    }
     return;
   }
   if (method === "POST" && url.pathname === "/agent-api/current-task/children") {
@@ -647,7 +662,19 @@ async function handleAgentApi(
       { kind: "agent", id: scope.agentId },
       scope.attemptId,
     ));
-    sendJson(response, result.accepted ? 201 : result.reason === "not-found" ? 404 : 409, result);
+    if (!result.accepted) {
+      sendJson(response, result.reason === "not-found" ? 404 : 409, result);
+    } else {
+      sendJson(response, 201, {
+        accepted: true,
+        task: {
+          id: result.task.id,
+          boardId: result.task.boardId,
+          columnId: result.task.columnId,
+          revision: result.task.revision,
+        },
+      });
+    }
     return;
   }
   if (method === "POST" && url.pathname === "/agent-api/current-task/dependencies") {
@@ -659,15 +686,16 @@ async function handleAgentApi(
       { kind: "agent", id: scope.agentId },
       scope.attemptId,
     ));
-    sendRelationshipMutation(response, result);
+    if (!result.accepted) sendRelationshipMutation(response, result);
+    else sendJson(response, 201, { accepted: true, relationship: result.relationship });
     return;
   }
   if (method === "POST" && url.pathname === "/agent-api/current-task/permission-block") {
     const body = await readJsonBody(request);
+    stringField(body, "summary");
     sendJson(response, 200, {
       accepted: true,
       taskId: scope.taskId,
-      summary: stringField(body, "summary"),
     });
     return;
   }
