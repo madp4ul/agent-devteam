@@ -533,6 +533,13 @@ export class TaskProjectionStore {
   }
 
   private readActivations(taskId: string): ActivationView[] {
+    const taskState = this.#database.prepare(
+      `SELECT automation_suspended, suspended_activation_id
+       FROM tasks WHERE id = ?`,
+    ).get(taskId) as {
+      automation_suspended: number;
+      suspended_activation_id: string | null;
+    };
     const rows = this.#database
       .prepare(
         `SELECT id, target_agent_id, reason_type, source_event_id, status,
@@ -559,6 +566,11 @@ export class TaskProjectionStore {
       }>;
     return rows.map((row) => {
       const attempts = this.readAttempts(row.id);
+      const dismissible = row.status === "queued" && row.resolution === null &&
+        row.stale === 0 && (attempts.length === 0 || (
+          taskState.automation_suspended === 1 &&
+          taskState.suspended_activation_id === row.id
+        ));
       return {
         id: row.id,
         targetAgentId: row.target_agent_id,
@@ -581,8 +593,54 @@ export class TaskProjectionStore {
         model: row.model,
         reasoningEffort: row.reasoning_effort,
         stale: row.stale === 1,
+        dismissal: dismissible
+          ? { mayStartNext: this.dismissalMayStartNext(taskId, row.id) }
+          : null,
       } satisfies ActivationView;
     });
+  }
+
+  private dismissalMayStartNext(taskId: string, dismissedActivationId: string): boolean {
+    const row = this.#database.prepare(
+      `SELECT 1
+       FROM activations selected
+       JOIN tasks task ON task.id = selected.task_id
+       JOIN activations candidate ON candidate.task_id = selected.task_id
+       JOIN mapped_tasks mapped ON mapped.id = task.id
+       JOIN agents agent ON agent.id = candidate.target_agent_id AND agent.applied = 1
+       JOIN runtime ON runtime.singleton = 1 AND runtime.automation_state = 'running'
+       WHERE selected.task_id = ?
+         AND selected.id = ?
+         AND (task.automation_suspended = 0 OR task.suspended_activation_id = selected.id)
+         AND NOT EXISTS (
+           SELECT 1 FROM activations before_selected
+           WHERE before_selected.task_id = selected.task_id
+             AND before_selected.sequence < selected.sequence
+             AND before_selected.status <> 'completed'
+         )
+         AND candidate.status = 'queued'
+         AND candidate.id <> selected.id
+         AND candidate.stale = 0
+         AND (candidate.retry_due_at IS NULL OR candidate.retry_due_at <= ?)
+         AND NOT EXISTS (
+           SELECT 1
+           FROM task_relationships relationship
+           JOIN tasks blocker ON blocker.id = relationship.target_task_id
+           WHERE relationship.type IN ('dependency', 'parent-child')
+             AND relationship.source_task_id = candidate.task_id
+             AND blocker.column_id <> 'completion'
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM activations earlier
+           WHERE earlier.task_id = candidate.task_id
+             AND earlier.sequence < candidate.sequence
+             AND earlier.id <> selected.id
+             AND earlier.status <> 'completed'
+         )
+       ORDER BY candidate.sequence
+       LIMIT 1`,
+    ).get(taskId, dismissedActivationId, new Date().toISOString());
+    return row !== undefined;
   }
 
   private readActivationStartupFailure(

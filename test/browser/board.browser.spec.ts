@@ -261,6 +261,7 @@ test("task interruption waits for confirmation and offers contextual continuatio
       recovery: null,
       model: null,
       reasoningEffort: null,
+      dismissal: { mayStartNext: true },
     }];
     await route.fulfill({ response, json: body });
   });
@@ -292,6 +293,148 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await expect(page.getByRole("link", { name: /T-0002 Drag this task/ }).locator(".."))
     .not.toContainText("Automation suspended");
   await expect(attention).toHaveCount(0);
+});
+
+test("task details confirm individual queued and interrupted activation dismissal", async ({ page }) => {
+  let activations = [
+    {
+      id: "interrupted-activation",
+      targetAgentId: "consulting-agent",
+      status: "queued",
+      reason: { type: "agent-mention", sourceEventId: "comment-interrupted" },
+      attempts: [{
+        id: "interrupted-attempt",
+        status: "interrupted",
+        workspacePath: "C:/task-workspace",
+        startedAt: "2026-08-08T12:00:00.000Z",
+        completedAt: "2026-08-08T12:01:00.000Z",
+        outcome: { status: "user-interrupted", summary: "The user interrupted this attempt." },
+        threadId: "thread-interrupted",
+        model: null,
+        reasoningEffort: null,
+      }],
+      startupFailure: null,
+      recovery: null,
+      stale: false,
+      model: null,
+      reasoningEffort: null,
+      dismissal: { mayStartNext: true },
+    },
+    {
+      id: "queued-activation",
+      targetAgentId: "implementing-agent",
+      status: "queued",
+      reason: { type: "column-entry", sourceEventId: "activity-queued" },
+      attempts: [],
+      startupFailure: null,
+      recovery: null,
+      stale: false,
+      model: null,
+      reasoningEffort: null,
+      dismissal: { mayStartNext: false },
+    },
+  ];
+  await page.route("**/api/activations/*/dismiss", async (route) => {
+    const activationId = route.request().url().split("/").at(-2)!;
+    if (activationId === "queued-activation") {
+      activations = activations.map((activation) => activation.id === activationId
+        ? { ...activation, status: "running" }
+        : activation);
+      await route.fulfill({ status: 409, json: { accepted: false, reason: "not-dismissible" } });
+      return;
+    }
+    activations = activations.map((activation) => activation.id === activationId
+      ? { ...activation, status: "dismissed" }
+      : activation);
+    await route.fulfill({ status: 200, json: { accepted: true, activationId } });
+  });
+  await page.route("**/api/tasks/T-0002", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.task.activations = activations;
+    body.inspection.automationSuspended = activations[0]?.status === "queued";
+    body.inspection.run = {
+      status: activations.some(({ status }) => status === "queued") ? "queued" : "idle",
+      activeAgentId: null,
+      queuedActivationCount: activations.filter(({ status }) => status === "queued").length,
+      failedActivationCount: 0,
+    };
+    body.activeRun = null;
+    body.automation = { state: "running", attemptsMayStart: true };
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto("/tasks/T-0002");
+  const queue = page.locator(".activation-queue");
+  await expect(queue.getByRole("button", { name: "Dismiss activation for consulting-agent" })).toBeVisible();
+  await expect(queue.getByRole("button", { name: "Dismiss activation for implementing-agent" })).toBeVisible();
+  await queue.getByRole("button", { name: "Dismiss activation for consulting-agent" }).click();
+  const dialog = page.getByRole("dialog", { name: "Dismiss activation?" });
+  await expect(dialog).toContainText("consulting-agent");
+  await expect(dialog).toContainText("mentioned in a comment");
+  await expect(dialog).toContainText("The next queued activation may start immediately.");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+  await queue.getByRole("button", { name: "Dismiss activation for consulting-agent" }).click();
+  await dialog.getByRole("button", { name: "Dismiss activation" }).click();
+  await expect(queue).not.toContainText("consulting-agent");
+  await expect(queue.getByRole("button", { name: "Dismiss activation for implementing-agent" })).toBeVisible();
+  await queue.getByRole("button", { name: "Dismiss activation for implementing-agent" }).click();
+  await dialog.getByRole("button", { name: "Dismiss activation" }).click();
+  await expect(page.getByRole("alert")).toContainText("already started or changed state");
+  await expect(queue.getByRole("button", { name: "Dismiss activation for implementing-agent" })).toHaveCount(0);
+});
+
+test("task details dismiss an untouched activation through the assembled application", async ({ page }) => {
+  const directory = await mkdtemp(join(tmpdir(), "coordination-browser-dismiss-activation-"));
+  const definitionPath = join(directory, "process.yaml");
+  await writeFile(join(directory, "implementer.md"), "Implement the task.\n");
+  await writeFile(definitionPath, `schemaVersion: 1
+name: Dismissal proof
+defaultTaskWorkspaceStartingRef: main
+coordinationGuidance: Keep activation decisions explicit.
+agents:
+  - id: implementer
+    name: Implementation Agent
+    role: implementation
+    summary: Implements tasks.
+    instructions: implementer.md
+boards:
+  - id: delivery
+    name: Delivery
+    guidance: Deliver work.
+    columns:
+      - id: implementation
+        name: Implementation
+        watchingAgent: implementer
+`);
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: definitionPath,
+    databasePath: join(directory, "coordination.sqlite3"),
+  });
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Dismiss before dispatch",
+    description: "Prove the complete browser dismissal path while startup remains paused.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "browser-create-dismissible-activation",
+  });
+  expect(created.accepted).toBe(true);
+  if (!created.accepted) return;
+  const server = await startWebServer(application, { host: "127.0.0.1", port: 0 });
+  try {
+    await page.goto(`${server.baseUrl}/tasks/${created.task.id}`);
+    await page.getByRole("button", { name: "Dismiss activation for Implementation Agent" }).click();
+    await page.getByRole("dialog", { name: "Dismiss activation?" })
+      .getByRole("button", { name: "Dismiss activation" }).click();
+    await expect(page.getByText("No agent work is running or queued.")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Task timeline" }))
+      .toContainText("Activation dismissed");
+  } finally {
+    await server.close();
+    application.close();
+  }
 });
 
 test("configuration errors show the invalid value with the actionable diagnostic", async ({ page }) => {

@@ -339,7 +339,10 @@ textarea { resize: vertical; line-height: 1.5; }
 .activation-queue ol { display: grid; gap: .5rem; margin: .65rem 0 0; padding: 0; list-style: none; counter-reset: activation; }
 .activation-queue li { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto; align-items: center; gap: .55rem; border-bottom: 1px solid var(--line); padding: .55rem 0; counter-increment: activation; }
 .activation-queue li::before { color: var(--muted); font-size: .72rem; font-weight: 800; content: counter(activation); }
-.activation-queue li span { color: var(--muted); font-size: .75rem; }
+.activation-queue li > div { display: grid; gap: .15rem; }
+.activation-queue li > div span { color: var(--muted); font-size: .75rem; }
+.activation-dismiss { display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border: 1px solid transparent; border-radius: 50%; color: var(--muted); background: transparent; padding: 0; font-size: 1.25rem; line-height: 1; }
+.activation-dismiss:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); background: transparent; }
 .quiet { color: var(--muted); }
 .attention-list { padding-left: 1.2rem; }
 .agent-activity-panel .attention-list { display: grid; gap: .75rem; margin-top: 1rem; padding: 0; list-style: none; }

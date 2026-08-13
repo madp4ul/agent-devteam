@@ -9,7 +9,7 @@ import type {
   UserTaskInspectionView,
 } from "../../application/coordination-contract.ts";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
-import { continueInterruptedTask, interruptTask } from "./api.ts";
+import { continueInterruptedTask, dismissActivation, interruptTask } from "./api.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
 
@@ -33,6 +33,8 @@ export function AgentActivityPanel({
   onFeedback(feedback: { role: "status" | "alert"; text: string }): void;
 }): ReactNode {
   const [waitingReasonsExpanded, setWaitingReasonsExpanded] = useState(false);
+  const [dismissal, setDismissal] = useState<ActivationView | null>(null);
+  const [dismissalPending, setDismissalPending] = useState(false);
   const names = new Map(state.collaborators.map((agent) => [agent.id, agent.name]));
   const agentName = (id: string): string => names.get(id) ?? id;
   const queued = state.activations.filter((activation) => activation.status === "queued");
@@ -93,6 +95,10 @@ export function AgentActivityPanel({
       {state.inspection.automationSuspended ? (
         <ContinueAutomationControl
           taskId={state.taskId}
+          onDismiss={() => {
+            const interruptedHead = queued.find((activation) => activation.dismissal != null);
+            if (interruptedHead !== undefined) setDismissal(interruptedHead);
+          }}
           onContinued={async () => {
             await onChanged();
             onFeedback({ role: "status", text: `Continued ${state.taskId}.` });
@@ -111,8 +117,21 @@ export function AgentActivityPanel({
           <ol>
             {queued.map((activation) => (
               <li key={activation.id}>
-                <strong>{agentName(activation.targetAgentId)}</strong>
-                <span>Activated by {activationReasonLabel(activation).toLocaleLowerCase()}</span>
+                <div>
+                  <strong>{agentName(activation.targetAgentId)}</strong>
+                  <span>Activated by {activationReasonLabel(activation).toLocaleLowerCase()}</span>
+                </div>
+                {activation.dismissal != null ? (
+                  <button
+                    type="button"
+                    className="activation-dismiss"
+                    aria-label={`Dismiss activation for ${agentName(activation.targetAgentId)}`}
+                    title={`Dismiss activation for ${agentName(activation.targetAgentId)}`}
+                    onClick={() => setDismissal(activation)}
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                ) : null}
               </li>
             ))}
           </ol>
@@ -125,6 +144,30 @@ export function AgentActivityPanel({
         onChanged={onChanged}
         onFeedback={onFeedback}
       />
+      {dismissal !== null ? (
+        <DismissActivationConfirmation
+          activation={dismissal}
+          agentName={agentName(dismissal.targetAgentId)}
+          mayStartNext={dismissal.dismissal?.mayStartNext === true}
+          pending={dismissalPending}
+          onCancel={() => setDismissal(null)}
+          onConfirm={() => {
+            setDismissalPending(true);
+            void dismissActivation(dismissal.id, crypto.randomUUID())
+              .then(async () => {
+                setDismissal(null);
+                await onChanged();
+                onFeedback({ role: "status", text: `Dismissed activation for ${agentName(dismissal.targetAgentId)}.` });
+              })
+              .catch(async (error) => {
+                setDismissal(null);
+                await onChanged();
+                onFeedback({ role: "alert", text: errorMessage(error) });
+              })
+              .finally(() => setDismissalPending(false));
+          }}
+        />
+      ) : null}
     </section>
   );
 }
@@ -200,10 +243,12 @@ function AttentionList({
 
 function ContinueAutomationControl({
   taskId,
+  onDismiss,
   onContinued,
   onError,
 }: {
   taskId: string;
+  onDismiss(): void;
   onContinued(): Promise<void>;
   onError(error: unknown): void;
 }): ReactNode {
@@ -216,18 +261,62 @@ function ContinueAutomationControl({
         Continuation message (optional)
         <textarea rows={3} value={message} onChange={(event) => setMessage(event.currentTarget.value)} />
       </label>
-      <button
-        disabled={pending}
-        onClick={() => {
-          setPending(true);
-          void continueInterruptedTask(taskId, message, crypto.randomUUID())
-            .then(onContinued)
-            .catch(onError)
-            .finally(() => setPending(false));
-        }}
-      >
-        {pending ? "Continuing…" : "Continue interrupted activation"}
-      </button>
+      <div className="form-actions interruption-actions">
+        <button type="button" className="secondary" disabled={pending} onClick={onDismiss}>
+          Dismiss activation
+        </button>
+        <button
+          disabled={pending}
+          onClick={() => {
+            setPending(true);
+            void continueInterruptedTask(taskId, message, crypto.randomUUID())
+              .then(onContinued)
+              .catch(onError)
+              .finally(() => setPending(false));
+          }}
+        >
+          {pending ? "Continuing…" : "Continue interrupted activation"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DismissActivationConfirmation({
+  activation,
+  agentName,
+  mayStartNext,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  activation: ActivationView;
+  agentName: string;
+  mayStartNext: boolean;
+  pending: boolean;
+  onCancel(): void;
+  onConfirm(): void;
+}): ReactNode {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="dismiss-activation-title">
+        <h2 id="dismiss-activation-title">Dismiss activation?</h2>
+        <p>
+          Dismiss the activation for <strong>{agentName}</strong>, activated by {activationReasonLabel(activation).toLocaleLowerCase()}?
+          It will never run again, but the decision and original activation remain in task history.
+        </p>
+        <p>
+          {mayStartNext
+            ? "The next queued activation may start immediately."
+            : "Every other activation keeps its current order and eligibility."}
+        </p>
+        <div className="form-actions">
+          <button type="button" className="secondary" autoFocus disabled={pending} onClick={onCancel}>Cancel</button>
+          <button type="button" className="destructive" disabled={pending} onClick={onConfirm}>
+            {pending ? "Dismissing…" : "Dismiss activation"}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

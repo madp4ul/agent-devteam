@@ -5,6 +5,8 @@ import type {
   ActivationView,
   DismissStaleActivationCommand,
   DismissStaleActivationResult,
+  DismissActivationCommand,
+  DismissActivationResult,
   ActivationRecoveryCommand,
   ActivationRecoveryAction,
   ActivationRecoveryResult,
@@ -536,6 +538,79 @@ export class TaskCommandStore {
     return this.recoverActivation("dismiss", command, "technical");
   }
 
+  dismissActivation(command: DismissActivationCommand): DismissActivationResult {
+    return this.transaction(() => {
+      const prior = this.#commandResponses.read<DismissActivationResult>(
+        "dismiss-activation",
+        command.idempotencyKey,
+      );
+      if (prior !== undefined) return prior;
+      const activation = this.#database.prepare(
+        `SELECT activation.task_id, activation.target_agent_id,
+                activation.reason_type, activation.source_event_id, activation.status,
+                activation.resolution, activation.stale,
+                task.automation_suspended, task.suspended_activation_id,
+                (SELECT COUNT(*) FROM attempts attempt
+                 WHERE attempt.activation_id = activation.id) AS attempt_count
+         FROM activations activation
+         JOIN tasks task ON task.id = activation.task_id
+         WHERE activation.id = ?`,
+      ).get(command.activationId) as
+        | {
+            task_id: string;
+            target_agent_id: string;
+            reason_type: string;
+            source_event_id: string;
+            status: ActivationView["status"];
+            resolution: string | null;
+            stale: number;
+            automation_suspended: number;
+            suspended_activation_id: string | null;
+            attempt_count: number;
+          }
+        | undefined;
+      let result: DismissActivationResult;
+      if (activation === undefined) {
+        result = { accepted: false, reason: "not-found" };
+      } else {
+        const dismissesUntouchedQueueEntry = activation.attempt_count === 0;
+        const dismissesInterruptedHead = activation.automation_suspended === 1 &&
+          activation.suspended_activation_id === command.activationId;
+        const dismissible = activation.status === "queued" &&
+          activation.resolution === null &&
+          activation.stale === 0 &&
+          (dismissesUntouchedQueueEntry || dismissesInterruptedHead);
+        if (!dismissible) {
+          result = { accepted: false, reason: "not-dismissible" };
+        } else {
+          const occurredAt = new Date().toISOString();
+          this.#database.prepare(
+            `UPDATE activations
+             SET status = 'completed', resolution = 'dismissed',
+                 retry_due_at = NULL, failure_kind = NULL, failure_summary = NULL
+             WHERE id = ?`,
+          ).run(command.activationId);
+          const clearedSuspension = this.#database.prepare(
+            `UPDATE tasks
+             SET automation_suspended = 0, suspended_activation_id = NULL
+             WHERE id = ? AND automation_suspended = 1
+               AND suspended_activation_id = ?`,
+          ).run(activation.task_id, command.activationId).changes === 1;
+          this.appendActivationDismissedActivity(activation.task_id, command.actor, {
+            activationId: command.activationId,
+            targetAgentId: activation.target_agent_id,
+            reasonType: activation.reason_type,
+            sourceEventId: activation.source_event_id,
+            clearedSuspension,
+          }, occurredAt);
+          result = { accepted: true, activationId: command.activationId };
+        }
+      }
+      this.#commandResponses.write("dismiss-activation", command.idempotencyKey, result);
+      return result;
+    });
+  }
+
   dismissStaleActivation(
     command: DismissStaleActivationCommand,
   ): DismissStaleActivationResult {
@@ -546,11 +621,20 @@ export class TaskCommandStore {
       );
       if (prior !== undefined) return prior;
       const activation = this.#database.prepare(
-        `SELECT activation.stale, activation.resolution, activation.task_id
+        `SELECT activation.stale, activation.resolution, activation.task_id,
+                activation.target_agent_id, activation.reason_type,
+                activation.source_event_id
          FROM activations activation
          WHERE activation.id = ?`,
       ).get(command.activationId) as
-        | { stale: number; resolution: string | null; task_id: string }
+        | {
+            stale: number;
+            resolution: string | null;
+            task_id: string;
+            target_agent_id: string;
+            reason_type: string;
+            source_event_id: string;
+          }
         | undefined;
       let result: DismissStaleActivationResult;
       if (activation === undefined) result = { accepted: false, reason: "not-found" };
@@ -596,6 +680,13 @@ export class TaskCommandStore {
             resolvedAt,
           );
         }
+        this.appendActivationDismissedActivity(activation.task_id, command.actor, {
+          activationId: command.activationId,
+          targetAgentId: activation.target_agent_id,
+          reasonType: activation.reason_type,
+          sourceEventId: activation.source_event_id,
+          clearedSuspension: suspension.changes === 1,
+        }, resolvedAt);
         result = { accepted: true, activationId: command.activationId };
       }
       this.#commandResponses.write("dismiss-stale-activation", command.idempotencyKey, result);
@@ -628,7 +719,8 @@ export class TaskCommandStore {
         .prepare(
           `SELECT attention.task_id, attention.resolved_at,
                   activation.id AS activation_id, activation.status,
-                  activation.failure_kind
+                  activation.failure_kind, activation.target_agent_id,
+                  activation.reason_type, activation.source_event_id
            FROM attention_reasons attention
            LEFT JOIN activations activation ON activation.id = attention.source_event_id
            WHERE attention.id = ? AND attention.type = 'failed-run'`,
@@ -640,6 +732,9 @@ export class TaskCommandStore {
             activation_id: string | null;
             status: ActivationView["status"] | null;
             failure_kind: "technical" | "permission" | null;
+            target_agent_id: string | null;
+            reason_type: string | null;
+            source_event_id: string | null;
           }
         | undefined;
       let result: ActivationRecoveryResult;
@@ -670,6 +765,13 @@ export class TaskCommandStore {
                WHERE id = ?`,
             )
             .run(reason.activation_id);
+          this.appendActivationDismissedActivity(reason.task_id, command.actor, {
+            activationId: reason.activation_id,
+            targetAgentId: reason.target_agent_id!,
+            reasonType: reason.reason_type!,
+            sourceEventId: reason.source_event_id!,
+            clearedSuspension: false,
+          }, resolvedAt);
         } else {
           const attempts = this.#database
             .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
@@ -705,6 +807,27 @@ export class TaskCommandStore {
 
   private transaction<Result>(operation: () => Result): Result {
     return this.#owner.transaction(operation);
+  }
+
+  private appendActivationDismissedActivity(
+    taskId: string,
+    actor: Actor & { kind: "user" },
+    dismissal: {
+      activationId: string;
+      targetAgentId: string;
+      reasonType: string;
+      sourceEventId: string;
+      clearedSuspension: boolean;
+    },
+    occurredAt: string,
+  ): void {
+    this.appendActivity(taskId, "activation.dismissed", actor, {
+      activationId: dismissal.activationId,
+      targetAgentId: dismissal.targetAgentId,
+      reasonType: dismissal.reasonType,
+      sourceEventId: dismissal.sourceEventId,
+      ...(dismissal.clearedSuspension ? { clearedSuspension: "true" } : {}),
+    }, occurredAt);
   }
 
   private insertTask(

@@ -16,6 +16,9 @@ export function errorMessage(error: unknown): string {
     if (body.reason === "runtime-unavailable") {
       return "Automation remains paused because no agent runtime is configured.";
     }
+    if (body.reason === "not-dismissible") {
+      return "This activation has already started or changed state. Current task state has been restored.";
+    }
     return body.diagnostic ?? body.reason?.replaceAll("-", " ") ?? error.message;
   }
   return error instanceof Error ? error.message : "The request could not be completed.";

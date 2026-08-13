@@ -22,6 +22,8 @@ import type {
   ContinuePermissionBlockedActivationCommand,
   ContinueInterruptedTaskCommand,
   ContinueInterruptedTaskResult,
+  DismissActivationCommand,
+  DismissActivationResult,
   DismissStaleActivationCommand,
   DismissStaleActivationResult,
   CreateTaskCommand,
@@ -300,6 +302,19 @@ export class CoordinationApplication {
     command: DismissStaleActivationCommand,
   ): DismissStaleActivationResult {
     return this.#persistence.taskCommands.dismissStaleActivation(command);
+  }
+
+  dismissActivation(command: DismissActivationCommand): DismissActivationResult {
+    if (this.#startup.mode === "configuration-error") {
+      return {
+        accepted: false,
+        reason: "configuration-error",
+        diagnostics: this.#startup.diagnostics,
+      };
+    }
+    const result = this.#persistence.taskCommands.dismissActivation(command);
+    if (result.accepted) this.#automation.kick();
+    return result;
   }
 
   pauseAutomation(): PauseAutomationResult {

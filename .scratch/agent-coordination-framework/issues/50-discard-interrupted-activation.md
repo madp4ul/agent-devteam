@@ -6,45 +6,45 @@ history or discarding unrelated queued expectations.
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Generalize activation dismissal as a user-only decision to abandon one
+- [x] Generalize activation dismissal as a user-only decision to abandon one
   activation whose expectation will not be fulfilled. It is not a task-wide
   automation reset, a bulk queue action, or an agent-facing coordination tool.
-- [ ] The preserved head activation of a user-interrupted attempt offers
+- [x] The preserved head activation of a user-interrupted attempt offers
   Dismiss alongside Continue. Dismissing it atomically records the dismissal,
   clears the task automation suspension caused by that activation, and lets the
   next preserved activation become eligible under the ordinary blocking,
   process-pause, staleness, and dispatch rules.
-- [ ] Every untouched queued activation in task details has a compact `×`
+- [x] Every untouched queued activation in task details has a compact `×`
   control rather than a repetitive visible Dismiss label. The control has an
   activation-specific accessible name and opens a confirmation dialog before
   making any change.
-- [ ] The confirmation identifies the target agent and activation reason,
+- [x] The confirmation identifies the target agent and activation reason,
   explains that dismissal is permanent and recorded, and states the actual
   queue consequence. When dismissing the interrupted head may let another
   activation start immediately, it warns the user explicitly.
-- [ ] Dismissal affects only the selected activation. Dismissing a later queued
+- [x] Dismissal affects only the selected activation. Dismissing a later queued
   activation neither changes the current head nor clears an interruption
   suspension; dismissing the interrupted head never dismisses later work.
-- [ ] Completion has no special dismissal behavior. Remaining activations keep
+- [x] Completion has no special dismissal behavior. Remaining activations keep
   their order and eligibility after dismissal even when the task is already in
   Completion, and individually unwanted activations can be dismissed there.
-- [ ] A running activation cannot be dismissed directly; the user must first
+- [x] A running activation cannot be dismissed directly; the user must first
   interrupt its active attempt. Existing contextual recovery behavior for
   exhausted failures, permission blocks, and stale activations remains
   unchanged.
-- [ ] Dismissal preserves the activation as dismissed and appends immutable
+- [x] Dismissal preserves the activation as dismissed and appends immutable
   activity identifying the activation, target agent, original reason, user
   actor, and timestamp. A prior user-interrupted attempt remains
   user-interrupted; dismissal is a later decision rather than a rewritten
   attempt outcome. An untouched activation dismissed before dispatch has no
   attempt history because no run began.
-- [ ] Confirmation is race-safe and idempotent for the exact activation. If its
+- [x] Confirmation is race-safe and idempotent for the exact activation. If its
   state changed before confirmation, the command cannot interrupt it, dismiss a
   different queue item, or apply consequences based on stale state; the task
   refreshes with a clear current-state result.
-- [ ] Application and browser tests cover untouched queued dismissal, later-item
+- [x] Application and browser tests cover untouched queued dismissal, later-item
   dismissal while an interrupted head remains suspended, interrupted-head
   dismissal and immediate queue release, Completion, process pause, accessible
   controls and confirmation, audit history, command replay, and a dispatch race.
@@ -58,3 +58,24 @@ history or discarding unrelated queued expectations.
   untouched queued activations. The user chose a compact, accessible `×` plus
   confirmation for queue rows, individual dismissal only, normal queue release,
   and immutable history. Dismissal remains user-only.
+
+## Answer
+
+Implemented one user-only dismissal command for untouched queued activations
+and preserved user-interrupted activations. Task details expose compact,
+activation-specific accessible controls and a consequence-aware confirmation;
+the interrupted head also offers Dismiss beside Continue. The authoritative
+application projection owns dismissibility and immediate-dispatch consequences,
+while optimistic rejection refreshes changed state with explicit feedback.
+
+Dismissal is atomic and idempotent, preserves the selected activation as
+dismissed, records its complete reason provenance and user decision in immutable
+activity, clears only a suspension caused by that activation, and leaves every
+other activation in order. Untouched dismissed work has no attempt, while an
+interrupted attempt remains unchanged in history. Existing failure, permission,
+stale, Completion, blocking, pause, and dispatch semantics remain intact.
+
+Verification passed both TypeScript typechecks, the production build, the full
+local test suite, all 55 browser scenarios, and `git diff --check`. Independent
+Standards and Spec reviews reported no remaining findings after their initial
+findings were resolved.

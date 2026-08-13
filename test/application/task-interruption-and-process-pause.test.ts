@@ -186,6 +186,143 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   });
 });
 
+test("user dismisses an interrupted head and releases later work in Completion", async (t) => {
+  const fixture = await createFixture("dismiss-interrupted");
+  const runtime = new InterruptibleRuntime();
+  const application = await startApplication(fixture, runtime);
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Dismiss interrupted work",
+    description: "Let the later consultation proceed after interruption.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-dismiss-interrupted-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const mentioned = application.addTaskComment({
+    taskId: created.task.id,
+    body: "@consultant inspect the final state after implementation stops.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "queue-later-consultation",
+  });
+  assert.equal(mentioned.accepted, true);
+  if (!mentioned.accepted) return;
+  const [interruptedActivation, laterActivation] = mentioned.task.activations;
+  assert.ok(interruptedActivation);
+  assert.ok(laterActivation);
+
+  await application.resumeAutomation();
+  const first = await runtime.waitForRequest(1);
+  assert.equal(first.activationId, interruptedActivation.id);
+  const interruption = application.interruptTask({
+    taskId: created.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "interrupt-before-dismissal",
+  });
+  assert.equal(interruption.accepted, true);
+  if (!interruption.accepted) return;
+  await interruption.confirmed;
+  const completed = application.moveTask({
+    taskId: created.task.id,
+    destinationColumnId: "completion",
+    expectedRevision: created.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "move-interrupted-task-to-completion",
+  });
+  assert.equal(completed.accepted, true);
+  if (!completed.accepted) return;
+
+  const dismissed = application.dismissActivation({
+    activationId: interruptedActivation.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "dismiss-interrupted-head",
+  });
+  assert.deepEqual(dismissed, {
+    accepted: true,
+    activationId: interruptedActivation.id,
+  });
+  const next = await runtime.waitForRequest(2);
+  assert.equal(next.activationId, laterActivation.id);
+  const inspected = application.queryTask(created.task.id);
+  assert.equal(inspected.available, true);
+  if (!inspected.available) return;
+  assert.equal(inspected.task.columnId, "completion");
+  assert.equal(inspected.task.activations[0]?.status, "dismissed");
+  assert.equal(inspected.task.activations[0]?.attempts.length, 1);
+  assert.equal(inspected.task.activations[0]?.attempts[0]?.outcome?.status, "user-interrupted");
+  const dismissal = inspected.task.activity.find(
+    (activity) => activity.type === "activation.dismissed",
+  );
+  assert.equal(dismissal?.details.clearedSuspension, "true");
+  const inspection = application.queryTaskInspection(created.task.id);
+  assert.equal(inspection.available, true);
+  if (inspection.available) assert.equal(inspection.task.automationSuspended, false);
+  runtime.complete({ status: "completed", summary: "Later consultation completed." });
+  await application.waitForAutomationIdle();
+});
+
+test("dismissing later queued work leaves the interrupted head suspended", async (t) => {
+  const fixture = await createFixture("dismiss-behind-interruption");
+  const runtime = new InterruptibleRuntime();
+  const application = await startApplication(fixture, runtime);
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Keep interruption suspended",
+    description: "Dismiss only the later consultation.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-suspended-dismissal-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const mentioned = application.addTaskComment({
+    taskId: created.task.id,
+    body: "@consultant this later consultation is no longer wanted.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "queue-dismissible-consultation",
+  });
+  assert.equal(mentioned.accepted, true);
+  if (!mentioned.accepted) return;
+  await application.resumeAutomation();
+  const running = await runtime.waitForRequest(1);
+  assert.deepEqual(application.dismissActivation({
+    activationId: running.activationId,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "cannot-dismiss-running-activation",
+  }), { accepted: false, reason: "not-dismissible" });
+  const interruption = application.interruptTask({
+    taskId: created.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "interrupt-before-later-dismissal",
+  });
+  assert.equal(interruption.accepted, true);
+  if (!interruption.accepted) return;
+  await interruption.confirmed;
+  const laterActivationId = mentioned.task.activations[1]!.id;
+  const beforeDismissal = application.queryTask(created.task.id);
+  assert.equal(beforeDismissal.available, true);
+  if (beforeDismissal.available) {
+    assert.deepEqual(beforeDismissal.task.activations[1]?.dismissal, { mayStartNext: false });
+  }
+  assert.deepEqual(application.dismissActivation({
+    activationId: laterActivationId,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "dismiss-later-while-suspended",
+  }), { accepted: true, activationId: laterActivationId });
+  const inspection = application.queryTaskInspection(created.task.id);
+  assert.equal(inspection.available, true);
+  if (inspection.available) assert.equal(inspection.task.automationSuspended, true);
+  const task = application.queryTask(created.task.id);
+  assert.equal(task.available, true);
+  if (!task.available) return;
+  assert.equal(task.task.activations[0]?.status, "queued");
+  assert.equal(task.task.activations[1]?.status, "dismissed");
+  assert.equal(runtime.requests.length, 1);
+});
+
 test("pause drains active attempts and preserves queued work until resume", async (t) => {
   const fixture = await createFixture("pause");
   const runtime = new InterruptibleRuntime();

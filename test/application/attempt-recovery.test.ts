@@ -20,6 +20,57 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+test("user dismisses one untouched queued activation without creating an attempt", async (t) => {
+  const fixture = await createFixture("dismiss-queued");
+  const runtime = new ControlledRuntime();
+  const clock = new ControlledClock("2026-01-01T12:00:00.000Z");
+  const application = await startControlledApplication(fixture, runtime, clock);
+  t.after(() => application.close());
+  const { taskId, firstActivationId, laterActivationId } = createQueuedPair(application);
+
+  const dismissed = application.dismissActivation({
+    activationId: laterActivationId,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "dismiss-untouched-queued-activation",
+  });
+
+  assert.deepEqual(dismissed, { accepted: true, activationId: laterActivationId });
+  assert.deepEqual(application.dismissActivation({
+    activationId: laterActivationId,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "dismiss-untouched-queued-activation",
+  }), dismissed);
+  const inspected = application.queryTask(taskId);
+  assert.equal(inspected.available, true);
+  if (!inspected.available) return;
+  assert.equal(inspected.task.activations[0]?.id, firstActivationId);
+  assert.equal(inspected.task.activations[0]?.status, "queued");
+  assert.equal(inspected.task.activations[1]?.status, "dismissed");
+  assert.deepEqual(inspected.task.activations[1]?.attempts, []);
+  assert.deepEqual(
+    inspected.task.activity.find((activity) => activity.type === "activation.dismissed"),
+    {
+      id: inspected.task.activity.find((activity) => activity.type === "activation.dismissed")?.id,
+      type: "activation.dismissed",
+      actor: { kind: "user", id: "paul" },
+      occurredAt: inspected.task.activity.find((activity) => activity.type === "activation.dismissed")?.occurredAt,
+      details: {
+        activationId: laterActivationId,
+        targetAgentId: "reviewer",
+        reasonType: "column-entry",
+        sourceEventId: inspected.task.activations[1]!.reason.sourceEventId,
+      },
+    },
+  );
+  assert.equal(runtime.requests.length, 0);
+  await application.resumeAutomation();
+  const first = await runtime.waitForRequest(1);
+  assert.equal(first.activationId, firstActivationId);
+  assert.equal(runtime.requests.some(({ activationId }) => activationId === laterActivationId), false);
+  await runtime.finish({ status: "completed", summary: "Remaining work completed after resume." });
+  await application.waitForAutomationIdle();
+});
+
 test("technical failure schedules the same head activation with capped exponential backoff", async (t) => {
   const fixture = await createFixture("technical-retry");
   const runtime = new ControlledRuntime();
@@ -186,6 +237,15 @@ test("dismiss records abandonment and permits the preserved queue to advance", a
   assert.equal(inspected.task.activations[0]?.id, firstActivationId);
   assert.equal(inspected.task.activations[0]?.status, "dismissed");
   assert.equal(inspected.task.activations[1]?.status, "completed");
+  assert.deepEqual(
+    inspected.task.activity.find((activity) => activity.type === "activation.dismissed")?.details,
+    {
+      activationId: firstActivationId,
+      targetAgentId: "implementer",
+      reasonType: "column-entry",
+      sourceEventId: inspected.task.activations[0]!.reason.sourceEventId,
+    },
+  );
   const noAttention = application.queryNeedsAttention();
   assert.equal(noAttention.available, true);
   if (noAttention.available) assert.deepEqual(noAttention.tasks, []);

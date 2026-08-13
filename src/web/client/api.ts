@@ -237,6 +237,16 @@ export async function dismissStaleActivation(
   });
 }
 
+export async function dismissActivation(
+  activationId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await request(`/api/activations/${encodeURIComponent(activationId)}/dismiss`, {
+    method: "POST",
+    body: JSON.stringify({ idempotencyKey }),
+  });
+}
+
 export async function pauseAutomation(): Promise<void> {
   await request("/api/automation/pause", { method: "POST", body: "{}" });
 }

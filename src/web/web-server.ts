@@ -160,10 +160,21 @@ async function handleBrowserApi(
   }
   const transcriptMatch = /^\/api\/attempts\/([^/]+)\/transcript$/.exec(url.pathname);
   const dismissStaleMatch = /^\/api\/activations\/([^/]+)\/dismiss-stale$/.exec(url.pathname);
+  const dismissActivationMatch = /^\/api\/activations\/([^/]+)\/dismiss$/.exec(url.pathname);
   if (method === "POST" && dismissStaleMatch?.[1] !== undefined) {
     const body = await readJsonBody(request);
     const result = application.dismissStaleActivation({
       activationId: decodeURIComponent(dismissStaleMatch[1]),
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
+    return;
+  }
+  if (method === "POST" && dismissActivationMatch?.[1] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.dismissActivation({
+      activationId: decodeURIComponent(dismissActivationMatch[1]),
       actor: { kind: "user", id: "local-user" },
       idempotencyKey: stringField(body, "idempotencyKey"),
     });

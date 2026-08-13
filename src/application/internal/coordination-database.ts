@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 11;
+const currentSchemaVersion = 12;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -113,6 +113,7 @@ function initializeCurrentSchema(database: DatabaseSync): void {
           'attention.created',
           'attention.resolved',
           'activation.created',
+          'activation.dismissed',
           'attempt.started',
           'attempt.completed',
           'automation.suspended',
@@ -340,6 +341,7 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     transcriptColumns.has("reported_usage_json") &&
     commentColumns.has("attempt_id") &&
     activityTable?.sql.includes("task.archived") === true &&
+    activityTable.sql.includes("activation.dismissed") === true &&
     activityTable.sql.includes("relationship.removed") === true;
 }
 

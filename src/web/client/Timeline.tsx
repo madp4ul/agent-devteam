@@ -519,6 +519,7 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "attention.created": "Attention requested",
     "attention.resolved": "Attention resolved",
     "activation.created": "Activation queued",
+    "activation.dismissed": "Activation dismissed",
     "attempt.started": "Attempt started",
     "attempt.completed": "Attempt completed",
     "automation.suspended": "Task automation suspended",
@@ -535,6 +536,11 @@ function activityDescription(activity: TaskActivityView, columns: TimelineColumn
   if (activity.type === "task.created") return `Created in ${columnName(activity.details.columnId, columns)}.`;
   if (activity.type === "task.edited") return "Title or description updated.";
   if (activity.type === "attention.resolved") return `Resolved ${activity.details.reasonType ?? "attention"}.`;
+  if (activity.type === "activation.dismissed") {
+    return activity.details.clearedSuspension === "true"
+      ? "The interrupted activation will not continue; task automation may advance."
+      : "The selected activation will not run.";
+  }
   if (activity.type === "automation.suspended") return "The interrupted activation remains first in line until continued.";
   if (activity.type === "automation.resumed") return "The interrupted activation was continued.";
   if (activity.type === "task.archived") return "Removed from the active board while retaining coordination history.";

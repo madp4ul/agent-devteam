@@ -77,6 +77,7 @@ export interface TaskActivityView {
     | "attention.created"
     | "attention.resolved"
     | "activation.created"
+    | "activation.dismissed"
     | "attempt.started"
     | "attempt.completed"
     | "automation.suspended"
@@ -159,6 +160,7 @@ export interface ActivationView extends AgentExecutionProfile {
     | { state: "awaiting-retry" | "permission-blocked"; summary: string }
     | null;
   stale: boolean;
+  dismissal?: { mayStartNext: boolean } | null;
 }
 
 export interface ProcessDefinitionImpact {
@@ -469,6 +471,17 @@ export interface DismissStaleActivationCommand {
 export type DismissStaleActivationResult =
   | { accepted: true; activationId: string }
   | { accepted: false; reason: "not-found" | "not-stale" };
+
+export interface DismissActivationCommand {
+  activationId: string;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
+export type DismissActivationResult =
+  | { accepted: true; activationId: string }
+  | { accepted: false; reason: "not-found" | "not-dismissible" }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
 export type PauseAutomationResult = {
   accepted: true;
