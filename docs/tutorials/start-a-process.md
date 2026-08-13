@@ -67,6 +67,21 @@ Use `--state-root <path>` only on first initialization to choose a different
 root. Later starts reuse the binding and reject attempts to redirect it. The
 default address is `http://127.0.0.1:3000`.
 
+To move an initialized root, stop the application and every agent and use the
+dedicated offline command. Run it from the repository so only the destination
+is required:
+
+```powershell
+node --experimental-strip-types src/cli.ts relocate-state D:\new\project-state
+```
+
+The command preserves the complete database and task-workspace Git state,
+repairs the repository-local binding and worktree registrations, and leaves the
+next application start paused. If it reports an interrupted relocation, rerun
+the exact recovery command it prints. See the
+[project-state backup, restore, and relocation procedure](../project-state-backup-and-restore.md)
+for exceptional cleanup guidance.
+
 The Windows launcher passes host and port arguments through to the application,
 so the equivalent address override is:
 
@@ -122,8 +137,8 @@ records, directories, and Git registrations agree before it permits mutation
 or dispatch. A missing or inconsistent root enters Configuration error mode;
 startup never adopts, reconstructs, deletes, or substitutes state.
 
-Back up and restore retained state using the
-[project-state backup and restore procedure](../project-state-backup-and-restore.md).
+Back up, restore, or relocate retained state using the
+[project-state state-management procedure](../project-state-backup-and-restore.md).
 
 The application uses the installed Codex SDK and the user's existing Codex
 authentication, sandbox, web-search, command-network, project, and unrelated

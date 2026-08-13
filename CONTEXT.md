@@ -55,6 +55,11 @@ The repository-local association from one project repository clone to its
 project state root. It is deployment state stored in local Git metadata, not
 version-controlled process configuration.
 
+**Project state relocation**:
+An explicit offline operation that moves one bound project state root as a
+complete recovery unit and repairs its database paths, Git registrations, and
+project state binding before the destination becomes authoritative.
+
 **Project state consistency**:
 Agreement between the project state binding, coordination database workspace
 records, physical task-workspace directories, and the project repository's Git
@@ -204,8 +209,8 @@ task, and does not count as a technical failure or automatic retry attempt.
 
 **Task automation suspension**:
 A user-controlled hold that prevents a task's preserved activation order from
-advancing. Interrupting an active run creates this hold; only an explicit user
-action continues the interrupted activation.
+advancing. Interrupting an active run creates this hold. The user explicitly
+resolves it by continuing or dismissing the interrupted activation.
 
 **Process automation pause**:
 A process-wide hold that prevents new agent attempts from starting across all
@@ -227,9 +232,14 @@ explicit user retry begins a fresh cycle of up to three attempts for the same
 activation.
 
 **Activation dismissal**:
-An explicit user decision to abandon a failed activation. Dismissal records that
-its expectation was not fulfilled and allows the task's preserved activation
-order to continue.
+An explicit user decision to abandon one activation whose expectation will not
+be fulfilled. The user may dismiss an untouched queued activation, a preserved
+user-interrupted activation, or an activation exposed by an existing recovery
+flow. Dismissal retains the activation and immutable activity as audit history,
+affects no other activation, and lets the preserved activation order continue
+when the dismissed activation was at its head. Dismissing the activation that
+caused a task automation suspension also clears that suspension. An activation
+dismissed before its first run has no attempt history.
 
 **User**:
 The human overseeing the process. Agents can involve the user when they need

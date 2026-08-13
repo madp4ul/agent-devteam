@@ -164,15 +164,15 @@ without choosing the implementation yet.
 - [Show Token Usage in Attempt Transcripts](./issues/53-show-token-usage-in-attempt-transcripts.md)
   — Persist complete per-attempt SDK usage and show only uncached input and
   output in a compact field beside the transcript's thread controls.
+- [Relocate a Project State Root](./issues/34-relocate-project-state-root.md)
+  — Move the bound state root through one offline destination-only CLI command,
+  with exclusive access, canonical destination safety, staged validation,
+  supported Git repair, durable interruption recovery, and binding-last cutover.
 
 - [Prove the First Usable Workflow](./issues/28-prove-first-usable-workflow.md)
   — Drive the architecture-led example through design, implementation rework,
   in-place consultation, explicit user approval, verified Git integration, and
   Completion in a controlled browser proof backed by a live operating guide.
-
-## Next implementation priority
-
-No implementation-ready ticket is currently prioritized.
 
 ## Clarified delivery follow-ups
 
@@ -201,9 +201,6 @@ No implementation-ready ticket is currently prioritized.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.
-- [Relocate a Project State Root](./issues/34-relocate-project-state-root.md)
-  — Define a lower-priority explicit relocation and Git-registration repair
-  workflow only if usage demonstrates that initialized state must move.
 - [Make Participant Mentions Discoverable](./issues/35-make-participant-mentions-discoverable.md)
   — Evaluate lightweight `@` autocomplete against an explicit recipient
   control and highlight submitted mentions so users can address agents and see

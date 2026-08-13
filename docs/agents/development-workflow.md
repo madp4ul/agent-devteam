@@ -41,8 +41,11 @@ The user owns the Git history:
   Treat staged content as an immutable baseline.
 - Never reset, restore, overwrite, or otherwise disturb staged content.
 - Before editing a file that has staged changes, inspect staged and unstaged
-  diffs separately. If the requested edit would overlap a staged hunk, tell the
-  user before proceeding.
+  diffs separately. A staged snapshot remains immutable, but the working-tree
+  copy of that file may receive additional edits; those edits must remain as a
+  separate unstaged layer. If the requested edit would overlap a staged hunk,
+  tell the user before proceeding so they can confirm that layered review is
+  intended. Never unstage or replace the already reviewed snapshot.
 - Report staged and unstaged changes separately when handing work back.
 
 Git may reject repository commands because the workspace owner differs from

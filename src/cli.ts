@@ -15,6 +15,11 @@ import {
 } from "./web/host-workspace-opener.ts";
 import { GitTaskWorkspaceManager } from "./application/internal/git-task-workspace.ts";
 import { resolveProjectState } from "./application/internal/project-state.ts";
+import {
+  assertNoProjectStateRelocation,
+  relocateProjectState,
+} from "./application/internal/project-state-relocation.ts";
+import { acquireProjectStateOperationGuard } from "./application/internal/project-state-operation-guard.ts";
 
 await run(process.argv.slice(2));
 
@@ -52,6 +57,16 @@ async function run(arguments_: string[]): Promise<void> {
     if (!Number.isInteger(port) || port < 0 || port > 65535) {
       console.error("--port must be an integer from 0 through 65535");
       process.exitCode = 2;
+      return;
+    }
+    let projectStateGuard: Awaited<ReturnType<typeof acquireProjectStateOperationGuard>> | undefined;
+    try {
+      projectStateGuard = await acquireProjectStateOperationGuard(projectRepositoryPath, "application start");
+      await assertNoProjectStateRelocation(projectRepositoryPath);
+    } catch (error) {
+      await projectStateGuard?.release();
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
       return;
     }
     let projectState: Awaited<ReturnType<typeof resolveProjectState>> | undefined;
@@ -162,17 +177,47 @@ async function run(arguments_: string[]): Promise<void> {
       for (const diagnostic of startup.diagnostics) console.error(formatDiagnostic(diagnostic));
     }
 
-    const close = async (): Promise<void> => {
-      await server.close();
-      application.close();
+    let closing: Promise<void> | undefined;
+    const close = (): Promise<void> => {
+      closing ??= (async () => {
+        application.pauseAutomation();
+        await application.waitForAutomationIdle();
+        await server.close();
+        application.close();
+        await projectStateGuard?.release();
+      })();
+      return closing;
     };
     process.once("SIGINT", () => void close());
     process.once("SIGTERM", () => void close());
     return;
   }
 
+  if (command === "relocate-state") {
+    const destination = arguments_[1];
+    if (destination === undefined || destination.startsWith("--")) {
+      console.error("Usage: coordination relocate-state <destination> [--project repository]");
+      process.exitCode = 2;
+      return;
+    }
+    const projectRepositoryPath = resolve(readOption(arguments_, "--project") ?? process.cwd());
+    try {
+      const relocation = await relocateProjectState(projectRepositoryPath, destination);
+      console.log("Project state relocated successfully");
+      console.log(`Project state root: ${relocation.destination}`);
+      console.log("The coordination application will next start paused.");
+      if (!relocation.sourceRemoved) {
+        console.warn(`The old project state is inert but could not be removed: ${relocation.source}`);
+      }
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   console.error(
-    "Usage:\n  coordination validate <process-definition.yaml>\n  coordination start [--process path] [--project repository] [--state-root path] [--host address] [--port number]",
+    "Usage:\n  coordination validate <process-definition.yaml>\n  coordination start [--process path] [--project repository] [--state-root path] [--host address] [--port number]\n  coordination relocate-state <destination> [--project repository]",
   );
   process.exitCode = 2;
 }

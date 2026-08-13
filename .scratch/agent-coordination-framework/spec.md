@@ -252,6 +252,11 @@ is not mistaken for work that will start automatically.
 138. As a user, I want known coordination tool calls in attempt transcripts to
 show concise task-domain inputs and confirmed outcomes, so that I can understand
 what changed without reconstructing the call from its name alone.
+139. As a user, I want to dismiss one untouched queued activation, so that an
+expectation I no longer want never has to start and unrelated queued work is
+preserved.
+140. As a user, I want to dismiss a preserved interrupted activation instead of
+continuing it, so that task automation can resume with the next expectation.
 
 ## Implementation Decisions
 
@@ -526,6 +531,19 @@ what changed without reconstructing the call from its name alone.
   failure attention reason offers Retry and Dismiss. Retry begins another
   three-attempt cycle for the same activation. Dismiss records the abandoned
   expectation and advances the preserved queue.
+- The user may dismiss one untouched queued activation from its task-details
+  queue or dismiss the preserved interrupted head instead of continuing it.
+  Dismissal is never implicit or bulk: it preserves the selected activation as
+  dismissed, appends immutable user-decision activity, and leaves every other
+  activation in order. An untouched dismissed activation has no attempt because
+  no run began. Dismissing the interrupted head retains its user-interrupted
+  attempt, clears its causally related task suspension, and makes the next
+  activation ordinarily eligible even when the task is in Completion.
+- Queue rows expose dismissal through a compact activation-specific accessible
+  control and confirmation. The confirmation identifies the agent and reason
+  and warns when releasing the head may start later work immediately. The
+  command is idempotent and rejects stale state rather than interrupting a run
+  or dismissing a different activation. Agents cannot dismiss activations.
 - A permission block suspends the activation and creates user attention without
   automatic retry. The user may perform the action or adjust Codex policy and
   then continue the preserved activation.
@@ -672,6 +690,9 @@ what changed without reconstructing the call from its name alone.
   automatic attempts remain.
 - Historical failure evidence remains on attempt entries; current Retry and
   Dismiss controls appear only on the unresolved attention reason.
+- Untouched queued activations use a compact accessible dismissal control in
+  their task-details queue rows. The preserved interrupted head offers Dismiss
+  beside Continue; both paths confirm the exact activation and consequence.
 - Attempt transcripts open in a large read-only overlay that favors readable
   messages, useful tool activity, available diagnostics, and truncated command
   output without reproducing the full Codex client. During a run, newly started
@@ -752,7 +773,8 @@ what changed without reconstructing the call from its name alone.
 - Behavioral suites cover activation provenance and strict ordering, same-task
   serialization and cross-task concurrency, mentions, dependency unblocking,
   optimistic conflicts, idempotent retries, crash recovery, automatic retry,
-  Retry and Dismiss, permission blocks, user interruption and continuation,
+  Retry and Dismiss, untouched queued dismissal, user-interrupted activation
+  dismissal, permission blocks, user interruption and continuation,
   process pause and drain, stale activations, unmapped tasks, archive guards,
   storage failure, project state binding and complete startup worktree
   reconciliation, task-workspace discovery, live transcript progression,

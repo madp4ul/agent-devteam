@@ -44,8 +44,8 @@ for a database created by a supported released version.
    the backup has been independently verified.
 2. Restore the repository clone's local Git metadata and the complete project
    state root from the same backup generation to their original absolute paths.
-   Git worktree registrations contain absolute paths; relocating the root is a
-   separate, unsupported workflow.
+   Git worktree registrations contain absolute paths; use the supported
+   relocation command below when the destination must change.
 3. Verify that `coordination.projectStateRoot` names the restored root and that
    `git worktree list --porcelain` names every directory under
    `task-worktrees/`. Do not use `git worktree prune`, manually register an
@@ -58,3 +58,35 @@ for a database created by a supported released version.
 This procedure has been exercised by the restart integration tests against an
 isolated Git repository, production SQLite store, registered detached
 worktree, interrupted attempt, and deliberate workspace inconsistency.
+
+## Relocate
+
+Relocation is a separate offline operation, not a variant of restore. Stop the
+coordination application and all of its agents, then run this from the project
+repository:
+
+```powershell
+node --experimental-strip-types src/cli.ts relocate-state D:\new\project-state
+```
+
+When invoked outside the project repository, identify it explicitly:
+
+```powershell
+node --experimental-strip-types src/cli.ts relocate-state D:\new\project-state --project D:\project
+```
+
+The command reads the source from the repository-local binding. It validates
+the complete current state, available destination space, and exclusive access;
+copies through a staged destination; rewrites durable workspace paths; repairs
+Git's linked-worktree registrations; and changes the binding only after the
+destination validates. The next application start is paused.
+
+If relocation is interrupted, normal startup blocks and prints the exact
+`relocate-state` command to rerun. Use that same destination: the durable
+journal resumes or safely rolls back the unfinished phase. Do not move either
+root or edit Git registrations manually.
+
+After a verified cutover, failure to delete the old root does not roll the
+project back. The command identifies that inert directory; confirm that the
+repository binding names the new root before removing the old directory
+manually.
