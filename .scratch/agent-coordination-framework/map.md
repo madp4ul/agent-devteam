@@ -198,6 +198,10 @@ without choosing the implementation yet.
 
 ## Not yet specified
 
+- [Make Every Task Attention Reason Actionable](./issues/57-make-task-attention-actionable.md)
+  — Give every task-level attention reason a concrete resolution path, move
+  user-mention acknowledgement to its source comment, ignore user-authored
+  self-mentions, and compact interruption recovery into the attention panel.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.

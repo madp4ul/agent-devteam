@@ -22,6 +22,7 @@ import { TaskTimeline } from "./Timeline.tsx";
 import { TaskWorkspacePanel } from "./TaskWorkspacePanel.tsx";
 import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
 import { TaskRelationshipsPanel } from "./TaskRelationshipsPanel.tsx";
+import { TaskAttentionPanel } from "./TaskAttentionPanel.tsx";
 import {
   captureTimelineViewportAnchor,
   restoreTimelineViewportAnchor,
@@ -181,6 +182,17 @@ export function TaskPage({
               <p className="description">{task.description}</p>
             </section>
 
+            {inspection.unresolvedAttention.length === 0 ? null : (
+              <div data-task-section="attention">
+                <TaskAttentionPanel
+                  reasons={inspection.unresolvedAttention}
+                  highlightedReasonId={highlightedReasonId}
+                  onChanged={refresh}
+                  onFeedback={setFeedback}
+                />
+              </div>
+            )}
+
             <div data-task-section="activity">
               <AgentActivityPanel
                 state={{
@@ -190,7 +202,6 @@ export function TaskPage({
                   inspection,
                   activeRun: detail.activeRun,
                   activations: task.activations,
-                  highlightedReasonId,
                 }}
                 onChanged={refresh}
                 onFeedback={setFeedback}

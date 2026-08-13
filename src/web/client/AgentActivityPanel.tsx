@@ -5,10 +5,8 @@ import type {
   ActivationView,
   AutomationView,
   CollaboratorView,
-  TaskAttentionView,
   UserTaskInspectionView,
 } from "../../application/coordination-contract.ts";
-import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { continueInterruptedTask, dismissActivation, interruptTask } from "./api.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
@@ -20,7 +18,6 @@ interface AgentActivityState {
   inspection: UserTaskInspectionView;
   activeRun: ActiveRunView | null;
   activations: ActivationView[];
-  highlightedReasonId: string | null;
 }
 
 export function AgentActivityPanel({
@@ -155,12 +152,6 @@ export function AgentActivityPanel({
         </div>
       )}
 
-      <AttentionList
-        reasons={state.inspection.unresolvedAttention}
-        highlightedReasonId={state.highlightedReasonId}
-        onChanged={onChanged}
-        onFeedback={onFeedback}
-      />
       {dismissal !== null ? (
         <DismissActivationConfirmation
           activation={dismissal}
@@ -228,34 +219,6 @@ function activationReasonLabel(activation: ActivationView): string {
   if (activation.reason.type === "column-entry") return "Column entry";
   if (activation.reason.type === "blockers-cleared") return "Blockers cleared";
   return "Mentioned in a comment";
-}
-
-function AttentionList({
-  reasons,
-  highlightedReasonId,
-  onChanged,
-  onFeedback,
-}: {
-  reasons: TaskAttentionView[];
-  highlightedReasonId: string | null;
-  onChanged(): Promise<void>;
-  onFeedback(feedback: { role: "status" | "alert"; text: string }): void;
-}): ReactNode {
-  if (reasons.length === 0) return null;
-  return (
-    <ul className="attention-list">
-      {reasons.map((attention) => (
-        <li key={attention.id} className={highlightedReasonId === attention.id ? "highlighted" : ""}>
-          <AttentionReasonResolution
-            reason={attention}
-            labelPrefix="Needs attention: "
-            onResolved={onChanged}
-            onError={(error) => onFeedback({ role: "alert", text: errorMessage(error) })}
-          />
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 function ContinueAutomationControl({
