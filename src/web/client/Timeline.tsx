@@ -9,6 +9,7 @@ import type {
   TaskCommentView,
   TaskRelationshipView,
 } from "../../application/coordination-contract.ts";
+import { findParticipantMentions } from "../../application/participant-mentions.ts";
 import { AttemptTranscriptDialog } from "./AttemptTranscriptDialog.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
@@ -27,6 +28,7 @@ export function TaskTimeline({
   columns,
   tasks,
   transcriptsAvailable = true,
+  onReplyToAgent,
 }: {
   comments: TaskCommentView[];
   activity: TaskActivityView[];
@@ -35,11 +37,20 @@ export function TaskTimeline({
   columns: TimelineColumn[];
   tasks: TimelineTask[];
   transcriptsAvailable?: boolean;
+  onReplyToAgent?(agentId: string): void;
 }): ReactNode {
   const [transcriptSelection, setTranscriptSelection] = useState<{ attempt: AttemptView; agentName: string }>();
   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
   const records = buildTimelineRecords(comments, activity, activations);
-  const context: TimelineContext = { comments, activity, activations, agents, columns, tasks };
+  const context: TimelineContext = {
+    comments,
+    activity,
+    activations,
+    agents,
+    columns,
+    tasks,
+    ...(onReplyToAgent === undefined ? {} : { onReplyToAgent }),
+  };
 
   const setTextExpanded = (id: string, expanded: boolean): void => {
     setExpandedText((current) => {
@@ -94,6 +105,7 @@ interface TimelineContext {
   agents: TimelineAgent[];
   columns: TimelineColumn[];
   tasks: TimelineTask[];
+  onReplyToAgent?: (agentId: string) => void;
 }
 
 function TimelineRecordView({
@@ -151,7 +163,7 @@ function TimelineRecordView({
               text={record.failure.diagnostic}
               expanded={expandedText.has(`startup-${record.activation.id}`)}
               onExpanded={(expanded) => onTextExpanded(`startup-${record.activation.id}`, expanded)}
-              participants={participantIds(context.agents)}
+              participants={participantNamesById(context.agents)}
             />
           </div>
           <small>Boundary: {record.failure.boundary}. No Codex attempt or thread started.</small>
@@ -215,7 +227,7 @@ function AttemptCard({
               text={attempt.outcome.summary}
               expanded={expandedText.has(outcomeTextId)}
               onExpanded={(expanded) => onTextExpanded(outcomeTextId, expanded)}
-              participants={participantIds(context.agents)}
+              participants={participantNamesById(context.agents)}
             />
           </section>
         )}
@@ -291,7 +303,11 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
   const requestedAgents = [...new Set(context.activations
     .filter((activation) => activation.reason.type === "agent-mention" && activation.reason.sourceEventId === comment.id)
     .map((activation) => nameForAgent(activation.targetAgentId, context.agents)))];
-  const requestedUser = /(?:^|[^\w@])@user(?:$|[^A-Za-z0-9_-])/.test(comment.body);
+  const requestedUser = findParticipantMentions(comment.body).some((mention) => mention.participantId === "user");
+  const replyAgent = requestedUser && comment.actor.kind === "agent" &&
+    context.agents.some((agent) => agent.id === comment.actor.id)
+    ? comment.actor.id
+    : undefined;
   const contents = (
     <>
       <div className="entry-meta">
@@ -303,12 +319,17 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
         text={comment.body}
         expanded={expanded}
         onExpanded={onExpanded}
-        participants={participantIds(context.agents)}
+        participants={participantNamesById(context.agents)}
       />
       {requestedAgents.length === 0 && !requestedUser ? null : (
         <p className="comment-consequence">
           Requested {[...requestedAgents, ...(requestedUser ? ["user attention"] : [])].join(", ")}
         </p>
+      )}
+      {replyAgent === undefined || context.onReplyToAgent === undefined ? null : (
+        <button className="secondary comment-reply" onClick={() => context.onReplyToAgent?.(replyAgent)}>
+          Reply to {nameForAgent(replyAgent, context.agents)}
+        </button>
       )}
     </>
   );
@@ -406,7 +427,7 @@ function TextPreview({ id, text, expanded, onExpanded, participants }: {
   text: string;
   expanded: boolean;
   onExpanded(expanded: boolean): void;
-  participants: Set<string>;
+  participants: Map<string, string>;
 }): ReactNode {
   const ref = useRef<HTMLParagraphElement>(null);
   const [overflowing, setOverflowing] = useState(false);
@@ -433,16 +454,23 @@ function TextPreview({ id, text, expanded, onExpanded, participants }: {
   );
 }
 
-function MentionedText({ text, participants }: { text: string; participants: Set<string> }): ReactNode {
+function MentionedText({ text, participants }: { text: string; participants: Map<string, string> }): ReactNode {
   const parts: ReactNode[] = [];
   let cursor = 0;
-  for (const match of text.matchAll(/(?:^|[^\w@])@([A-Za-z0-9][A-Za-z0-9_-]*)/g)) {
-    if (match.index === undefined || !participants.has(match[1] ?? "")) continue;
-    const mention = `@${match[1]}`;
-    const mentionStart = match.index + match[0].lastIndexOf("@");
-    if (mentionStart > cursor) parts.push(text.slice(cursor, mentionStart));
-    parts.push(<strong className="canonical-mention" key={`${mentionStart}-${mention}`}>{mention}</strong>);
-    cursor = mentionStart + mention.length;
+  for (const match of findParticipantMentions(text)) {
+    const participantName = participants.get(match.participantId);
+    if (participantName === undefined) continue;
+    const mention = text.slice(match.start, match.end);
+    if (match.start > cursor) parts.push(text.slice(cursor, match.start));
+    parts.push(
+      <strong
+        className="canonical-mention"
+        key={`${match.start}-${mention}`}
+        title={participantName}
+        aria-label={`${mention}, ${participantName}`}
+      >{mention}</strong>,
+    );
+    cursor = match.end;
   }
   if (cursor < text.length) parts.push(text.slice(cursor));
   return parts;
@@ -580,6 +608,6 @@ function columnName(columnId: string | undefined, columns: TimelineColumn[]): st
   return columns.find((column) => column.id === columnId)?.name ?? columnId;
 }
 
-function participantIds(agents: TimelineAgent[]): Set<string> {
-  return new Set(["user", ...agents.map((agent) => agent.id)]);
+function participantNamesById(agents: TimelineAgent[]): Map<string, string> {
+  return new Map([["user", "User"], ...agents.map((agent) => [agent.id, agent.name] as const)]);
 }

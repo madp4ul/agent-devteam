@@ -313,6 +313,8 @@ Canonical participant tokens are executable coordination requests, not merely
 typographic references. Descriptive prose uses the participant's display name
 without `@`; an agent must not write a token for itself or for a participant
 whose response is not actually requested.
+Tokens inside inline code remain illustrative text rather than executable
+coordination requests.
 
 **Attention reason**:
 A typed cause of a task needing user attention: a user mention, a failed agent

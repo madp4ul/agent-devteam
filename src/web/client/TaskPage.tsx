@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import type { CollaboratorView } from "../../application/coordination-contract.ts";
+import { findPartialParticipantMention, findParticipantMentions } from "../../application/participant-mentions.ts";
 
 import {
   addTaskComment,
@@ -37,6 +39,8 @@ export function TaskPage({
 }): ReactNode {
   const [detail, setDetail] = useState<BrowserTaskDetail>();
   const [editing, setEditing] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
+  const commentInput = useRef<HTMLTextAreaElement>(null);
   const [archivalPending, setArchivalPending] = useState(false);
   const [discardConfirmation, setDiscardConfirmation] = useState(false);
   const refreshSequence = useRef(0);
@@ -195,6 +199,10 @@ export function TaskPage({
 
             {task.archived ? null : <div data-task-section="comment"><CommentForm
               taskId={task.id}
+              collaborators={detail.collaborators}
+              body={commentDraft}
+              inputRef={commentInput}
+              onBodyChanged={setCommentDraft}
               onCommented={async () => {
                 await refresh();
                 setFeedback({ role: "status", text: `Commented on ${task.id}.` });
@@ -209,6 +217,13 @@ export function TaskPage({
               columns={board.columns}
               tasks={detail.relationshipTasks}
               transcriptsAvailable={!task.archived}
+              {...(task.archived ? {} : { onReplyToAgent: (agentId: string) => {
+                const mention = `@${agentId}`;
+                setCommentDraft((current) => containsMention(current, agentId)
+                  ? current
+                  : `${current}${current.length === 0 || /\s$/.test(current) ? "" : " "}${mention} `);
+                window.requestAnimationFrame(() => commentInput.current?.focus());
+              } })}
             /></div>
           </div>
 
@@ -306,22 +321,62 @@ export function TaskPage({
 
 function CommentForm({
   taskId,
+  collaborators,
+  body,
+  inputRef,
+  onBodyChanged,
   onCommented,
 }: {
   taskId: string;
+  collaborators: CollaboratorView[];
+  body: string;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  onBodyChanged(body: string): void;
   onCommented(): Promise<void>;
 }): ReactNode {
-  const [body, setBody] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
+  const [selectionStart, setSelectionStart] = useState(0);
+  const [activeSuggestion, setActiveSuggestion] = useState(0);
+  const [dismissedMention, setDismissedMention] = useState<string>();
+  const participants: MentionParticipant[] = [
+    ...collaborators.map((agent) => ({ ...agent, token: `@${agent.id}` as const })),
+    { id: "user", name: "User", summary: "The person overseeing the process.", token: "@user" },
+  ];
+  const mention = findPartialParticipantMention(body, selectionStart);
+  const mentionKey = mention === undefined ? undefined : `${mention.start}:${mention.query}`;
+  const suggestions = mention === undefined || dismissedMention === mentionKey
+    ? []
+    : participants.filter((participant) => {
+      const query = mention.query.toLocaleLowerCase();
+      return participant.id.toLocaleLowerCase().includes(query) ||
+        participant.name.toLocaleLowerCase().includes(query) ||
+        participant.summary.toLocaleLowerCase().includes(query);
+    });
+  const selectedSuggestion = Math.min(activeSuggestion, Math.max(0, suggestions.length - 1));
+  const updateSelection = (element: HTMLTextAreaElement): void => setSelectionStart(element.selectionStart);
+  const insertMention = (participant: MentionParticipant): void => {
+    if (mention === undefined) return;
+    const next = `${body.slice(0, mention.start)}${participant.token} ${body.slice(selectionStart)}`;
+    const nextSelection = mention.start + participant.token.length + 1;
+    onBodyChanged(next);
+    setSelectionStart(nextSelection);
+    setDismissedMention(undefined);
+    setActiveSuggestion(0);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(nextSelection, nextSelection);
+    });
+  };
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     setPending(true);
     setError(undefined);
     try {
       await addTaskComment(taskId, body, idempotencyKey);
-      setBody("");
+      onBodyChanged("");
+      setSelectionStart(0);
       setIdempotencyKey(crypto.randomUUID());
       setPending(false);
       await onCommented();
@@ -334,7 +389,62 @@ function CommentForm({
     <section className="detail-panel comment-panel" aria-labelledby="comment-heading">
       <h2 id="comment-heading">Add comment</h2>
       <form onSubmit={(event) => void submit(event)}>
-        <textarea aria-label="Comment" rows={2} value={body} onChange={(event) => setBody(event.currentTarget.value)} />
+        <div className="mention-composer">
+          <textarea
+            ref={inputRef}
+            aria-label="Comment"
+            aria-autocomplete="list"
+            aria-controls={suggestions.length === 0 ? undefined : "mention-participants"}
+            aria-expanded={suggestions.length > 0}
+            aria-activedescendant={suggestions.length === 0
+              ? undefined
+              : `mention-participant-${suggestions[selectedSuggestion]?.id}`}
+            rows={2}
+            value={body}
+            onChange={(event) => {
+              onBodyChanged(event.currentTarget.value);
+              setDismissedMention(undefined);
+              setActiveSuggestion(0);
+              updateSelection(event.currentTarget);
+            }}
+            onClick={(event) => updateSelection(event.currentTarget)}
+            onKeyUp={(event) => updateSelection(event.currentTarget)}
+            onKeyDown={(event) => {
+              if (suggestions.length === 0) return;
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const direction = event.key === "ArrowDown" ? 1 : -1;
+                setActiveSuggestion((selectedSuggestion + direction + suggestions.length) % suggestions.length);
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+                const participant = suggestions[selectedSuggestion];
+                if (participant !== undefined) insertMention(participant);
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                setDismissedMention(mentionKey);
+              }
+            }}
+          />
+          {suggestions.length === 0 ? null : (
+            <ul id="mention-participants" className="mention-options" role="listbox" aria-label="Mention participants">
+              {suggestions.map((participant, index) => (
+                <li
+                  key={participant.id}
+                  id={`mention-participant-${participant.id}`}
+                  role="option"
+                  aria-selected={index === selectedSuggestion}
+                  className={index === selectedSuggestion ? "active" : undefined}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => insertMention(participant)}
+                >
+                  <strong>{participant.name}</strong>
+                  <code>{participant.token}</code>
+                  <span>{participant.summary}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
         <button disabled={pending || body.trim().length === 0} type="submit">
           {pending ? "Posting…" : "Post"}
@@ -342,6 +452,14 @@ function CommentForm({
       </form>
     </section>
   );
+}
+
+interface MentionParticipant extends CollaboratorView {
+  token: `@${string}`;
+}
+
+function containsMention(body: string, participantId: string): boolean {
+  return findParticipantMentions(body).some((mention) => mention.participantId === participantId);
 }
 
 function EditDialog({

@@ -7,42 +7,42 @@ activation semantics established by issue 20.
 
 **Blocked by:** 20 — Consult Agents and Notify the User
 
-**Status:** open
+**Status:** resolved
 
-- [ ] Compare a lightweight `@` autocomplete with an explicit participant
+- [x] Compare a lightweight `@` autocomplete with an explicit participant
   selector, including whether the first useful interaction should retain
   multiple mentions or deliberately allow only one addressed agent. Prefer the
   smallest interaction that makes common consultation reliable.
-- [ ] If autocomplete is selected, opening suggestions at a valid mention token
+- [x] If autocomplete is selected, opening suggestions at a valid mention token
   boundary lists applied agents by display name with enough summary context to
   distinguish their responsibilities and includes the special user recipient.
-- [ ] Selecting a suggestion inserts the exact canonical token accepted by the
+- [x] Selecting a suggestion inserts the exact canonical token accepted by the
   existing mention parser. Filtering, keyboard navigation, pointer selection,
   dismissal, focus behavior, and screen-reader labeling are usable without
   preventing ordinary comment text entry.
-- [ ] An `@` inside an email address, code fragment, or ordinary prose does not
+- [x] An `@` inside an email address, code fragment, or ordinary prose does not
   unexpectedly address a participant. Unknown or removed participant IDs remain
   understandable and do not silently target someone else.
-- [ ] Suggestions use the current applied participant directory and refresh
+- [x] Suggestions use the current applied participant directory and refresh
   after process-definition changes; display-name changes do not alter stable
   mention identity.
-- [ ] Rendered comments visually distinguish canonical participant mentions
+- [x] Rendered comments visually distinguish canonical participant mentions
   from surrounding prose. The treatment exposes the participant's display name
   and whether that source mention queued an agent activation or requested user
   attention, without turning every consequence into another full-size comment.
-- [ ] Plain display names and email-like text remain ordinary prose, so users
+- [x] Plain display names and email-like text remain ordinary prose, so users
   can distinguish discussion *about* an agent from an explicit request *to* it.
-- [ ] An agent-authored comment that canonically mentions the user offers an
+- [x] An agent-authored comment that canonically mentions the user offers an
   accessible Reply action. Activating it moves focus to Add comment and inserts
   the authoring agent's exact canonical mention token, ready for the user's
   response; it does not submit the comment or create an activation by itself.
-- [ ] Reply insertion never discards an existing draft. Repeated use avoids
+- [x] Reply insertion never discards an existing draft. Repeated use avoids
   inserting an accidental duplicate mention, and an agent that is no longer in
   the current participant directory is not silently mapped to another agent.
-- [ ] Choosing or editing a suggestion creates no activation by itself.
+- [x] Choosing or editing a suggestion creates no activation by itself.
   Submission remains one atomic comment command with the same deduplication,
   textual ordering, user-attention, and idempotency behavior as issue 20.
-- [ ] Focused interaction or browser tests cover discovery, insertion, keyboard
+- [x] Focused interaction or browser tests cover discovery, insertion, keyboard
   and pointer use, cancellation, multiple/one-recipient behavior as decided,
   email-like text, unknown identities, reply-to-agent draft insertion and focus,
   draft preservation, and the resulting submitted activation.
@@ -66,3 +66,23 @@ activation semantics established by issue 20.
   prepares a canonical mention of that agent in the existing composer. The
   shortcut prepares a draft only; the user remains in control of its content
   and submission.
+- Implementation selected multi-recipient `@` autocomplete. It preserves the
+  established ordered multi-participant comment model, while a single-recipient
+  selector would have removed an existing capability and competed with ordinary
+  prose composition.
+
+## Answer
+
+Implemented participant discovery in the real task-detail comment composer.
+Typing a partial canonical mention at a valid boundary opens the current applied
+agent directory plus the user recipient, with display names, canonical tokens,
+and responsibility summaries. Pointer and keyboard selection insert exact
+tokens without submitting; Escape dismisses the list; screen readers receive
+the active option; and inline-code, email-like, unknown, and removed identities
+cannot silently target a participant.
+
+Submitted comments retain atomic issue-20 semantics and now expose canonical
+mentions with participant display names and their activation or attention
+consequence. Agent-authored user requests offer Reply while an active composer
+exists; Reply preserves the complete draft, avoids duplicate executable
+mentions, inserts the current agent's canonical token, and focuses the composer.

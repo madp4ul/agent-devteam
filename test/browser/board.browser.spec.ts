@@ -1117,6 +1117,116 @@ test("an open task reconciles external timeline changes without disturbing a foc
   await expect(draft).toBeFocused();
 });
 
+test("comment participants are discoverable and insert canonical mentions without submitting", async ({ page }) => {
+  await page.goto("/tasks/T-0001");
+  const comment = page.getByRole("region", { name: "Add comment" });
+  const draft = comment.getByRole("textbox", { name: "Comment" });
+
+  await draft.fill("Please ask @imp");
+  const suggestions = comment.getByRole("listbox", { name: "Mention participants" });
+  await expect(suggestions).toBeVisible();
+  const implementer = suggestions.getByRole("option", { name: /Implementation Agent.*Builds verified changes/ });
+  await expect(implementer).toHaveAttribute("aria-selected", "true");
+  await expect(draft).toHaveAttribute("aria-activedescendant", "mention-participant-implementer");
+  await implementer.click();
+  await expect(draft).toHaveValue("Please ask @implementer ");
+  await expect(suggestions).toHaveCount(0);
+
+  await draft.pressSequentially("and notify @");
+  await draft.press("ArrowDown");
+  await expect(suggestions.getByRole("option", { name: /User.*person overseeing the process/i }))
+    .toHaveAttribute("aria-selected", "true");
+  await draft.press("Enter");
+  await expect(draft).toHaveValue("Please ask @implementer and notify @user ");
+  await expect(page.locator(".comment-entry")).not.toContainText("Please ask @implementer and notify @user");
+
+  await comment.getByRole("button", { name: "Post" }).click();
+  const submitted = page.locator(".comment-entry").filter({ hasText: "Please ask" });
+  await expect(submitted.locator(".canonical-mention")).toHaveCount(2);
+  await expect(submitted.locator(".canonical-mention").first()).toHaveAttribute("title", "Implementation Agent");
+  await expect(submitted).toContainText("Requested Implementation Agent, user attention");
+});
+
+test("mention discovery supports dismissal and ignores email-like and inline-code text", async ({ page }) => {
+  await page.goto("/tasks/T-0001");
+  const comment = page.getByRole("region", { name: "Add comment" });
+  const draft = comment.getByRole("textbox", { name: "Comment" });
+  const suggestions = comment.getByRole("listbox", { name: "Mention participants" });
+
+  await draft.fill("paul@imp");
+  await expect(suggestions).toHaveCount(0);
+  await draft.fill("Use `@imp` as an example");
+  await expect(suggestions).toHaveCount(0);
+  await draft.fill("Use ``@imp`` as an example");
+  await expect(suggestions).toHaveCount(0);
+  await draft.fill("Ask @imp");
+  await expect(suggestions).toBeVisible();
+  await draft.press("Escape");
+  await expect(suggestions).toHaveCount(0);
+  await expect(draft).toHaveValue("Ask @imp");
+});
+
+test("reply to an agent mention preserves the draft, avoids duplicates, and focuses the composer", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.comments.push({
+      id: "agent-requested-user",
+      body: "I need a decision from @user before continuing.",
+      actor: { kind: "agent", id: "implementer" },
+      occurredAt: "2026-08-09T12:30:00.000Z",
+    });
+    detail.task.comments.push({
+      id: "removed-agent-requested-user",
+      body: "A removed participant wrote @user and @removed.",
+      actor: { kind: "agent", id: "removed" },
+      occurredAt: "2026-08-09T12:31:00.000Z",
+    });
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const draft = page.getByRole("textbox", { name: "Comment" });
+  await draft.fill("Here is the decision.");
+  const request = page.locator(".comment-entry").filter({ hasText: "I need a decision" });
+  const reply = request.getByRole("button", { name: "Reply to Implementation Agent" });
+  await reply.click();
+  await expect(draft).toHaveValue("Here is the decision. @implementer ");
+  await expect(draft).toBeFocused();
+  await reply.click();
+  await expect(draft).toHaveValue("Here is the decision. @implementer ");
+  const removed = page.locator(".comment-entry").filter({ hasText: "A removed participant" });
+  await expect(removed.locator(".canonical-mention")).toHaveCount(1);
+  await expect(removed.getByRole("button", { name: /Reply to/ })).toHaveCount(0);
+});
+
+test("reply preserves trailing draft whitespace and is absent without an active composer", async ({ page }) => {
+  let archived = false;
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.comments.push({
+      id: "whitespace-request",
+      body: "Please answer @user.",
+      actor: { kind: "agent", id: "implementer" },
+      occurredAt: "2026-08-09T12:32:00.000Z",
+    });
+    if (archived) detail.task.archived = true;
+    await route.fulfill({ response, json: detail });
+  });
+  await page.goto("/tasks/T-0001");
+  const draft = page.getByRole("textbox", { name: "Comment" });
+  await draft.fill("First line\n\n");
+  await page.getByRole("button", { name: "Reply to Implementation Agent" }).click();
+  await expect(draft).toHaveValue("First line\n\n@implementer ");
+
+  archived = true;
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Add comment" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reply to Implementation Agent" })).toHaveCount(0);
+  await page.unrouteAll({ behavior: "wait" });
+});
+
 test("an open transcript replaces one running tool entry with its terminal evidence", async ({ page }) => {
   let reads = 0;
   await page.route("**/api/tasks/T-0001", async (route) => {

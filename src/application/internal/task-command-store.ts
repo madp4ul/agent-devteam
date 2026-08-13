@@ -30,6 +30,7 @@ import type {
   TaskRelationshipMutationResult,
   TaskView,
 } from "../coordination-contract.ts";
+import { findParticipantMentions } from "../participant-mentions.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { CommandResponseStore } from "./command-response-store.ts";
@@ -931,8 +932,8 @@ export class TaskCommandStore {
     const mentionedAgents: string[] = [];
     const seen = new Set<string>();
     let user = false;
-    for (const match of body.matchAll(/(?:^|[^\w@])@([A-Za-z0-9][A-Za-z0-9_-]*)/g)) {
-      const participantId = match[1];
+    for (const mention of findParticipantMentions(body)) {
+      const participantId = mention.participantId;
       if (participantId === "user") {
         user = true;
       } else if (

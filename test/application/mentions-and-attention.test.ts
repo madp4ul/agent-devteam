@@ -124,6 +124,33 @@ test("a controlled consultation distinguishes prose from deliberate executable r
   );
 });
 
+test("email-like text, inline code, and unknown identities do not address participants", async (t) => {
+  const fixture = await createFixture("non-executable-mention-text");
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Describe mentions without invoking them",
+    description: "Only canonical requests outside code activate participants.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-non-executable-text",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  const commented = application.addTaskComment({
+    taskId: created.task.id,
+    body: "Email reviewer@example.test, document `@reviewer`, and ignore @removed. @architect please decide.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "comment-non-executable-text",
+  });
+
+  assert.equal(commented.accepted, true);
+  if (!commented.accepted) return;
+  assert.deepEqual(commented.task.activations.map((activation) => activation.targetAgentId), ["architect"]);
+});
+
 test("a user mention creates one durable attention reason that only mark-addressed resolves", async (t) => {
   const fixture = await createFixture("user-attention");
   const first = await CoordinationApplication.start(fixture);

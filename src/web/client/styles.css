@@ -430,6 +430,13 @@ textarea { resize: vertical; line-height: 1.5; }
 .canonical-mention { border-radius: .22rem; color: #5d430f; background: #f5d88c; padding: .03rem .12rem; }
 .comment-consequence { display: flex; gap: .35rem; align-items: baseline; color: var(--muted); font-size: .74rem; font-weight: 600; }
 .comment-consequence::before { color: #8b948f; content: "↳"; }
+.mention-composer { position: relative; }
+.mention-options { position: absolute; z-index: 12; right: 0; left: 0; max-height: min(18rem, 50vh); margin: .3rem 0 0; border: 1px solid var(--line); border-radius: .6rem; background: var(--paper); padding: .35rem; overflow-y: auto; box-shadow: var(--shadow); list-style: none; }
+.mention-options li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .12rem .7rem; border-radius: .4rem; padding: .55rem .65rem; cursor: pointer; }
+.mention-options li.active, .mention-options li:hover { background: var(--surface-hover-strong); }
+.mention-options code { color: var(--muted); }
+.mention-options span { grid-column: 1 / -1; color: var(--muted); font-size: .75rem; }
+.comment-reply { margin-top: .35rem; padding: .4rem .65rem; font-size: .75rem; }
 .attempt-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .8rem; }
 .diagnostic { color: #953824; }
 .transcript-modal { width: min(68rem, 100%); height: min(52rem, calc(100vh - 2rem)); display: flex; flex-direction: column; overscroll-behavior: contain; }
