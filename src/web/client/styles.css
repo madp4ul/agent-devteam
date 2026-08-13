@@ -341,8 +341,9 @@ textarea { resize: vertical; line-height: 1.5; }
 .activation-queue li::before { color: var(--muted); font-size: .72rem; font-weight: 800; content: counter(activation); }
 .activation-queue li > div { display: grid; gap: .15rem; }
 .activation-queue li > div span { color: var(--muted); font-size: .75rem; }
-.activation-dismiss { display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border: 1px solid transparent; border-radius: 50%; color: var(--muted); background: transparent; padding: 0; font-size: 1.25rem; line-height: 1; }
+.activation-dismiss { display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: transparent; padding: 0; }
 .activation-dismiss:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); background: transparent; }
+.activation-dismiss svg { display: block; width: 1rem; height: 1rem; fill: none; stroke: currentcolor; stroke-linecap: round; stroke-width: 2; }
 .quiet { color: var(--muted); }
 .attention-list { padding-left: 1.2rem; }
 .agent-activity-panel .attention-list { display: grid; gap: .75rem; margin-top: 1rem; padding: 0; list-style: none; }
@@ -533,6 +534,8 @@ input, textarea, select { border-color: var(--border-control); color: var(--text
 .startup-diagnostic, .diagnostic, .failed-attempt .attempt-status, .workspace-git-warning, .workspace-feedback.alert { color: var(--failure-text); }
 .create-column, .row-create, .relationship-remove { border-color: var(--border-control); color: var(--action); background: transparent; }
 .create-column:hover:not(:disabled), .row-create:hover:not(:disabled), .relationship-remove:hover:not(:disabled) { border-color: var(--action); color: var(--on-action); background: var(--action); }
+.activation-dismiss { border-color: var(--border-control); color: var(--text-muted); background: transparent; }
+.activation-dismiss:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); background: transparent; }
 .modal-backdrop { background: var(--backdrop); }
 .modal, .detail-panel, .move-panel, .timeline-section, .token-usage, .transcript-item, .relationship-options, .attention-groups > li { border-color: var(--border); color: var(--text); background: var(--surface); box-shadow: 0 5px 18px var(--shadow-color); }
 form label, .move-select { color: var(--text-muted); }

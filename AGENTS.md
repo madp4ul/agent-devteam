@@ -12,6 +12,13 @@ Issues and specifications are stored as local Markdown under `.scratch/`. See
 This is a single-context repository using `CONTEXT.md` and `docs/adr/`, created
 lazily as decisions emerge. See `docs/agents/domain.md`.
 
+### Architecture docs
+
+`docs/architecture.md` is the inspection map for the implemented system. Read it
+before changing module boundaries, state ownership, authoritative flows, runtime
+integration, or startup invariants. Update it in the same change whenever one of
+those architectural facts changes; record durable decision reasoning in an ADR.
+
 ### Development workflow
 
 When the user asks which workflow or skill should come next, consult

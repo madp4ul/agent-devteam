@@ -597,7 +597,9 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
   assert.equal(inspection.available, true);
   if (inspection.available) {
     assert.deepEqual(inspection.task.currentActivation, {
+      id: running.task.activations[0]?.id,
       targetAgentId: "implementer",
+      state: "running",
       model: "gpt-5.6-sol",
       reasoningEffort: "medium",
     });

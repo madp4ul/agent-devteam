@@ -79,7 +79,16 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   assert.ok(firstSuspensionActivity);
   const inspection = application.queryTaskInspection(created.task.id);
   assert.equal(inspection.available, true);
-  if (inspection.available) assert.equal(inspection.task.automationSuspended, true);
+  if (inspection.available) {
+    assert.equal(inspection.task.automationSuspended, true);
+    assert.deepEqual(inspection.task.currentActivation, {
+      id: interrupted.task.activations[0]?.id,
+      targetAgentId: "implementer",
+      state: "interrupted",
+      model: null,
+      reasoningEffort: null,
+    });
+  }
   const suspendedOverview = application.queryTaskOverviews({
     boardId: "delivery",
     columnIds: ["implementation"],

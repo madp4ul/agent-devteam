@@ -263,7 +263,9 @@ test("a streamed Codex failure remains inspectable while its retry waits at the 
   assert.equal(inspection.available, true);
   if (inspection.available) {
     assert.deepEqual(inspection.task.currentActivation, {
+      id: failed.task.activations[0]?.id,
       targetAgentId: "implementer",
+      state: "queued",
       model: "gpt-5.6-sol",
       reasoningEffort: "medium",
     });

@@ -5,6 +5,9 @@ Agent Coordination Framework. It loads a version-controlled YAML process,
 persists product-owned boards and activations in SQLite, provisions an isolated
 Git worktree per task, and dispatches watched-column work through the Codex SDK.
 
+For the implemented system structure, module boundaries, state ownership, and
+end-to-end execution flows, see the [architecture overview](docs/architecture.md).
+
 Development from source requires Node.js 24 or later and pnpm 11.9.0. Follow the
 [development setup guide](docs/development-setup.md) when preparing a machine.
 The planned production distribution is a self-contained host-native

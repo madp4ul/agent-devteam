@@ -158,8 +158,10 @@ export class TaskDiscovery {
       return { available: false, reason: "not-found" };
     }
     const currentActivation = task.activations.find(
-      (activation) => activation.status !== "completed" && activation.status !== "dismissed",
+      (activation): activation is typeof activation & { status: "queued" | "running" | "failed" } =>
+        activation.status !== "completed" && activation.status !== "dismissed",
     );
+    const automationSuspended = this.#taskProjections.isTaskAutomationSuspended(task.id);
     return {
       available: true,
       task: {
@@ -179,11 +181,15 @@ export class TaskDiscovery {
           currentActivation === undefined
             ? null
             : {
+                id: currentActivation.id,
                 targetAgentId: currentActivation.targetAgentId,
+                state: automationSuspended && currentActivation.status === "queued"
+                  ? "interrupted" as const
+                  : currentActivation.status,
                 model: currentActivation.model,
                 reasoningEffort: currentActivation.reasoningEffort,
               },
-        automationSuspended: this.#taskProjections.isTaskAutomationSuspended(task.id),
+        automationSuspended,
         ...(options.audience === "user"
           ? { workspace: this.#automationStore.readTaskWorkspace(task.id) ?? null }
           : {}),

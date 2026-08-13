@@ -311,7 +311,11 @@ export interface TaskInspectionView {
   blocking: TaskOverviewView["blocking"];
   run: TaskOverviewView["run"];
   unresolvedAttention: TaskAttentionView[];
-  currentActivation: ({ targetAgentId: string } & AgentExecutionProfile) | null;
+  currentActivation: ({
+    id: string;
+    targetAgentId: string;
+    state: "queued" | "running" | "failed" | "interrupted";
+  } & AgentExecutionProfile) | null;
   automationSuspended: boolean;
   onDemand: { activity: true; attachments: true };
 }

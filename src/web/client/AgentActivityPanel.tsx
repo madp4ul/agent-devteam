@@ -38,6 +38,15 @@ export function AgentActivityPanel({
   const names = new Map(state.collaborators.map((agent) => [agent.id, agent.name]));
   const agentName = (id: string): string => names.get(id) ?? id;
   const queued = state.activations.filter((activation) => activation.status === "queued");
+  const interruptedCurrent = state.inspection.currentActivation?.state === "interrupted"
+    ? state.inspection.currentActivation
+    : null;
+  const interruptedActivation = interruptedCurrent === null
+    ? null
+    : queued.find((activation) => activation.id === interruptedCurrent.id) ?? null;
+  const laterQueued = interruptedCurrent === null
+    ? queued
+    : queued.filter((activation) => activation.id !== interruptedCurrent.id);
   const waitingReasons = waitingReasonsFor(state);
   const hasWaitingWork = queued.length > 0 || state.inspection.run.status === "failed" ||
     state.inspection.automationSuspended ||
@@ -73,6 +82,13 @@ export function AgentActivityPanel({
             {state.activeRun.status === "interrupting" ? "Interrupting…" : "Interrupt current attempt"}
           </button>
         </div>
+      ) : interruptedCurrent !== null ? (
+        <div className="activity-current waiting interrupted">
+          <div>
+            <strong>{agentName(interruptedCurrent.targetAgentId)}</strong>
+            <span>Interrupted · awaiting your decision</span>
+          </div>
+        </div>
       ) : hasWaitingWork && waitingReasons.length > 0 ? (
         <div className="activity-current waiting">
           <div>
@@ -95,10 +111,9 @@ export function AgentActivityPanel({
       {state.inspection.automationSuspended ? (
         <ContinueAutomationControl
           taskId={state.taskId}
-          onDismiss={() => {
-            const interruptedHead = queued.find((activation) => activation.dismissal != null);
-            if (interruptedHead !== undefined) setDismissal(interruptedHead);
-          }}
+          onDismiss={interruptedActivation?.dismissal == null
+            ? null
+            : () => setDismissal(interruptedActivation)}
           onContinued={async () => {
             await onChanged();
             onFeedback({ role: "status", text: `Continued ${state.taskId}.` });
@@ -107,7 +122,7 @@ export function AgentActivityPanel({
         />
       ) : null}
 
-      {queued.length === 0 ? (
+      {laterQueued.length === 0 ? (
         state.activeRun === null && (!hasWaitingWork || waitingReasons.length === 0)
           ? <p className="quiet">No agent work is running or queued.</p>
           : null
@@ -115,7 +130,7 @@ export function AgentActivityPanel({
         <div className="activation-queue">
           <h3>Activation queue</h3>
           <ol>
-            {queued.map((activation) => (
+            {laterQueued.map((activation) => (
               <li key={activation.id}>
                 <div>
                   <strong>{agentName(activation.targetAgentId)}</strong>
@@ -129,7 +144,9 @@ export function AgentActivityPanel({
                     title={`Dismiss activation for ${agentName(activation.targetAgentId)}`}
                     onClick={() => setDismissal(activation)}
                   >
-                    <span aria-hidden="true">×</span>
+                    <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                      <path d="M5 5l10 10M15 5L5 15" />
+                    </svg>
                   </button>
                 ) : null}
               </li>
@@ -248,7 +265,7 @@ function ContinueAutomationControl({
   onError,
 }: {
   taskId: string;
-  onDismiss(): void;
+  onDismiss: (() => void) | null;
   onContinued(): Promise<void>;
   onError(error: unknown): void;
 }): ReactNode {
@@ -256,15 +273,17 @@ function ContinueAutomationControl({
   const [pending, setPending] = useState(false);
   return (
     <div className="attempt-control">
-      <p>Task automation is suspended. The interrupted activation remains first in line.</p>
+      <p>Task automation is suspended after this interruption. Continue or dismiss this activation before later queued work can run.</p>
       <label>
         Continuation message (optional)
         <textarea rows={3} value={message} onChange={(event) => setMessage(event.currentTarget.value)} />
       </label>
       <div className="form-actions interruption-actions">
-        <button type="button" className="secondary" disabled={pending} onClick={onDismiss}>
-          Dismiss activation
-        </button>
+        {onDismiss === null ? null : (
+          <button type="button" className="secondary" disabled={pending} onClick={onDismiss}>
+            Dismiss activation
+          </button>
+        )}
         <button
           disabled={pending}
           onClick={() => {

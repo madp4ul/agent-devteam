@@ -381,7 +381,9 @@ test("full task inspection keeps history and attachments behind on-demand querie
     },
     unresolvedAttention: [],
     currentActivation: {
+      id: inspection.task.currentActivation?.id,
       targetAgentId: "implementer",
+      state: "queued",
       model: null,
       reasoningEffort: null,
     },

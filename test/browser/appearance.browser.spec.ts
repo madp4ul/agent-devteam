@@ -175,6 +175,51 @@ test("dark interactive controls keep readable contrast without turning secondary
   expect(await contrastRatio(commentMarker)).toBeGreaterThanOrEqual(4.5);
 });
 
+test("queued activation dismissal matches secondary round controls in both themes", async ({ page }) => {
+  await page.route("**/api/tasks/T-0002", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.task.activations = [{
+      id: "visual-dismissal",
+      targetAgentId: "implementer",
+      status: "queued",
+      reason: { type: "column-entry", sourceEventId: "visual-dismissal-source" },
+      attempts: [],
+      startupFailure: null,
+      recovery: null,
+      stale: false,
+      model: null,
+      reasoningEffort: null,
+      dismissal: { mayStartNext: false },
+    }];
+    body.inspection.run = {
+      status: "queued",
+      activeAgentId: null,
+      queuedActivationCount: 1,
+      failedActivationCount: 0,
+    };
+    body.activeRun = null;
+    await route.fulfill({ response, json: body });
+  });
+
+  for (const theme of ["light", "dark"] as const) {
+    await page.goto("/tasks/T-0002");
+    await page.getByRole("combobox", { name: "Appearance" }).selectOption(theme);
+    const dismiss = page.getByRole("button", { name: "Dismiss activation for Implementation Agent" });
+    await expect(dismiss).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(dismiss.locator("svg")).toHaveCount(1);
+    expect(await dismiss.evaluate((button) => {
+      const icon = button.querySelector("svg")!;
+      const buttonRect = button.getBoundingClientRect();
+      const iconRect = icon.getBoundingClientRect();
+      return {
+        x: Math.abs(iconRect.x + iconRect.width / 2 - (buttonRect.x + buttonRect.width / 2)),
+        y: Math.abs(iconRect.y + iconRect.height / 2 - (buttonRect.y + buttonRect.height / 2)),
+      };
+    })).toEqual({ x: 0, y: 0 });
+  }
+});
+
 async function contrastRatio(locator: import("@playwright/test").Locator): Promise<number> {
   return locator.evaluate((element) => {
     const style = getComputedStyle(element);

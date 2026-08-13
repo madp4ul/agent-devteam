@@ -228,6 +228,13 @@ test("task interruption waits for confirmation and offers contextual continuatio
       ? { status: "queued", activeAgentId: null, queuedActivationCount: 1, failedActivationCount: 0 }
       : { status: "running", activeAgentId: "consulting-agent", queuedActivationCount: 0, failedActivationCount: 0 };
     body.inspection.automationSuspended = interruptionState === "interrupted";
+    body.inspection.currentActivation = {
+      id: "live-activation",
+      targetAgentId: "consulting-agent",
+      state: interruptionState === "interrupted" ? "interrupted" : "running",
+      model: null,
+      reasoningEffort: null,
+    };
     const startedAt = new Date(Date.now() - 10_000).toISOString();
     body.activeRun = interruptionState === "interrupted" ? null : {
       attemptId: "live-attempt",
@@ -244,15 +251,17 @@ test("task interruption waits for confirmation and offers contextual continuatio
     body.task.activations = [{
       id: "live-activation",
       targetAgentId: "consulting-agent",
-      status: "running",
+      status: interruptionState === "interrupted" ? "queued" : "running",
       reason: { type: "agent-mention", sourceEventId: "comment-live" },
       attempts: [{
         id: "live-attempt",
-        status: "running",
+        status: interruptionState === "interrupted" ? "interrupted" : "running",
         workspacePath: "C:/task-workspace",
         startedAt,
-        completedAt: null,
-        outcome: null,
+        completedAt: interruptionState === "interrupted" ? new Date().toISOString() : null,
+        outcome: interruptionState === "interrupted"
+          ? { status: "user-interrupted", summary: "The user interrupted this attempt." }
+          : null,
         threadId: "thread-live",
         model: null,
         reasoningEffort: null,
@@ -276,7 +285,11 @@ test("task interruption waits for confirmation and offers contextual continuatio
   const interruptClick = page.getByRole("button", { name: "Interrupt current attempt" }).click();
   await expect(page.getByRole("button", { name: "Interrupting…" })).toBeDisabled();
   await interruptClick;
-  await expect(page.getByText("Task automation is suspended. The interrupted activation remains first in line.")).toBeVisible();
+  const interruptedCurrent = page.locator(".activity-current.interrupted");
+  await expect(interruptedCurrent).toContainText("consulting-agent");
+  await expect(interruptedCurrent).toContainText("Interrupted · awaiting your decision");
+  await expect(page.getByText("Task automation is suspended after this interruption.", { exact: false })).toBeVisible();
+  await expect(page.locator(".activation-queue")).toHaveCount(0);
   await page.getByRole("link", { name: "Back to board" }).click();
   const suspendedCard = page.getByRole("link", { name: /T-0002 Drag this task/ }).locator("..");
   await expect(suspendedCard).not.toContainText("Automation suspended");
@@ -353,6 +366,23 @@ test("task details confirm individual queued and interrupted activation dismissa
     const body = await response.json();
     body.task.activations = activations;
     body.inspection.automationSuspended = activations[0]?.status === "queued";
+    body.inspection.currentActivation = activations[0]?.status === "queued"
+      ? {
+          id: "interrupted-activation",
+          targetAgentId: "consulting-agent",
+          state: "interrupted",
+          model: null,
+          reasoningEffort: null,
+        }
+      : activations[1]?.status === "queued"
+        ? {
+            id: "queued-activation",
+            targetAgentId: "implementing-agent",
+            state: "queued",
+            model: null,
+            reasoningEffort: null,
+          }
+        : null;
     body.inspection.run = {
       status: activations.some(({ status }) => status === "queued") ? "queued" : "idle",
       activeAgentId: null,
@@ -365,19 +395,22 @@ test("task details confirm individual queued and interrupted activation dismissa
   });
 
   await page.goto("/tasks/T-0002");
+  const current = page.locator(".activity-current.interrupted");
   const queue = page.locator(".activation-queue");
-  await expect(queue.getByRole("button", { name: "Dismiss activation for consulting-agent" })).toBeVisible();
+  await expect(current).toContainText("consulting-agent");
+  await expect(current).toContainText("Interrupted · awaiting your decision");
+  await expect(queue).not.toContainText("consulting-agent");
   await expect(queue.getByRole("button", { name: "Dismiss activation for implementing-agent" })).toBeVisible();
-  await queue.getByRole("button", { name: "Dismiss activation for consulting-agent" }).click();
+  await page.getByRole("button", { name: "Dismiss activation", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Dismiss activation?" });
   await expect(dialog).toContainText("consulting-agent");
   await expect(dialog).toContainText("mentioned in a comment");
   await expect(dialog).toContainText("The next queued activation may start immediately.");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toHaveCount(0);
-  await queue.getByRole("button", { name: "Dismiss activation for consulting-agent" }).click();
+  await page.getByRole("button", { name: "Dismiss activation", exact: true }).click();
   await dialog.getByRole("button", { name: "Dismiss activation" }).click();
-  await expect(queue).not.toContainText("consulting-agent");
+  await expect(current).toHaveCount(0);
   await expect(queue.getByRole("button", { name: "Dismiss activation for implementing-agent" })).toBeVisible();
   await queue.getByRole("button", { name: "Dismiss activation for implementing-agent" }).click();
   await dialog.getByRole("button", { name: "Dismiss activation" }).click();
@@ -690,7 +723,12 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(relationships.getByRole("heading", { name: "Depends on" })).toBeVisible();
   await expect(relationships.getByRole("link", { name: "Drag this task" })).toBeVisible();
   await expect(relationships).toContainText("Blocking");
-  await expect(page.getByText(/Needs attention: user mention/)).toBeVisible();
+  const attention = page.getByRole("region", { name: "Needs attention" });
+  const agentActivity = page.getByRole("region", { name: "Agent activity" });
+  await expect(attention.getByText("user mention", { exact: true })).toBeVisible();
+  await expect(agentActivity).not.toContainText("user mention");
+  await expect(page.locator('.detail-primary-column > [data-task-section="attention"] + [data-task-section="activity"]'))
+    .toHaveCount(1);
   await expect(page.getByText("Please preserve the authored context")).toBeVisible();
   await expect(page.getByText("Please also verify the migration behavior.")).toBeVisible();
   await expect(page.getByText("Task moved")).toBeVisible();
@@ -1034,6 +1072,7 @@ test("task details prioritize agent activity and preserve the responsive reading
   await page.goto("/tasks/T-0001");
   const description = page.getByRole("region", { name: "Description" });
   await expect(description).toBeVisible();
+  const attention = page.getByRole("region", { name: "Needs attention" });
   const activity = page.getByRole("region", { name: "Agent activity" });
   const workspace = page.getByRole("region", { name: "Workspace", exact: true });
   const movement = page.getByRole("region", { name: "Move task" });
@@ -1057,10 +1096,13 @@ test("task details prioritize agent activity and preserve the responsive reading
   await expect(activity).not.toContainText("Failed activations");
 
   const descriptionBounds = await description.boundingBox();
+  const attentionBounds = await attention.boundingBox();
   const activityBounds = await activity.boundingBox();
   expect(descriptionBounds).not.toBeNull();
+  expect(attentionBounds).not.toBeNull();
   expect(activityBounds).not.toBeNull();
-  expect(activityBounds!.y - (descriptionBounds!.y + descriptionBounds!.height)).toBeLessThanOrEqual(24);
+  expect(attentionBounds!.y - (descriptionBounds!.y + descriptionBounds!.height)).toBeLessThanOrEqual(24);
+  expect(activityBounds!.y - (attentionBounds!.y + attentionBounds!.height)).toBeLessThanOrEqual(24);
 
   const workspaceBounds = await workspace.boundingBox();
   expect(workspaceBounds).not.toBeNull();
@@ -1094,6 +1136,7 @@ test("task details prioritize agent activity and preserve the responsive reading
   expect(readingOrder).toEqual([
     "overview",
     "description",
+    "attention",
     "activity",
     "comment",
     "timeline",
@@ -1113,6 +1156,7 @@ test("running agent activity uses the configured agent name and interruption con
     ];
     detail.inspection.blocking = { blocked: false, blockerTaskIds: [] };
     detail.inspection.automationSuspended = false;
+    detail.inspection.unresolvedAttention = [];
     detail.activeRun = {
       attemptId: "live-attempt",
       taskId: "T-0001",
@@ -1129,6 +1173,7 @@ test("running agent activity uses the configured agent name and interruption con
   });
 
   await page.goto("/tasks/T-0001");
+  await expect(page.getByRole("region", { name: "Needs attention" })).toHaveCount(0);
   const activity = page.getByRole("region", { name: "Agent activity" });
   await expect(activity).toContainText("Implementation Agent");
   await expect(activity).toContainText(/1m \d+s/);
