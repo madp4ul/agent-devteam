@@ -19,5 +19,5 @@ export function RelativeTime({ value }: { value: string }): ReactNode {
 }
 
 function formatExactTime(instant: Date): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(instant);
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "medium" }).format(instant);
 }

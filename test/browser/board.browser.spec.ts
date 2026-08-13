@@ -591,6 +591,19 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(attemptEntry).toContainText("Started");
   await expect(attemptEntry.locator(".attempt-agent-name")).toHaveText("Implementation Agent");
   await expect(attemptEntry.locator(".attempt-number")).toHaveText("Attempt 1");
+  const attemptMetadata = attemptEntry.locator(".attempt-metadata");
+  const transcriptButton = attemptEntry.getByRole("button", { name: "View transcript" });
+  const [attemptMetadataBox, transcriptButtonBox] = await Promise.all([
+    attemptMetadata.boundingBox(),
+    transcriptButton.boundingBox(),
+  ]);
+  expect(attemptMetadataBox).not.toBeNull();
+  expect(transcriptButtonBox).not.toBeNull();
+  expect(Math.abs(
+    (attemptMetadataBox!.y + attemptMetadataBox!.height / 2) -
+    (transcriptButtonBox!.y + transcriptButtonBox!.height / 2),
+  )).toBeLessThanOrEqual(2);
+  expect(transcriptButtonBox!.x).toBeGreaterThan(attemptMetadataBox!.x + attemptMetadataBox!.width);
   const nestedComment = attemptEntry.locator(".nested-comment");
   await expect(nestedComment.locator(".entry-meta strong")).toHaveText("Commented");
   await expect(nestedComment).toContainText("Requested Implementation Agent");
@@ -658,6 +671,23 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   expect(commentBounds).not.toBeNull();
   expect(timelineBounds).not.toBeNull();
   expect(timelineBounds!.y - (commentBounds!.y + commentBounds!.height)).toBeGreaterThanOrEqual(8);
+});
+
+test("attempt outcomes show canonical-looking participant text without executable mention styling", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const outcome = detail.task.activations[0]?.attempts[0]?.outcome;
+    if (outcome !== undefined && outcome !== null) {
+      outcome.summary = "No further response from @implementer is required.";
+    }
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const outcome = page.getByRole("region", { name: "Outcome" });
+  await expect(outcome).toContainText("No further response from @implementer is required.");
+  await expect(outcome.locator(".canonical-mention")).toHaveCount(0);
 });
 
 test("a transcript without reported usage does not present zero as measured usage", async ({ page }) => {
@@ -1145,6 +1175,23 @@ test("comment participants are discoverable and insert canonical mentions withou
   await expect(submitted.locator(".canonical-mention")).toHaveCount(2);
   await expect(submitted.locator(".canonical-mention").first()).toHaveAttribute("title", "Implementation Agent");
   await expect(submitted).toContainText("Requested Implementation Agent, user attention");
+  const agentMention = submitted.locator(".canonical-mention.agent-mention");
+  const userMention = submitted.locator(".canonical-mention.user-mention");
+  const agentConsequence = submitted.locator(".comment-consequence .agent-mention");
+  const userConsequence = submitted.locator(".comment-consequence .user-mention");
+  await expect(agentMention).toHaveCount(1);
+  await expect(userMention).toHaveCount(1);
+  await expect(agentConsequence).toHaveText("Implementation Agent");
+  await expect(userConsequence).toHaveText("user attention");
+  const [agentMentionColor, userMentionColor, agentConsequenceColor, userConsequenceColor] = await Promise.all([
+    agentMention.evaluate((element) => getComputedStyle(element).backgroundColor),
+    userMention.evaluate((element) => getComputedStyle(element).backgroundColor),
+    agentConsequence.evaluate((element) => getComputedStyle(element).backgroundColor),
+    userConsequence.evaluate((element) => getComputedStyle(element).backgroundColor),
+  ]);
+  expect(agentMentionColor).not.toBe(userMentionColor);
+  expect(agentConsequenceColor).toBe(agentMentionColor);
+  expect(userConsequenceColor).toBe(userMentionColor);
 });
 
 test("mention discovery supports dismissal and ignores email-like and inline-code text", async ({ page }) => {
@@ -1190,6 +1237,13 @@ test("reply to an agent mention preserves the draft, avoids duplicates, and focu
   await draft.fill("Here is the decision.");
   const request = page.locator(".comment-entry").filter({ hasText: "I need a decision" });
   const reply = request.getByRole("button", { name: "Reply to Implementation Agent" });
+  const consequence = request.locator(".comment-consequence");
+  const [consequenceBox, replyBox] = await Promise.all([consequence.boundingBox(), reply.boundingBox()]);
+  expect(consequenceBox).not.toBeNull();
+  expect(replyBox).not.toBeNull();
+  expect(Math.abs((consequenceBox!.y + consequenceBox!.height / 2) - (replyBox!.y + replyBox!.height / 2)))
+    .toBeLessThanOrEqual(2);
+  expect(replyBox!.x).toBeGreaterThan(consequenceBox!.x + consequenceBox!.width);
   await reply.click();
   await expect(draft).toHaveValue("Here is the decision. @implementer ");
   await expect(draft).toBeFocused();

@@ -70,6 +70,12 @@ activation semantics established by issue 20.
   established ordered multi-participant comment model, while a single-recipient
   selector would have removed an existing capability and competed with ordinary
   prose composition.
+- Follow-up visual review gave user requests the established amber attention
+  treatment and agent requests a distinct green treatment. The timeline repeats
+  those highlights in its compact Requested summary and keeps Reply on the same
+  row. Live range highlighting inside the native comment textarea was deliberately
+  not added because it would require a mirrored editor overlay with duplicated
+  wrapping, scrolling, selection, input-method, and accessibility behavior.
 
 ## Answer
 

@@ -163,7 +163,6 @@ function TimelineRecordView({
               text={record.failure.diagnostic}
               expanded={expandedText.has(`startup-${record.activation.id}`)}
               onExpanded={(expanded) => onTextExpanded(`startup-${record.activation.id}`, expanded)}
-              participants={participantNamesById(context.agents)}
             />
           </div>
           <small>Boundary: {record.failure.boundary}. No Codex attempt or thread started.</small>
@@ -227,7 +226,6 @@ function AttemptCard({
               text={attempt.outcome.summary}
               expanded={expandedText.has(outcomeTextId)}
               onExpanded={(expanded) => onTextExpanded(outcomeTextId, expanded)}
-              participants={participantNamesById(context.agents)}
             />
           </section>
         )}
@@ -245,16 +243,16 @@ function AttemptCard({
           </ol>
         )}
         <footer className="attempt-footer">
-          <TriggerLink record={record} context={context} onSource={onSource} />
-          <span>Started <RelativeTime value={attempt.startedAt} /></span>
-        </footer>
-        {onTranscript === undefined ? null : (
-          <div className="attempt-actions">
+          <div className="attempt-metadata">
+            <TriggerLink record={record} context={context} onSource={onSource} />
+            <span>Started <RelativeTime value={attempt.startedAt} /></span>
+          </div>
+          {onTranscript === undefined ? null : (
             <button className="secondary" onClick={() => onTranscript({ attempt, agentName })}>
               View transcript
             </button>
-          </div>
-        )}
+          )}
+        </footer>
       </article>
     </li>
   );
@@ -300,9 +298,9 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
   onExpanded(expanded: boolean): void;
 }): ReactNode {
   const author = actorName(comment.actor, context.agents);
-  const requestedAgents = [...new Set(context.activations
+  const requestedAgentIds = [...new Set(context.activations
     .filter((activation) => activation.reason.type === "agent-mention" && activation.reason.sourceEventId === comment.id)
-    .map((activation) => nameForAgent(activation.targetAgentId, context.agents)))];
+    .map((activation) => activation.targetAgentId))];
   const requestedUser = findParticipantMentions(comment.body).some((mention) => mention.participantId === "user");
   const replyAgent = requestedUser && comment.actor.kind === "agent" &&
     context.agents.some((agent) => agent.id === comment.actor.id)
@@ -321,15 +319,29 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
         onExpanded={onExpanded}
         participants={participantNamesById(context.agents)}
       />
-      {requestedAgents.length === 0 && !requestedUser ? null : (
-        <p className="comment-consequence">
-          Requested {[...requestedAgents, ...(requestedUser ? ["user attention"] : [])].join(", ")}
-        </p>
-      )}
-      {replyAgent === undefined || context.onReplyToAgent === undefined ? null : (
-        <button className="secondary comment-reply" onClick={() => context.onReplyToAgent?.(replyAgent)}>
-          Reply to {nameForAgent(replyAgent, context.agents)}
-        </button>
+      {requestedAgentIds.length === 0 && !requestedUser ? null : (
+        <div className="comment-coordination">
+          <p className="comment-consequence">
+            <span>Requested{" "}</span>
+            {requestedAgentIds.map((agentId, index) => (
+              <span key={agentId}>
+                {index === 0 ? null : ", "}
+                <strong className="participant-highlight agent-mention">{nameForAgent(agentId, context.agents)}</strong>
+              </span>
+            ))}
+            {requestedUser ? (
+              <span>
+                {requestedAgentIds.length === 0 ? null : ", "}
+                <strong className="participant-highlight user-mention">user attention</strong>
+              </span>
+            ) : null}
+          </p>
+          {replyAgent === undefined || context.onReplyToAgent === undefined ? null : (
+            <button className="secondary comment-reply" onClick={() => context.onReplyToAgent?.(replyAgent)}>
+              Reply to {nameForAgent(replyAgent, context.agents)}
+            </button>
+          )}
+        </div>
       )}
     </>
   );
@@ -427,7 +439,7 @@ function TextPreview({ id, text, expanded, onExpanded, participants }: {
   text: string;
   expanded: boolean;
   onExpanded(expanded: boolean): void;
-  participants: Map<string, string>;
+  participants?: Map<string, string>;
 }): ReactNode {
   const ref = useRef<HTMLParagraphElement>(null);
   const [overflowing, setOverflowing] = useState(false);
@@ -443,7 +455,7 @@ function TextPreview({ id, text, expanded, onExpanded, participants }: {
   return (
     <div className="authored-text">
       <p id={id} ref={ref} className={`authored-prose${expanded ? " expanded" : ""}`}>
-        <MentionedText text={text} participants={participants} />
+        {participants === undefined ? text : <MentionedText text={text} participants={participants} />}
       </p>
       {!expanded && !overflowing ? null : (
         <button className="text-disclosure" aria-controls={id} aria-expanded={expanded} onClick={() => onExpanded(!expanded)}>
@@ -464,7 +476,7 @@ function MentionedText({ text, participants }: { text: string; participants: Map
     if (match.start > cursor) parts.push(text.slice(cursor, match.start));
     parts.push(
       <strong
-        className="canonical-mention"
+        className={`canonical-mention ${match.participantId === "user" ? "user-mention" : "agent-mention"}`}
         key={`${match.start}-${mention}`}
         title={participantName}
         aria-label={`${mention}, ${participantName}`}

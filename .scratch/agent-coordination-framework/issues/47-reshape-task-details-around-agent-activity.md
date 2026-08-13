@@ -87,3 +87,8 @@ runnable non-browser tests (with the existing credentialed Codex integration
 test skipped), and all 35 browser scenarios. Live visual review passed at
 1280×900 and 600×900. The final independent Standards and Spec rechecks found
 no remaining findings.
+
+Follow-up task-detail review moved View transcript onto the same compact row as
+the attempt's Triggered by and Started metadata. Timeline relative times and
+their exact timestamp tooltips now use the application's English language
+instead of inheriting the host operating-system locale.
