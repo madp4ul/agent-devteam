@@ -32,6 +32,7 @@ import type {
   EditTaskCommand,
   MoveTaskCommand,
   MoveTaskResult,
+  InertMoveTaskResult,
   MarkUserMentionAddressedCommand,
   MarkUserMentionAddressedResult,
   InterruptTaskCommand,
@@ -518,6 +519,13 @@ export class CoordinationApplication {
     const result = gated ?? this.#persistence.taskCommands.moveTask(command);
     if (result.accepted) this.#automation.kick();
     return result;
+  }
+
+  resolveInertTaskMove(
+    command: MoveTaskCommand,
+  ): InertMoveTaskResult | MoveTaskResult | undefined {
+    const gated = this.configurationErrorRejection();
+    return gated ?? this.#persistence.taskCommands.resolveInertMove(command);
   }
 
   createTaskRelationship(

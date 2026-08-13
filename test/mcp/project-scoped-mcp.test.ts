@@ -384,6 +384,35 @@ boards:
     body: "Implementation complete; handing off for review.",
     idempotencyKey: "agent-comment",
   };
+  const beforeInertMove = application.queryTask(created.task.id);
+  assert.equal(beforeInertMove.available, true);
+  if (!beforeInertMove.available) return;
+  const inertMoveResult = await client.callTool({
+    name: "move_current_task",
+    arguments: {
+      destinationColumnId: "implementation",
+      expectedRevision: inspectedTask.revision,
+      idempotencyKey: "agent-inert-move",
+    },
+  });
+  assert.notEqual(inertMoveResult.isError, true);
+  assert.deepEqual(JSON.parse(textContent(inertMoveResult.content)), {
+    accepted: true,
+    outcome: "already-in-column",
+    revision: inspectedTask.revision,
+    transition: {
+      taskId: created.task.id,
+      fromColumnId: "implementation",
+      toColumnId: "implementation",
+    },
+  });
+  const afterInertMove = application.queryTask(created.task.id);
+  assert.equal(afterInertMove.available, true);
+  if (!afterInertMove.available) return;
+  assert.equal(afterInertMove.task.revision, beforeInertMove.task.revision);
+  assert.deepEqual(afterInertMove.task.activity, beforeInertMove.task.activity);
+  assert.deepEqual(afterInertMove.task.activations, beforeInertMove.task.activations);
+
   const commentResult = await client.callTool({ name: "add_comment", arguments: commentArguments });
   const repeatedCommentResult = await client.callTool({ name: "add_comment", arguments: commentArguments });
   const commentPayload = JSON.parse(textContent(commentResult.content)) as {
@@ -434,6 +463,26 @@ boards:
       },
     ],
   );
+  const repeatedInertMoveResult = await client.callTool({
+    name: "move_current_task",
+    arguments: {
+      destinationColumnId: "implementation",
+      expectedRevision: inspectedTask.revision,
+      idempotencyKey: "agent-inert-move",
+    },
+  });
+  assert.notEqual(repeatedInertMoveResult.isError, true);
+  assert.deepEqual(
+    JSON.parse(textContent(repeatedInertMoveResult.content)),
+    JSON.parse(textContent(inertMoveResult.content)),
+  );
+  const afterInertReplay = application.queryTask(created.task.id);
+  assert.equal(afterInertReplay.available, true);
+  if (!afterInertReplay.available) return;
+  assert.equal(afterInertReplay.task.columnId, "review");
+  assert.equal(afterInertReplay.task.revision, updated.task.revision);
+  assert.deepEqual(afterInertReplay.task.activity, updated.task.activity);
+  assert.deepEqual(afterInertReplay.task.activations, updated.task.activations);
 
   const runtimeTask = application.createTask({
     boardId: "delivery",

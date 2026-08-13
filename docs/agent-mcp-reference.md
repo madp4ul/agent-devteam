@@ -20,7 +20,7 @@ original result without repeating the change.
 | `list_collaborators` | none | Lists agent identities without loading their instructions. | `{ available: true, collaborators: Collaborator[] }` |
 | `inspect_current_task` | none | Reads the complete current task assigned to this activation. | `TaskInspection` directly, without an `available` wrapper. |
 | `add_comment` | `body`, `idempotencyKey` | Adds an authored agent comment; canonical mentions may create activations or user attention. | `{ accepted: true, taskId, revision, commentId }` |
-| `move_current_task` | `destinationColumnId`, `expectedRevision`, `idempotencyKey` | Revision-checks and moves the current task; a watched destination normally creates its activation. | `{ accepted: true, revision, transition: { taskId, fromColumnId, toColumnId } }` |
+| `move_current_task` | `destinationColumnId`, `expectedRevision`, `idempotencyKey` | Revision-checks and moves the current task; a watched destination normally creates its activation. Requesting the current column is an inert success. | `{ accepted: true, revision, transition: { taskId, fromColumnId, toColumnId } }`; an inert result also includes `outcome: "already-in-column"`. |
 | `create_child_task` | `boardId`, `columnId`, `title`, `description`, optional `startingRef`, `idempotencyKey` | Creates a task related as a child of the current task. | `{ accepted: true, task: { id, boardId, columnId, revision } }` |
 | `add_dependency` | `targetTaskId`, `idempotencyKey` | Makes the current task depend on another task. | `{ accepted: true, relationship }` |
 | `report_permission_block` | `summary` | Marks this run outcome as permission-blocked after a required action is denied. | `{ accepted: true, taskId }` |

@@ -21,6 +21,7 @@ import type {
   EditTaskCommand,
   MoveTaskCommand,
   MoveTaskResult,
+  InertMoveTaskResult,
   MarkUserMentionAddressedCommand,
   MarkUserMentionAddressedResult,
   TaskAttentionView,
@@ -233,6 +234,42 @@ export class TaskCommandStore {
           taskId: task.id,
           fromColumnId: currentTask.columnId,
           toColumnId: command.destinationColumnId,
+        },
+      };
+      this.#commandResponses.write(commandType, command.idempotencyKey, result);
+      return result;
+    });
+  }
+
+  resolveInertMove(command: MoveTaskCommand): InertMoveTaskResult | MoveTaskResult | undefined {
+    return this.transaction(() => {
+      const commandType = `move-task:${command.taskId}`;
+      const prior = this.#commandResponses.read<InertMoveTaskResult | MoveTaskResult>(
+        commandType,
+        command.idempotencyKey,
+      );
+      if (prior !== undefined) return prior;
+      const currentTask = this.#projections.readTask(command.taskId);
+      if (
+        currentTask === undefined ||
+        currentTask.archived ||
+        currentTask.revision !== command.expectedRevision ||
+        currentTask.columnId !== command.destinationColumnId
+      ) {
+        return undefined;
+      }
+      this.validatedAgentAttemptId(command.taskId, command);
+      const mapped = this.#database.prepare("SELECT 1 FROM mapped_tasks WHERE id = ?")
+        .get(command.taskId);
+      if (mapped === undefined) return undefined;
+      const result: InertMoveTaskResult = {
+        accepted: true,
+        outcome: "already-in-column",
+        task: currentTask,
+        transition: {
+          taskId: currentTask.id,
+          fromColumnId: currentTask.columnId,
+          toColumnId: currentTask.columnId,
         },
       };
       this.#commandResponses.write(commandType, command.idempotencyKey, result);

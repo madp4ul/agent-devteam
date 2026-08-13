@@ -211,7 +211,12 @@ export function BoardPage({
           const destination = state.boards
             .find((board) => board.id === boardId)
             ?.columns.find((column) => column.id === columnId);
-          if (task !== undefined && task.boardId === boardId && destination !== undefined) {
+          if (
+            task !== undefined &&
+            task.boardId === boardId &&
+            destination !== undefined &&
+            task.column.id !== destination.id
+          ) {
             void move(task, destination);
           }
         },

@@ -2072,3 +2072,52 @@ test("pointer dragging moves through the same command and conflicts stay actiona
   await expect(page.getByRole("heading", { name: "Concurrent authoritative title" })).toBeVisible();
   await expect(page.getByRole("dialog", { name: /Edit/ })).toHaveCount(0);
 });
+
+test("dropping a task into its current column is inert", async ({ page, request }) => {
+  const created = await (await request.post("/api/tasks", {
+    data: {
+      boardId: "delivery",
+      columnId: "backlog",
+      title: "Drop this task back",
+      description: "Returning a drag to its source column must be inert.",
+      idempotencyKey: "browser-inert-drag-task",
+    },
+  })).json() as { task: { id: string } };
+  const taskId = created.task.id;
+  let moveRequests = 0;
+  await page.route("**/api/tasks/*/move", async (route) => {
+    moveRequests += 1;
+    await route.continue();
+  });
+  const before = await (await request.get(`/api/tasks/${taskId}`)).json() as {
+    task: { revision: number; activity: unknown[]; activations: unknown[] };
+  };
+  await page.goto("/");
+  await page.getByLabel("Filter tasks").fill("Drop this task back");
+  const handle = page.getByRole("button", { name: `Drag ${taskId}` });
+  const currentColumn = page.getByTestId("column-backlog");
+  const otherColumn = page.getByTestId("column-implementation");
+  await handle.scrollIntoViewIfNeeded();
+  const sourceBox = await handle.boundingBox();
+  const targetBox = await currentColumn.boundingBox();
+  const otherBox = await otherColumn.boundingBox();
+  expect(sourceBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+  expect(otherBox).not.toBeNull();
+  if (sourceBox === null || targetBox === null || otherBox === null) return;
+
+  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(otherBox.x + otherBox.width / 2, otherBox.y + otherBox.height / 2, { steps: 12 });
+  await expect(otherColumn).toHaveClass(/drop-target/);
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 12 });
+  await expect(currentColumn).toHaveClass(/drop-target/);
+  await page.mouse.up();
+
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(moveRequests).toBe(0);
+  const after = await (await request.get(`/api/tasks/${taskId}`)).json() as typeof before;
+  expect(after.task.revision).toBe(before.task.revision);
+  expect(after.task.activity).toEqual(before.task.activity);
+  expect(after.task.activations).toEqual(before.task.activations);
+});

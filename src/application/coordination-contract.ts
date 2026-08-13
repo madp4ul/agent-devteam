@@ -709,6 +709,13 @@ export type MoveTaskResult =
     }
   | Exclude<BoardMutationResult, { accepted: true }>;
 
+export type InertMoveTaskResult = {
+  accepted: true;
+  outcome: "already-in-column";
+  task: TaskView;
+  transition: { taskId: string; fromColumnId: string; toColumnId: string };
+};
+
 export type TaskRelationshipMutationResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }

@@ -636,14 +636,28 @@ async function handleAgentApi(
   }
   if (method === "POST" && url.pathname === "/agent-api/current-task/move") {
     const body = await readJsonBody(request);
-    const result = application.moveTask({
+    const destinationColumnId = stringField(body, "destinationColumnId");
+    const expectedRevision = numberField(body, "expectedRevision");
+    const idempotencyKey = stringField(body, "idempotencyKey");
+    const command = {
       taskId: scope.taskId,
-      destinationColumnId: stringField(body, "destinationColumnId"),
-      expectedRevision: numberField(body, "expectedRevision"),
-      idempotencyKey: stringField(body, "idempotencyKey"),
-      actor: { kind: "agent", id: scope.agentId },
+      destinationColumnId,
+      expectedRevision,
+      idempotencyKey,
+      actor: { kind: "agent" as const, id: scope.agentId },
       ...(scope.attemptId === undefined ? {} : { attemptId: scope.attemptId }),
-    });
+    };
+    const inert = application.resolveInertTaskMove(command);
+    if (inert?.accepted && "outcome" in inert) {
+      sendJson(response, 200, {
+        accepted: true,
+        outcome: inert.outcome,
+        revision: inert.task.revision,
+        transition: inert.transition,
+      });
+      return;
+    }
+    const result = inert ?? application.moveTask(command);
     if (!result.accepted) sendJson(response, 409, result);
     else {
       sendJson(response, 200, {
