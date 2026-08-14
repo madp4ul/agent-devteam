@@ -198,6 +198,37 @@ without choosing the implementation yet.
 
 ## Not yet specified
 
+- [Wrap Wide Transcript Content](./issues/58-wrap-wide-transcript-content.md)
+  — Keep transcript prose and tool output inside the viewer, containing any
+  intentional code scrolling within the relevant content block.
+- [Notify Agent Handoffs to the User](./issues/59-notify-agent-handoffs-to-user.md)
+  — Notify on explicit agent-to-user responsibility handoffs and refine the
+  durable attention and deduplication semantics for unwatched-column moves.
+- [Dismiss Startup Impact After Accepting Board Changes](./issues/60-dismiss-startup-impact-after-acceptance.md)
+  — Remove resolved startup-impact state immediately and durably after the user
+  accepts or dismisses all actionable effects.
+  **Resolved:** Startup projections now omit fully resolved process-definition
+  impact across refresh and restart while preserving partial and later impacts.
+- [Remove Mojibake Characters from the UI](./issues/61-remove-mojibake-ui-characters.md)
+  — Correct the encoding boundary that renders intended punctuation as stray
+  characters such as `Â·`.
+- [Review Agent Commits While Task Worktrees Are Open](./issues/62-review-agent-commits-with-open-worktrees.md)
+  — Investigate safe review workflows that respect Git linked-worktree
+  constraints without discarding or disrupting active task workspaces.
+- [Evaluate an Initial-Prompt Token Breakdown](./issues/63-evaluate-initial-prompt-token-breakdown.md)
+  — Determine whether initial prompt usage can be measured and presented
+  separately without misrepresenting SDK token accounting.
+- [Show Additional Line Counts on Timeline Expansion Controls](./issues/64-show-collapsed-line-counts.md)
+  — Tell users how much collapsed timeline prose a Show more action will reveal.
+- [Link Relationship Timeline Events to Related Tasks](./issues/65-link-relationship-events-to-tasks.md)
+  — Make child, dependency, and other relationship events navigate directly to
+  the related task, including from historical entries.
+- [Render Markdown in Task Descriptions and Timeline Comments](./issues/66-render-task-markdown.md)
+  — Safely render a defined Markdown subset while preserving mentions,
+  authored source, compact previews, and responsive layout.
+- [Archive Task Worktrees Owned by a Different Windows Identity](./issues/67-archive-differently-owned-worktrees.md)
+  — Give host-side archival exact process-local Git trust and preserve distinct
+  dirty, durability, registration, ownership, and removal outcomes.
 - [Make Every Task Attention Reason Actionable](./issues/57-make-task-attention-actionable.md)
   — Give every task-level attention reason a concrete resolution path, move
   user-mention acknowledgement to its source comment, ignore user-authored

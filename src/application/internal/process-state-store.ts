@@ -195,6 +195,16 @@ export class ProcessStateStore {
     };
   }
 
+  readUnresolvedDefinitionImpact(
+    previousVersion: string,
+    currentVersion: string,
+  ): ProcessDefinitionImpact | undefined {
+    const impact = this.readDefinitionImpact(previousVersion, currentVersion);
+    return impact.unmappedTasks.length > 0 || impact.staleActivations.length > 0
+      ? impact
+      : undefined;
+  }
+
   resumeAutomation(): void {
     this.#database.connection
       .prepare("UPDATE runtime SET automation_state = 'running' WHERE singleton = 1")

@@ -442,28 +442,78 @@ function TextPreview({ id, text, expanded, onExpanded, participants }: {
   participants?: Map<string, string>;
 }): ReactNode {
   const ref = useRef<HTMLParagraphElement>(null);
-  const [overflowing, setOverflowing] = useState(false);
+  const [hiddenLineCount, setHiddenLineCount] = useState(0);
   useLayoutEffect(() => {
     const element = ref.current;
-    if (element === null || expanded) return;
-    const measure = (): void => setOverflowing(element.scrollHeight > element.clientHeight + 1);
+    if (element === null) return;
+    let animationFrame: number | undefined;
+    const measure = (): void => setHiddenLineCount(measureHiddenRenderedLines(element));
+    const scheduleMeasure = (): void => {
+      if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        animationFrame = undefined;
+        measure();
+      });
+    };
     measure();
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(scheduleMeasure);
     observer.observe(element);
-    return () => observer.disconnect();
-  }, [expanded, text]);
+    document.fonts?.addEventListener("loadingdone", scheduleMeasure);
+    return () => {
+      observer.disconnect();
+      document.fonts?.removeEventListener("loadingdone", scheduleMeasure);
+      if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
+    };
+  }, [text]);
   return (
     <div className="authored-text">
       <p id={id} ref={ref} className={`authored-prose${expanded ? " expanded" : ""}`}>
         {participants === undefined ? text : <MentionedText text={text} participants={participants} />}
       </p>
-      {!expanded && !overflowing ? null : (
+      {hiddenLineCount === 0 ? null : (
         <button className="text-disclosure" aria-controls={id} aria-expanded={expanded} onClick={() => onExpanded(!expanded)}>
-          {expanded ? "Show less" : "Show more"}
+          {expanded ? "Show less" : `Show ${hiddenLineCount} more ${hiddenLineCount === 1 ? "line" : "lines"}`}
         </button>
       )}
     </div>
   );
+}
+
+function measureHiddenRenderedLines(element: HTMLParagraphElement): number {
+  const parent = element.parentElement;
+  if (parent === null || element.clientWidth === 0) return 0;
+  const measurement = element.cloneNode(true) as HTMLParagraphElement;
+  measurement.removeAttribute("id");
+  measurement.classList.remove("expanded");
+  measurement.setAttribute("aria-hidden", "true");
+  Object.assign(measurement.style, {
+    position: "fixed",
+    visibility: "hidden",
+    pointerEvents: "none",
+    width: `${element.getBoundingClientRect().width}px`,
+  });
+  parent.append(measurement);
+  try {
+    const collapsedHeight = measurement.clientHeight;
+    measurement.classList.add("expanded");
+    const range = document.createRange();
+    range.selectNodeContents(measurement);
+    const lineBounds: Array<{ top: number; bottom: number }> = [];
+    for (const rect of range.getClientRects()) {
+      if (rect.height === 0) continue;
+      const currentLine = lineBounds.find((line) => rect.top < line.bottom - 1 && rect.bottom > line.top + 1);
+      if (currentLine === undefined) lineBounds.push({ top: rect.top, bottom: rect.bottom });
+      else {
+        currentLine.top = Math.min(currentLine.top, rect.top);
+        currentLine.bottom = Math.max(currentLine.bottom, rect.bottom);
+      }
+    }
+    const collapsedBottom = measurement.getBoundingClientRect().top + collapsedHeight;
+    const visibleLineCount = lineBounds.filter((line) => line.top < collapsedBottom - 1).length;
+    return Math.max(0, lineBounds.length - visibleLineCount);
+  } finally {
+    measurement.remove();
+  }
 }
 
 function MentionedText({ text, participants }: { text: string; participants: Map<string, string> }): ReactNode {

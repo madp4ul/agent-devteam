@@ -266,12 +266,15 @@ export class CoordinationApplication {
 
   queryStartup(): StartupView {
     if (this.#startup.mode === "paused" && this.#startup.processImpact !== undefined) {
+      const { processImpact: startupImpact, ...startup } = this.#startup;
+      const processImpact = this.#persistence.process.readUnresolvedDefinitionImpact(
+        startupImpact.previousVersion,
+        startupImpact.currentVersion,
+      );
+      if (processImpact === undefined) return startup;
       return {
-        ...this.#startup,
-        processImpact: this.#persistence.process.readDefinitionImpact(
-          this.#startup.processImpact.previousVersion,
-          this.#startup.processImpact.currentVersion,
-        ),
+        ...startup,
+        processImpact,
       };
     }
     return this.#startup;

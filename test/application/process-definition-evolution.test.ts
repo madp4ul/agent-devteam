@@ -167,6 +167,118 @@ boards:
   }), { accepted: true, activationId: staleActivationId });
 });
 
+test("resolved startup impact is dismissed durably while later changes create only new impact", async (t) => {
+  const fixture = await createFixture();
+  const first = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  const firstTask = first.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Resolve the first startup impact",
+    description: "Partial resolution must leave only the second impact visible.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-first-impact",
+  });
+  const secondTask = first.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Resolve the second startup impact",
+    description: "Full resolution must dismiss the startup presentation durably.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-second-impact",
+  });
+  assert.equal(firstTask.accepted, true);
+  assert.equal(secondTask.accepted, true);
+  if (!firstTask.accepted || !secondTask.accepted) return;
+  const firstActivationId = firstTask.task.activations[0]?.id;
+  const secondActivationId = secondTask.task.activations[0]?.id;
+  assert.ok(firstActivationId);
+  assert.ok(secondActivationId);
+  first.close();
+
+  await writeProcessEvolutionDefinition(fixture.definitionPath, { includeImplementation: false });
+  const changed = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  assert.deepEqual(changed.dismissStaleActivation({
+    activationId: firstActivationId,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "dismiss-first-impact",
+  }), { accepted: true, activationId: firstActivationId });
+  assert.equal(changed.moveTask({
+    taskId: firstTask.task.id,
+    destinationColumnId: "backlog",
+    expectedRevision: firstTask.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "remap-first-impact",
+  }).accepted, true);
+  const partial = changed.queryStartup();
+  assert.equal(partial.mode, "paused");
+  if (partial.mode === "paused") {
+    assert.deepEqual(partial.processImpact?.unmappedTasks.map(({ taskId }) => taskId), [secondTask.task.id]);
+    assert.deepEqual(partial.processImpact?.staleActivations.map(({ activationId }) => activationId), [secondActivationId]);
+  }
+
+  assert.deepEqual(changed.dismissStaleActivation({
+    activationId: secondActivationId,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "dismiss-second-impact",
+  }), { accepted: true, activationId: secondActivationId });
+  assert.equal(changed.moveTask({
+    taskId: secondTask.task.id,
+    destinationColumnId: "backlog",
+    expectedRevision: secondTask.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "remap-second-impact",
+  }).accepted, true);
+  const resolved = changed.queryStartup();
+  assert.equal(resolved.mode, "paused");
+  if (resolved.mode === "paused") assert.equal(resolved.processImpact, undefined);
+  changed.close();
+
+  const restarted = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  const afterRestart = restarted.queryStartup();
+  assert.equal(afterRestart.mode, "paused");
+  if (afterRestart.mode === "paused") assert.equal(afterRestart.processImpact, undefined);
+  restarted.close();
+
+  await writeProcessEvolutionDefinition(fixture.definitionPath, { includeImplementation: true });
+  const restored = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  const laterTask = restored.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Create a later startup impact",
+    description: "A later definition change must not revive resolved items.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-later-impact",
+  });
+  assert.equal(laterTask.accepted, true);
+  if (!laterTask.accepted) return;
+  restored.close();
+
+  await writeProcessEvolutionDefinition(fixture.definitionPath, { includeImplementation: false });
+  const changedAgain = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => changedAgain.close());
+  const laterImpact = changedAgain.queryStartup();
+  assert.equal(laterImpact.mode, "paused");
+  if (laterImpact.mode === "paused") {
+    assert.deepEqual(laterImpact.processImpact?.unmappedTasks.map(({ taskId }) => taskId), [laterTask.task.id]);
+    assert.deepEqual(laterImpact.processImpact?.staleActivations.map(({ taskId }) => taskId), [laterTask.task.id]);
+  }
+});
+
 test("restored identities remap without replay and require explicit process approval", async (t) => {
   const fixture = await createFixture();
   const first = await CoordinationApplication.start({
@@ -261,6 +373,11 @@ test("Resume with current process rebases only compatible stale activations", as
   });
   const approved = await changed.resumeWithCurrentProcess();
   assert.equal(approved.accepted, true);
+  const startupAfterApproval = changed.queryStartup();
+  assert.equal(startupAfterApproval.mode, "paused");
+  if (startupAfterApproval.mode === "paused") {
+    assert.equal(startupAfterApproval.processImpact, undefined);
+  }
   await changed.waitForAutomationIdle();
   assert.equal(runtime.requests.length, 1);
   assert.equal(runtime.requests[0]?.agent.instructions, "Use the current instructions.\n");

@@ -73,6 +73,47 @@ test("process changes expose startup impact and explicit stale-work recovery", a
   await impact.getByRole("button", { name: "Resume with current process" }).click();
   await expect.poll(() => resumedWithCurrentProcess).toBe(true);
   await expect(page.getByText("Automation running")).toBeVisible();
+  await expect(impact).toBeVisible();
+  await expect(impact.getByRole("heading", { name: /Unmapped tasks.*1/ })).toBeVisible();
+  await expect(impact.getByRole("heading", { name: /Stale activations.*0/ })).toBeVisible();
+});
+
+test("accepting the final stale activation removes startup impact after refresh", async ({ page }) => {
+  let accepted = false;
+  await page.route("**/api/automation/resume-with-current-process", async (route) => {
+    accepted = true;
+    await route.fulfill({
+      status: 200,
+      json: { accepted: true, automation: { state: "running", attemptsMayStart: true } },
+    });
+  });
+  await page.route("**/api/board", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.startup.processImpact = accepted ? undefined : {
+      previousVersion: "previous-version",
+      currentVersion: "current-version",
+      unmappedTasks: [],
+      staleActivations: [{
+        activationId: "compatible-activation",
+        taskId: "T-0001",
+        targetAgentId: "consulting-agent",
+        priorStatus: "queued",
+        targetAvailable: true,
+        taskMapped: true,
+      }],
+    };
+    if (accepted) body.automation = { state: "running", attemptsMayStart: true };
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto("/");
+  const impact = page.locator(".process-impact");
+  await expect(impact).toBeVisible();
+  await impact.getByRole("button", { name: "Resume with current process" }).click();
+  await expect(impact).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".process-impact")).toHaveCount(0);
 });
 
 test("actual definition removal, user remapping, and identity restoration stay recoverable", async ({ page }) => {
@@ -104,8 +145,19 @@ test("actual definition removal, user remapping, and identity restoration stay r
   await impact.getByRole("button", { name: new RegExp(created.task.id) }).click();
   await page.getByRole("combobox", { name: "Move task" }).selectOption("backlog");
   await expect(page.getByRole("combobox", { name: "Move task" })).toHaveValue("backlog");
+  await page.getByRole("link", { name: "Back to board" }).click();
+  await expect(page.locator(".process-impact")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".process-impact")).toHaveCount(0);
   await removedServer.close();
   removed.close();
+
+  const restartedRemoved = await CoordinationApplication.start({ processDefinitionPath: definitionPath, databasePath });
+  const restartedRemovedServer = await startWebServer(restartedRemoved, { host: "127.0.0.1", port: 0 });
+  await page.goto(restartedRemovedServer.baseUrl);
+  await expect(page.locator(".process-impact")).toHaveCount(0);
+  await restartedRemovedServer.close();
+  restartedRemoved.close();
 
   await writeProcessEvolutionDefinition(definitionPath, {
     includeImplementation: true,
@@ -792,7 +844,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(nestedComment.locator(".comment-consequence")).toHaveCSS("font-weight", "600");
   const authoredProse = nestedComment.locator(".authored-prose");
   expect(await authoredProse.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
-  await nestedComment.getByRole("button", { name: "Show more" }).click();
+  await nestedComment.getByRole("button", { name: /Show \d+ more lines?/ }).click();
   await expect(nestedComment.getByRole("button", { name: "Show less" })).toBeVisible();
   expect(await authoredProse.evaluate((element) => element.scrollHeight === element.clientHeight)).toBe(true);
   await expect(attemptEntry.getByText("Thread information")).toHaveCount(0);
@@ -852,6 +904,51 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   expect(commentBounds).not.toBeNull();
   expect(timelineBounds).not.toBeNull();
   expect(timelineBounds!.y - (commentBounds!.y + commentBounds!.height)).toBeGreaterThanOrEqual(8);
+});
+
+test("collapsed timeline prose reports hidden rendered lines at desktop and narrow widths", async ({ page }) => {
+  let authoredBody = "First line.\nSecond line.\nThird line.\nFourth line.\nFifth line.";
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const authoredComment = detail.task.comments.find((comment: { body: string }) =>
+      comment.body.startsWith("Please preserve the authored context"));
+    if (authoredComment !== undefined) {
+      authoredComment.body = authoredBody;
+    }
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const authoredComment = page.locator(".comment-entry, .nested-comment").filter({ hasText: "First line." });
+  const authoredProseId = await authoredComment.locator(".authored-prose").getAttribute("id");
+  expect(authoredProseId).not.toBeNull();
+  const authoredText = page.locator(`[id="${authoredProseId}"]`).locator("..");
+  const disclosure = authoredText.getByRole("button", { name: "Show 1 more line" });
+  await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  await disclosure.press("Enter");
+  await expect(authoredText.getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
+
+  authoredBody = Array.from({ length: 10 }, (_, index) =>
+    `Responsive wrapping sentence ${index + 1} stays measurable when timeline content refreshes.`).join(" ");
+  await expect(authoredText).toContainText("Responsive wrapping sentence 10");
+  await expect(authoredText.getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
+  await authoredText.getByRole("button", { name: "Show less" }).click();
+  const desktopDisclosure = authoredText.getByRole("button", { name: /Show \d+ more lines?/ });
+  const desktopHiddenLines = Number((await desktopDisclosure.textContent())?.match(/\d+/)?.[0]);
+  expect(desktopHiddenLines).toBeGreaterThan(1);
+
+  await desktopDisclosure.click();
+  await page.setViewportSize({ width: 420, height: 900 });
+  await expect(authoredText.getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
+  await authoredText.getByRole("button", { name: "Show less" }).click();
+  await expect(authoredText.getByRole("button", { name: /Show \d+ more lines?/ })).toBeVisible();
+  const narrowHiddenLines = Number((await authoredText.locator(".text-disclosure").textContent())?.match(/\d+/)?.[0]);
+  expect(narrowHiddenLines).toBeGreaterThan(desktopHiddenLines);
+
+  authoredBody = "Short update.";
+  await expect(authoredText).toContainText("Short update.");
+  await expect(authoredText.locator(".text-disclosure")).toHaveCount(0);
 });
 
 test("attempt outcomes show canonical-looking participant text without executable mention styling", async ({ page }) => {

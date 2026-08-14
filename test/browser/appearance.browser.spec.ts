@@ -155,7 +155,7 @@ test("dark interactive controls keep readable contrast without turning secondary
   expect(await contrastRatio(dragHandle)).toBeGreaterThanOrEqual(4.5);
 
   await page.goto("/tasks/T-0001");
-  const showMore = page.getByRole("button", { name: "Show more" }).first();
+  const showMore = page.getByRole("button", { name: /Show \d+ more lines?/ }).first();
   await expect(showMore).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   expect(await contrastRatio(showMore)).toBeGreaterThanOrEqual(4.5);
 
