@@ -1,147 +1,163 @@
 # 59 — Add Notification Settings and Refine the Top Bar
 
 **What to build:** Replace the top bar's loose collection of form controls with
-compact operational controls and a proper Settings entry. A large settings
-overlay owns notification and appearance preferences, including global
-notification delivery, individual notification causes, and per-column entry
-subscriptions.
+compact operational controls and a direct Settings action. A categorized
+settings overlay owns durable per-process notification policy and browser-local
+appearance, while desktop delivery gains configurable agent-authored column
+entry notifications.
 
 **Blocked by:** None
 
 **Status:** open
 
-- [ ] The shared board/task top bar has a compact application menu with a
-  Settings entry. Opening Settings presents a large modal overlay, visually
-  consistent with the transcript viewer, rather than navigating away from the
-  current board or task.
-- [ ] The settings overlay supports multiple categories. Its first categories
-  are Notifications and Appearance, selected from a sidebar on ordinary
-  desktop widths and presented in a usable responsive order at narrow widths.
-  Opening, category selection, closing, keyboard focus, Escape, and focus
-  restoration follow accessible dialog and menu behavior.
-- [ ] Notifications settings contain one global desktop-delivery toggle plus
-  individual controls for agent-authored user mentions, actionable failed
-  runs, and every applied workflow column. Subordinate controls remain visible
-  and understandable when global delivery is off, without unexpectedly
-  requesting operating-system permission.
-- [ ] Every applied workflow column, irrespective of its watching agent or
-  framework ownership, has an independently toggleable entry subscription in
-  Notifications settings. The preference is not displayed as another control
-  in each board header, is not part of the version-controlled process
-  definition, and does not change workflow ownership.
-- [ ] The user can change notification-cause and column subscriptions while the
-  application is running, without pausing automation, restarting the host, or
-  reapplying the process definition. Changes apply to future occurrences and
-  do not replay existing attention or entry history.
-- [ ] A new entry into a subscribed column can produce one notification. Base
-  detection on a durable entry occurrence and its actor rather than comparing
-  periodically refreshed board positions, so intermediate moves, inert
-  refreshes, and same-column no-ops are not mistaken for entries.
-- [ ] An agent-authored `@user` mention continues to create durable attention
-  and, by default, notify independently of column subscriptions. It remains
-  independently configurable and this ticket must preserve issue 57's intended
-  rule that a user-authored self-mention is not an attention request.
-- [ ] Actionable terminal or startup agent-run failures remain an independently
-  configurable notification cause.
-- [ ] A user-initiated interruption continues to create authoritative
-  `automation-suspended` attention with its Continue/dismiss recovery, but does
-  not produce a desktop notification. The initiating user is already
-  interacting with the event and should not receive a notification echo.
-- [ ] A subscribed-column entry is an informational notification preference;
-  by default it does not create a Needs attention reason or imply that the user
-  owns the next action. `@user` remains the explicit durable request for user
-  action.
-- [ ] Do not notify for an inert refresh, replayed history, startup discovery of
-  existing state, or another event that does not represent a new occurrence.
-- [ ] Reuse the existing opt-in, best-effort, privacy-safe desktop-notification
-  behavior and direct navigation to the affected task.
-- [ ] Remove suppression based on the affected task detail page being open.
-  Page visibility does not prove that the user is looking at the application;
-  an enabled cause therefore notifies whether the user is on the board,
+## Settings surface
+
+- [ ] The shared board/task top bar has a gear-shaped Settings action that opens
+  a large modal overlay, visually consistent with the transcript viewer,
+  without an intermediary one-item menu or navigation away from the current
+  board or task.
+- [ ] The overlay initially selects Notifications and supports Notifications
+  and Appearance as distinct categories. Use a category sidebar at ordinary
+  desktop widths and a usable responsive presentation at narrow widths.
+  Opening, category selection, closing, Escape, keyboard focus, and focus
+  restoration follow accessible dialog behavior.
+- [ ] Settings apply and persist immediately, with no Save or Cancel step. A
+  rejected update restores the authoritative value and reports an inline error.
+
+## Notification policy
+
+- [ ] Notification policy is durable live state for the applied process, shared
+  across browsers viewing that process, and separate from the version-controlled
+  process definition and browser-local operating-system permission.
+- [ ] The shared global policy defaults on and acts as a master silence switch.
+  Individual cause and column settings remain visible, editable, and preserved
+  while it is off. Turning it back on affects only future occurrences.
+- [ ] Agent-authored `@user` mentions and actionable terminal or startup
+  agent-run failures are independent causes and default on. A user-authored
+  `@user` self-mention creates neither user attention nor a notification; this
+  ticket owns that correction rather than issue 57.
+- [ ] A user-initiated task interruption still creates authoritative
+  `automation-suspended` attention with its existing recovery semantics, but is
+  not a notification cause. Pausing process-wide automation also does not
+  notify.
+- [ ] Notifications settings group column subscriptions under their board
+  headings and identify them durably by stable board and column IDs. Display
+  names remain presentation only.
+- [ ] A newly encountered unwatched workflow column defaults subscribed, an
+  agent-watched workflow column defaults unsubscribed, and every framework-owned
+  Completion column defaults subscribed. This initializes the durable setting
+  only when that stable board/column identity first appears; later watcher or
+  process changes do not recompute it.
+- [ ] Only agent-authored entry into a subscribed column notifies. Both an
+  agent move and agent-authored initial task creation count as entry. The
+  corresponding user-authored move or creation is always silent. Same-column
+  no-ops, inert refreshes, replayed history, and startup discovery are not
+  entries.
+- [ ] Column-entry notification is informational: it does not create Needs
+  attention or imply user responsibility. Its title identifies board and task,
+  its body identifies task title and destination column, and selecting it opens
+  task details without an attention highlight. It exposes no description,
+  comment text, diagnostics, or other task content.
+- [ ] Notification occurrences are independent and immediate. An agent comment
+  mentioning the user may notify on the next observation while that attempt is
+  still running; a later subscribed-column entry may notify again. Do not add
+  batching, attempt-level correlation, trigger precedence, or combined-trigger
+  deduplication.
+- [ ] Policy changes are prospective. Occurrences created while the global
+  switch or their individual cause is off are never replayed after enablement,
+  reload, or restart.
+
+## Browser delivery
+
+- [ ] Delivery remains browser-present and best-effort. At least one
+  application tab must be open; closing all tabs can miss occurrences and later
+  reopening does not replay them. Failed or unavailable operating-system
+  delivery is not retried and never changes authoritative task or attention
+  state.
+- [ ] Do not suppress a notification because the affected task detail page is
+  open. An enabled occurrence may notify while the user is on the board,
   another task, or the affected task itself.
-- [ ] Define deduplication when one agent handoff both enters a subscribed
-  column and mentions the user, so the user is informed without receiving a
-  noisy pair of notifications while the durable mention remains intact.
-- [ ] Decide during specification whether user-authored entries are always
-  silent, and whether agent-authored task creation directly in a subscribed
-  column counts as an entry. The default recommendation is to suppress the
-  user's own actions and include agent-authored creation.
-- [ ] Decide whether subscriptions follow the existing device-local browser
-  preference model or are durable project/user state. Whichever scope is
-  chosen must be visible in the control's explanation and must survive an
-  ordinary page reload.
-- [ ] Appearance settings own the existing System, Light, and Dark preference;
-  remove the appearance form control from the top bar without changing its
-  immediate application, system-theme following, or reload persistence.
-- [ ] Keep pause/resume immediately reachable in the top bar as one
-  purpose-built status action. Integrate automation state into that action:
-  running uses the existing green status signal with `Pause`; paused uses an
-  amber/yellow signal with `Resume`; pausing communicates its unavailable
-  transitional state without a separate status sentence or explanatory text.
-- [ ] Keep Current runs as a top-bar entry with its count and task navigation,
-  but style and operate it as a compact top-bar menu rather than an unstyled
-  disclosure surrounded by form controls.
-- [ ] Remove the standalone desktop-notification button, appearance select,
-  duplicate automation-state label, and `No agents are changing boards.` text
-  from the top bar. The resulting top bar has a deliberate hierarchy across
-  board and task pages and remains usable at narrow widths.
-- [ ] Cover settings-menu and modal interaction; notification and appearance
-  persistence; global and per-cause controls; entries into watched, unwatched,
-  and framework-owned columns; subscribed and unsubscribed destinations;
-  agent-authored mentions; actionable failures; user interruption without
-  notification; combined triggers; user-authored entries; creation if
-  included; repeated and intermediate moves; startup/restart; delivery while
-  the affected task is open; notification failure; automation transitions;
-  current-run navigation; and responsive top-bar/settings layout.
+- [ ] When operating-system notification permission is undecided and the
+  browser has no recorded delivery-consent answer, show one small application
+  dialog. Yes invokes the browser permission request from that user gesture. No
+  records a reversible browser-local decline, suppresses later automatic
+  prompts in that browser, and does not change shared process policy.
+- [ ] Settings reports whether this browser is granted, locally declined,
+  denied/revoked, unsupported, or still eligible to ask. It offers the
+  applicable Allow/reconsider action; a browser-level denial that script cannot
+  reverse instead explains that browser controls own the remedy.
+- [ ] When shared notifications are on but this browser cannot deliver, show a
+  restrained warning badge on the Settings gear and explain the mismatch only
+  inside Settings.
+- [ ] Separate browsers may each deliver; do not add cross-browser claiming or
+  deduplication. Every browser observation of the same occurrence uses its
+  stable occurrence ID as the Notification tag so standard same-origin tag
+  replacement can coalesce duplicate attempts across tabs in one browser.
+- [ ] Attention notifications retain privacy-safe content and navigate to the
+  exact affected task/reason without resolving it. Column-entry notifications
+  use the content and navigation behavior defined above.
+
+## Appearance and top bar
+
+- [ ] Appearance settings own the existing System, Light, and Dark preference.
+  Appearance remains browser-local and shared across projects in that browser;
+  moving its control out of the top bar does not change immediate application,
+  system-theme following, or reload persistence.
+- [ ] Keep pause/resume immediately reachable as one purpose-built top-bar
+  status action: running is a green signal with `Pause`; pausing/draining is an
+  amber signal with disabled `Pausing…`; paused and resumable is an amber signal
+  with `Resume`.
+- [ ] When unresolved process impact prevents resume, show the ordinary amber
+  `Resume` action disabled. The nearby process-impact panel remains the sole
+  explanation and resolution surface; do not duplicate that text in the top
+  bar.
+- [ ] Keep Current runs as a compact top-bar menu with its count and existing
+  task navigation, styled as a top-bar control rather than an unstyled form
+  disclosure.
+- [ ] Remove the standalone desktop-notification button, Appearance select,
+  duplicate automation-state label, and `No agents are changing boards.` text.
+  The resulting hierarchy is consistent across board and task pages and remains
+  usable at narrow widths.
+
+## Verification
+
+- [ ] Application-level tests cover durable per-process policy, defaults,
+  initialization-only column behavior, immediate setting changes, agent versus
+  user authorship, creation and movement, self-mention suppression, failure and
+  interruption causes, and prospective no-replay semantics.
+- [ ] Browser tests cover the consent dialog and local permission states,
+  global/cause/column controls, multiple boards, same-tag delivery, active-task
+  delivery, failure handling, notification content/navigation, Settings and
+  Appearance interaction, automation transitions, blocked Resume, current-run
+  navigation, keyboard behavior, and desktop/narrow responsive layout.
+- [ ] Update the aggregate specification and architecture inspection map in the
+  same change to reflect durable notification-policy ownership, the occurrence
+  query/delivery flow, and the browser-local permission and Appearance state.
 
 ## Context
 
-Issue 20 implemented notifications for newly created attention reasons, and
-issue 57 tracks making those reasons actionable. Current domain behavior says
-that merely entering a column does not create user attention. The real-use
-request is a broader notification-settings surface, including a per-column
-awareness preference rather than a rule tied to unwatched columns alone.
-Column subscriptions therefore should remain separate from process-defined
-watching responsibility and from durable attention unless later use shows that
-a distinct explicit handoff concept is needed.
+Issue 20 implemented browser-polled notifications for newly created attention
+reasons. Current implementation polls the board projection every 1.5 seconds,
+keeps an in-memory seen set, suppresses delivery on the affected task page, and
+notifies for `user-mention`, `failed-run`, and `automation-suspended`; ordinary
+task movement never notifies. Its global opt-in and Appearance controls are
+mixed into `AutomationControls` alongside automation state and Current runs.
+
+This ticket replaces that shallow top-bar collection with three clear
+interfaces: immediate automation action/status, current-run navigation, and
+categorized settings. Notification policy becomes authoritative process-bound
+state, while the browser remains a best-effort operating-system delivery
+adapter. Durable activity identity and actor provenance, rather than board
+position diffing, are the source for column-entry occurrences.
 
 ## Comments
 
-- Current implementation (inspected 2026-08-14): desktop notifications are a
-  browser-side monitor over unresolved Needs attention reasons. It polls the
-  board projection every 1.5 seconds and attempts one operating-system
-  notification for each newly observed `user-mention`, `failed-run`, or
-  `automation-suspended` reason. Ordinary task movement never notifies.
-- Delivery currently requires the browser Notification interface, granted
-  operating-system permission, and the global `Desktop notifications on`
-  preference. The preference is disabled by default and stored in browser
-  local storage. The browser page must be open for its polling monitor to run.
-- The first observation seeds all existing reasons without notifying. Reasons
-  first seen while delivery is disabled, permission is absent, or the affected
-  task detail page is active are also recorded as seen and are not replayed
-  later. Active-task suppression is undesirable because an open page does not
-  establish user attention and should be removed. A delivery exception is
-  swallowed and not retried. A reason created and resolved entirely between
-  polls is not observed by this mechanism.
-- Notification content is limited to board name, task ID and title, and reason
-  type. Selecting it focuses the application and opens the affected task with
-  the reason highlighted; opening or dismissing the notification does not
-  resolve attention.
-- The existing in-memory seen set is suitable for best-effort attention
-  delivery but board-position diffing would be too shallow for column-entry
-  semantics: it cannot reliably retain actor provenance or notice multiple
-  moves between polls. The implemented activity ledger already records task
-  movement with actor and occurrence identity, which is the natural source for
-  a small notification-occurrence query interface.
-- Issue 57 owns making attention actions source-local and ignoring
-  user-authored `@user` self-mentions. Issue 59 should preserve those semantics
-  rather than establish a competing mention rule.
-- `AutomationControls` currently mixes status, action, explanation, current
-  runs, notification preference, and appearance preference into one wrapping
-  top-bar row. This ticket should replace that shallow collection with three
-  clear interfaces: immediate automation action/status, current-run navigation,
-  and an application menu leading to categorized settings.
-- Current `automation-suspended` attention is projected directly from the
-  durable state created by a user interruption. It must remain visible and
-  actionable on the board even though notification delivery for that
-  self-initiated occurrence is removed.
+- Grilling on 2026-08-14 resolved notification ownership, defaults, entry
+  semantics, permission consent, delivery scope, replay, multi-tab and
+  multi-browser behavior, content, combined triggers, settings interaction,
+  Appearance ownership, and top-bar automation states.
+- Column subscriptions are awareness preferences, not workflow watching and not
+  durable attention. `@user` remains the explicit durable user request.
+- Issue 57 retains attention action placement and interruption recovery UI. Its
+  former self-mention creation rule moved here so issue 59 is implementable
+  first without depending on that broader ticket.

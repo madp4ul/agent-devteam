@@ -5,7 +5,7 @@ action center: every listed reason must offer a concrete path to the place or
 decision that can resolve it, without duplicating large controls across task
 details.
 
-**Blocked by:** None
+**Blocked by:** 59 — Add Notification Settings and Refine the Top Bar
 
 **Status:** open
 
@@ -19,10 +19,9 @@ details.
   alongside the existing Respond action where Respond is available. Resolving
   it there must retain the existing durable attention-resolution behavior and
   remove the reason from the task-level panel after refresh.
-- [ ] Do not create a user-mention attention reason when a user-authored comment
-  mentions the user participant. User-authored self-mentions are not requests
-  for the same user’s attention. Agent-authored mentions of the user continue
-  to create attention normally.
+- [ ] Preserve issue 59's authoritative rule that only an agent-authored user
+  mention creates user attention. This ticket changes where that existing
+  reason is acted upon, not which comments create one.
 - [ ] Move recovery for the `automation-suspended` / Continue-required reason
   from the expanded Agent activity content into the corresponding Needs
   attention item. Agent activity may still identify the interrupted current
@@ -39,11 +38,11 @@ details.
 - [ ] Preserve the existing user-only authority, audit history, queue-release
   semantics, race handling, attention deep-link highlighting, and recovery
   behavior for failure, permission, stale-process, and interruption reasons.
-- [ ] Add application and browser coverage for agent-authored user mentions,
-  ignored user-authored self-mentions, navigation to the exact source comment,
-  source-local acknowledgement, conditional attention-panel removal, compact
-  interruption recovery, Continue, Dismiss, keyboard focus, and narrow-screen
-  reading order.
+- [ ] Add application and browser coverage for navigation to the exact source
+  comment, source-local acknowledgement, conditional attention-panel removal,
+  compact interruption recovery, Continue, Dismiss, keyboard focus, and
+  narrow-screen reading order. Issue 59 owns creation-level mention authorship
+  coverage.
 
 ## Comments
 
@@ -57,3 +56,6 @@ details.
 - The exact compact presentation for interruption recovery is intentionally
   unresolved between a single dialog-opening Resolve action and two direct
   actions. That choice should be made when this ticket is specified.
+- Issue 59 now owns suppressing user-authored `@user` self-mentions and is
+  intentionally implemented first. This ticket consumes the resulting
+  agent-authored mention reasons without redefining their eligibility.
