@@ -5,21 +5,32 @@ interface instead of appearing as stray encoding artifacts such as `Â·`.
 
 **Blocked by:** None
 
-**Status:** open
+**Status:** resolved
 
-- [ ] Find every user-visible instance of the unintended `Â` character and any
+- [x] Find every user-visible instance of the unintended `Â` character and any
   related mojibake in source strings, persisted projections, and rendered UI.
-- [ ] Correct the underlying text or encoding boundary rather than hiding one
+- [x] Correct the underlying text or encoding boundary rather than hiding one
   observed character with CSS.
-- [ ] Ensure intended separators such as the middle dot render consistently in
+- [x] Ensure intended separators such as the middle dot render consistently in
   task history, attempt labels, transcript metadata, and other affected views.
-- [ ] Decide whether existing persisted text needs a compatibility repair or
+- [x] Decide whether existing persisted text needs a compatibility repair or
   whether the defect is limited to presentation/source encoding.
-- [ ] Add regression coverage at the narrowest boundary that caused the
+- [x] Add regression coverage at the narrowest boundary that caused the
   corruption and verify representative UI surfaces visually.
+
+## Answer
+
+The defect was ten literal `Â·` sequences in the process-definition-change
+panel, introduced already corrupted in otherwise valid UTF-8 source. The build
+and web server preserved those literals faithfully; persisted projections were
+not involved, so existing state needs no compatibility repair.
+
+The panel now uses the intended middle-dot separator. Its browser scenarios
+assert the corrected rendered text for mocked and real process evolution, and
+a fast source-level test rejects common mojibake markers across all browser UI
+source before they can reach another view.
 
 ## Comments
 
 - Captured from real-project use after `Â·` appeared unintentionally in several
   places in the UI.
-

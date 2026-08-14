@@ -272,26 +272,26 @@ export function BoardPage({
               Live state was preserved. Stale activations will not run until explicitly approved
               for the current process, and unmapped tasks remain dormant until a user remaps them.
             </p>
-            <h3>Unmapped tasks Â· {processImpact.unmappedTasks.length}</h3>
+            <h3>Unmapped tasks · {processImpact.unmappedTasks.length}</h3>
             {processImpact.unmappedTasks.length === 0 ? <p>All retained tasks are mapped.</p> : (
               <ul>
                 {processImpact.unmappedTasks.map((task) => (
                   <li key={task.taskId}>
                     <button className="secondary" onClick={() => openTask(task.taskId, task.boardId)}>
-                      {task.taskId} Â· {task.title} Â· former {task.boardName} / {task.columnName}
+                      {task.taskId} · {task.title} · former {task.boardName} / {task.columnName}
                     </button>
                   </li>
                 ))}
               </ul>
             )}
-            <h3>Stale activations Â· {processImpact.staleActivations.length}</h3>
+            <h3>Stale activations · {processImpact.staleActivations.length}</h3>
             <ul>
               {processImpact.staleActivations.map((activation) => (
                 <li key={activation.activationId}>
                   <span>
-                    {activation.taskId} Â· {activation.targetAgentId} Â· {activation.priorStatus}
-                    {activation.targetAvailable ? " Â· current target available" : " Â· target agent removed"}
-                    {activation.taskMapped ? " Â· task mapped" : " Â· task unmapped"}
+                    {activation.taskId} · {activation.targetAgentId} · {activation.priorStatus}
+                    {activation.targetAvailable ? " · current target available" : " · target agent removed"}
+                    {activation.taskMapped ? " · task mapped" : " · task unmapped"}
                   </span>
                   <button
                     className="secondary"

@@ -65,8 +65,8 @@ test("process changes expose startup impact and explicit stale-work recovery", a
   await page.goto("/");
   const impact = page.locator(".process-impact");
   await expect(impact.getByRole("heading", { name: "Review startup impact" })).toBeVisible();
-  await expect(impact).toContainText("T-0002 Â· Drag this task Â· former Product delivery / Retired column");
-  await expect(impact).toContainText("retired-agent Â· failed Â· target agent removed Â· task unmapped");
+  await expect(impact).toContainText("T-0002 · Drag this task · former Product delivery / Retired column");
+  await expect(impact).toContainText("retired-agent · failed · target agent removed · task unmapped");
   await impact.locator("li").filter({ hasText: "retired-agent" })
     .getByRole("button", { name: "Dismiss stale activation" }).click();
   await expect(impact).not.toContainText("retired-agent");
@@ -140,7 +140,7 @@ test("actual definition removal, user remapping, and identity restoration stay r
   const removedServer = await startWebServer(removed, { host: "127.0.0.1", port: 0 });
   await page.goto(removedServer.baseUrl);
   const impact = page.locator(".process-impact");
-  await expect(impact).toContainText(`${created.task.id} Â· Recover changed process state`);
+  await expect(impact).toContainText(`${created.task.id} · Recover changed process state`);
   await impact.getByRole("button", { name: "Dismiss stale activation" }).click();
   await impact.getByRole("button", { name: new RegExp(created.task.id) }).click();
   await page.getByRole("combobox", { name: "Move task" }).selectOption("backlog");
@@ -904,6 +904,64 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   expect(commentBounds).not.toBeNull();
   expect(timelineBounds).not.toBeNull();
   expect(timelineBounds!.y - (commentBounds!.y + commentBounds!.height)).toBeGreaterThanOrEqual(8);
+});
+
+test("wide transcript content wraps without overflowing the dialog or page", async ({ page }) => {
+  const unbroken = "C:/workspace/" + "deeply-nested-segment/".repeat(18) + "artifact.json";
+  const prose = "Transcript prose remains readable within the available width even when it contains " +
+    `an unbroken value such as ${unbroken}.`;
+  const structuredOutput = JSON.stringify({ path: unbroken, status: "completed" }, null, 2);
+  const preformattedOutput = `COMMAND\tRESULT\n${unbroken}\tcompleted`;
+
+  await page.setViewportSize({ width: 360, height: 720 });
+  await page.route("**/api/attempts/browser-attempt/transcript", async (route) => {
+    const response = await route.fetch();
+    const transcript = await response.json();
+    transcript.items = [
+      { kind: "message", role: "agent", text: prose },
+      {
+        kind: "tool",
+        name: "command_execution",
+        status: "completed",
+        summary: structuredOutput,
+        output: preformattedOutput,
+      },
+      { kind: "diagnostic", text: unbroken },
+    ];
+    await route.fulfill({ response, json: transcript });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const pageScrollWidthBeforeDialog = await page.evaluate(() => document.documentElement.scrollWidth);
+  await page.getByRole("button", { name: "View transcript" }).click();
+  const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
+  await expect(dialog).toContainText(unbroken);
+
+  const containment = await dialog.evaluate((element) => {
+    const content = element.querySelector<HTMLElement>(".transcript-content");
+    const records = [...element.querySelectorAll<HTMLElement>(".transcript-item")];
+    return {
+      viewportWidth: document.documentElement.clientWidth,
+      pageScrollWidth: document.documentElement.scrollWidth,
+      dialogRight: element.getBoundingClientRect().right,
+      dialogOverflow: element.scrollWidth > element.clientWidth,
+      contentOverflow: content === null ? true : content.scrollWidth > content.clientWidth,
+      recordOverflow: records.some((record) => record.scrollWidth > record.clientWidth),
+    };
+  });
+  expect(containment.pageScrollWidth).toBeLessThanOrEqual(pageScrollWidthBeforeDialog);
+  expect(containment.dialogRight).toBeLessThanOrEqual(containment.viewportWidth);
+  expect(containment.dialogOverflow).toBe(false);
+  expect(containment.contentOverflow).toBe(false);
+  expect(containment.recordOverflow).toBe(false);
+
+  const toolOutput = dialog.locator(".tool-output");
+  await toolOutput.getByText("View command output").click();
+  const pre = toolOutput.locator("pre");
+  await expect(pre).toHaveText(preformattedOutput);
+  expect(await pre.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  expect(await toolOutput.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(false);
+  expect(await dialog.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(false);
 });
 
 test("collapsed timeline prose reports hidden rendered lines at desktop and narrow widths", async ({ page }) => {

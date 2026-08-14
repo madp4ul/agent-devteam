@@ -195,15 +195,17 @@ without choosing the implementation yet.
   acknowledgements and document the complete MCP tool surface.
   **Resolved:** Agent mutations no longer repeat full task projections; the
   concise MCP reference and contract tests cover all thirteen tools.
-
-## Not yet specified
-
 - [Wrap Wide Transcript Content](./issues/58-wrap-wide-transcript-content.md)
   — Keep transcript prose and tool output inside the viewer, containing any
   intentional code scrolling within the relevant content block.
-- [Notify Agent Handoffs to the User](./issues/59-notify-agent-handoffs-to-user.md)
-  — Notify on explicit agent-to-user responsibility handoffs and refine the
-  durable attention and deduplication semantics for unwatched-column moves.
+  **Resolved:** Transcript headers and records now stay within narrow dialogs,
+  while preformatted tool output preserves whitespace and scrolls locally.
+
+## Not yet specified
+
+- [Add Notification Settings and Refine the Top Bar](./issues/59-notify-agent-handoffs-to-user.md)
+  — Move notification and appearance preferences into categorized settings,
+  add per-column subscriptions, and clarify top-bar operational controls.
 - [Dismiss Startup Impact After Accepting Board Changes](./issues/60-dismiss-startup-impact-after-acceptance.md)
   — Remove resolved startup-impact state immediately and durably after the user
   accepts or dismisses all actionable effects.
@@ -212,6 +214,8 @@ without choosing the implementation yet.
 - [Remove Mojibake Characters from the UI](./issues/61-remove-mojibake-ui-characters.md)
   — Correct the encoding boundary that renders intended punctuation as stray
   characters such as `Â·`.
+  **Resolved:** Corrected the process-change panel's source literals and added
+  repository-wide browser-source and representative rendered-UI coverage.
 - [Review Agent Commits While Task Worktrees Are Open](./issues/62-review-agent-commits-with-open-worktrees.md)
   — Investigate safe review workflows that respect Git linked-worktree
   constraints without discarding or disrupting active task workspaces.
