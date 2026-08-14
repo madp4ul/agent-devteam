@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 12;
+const currentSchemaVersion = 13;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -227,6 +227,34 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       response_json TEXT NOT NULL,
       PRIMARY KEY (command_type, idempotency_key)
     );
+    CREATE TABLE IF NOT EXISTS notification_policy (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+      enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+      user_mention_enabled INTEGER NOT NULL CHECK (user_mention_enabled IN (0, 1)),
+      failed_run_enabled INTEGER NOT NULL CHECK (failed_run_enabled IN (0, 1))
+    );
+    INSERT OR IGNORE INTO notification_policy VALUES (1, 1, 1, 1);
+    CREATE TABLE IF NOT EXISTS notification_column_subscriptions (
+      board_id TEXT NOT NULL,
+      column_id TEXT NOT NULL,
+      enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+      PRIMARY KEY (board_id, column_id),
+      FOREIGN KEY (board_id, column_id) REFERENCES columns(board_id, id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS notification_occurrences (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL CHECK (type IN ('user-mention', 'failed-run', 'column-entry')),
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      task_title TEXT NOT NULL,
+      board_id TEXT NOT NULL,
+      board_name TEXT NOT NULL,
+      column_id TEXT,
+      column_name TEXT,
+      attention_reason_id TEXT REFERENCES attention_reasons(id) ON DELETE CASCADE,
+      source_event_id TEXT NOT NULL,
+      occurred_at TEXT NOT NULL
+    );
     CREATE VIEW IF NOT EXISTS mapped_tasks AS
       SELECT task.id
       FROM tasks task
@@ -289,6 +317,9 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     "attention_reasons",
     "task_attachments",
     "command_responses",
+    "notification_policy",
+    "notification_column_subscriptions",
+    "notification_occurrences",
   ];
   const tables = new Set(
     (database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>)

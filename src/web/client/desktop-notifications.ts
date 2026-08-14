@@ -1,69 +1,102 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { readBoard } from "./api.ts";
+import type {
+  NotificationPolicyView,
+  UpdateNotificationPolicyCommand,
+} from "../../application/coordination-contract.ts";
+import {
+  readNotificationOccurrences,
+  readNotificationPolicy,
+  updateNotificationPolicy,
+} from "./api.ts";
 import type { Navigate } from "./navigation.ts";
 
-const settingKey = "coordination.desktop-notifications.enabled";
+const consentKey = "coordination.desktop-notifications.consent";
+
+export type BrowserNotificationState =
+  | "granted"
+  | "locally-declined"
+  | "denied"
+  | "unsupported"
+  | "eligible";
 
 export interface DesktopNotificationControl {
-  available: boolean;
-  enabled: boolean;
-  permission: NotificationPermission | "unavailable";
-  toggle(): Promise<void>;
+  policy: NotificationPolicyView | undefined;
+  browserState: BrowserNotificationState;
+  consentPromptOpen: boolean;
+  deliveryMismatch: boolean;
+  updatePolicy(change: UpdateNotificationPolicyCommand["change"]): Promise<void>;
+  allow(): Promise<void>;
+  decline(): void;
 }
 
 export function useDesktopNotifications(navigate: Navigate): DesktopNotificationControl {
   const available = "Notification" in window;
-  const [enabled, setEnabled] = useState(
-    () =>
-      available &&
-      Notification.permission === "granted" &&
-      localStorage.getItem(settingKey) === "true",
+  const [policy, setPolicy] = useState<NotificationPolicyView>();
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
+    () => available ? Notification.permission : "unsupported",
   );
-  const [permission, setPermission] = useState<NotificationPermission | "unavailable">(
-    () => available ? Notification.permission : "unavailable",
-  );
-  const seen = useRef(new Set<string>());
-  const initialized = useRef(false);
+  const [consent, setConsent] = useState<"accepted" | "declined" | null>(() => {
+    const stored = localStorage.getItem(consentKey);
+    return stored === "accepted" || stored === "declined" ? stored : null;
+  });
+  const cursor = useRef<number | undefined>(undefined);
 
-  const observe = useCallback(async (deliver: boolean): Promise<void> => {
-    const state = await readBoard();
-    const activeTaskId = /^\/tasks\/([^/]+)$/.exec(window.location.pathname)?.[1];
-    for (const group of state.attention) {
-      for (const reason of group.reasons) {
-        if (seen.current.has(reason.id)) continue;
-        seen.current.add(reason.id);
-        if (!initialized.current || !deliver || decodeURIComponent(activeTaskId ?? "") === group.task.id) {
-          continue;
-        }
-        try {
-          const notification = new Notification(
-            `${group.task.boardName} · ${group.task.id}`,
-            { body: `${group.task.title} · ${reason.type.replaceAll("-", " ")}`, tag: reason.id },
-          );
-          notification.onclick = () => {
-            window.focus();
-            navigate(
-              `/tasks/${encodeURIComponent(group.task.id)}?attention=${encodeURIComponent(reason.id)}`,
-            );
-            notification.close();
-          };
-        } catch {
-          // Delivery is best-effort; the durable board reason remains authoritative.
-        }
+  useEffect(() => {
+    void readNotificationPolicy().then(setPolicy);
+  }, []);
+
+  const browserState: BrowserNotificationState = permission === "unsupported"
+    ? "unsupported"
+    : permission === "granted"
+      ? "granted"
+      : permission === "denied"
+        ? "denied"
+        : consent === "declined"
+          ? "locally-declined"
+          : "eligible";
+  const consentPromptOpen = policy?.enabled === true && browserState === "eligible" && consent === null;
+  const canDeliver = browserState === "granted";
+
+  const observe = useCallback(async (): Promise<void> => {
+    const batch = await readNotificationOccurrences(cursor.current);
+    cursor.current = batch.cursor;
+    const currentPermission = available ? Notification.permission : "unsupported";
+    if (currentPermission !== permission) setPermission(currentPermission);
+    if (currentPermission !== "granted") return;
+    for (const occurrence of batch.occurrences) {
+      try {
+        const reason = occurrence.type === "column-entry"
+          ? `entered ${occurrence.destination?.columnName ?? "a workflow column"}`
+          : occurrence.type === "user-mention"
+            ? "mentioned you"
+            : "agent run failed";
+        const notification = new Notification(
+          `${occurrence.task.boardName} · ${occurrence.task.id}`,
+          { body: `${occurrence.task.title} · ${reason}`, tag: occurrence.id },
+        );
+        notification.onclick = () => {
+          window.focus();
+          const attention = occurrence.attentionReasonId === undefined
+            ? ""
+            : `?attention=${encodeURIComponent(occurrence.attentionReasonId)}`;
+          navigate(`/tasks/${encodeURIComponent(occurrence.task.id)}${attention}`);
+          notification.close();
+        };
+      } catch {
+        // Delivery is best-effort and each occurrence is attempted only once by this tab.
       }
     }
-    initialized.current = true;
-  }, [navigate]);
+  }, [available, navigate, permission]);
 
   useEffect(() => {
     let disposed = false;
     const poll = async (): Promise<void> => {
       if (disposed) return;
       try {
-        await observe(enabled && permission === "granted");
+        await observe();
       } catch {
-        // A polling or delivery failure cannot alter authoritative attention state.
+        // Polling cannot alter authoritative occurrence or attention state.
       }
     };
     void poll();
@@ -72,23 +105,66 @@ export function useDesktopNotifications(navigate: Navigate): DesktopNotification
       disposed = true;
       window.clearInterval(interval);
     };
-  }, [enabled, observe, permission]);
+  }, [observe]);
 
-  const toggle = useCallback(async (): Promise<void> => {
+  const allow = useCallback(async (): Promise<void> => {
     if (!available) return;
-    if (enabled) {
-      localStorage.setItem(settingKey, "false");
-      setEnabled(false);
-      return;
-    }
-    await observe(false);
-    const nextPermission = await Notification.requestPermission();
-    setPermission(nextPermission);
-    if (nextPermission === "granted") {
-      localStorage.setItem(settingKey, "true");
-      setEnabled(true);
-    }
-  }, [available, enabled, observe]);
+    localStorage.setItem(consentKey, "accepted");
+    setConsent("accepted");
+    const next = await Notification.requestPermission();
+    setPermission(next);
+  }, [available]);
 
-  return { available, enabled, permission, toggle };
+  const decline = useCallback((): void => {
+    localStorage.setItem(consentKey, "declined");
+    setConsent("declined");
+  }, []);
+
+  const changePolicy = useCallback(async (
+    change: UpdateNotificationPolicyCommand["change"],
+  ): Promise<void> => {
+    setPolicy((current) => current === undefined ? current : applyPolicyChange(current, change));
+    try {
+      const authoritative = await updateNotificationPolicy(change);
+      setPolicy(authoritative);
+    } catch (error) {
+      setPolicy(await readNotificationPolicy());
+      throw error;
+    }
+  }, []);
+
+  return {
+    policy,
+    browserState,
+    consentPromptOpen,
+    deliveryMismatch: policy?.enabled === true && !canDeliver,
+    updatePolicy: changePolicy,
+    allow,
+    decline,
+  };
+}
+
+function applyPolicyChange(
+  policy: NotificationPolicyView,
+  change: UpdateNotificationPolicyCommand["change"],
+): NotificationPolicyView {
+  if (change.type === "global") return { ...policy, enabled: change.enabled };
+  if (change.type === "cause") {
+    return {
+      ...policy,
+      causes: {
+        ...policy.causes,
+        [change.cause === "user-mention" ? "userMention" : "failedRun"]: change.enabled,
+      },
+    };
+  }
+  return {
+    ...policy,
+    boards: policy.boards.map((board) => board.id !== change.boardId ? board : ({
+      ...board,
+      columns: board.columns.map((column) => column.id === change.columnId
+        ? { ...column, enabled: change.enabled }
+        : column),
+    })),
+  };
 }

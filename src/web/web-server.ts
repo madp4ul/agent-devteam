@@ -87,6 +87,47 @@ async function handleBrowserApi(
   method: string,
   url: URL,
 ): Promise<void> {
+  if (method === "GET" && url.pathname === "/api/settings/notifications") {
+    sendJson(response, 200, application.queryNotificationPolicy());
+    return;
+  }
+  if (method === "PATCH" && url.pathname === "/api/settings/notifications") {
+    const body = await readJsonBody(request);
+    const type = stringField(body, "type");
+    const enabled = booleanField(body, "enabled");
+    const result = type === "global"
+      ? application.updateNotificationPolicy({ change: { type, enabled } })
+      : type === "cause"
+        ? application.updateNotificationPolicy({
+            change: {
+              type,
+              cause: notificationCauseField(body, "cause"),
+              enabled,
+            },
+          })
+        : type === "column"
+          ? application.updateNotificationPolicy({
+              change: {
+                type,
+                boardId: stringField(body, "boardId"),
+                columnId: stringField(body, "columnId"),
+                enabled,
+              },
+            })
+          : undefined;
+    if (result === undefined) throw new Error("type must be global, cause, or column");
+    sendJson(response, result.accepted ? 200 : 404, result);
+    return;
+  }
+  if (method === "GET" && url.pathname === "/api/notification-occurrences") {
+    const afterText = url.searchParams.get("after");
+    const after = afterText === null ? undefined : Number(afterText);
+    if (after !== undefined && (!Number.isInteger(after) || after < 0)) {
+      throw new Error("after must be a non-negative integer");
+    }
+    sendJson(response, 200, application.queryNotificationOccurrences(after));
+    return;
+  }
   if (method === "GET" && url.pathname === "/api/board") {
     const startup = application.queryStartup();
     const automation = application.queryAutomation();
@@ -312,6 +353,7 @@ async function handleBrowserApi(
         activeRun: activeRuns.find((run) => run.taskId === taskId) ?? null,
         activeRuns,
         automation: application.queryAutomation(),
+        startup: application.queryStartup(),
         collaborators: collaborators.available ? collaborators.collaborators : [],
       });
     } else {
@@ -757,6 +799,23 @@ function stringField(body: Record<string, unknown>, name: string): string {
 function numberField(body: Record<string, unknown>, name: string): number {
   const value = body[name];
   if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${name} must be a number`);
+  return value;
+}
+
+function booleanField(body: Record<string, unknown>, name: string): boolean {
+  const value = body[name];
+  if (typeof value !== "boolean") throw new Error(`${name} must be a boolean`);
+  return value;
+}
+
+function notificationCauseField(
+  body: Record<string, unknown>,
+  name: string,
+): "user-mention" | "failed-run" {
+  const value = stringField(body, name);
+  if (value !== "user-mention" && value !== "failed-run") {
+    throw new Error(`${name} must be user-mention or failed-run`);
+  }
   return value;
 }
 

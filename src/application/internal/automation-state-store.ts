@@ -19,6 +19,7 @@ import type {
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { CommandResponseStore } from "./command-response-store.ts";
+import type { NotificationStore } from "./notification-store.ts";
 
 export interface RunnableActivation {
   activation: ActivationView;
@@ -34,16 +35,19 @@ export class AutomationStateStore {
   readonly #database: DatabaseSync;
   readonly #taskProjections: TaskProjectionStore;
   readonly #commandResponses: CommandResponseStore;
+  readonly #notifications: NotificationStore;
 
   constructor(
     database: CoordinationDatabase,
     taskProjections: TaskProjectionStore,
     commandResponses: CommandResponseStore,
+    notifications: NotificationStore,
   ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#taskProjections = taskProjections;
     this.#commandResponses = commandResponses;
+    this.#notifications = notifications;
   }
 
   recoverInterruptedAttempts(now = new Date()): number {
@@ -604,6 +608,13 @@ export class AutomationStateStore {
         { attentionReasonId, reasonType: "failed-run", sourceEventId: activationId },
         occurredAt,
       );
+      this.#notifications.recordAttention(
+        "failed-run",
+        activation.task_id,
+        attentionReasonId,
+        activationId,
+        occurredAt,
+      );
       return {
         taskId: activation.task_id,
         activationId,
@@ -833,6 +844,13 @@ export class AutomationStateStore {
          VALUES (?, ?, 'failed-run', ?, ?, NULL)`,
       )
       .run(attentionReasonId, taskId, activationId, occurredAt);
+    this.#notifications.recordAttention(
+      "failed-run",
+      taskId,
+      attentionReasonId,
+      activationId,
+      occurredAt,
+    );
     this.appendActivity(
       taskId,
       "attention.created",

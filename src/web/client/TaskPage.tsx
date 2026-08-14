@@ -13,6 +13,7 @@ import {
 } from "./api.ts";
 import { AgentActivityPanel } from "./AgentActivityPanel.tsx";
 import { AutomationControls } from "./AutomationControls.tsx";
+import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
@@ -118,6 +119,8 @@ export function TaskPage({
           automation={detail.automation}
           activeRuns={detail.activeRuns}
           notifications={notifications}
+          canResume={detail.startup.mode !== "paused" ||
+            (detail.startup.processImpact?.staleActivations.length ?? 0) === 0}
           onChanged={refresh}
           onFeedback={setFeedback}
           onOpenTask={(activeTaskId) => navigate(`/tasks/${encodeURIComponent(activeTaskId)}`)}
@@ -518,7 +521,7 @@ function EditDialog({
       <section className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-title">
         <div className="modal-heading">
           <h2 id="edit-title">Edit {detail.task.id}</h2>
-          <button className="icon-button" aria-label="Close task editing" onClick={onClose}>×</button>
+          <CloseIconButton label="Close task editing" onClick={onClose} />
         </div>
         <form onSubmit={(event) => void submit(event)}>
           <label>

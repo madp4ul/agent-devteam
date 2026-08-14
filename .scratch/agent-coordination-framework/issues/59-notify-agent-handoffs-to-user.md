@@ -8,7 +8,7 @@ entry notifications.
 
 **Blocked by:** None
 
-**Status:** open
+**Status:** resolved
 
 ## Settings surface
 
@@ -161,3 +161,18 @@ position diffing, are the source for column-entry occurrences.
 - Issue 57 retains attention action placement and interruption recovery UI. Its
   former self-mention creation rule moved here so issue 59 is implementable
   first without depending on that broader ticket.
+
+## Answer
+
+Implemented durable, process-bound notification policy and occurrence storage,
+including prospective cursor semantics for agent column entry, user mention,
+and failed-run delivery. Added the Settings dialog with immediate global,
+cause, per-column, and Appearance controls; browser-local permission consent;
+best-effort cursor polling; safe notification content and navigation; and the
+refined automation, Current runs, and Settings top-bar controls.
+
+Application and browser coverage now exercises persistence, policy changes,
+causal eligibility, restart behavior, delivery failure, active-task delivery,
+multi-board settings, keyboard/focus behavior, responsive layout, and the
+automation control states. The aggregate specification, architecture map, and
+ADR 0006 document the resulting ownership and browser/OS boundary.

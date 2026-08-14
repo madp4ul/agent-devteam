@@ -7,6 +7,13 @@ import { CoordinationApplication } from "../../src/application/coordination-appl
 import { startWebServer } from "../../src/web/web-server.ts";
 import { writeProcessEvolutionDefinition } from "../support/process-evolution-fixture.ts";
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem(
+    "coordination.desktop-notifications.consent",
+    "declined",
+  ));
+});
+
 test("process changes expose startup impact and explicit stale-work recovery", async ({ page }) => {
   let staleActivations = [
     {
@@ -64,6 +71,7 @@ test("process changes expose startup impact and explicit stale-work recovery", a
 
   await page.goto("/");
   const impact = page.locator(".process-impact");
+  await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeDisabled();
   await expect(impact.getByRole("heading", { name: "Review startup impact" })).toBeVisible();
   await expect(impact).toContainText("T-0002 · Drag this task · former Product delivery / Retired column");
   await expect(impact).toContainText("retired-agent · failed · target agent removed · task unmapped");
@@ -72,7 +80,7 @@ test("process changes expose startup impact and explicit stale-work recovery", a
   await expect(impact).not.toContainText("retired-agent");
   await impact.getByRole("button", { name: "Resume with current process" }).click();
   await expect.poll(() => resumedWithCurrentProcess).toBe(true);
-  await expect(page.getByText("Automation running")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
   await expect(impact).toBeVisible();
   await expect(impact.getByRole("heading", { name: /Unmapped tasks.*1/ })).toBeVisible();
   await expect(impact.getByRole("heading", { name: /Stale activations.*0/ })).toBeVisible();
@@ -174,62 +182,6 @@ test("actual definition removal, user remapping, and identity restoration stay r
   restored.close();
 });
 
-
-test("live runs show the actual agent and timer while process pause drains", async ({ page }) => {
-  let automationState: "running" | "pausing" | "paused" = "running";
-  await page.route("**/api/automation/pause", async (route) => {
-    automationState = "pausing";
-    setTimeout(() => { automationState = "paused"; }, 1_200);
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ accepted: true, automation: { state: "pausing", attemptsMayStart: false } }),
-    });
-  });
-  await page.route("**/api/board", async (route) => {
-    const response = await route.fetch();
-    const body = await response.json();
-    const task = body.boards[0].columns.flatMap((column: { tasks: unknown[] }) => column.tasks)
-      .find((candidate: { id: string }) => candidate.id === "T-0002");
-    task.run = {
-      status: automationState === "paused" ? "idle" : "running",
-      activeAgentId: automationState === "paused" ? null : "consulting-agent",
-      queuedActivationCount: 0,
-      failedActivationCount: 0,
-    };
-    body.automation = automationState === "running"
-      ? { state: "running", attemptsMayStart: true }
-      : { state: automationState, attemptsMayStart: false };
-    body.activeRuns = automationState === "paused" ? [] : [{
-      attemptId: "live-attempt",
-      taskId: "T-0002",
-      taskTitle: "Drag this task",
-      boardId: "delivery",
-      boardName: "Product delivery",
-      columnId: "backlog",
-      columnName: "Backlog",
-      agentId: "consulting-agent",
-      status: "running",
-      startedAt: new Date(Date.now() - 65_000).toISOString(),
-    }];
-    await route.fulfill({ response, json: body });
-  });
-
-  await page.goto("/");
-  const card = page.getByRole("link", { name: /T-0002 Drag this task/ }).locator("..");
-  await expect(card).toContainText(/Active · consulting-agent · 1m/);
-  await page.getByText("Current runs · 1").click();
-  const runButton = page.getByRole("button", { name: /consulting-agent · T-0002.*running · 1m/ });
-  await expect(runButton).toBeVisible();
-  await runButton.click();
-  await expect(page).toHaveURL(/\/tasks\/T-0002$/);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Pause" }).click();
-  await expect(page.getByRole("button", { name: "Draining active runs…" })).toBeDisabled();
-  await expect(page.getByText("Automation pausing")).toBeVisible();
-  await expect(page.getByText("Automation paused")).toBeVisible();
-  await expect(page.getByText("No agents are changing boards.")).toBeVisible();
-});
 
 test("task interruption waits for confirmation and offers contextual continuation", async ({ page }) => {
   let interruptionState: "running" | "interrupting" | "interrupted" = "running";
@@ -765,7 +717,7 @@ test("automatic board refresh preserves the user's current horizontal position",
 test("details keep contextual controls, one timeline, and readable transcript evidence", async ({ page }) => {
   await page.goto("/tasks/T-0001");
   const topbar = page.locator(".detail-topbar");
-  await expect(topbar.getByText(/Automation (running|paused)/)).toBeVisible();
+  await expect(topbar.getByRole("button", { name: /Pause|Resume/ })).toBeVisible();
   await expect(topbar.getByText(/Current runs · \d+/)).toBeVisible();
   const description = page.getByRole("region", { name: "Description" });
   await expect(description.getByRole("button", { name: "Edit task" })).toBeVisible();
@@ -2008,7 +1960,7 @@ test("archived tasks toggle into their retained board location and can be unarch
   const automation = page.locator(".automation-control");
   await expect(automation.getByRole("button", { name: /Archived tasks|Archive completed/ })).toHaveCount(0);
   await page.setViewportSize({ width: 640, height: 760 });
-  await expect(automation.getByText(/Desktop notifications/)).toBeVisible();
+  await expect(automation.getByRole("button", { name: /Settings/ })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(640);
   await page.setViewportSize({ width: 1280, height: 800 });
   const completion = page.getByTestId("column-completion");
@@ -2369,14 +2321,33 @@ test("permission attention explains why automatic retry is unavailable", async (
   await expect(reason.getByRole("button", { name: "Retry" })).toHaveCount(0);
 });
 
-test("desktop notifications are opt-in, privacy-safe, suppressed on the active task, and navigate without resolving", async ({ page, request }) => {
+test("notification consent delivers on the active task with a stable tag and informational navigation", async ({ page }) => {
+  let occurrenceReady = false;
+  let occurrenceDelivered = false;
+  let initialized = false;
+  await page.route("**/api/notification-occurrences*", async (route) => {
+    if (!initialized) {
+      initialized = true;
+      await route.fulfill({ json: { cursor: 0, occurrences: [] } });
+      return;
+    }
+    await route.fulfill({ json: !occurrenceReady || occurrenceDelivered ? { cursor: occurrenceDelivered ? 1 : 0, occurrences: [] } : {
+      cursor: 1,
+      occurrences: [{
+        id: "column-entry-occurrence", type: "column-entry", occurredAt: "2026-08-14T12:00:00.000Z",
+        task: { id: "T-0002", title: "Drag this task", boardId: "delivery", boardName: "Product delivery" },
+        destination: { boardId: "delivery", boardName: "Product delivery", columnId: "completion", columnName: "Completion" },
+      }, {
+        id: "mention-occurrence", type: "user-mention", occurredAt: "2026-08-14T12:00:01.000Z",
+        task: { id: "T-0002", title: "Drag this task", boardId: "delivery", boardName: "Product delivery" },
+        attentionReasonId: "mention-attention",
+      }],
+    } });
+    if (occurrenceReady) occurrenceDelivered = true;
+  });
   await page.addInitScript(() => {
-    const notifications: Array<{
-      title: string;
-      options: NotificationOptions;
-      onclick: (() => void) | null;
-      close(): void;
-    }> = [];
+    localStorage.removeItem("coordination.desktop-notifications.consent");
+    const notifications: Array<{ title: string; options: NotificationOptions; onclick: (() => void) | null; close(): void }> = [];
     class ControlledNotification {
       static permission: NotificationPermission = "default";
       static requestCount = 0;
@@ -2385,128 +2356,245 @@ test("desktop notifications are opt-in, privacy-safe, suppressed on the active t
         ControlledNotification.permission = "granted";
         return "granted";
       }
-      readonly title: string;
-      readonly options: NotificationOptions;
       onclick: (() => void) | null = null;
-      constructor(title: string, options: NotificationOptions = {}) {
-        this.title = title;
-        this.options = options;
-        notifications.push(this);
-      }
+      constructor(readonly title: string, readonly options: NotificationOptions = {}) { notifications.push(this); }
       close(): void {}
     }
     Object.defineProperty(window, "Notification", { value: ControlledNotification, configurable: true });
     Object.assign(window, { __controlledNotifications: notifications, __ControlledNotification: ControlledNotification });
   });
-  await page.goto("/");
-  await expect(page.getByRole("button", { name: "Desktop notifications off" })).toBeVisible();
-  expect(await page.evaluate(() => Notification.permission)).toBe("default");
-  await page.getByRole("button", { name: "Desktop notifications off" }).click();
-  await expect(page.getByRole("button", { name: "Desktop notifications on" })).toBeVisible();
-  await page.waitForTimeout(1_700);
-  expect(await page.evaluate(() => (window as typeof window & { __controlledNotifications: unknown[] }).__controlledNotifications.length)).toBe(0);
-
-  await page.getByRole("link", { name: /T-0002 Drag this task/ }).click();
-  await expect(page).toHaveURL(/\/tasks\/T-0002$/);
-  await page.getByRole("textbox", { name: "Comment" }).fill("@user please inspect this while I am open.");
-  const commentRegion = page.getByRole("region", { name: "Add comment" });
-  await expect(commentRegion.getByText("Mention a collaborator", { exact: false })).toHaveCount(0);
-  await expect(commentRegion.getByText("Comment", { exact: true })).toHaveCount(0);
-  await commentRegion.getByRole("button", { name: "Post" }).click();
-  await page.waitForTimeout(1_700);
-  expect(await page.evaluate(() => (window as typeof window & { __controlledNotifications: unknown[] }).__controlledNotifications.length)).toBe(0);
-
-  await page.getByRole("link", { name: "Back to board" }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await request.post("/api/tasks/T-0001/comments", {
-    data: {
-      body: "@user private comment text must not appear in the desktop notification.",
-      idempotencyKey: "controlled-notification-comment",
-    },
-  });
-  await expect.poll(() => page.evaluate(() => {
-    const controlled = window as typeof window & { __controlledNotifications: unknown[] };
-    return controlled.__controlledNotifications.length;
-  })).toBe(1);
+  await page.goto("/tasks/T-0002");
+  await expect(page.getByRole("dialog", { name: "Allow desktop notifications?" })).toBeVisible();
+  await page.getByRole("button", { name: "Yes, ask browser" }).click();
+  occurrenceReady = true;
+  await expect.poll(() => page.evaluate(() =>
+    (window as typeof window & { __controlledNotifications: unknown[] }).__controlledNotifications.length,
+  )).toBe(2);
   const delivered = await page.evaluate(() => {
     const controlled = window as typeof window & {
-      __controlledNotifications: Array<{ title: string; options: NotificationOptions }>;
+      __controlledNotifications: Array<{ title: string; options: NotificationOptions; onclick: (() => void) | null }>;
       __ControlledNotification: { requestCount: number };
     };
-    const notification = controlled.__controlledNotifications[0];
-    return {
-      title: notification?.title,
-      body: notification?.options.body,
-      tag: notification?.options.tag,
-      requestCount: controlled.__ControlledNotification.requestCount,
-    };
+    return { notifications: controlled.__controlledNotifications.map((notification) => ({
+      title: notification.title, body: notification.options.body, tag: notification.options.tag,
+    })), requestCount: controlled.__ControlledNotification.requestCount };
   });
-  expect(delivered.requestCount).toBe(1);
-  expect(delivered.title).toBe("Product delivery · T-0001");
-  expect(delivered.body).toBe("Inspect all coordination evidence · user mention");
-  expect(JSON.stringify(delivered)).not.toContain("private comment text");
-  await page.waitForTimeout(1_700);
-  expect(await page.evaluate(() => (window as typeof window & { __controlledNotifications: unknown[] }).__controlledNotifications.length)).toBe(1);
+  expect(delivered).toEqual({ notifications: [
+    { title: "Product delivery · T-0002", body: "Drag this task · entered Completion", tag: "column-entry-occurrence" },
+    { title: "Product delivery · T-0002", body: "Drag this task · mentioned you", tag: "mention-occurrence" },
+  ], requestCount: 1 });
   await page.evaluate(() => {
-    const controlled = window as typeof window & {
-      __controlledNotifications: Array<{ onclick: (() => void) | null }>;
-    };
+    const controlled = window as typeof window & { __controlledNotifications: Array<{ onclick: (() => void) | null }> };
     controlled.__controlledNotifications[0]?.onclick?.();
   });
-  await expect(page).toHaveURL(new RegExp(`/tasks/T-0001\\?attention=${delivered.tag}$`));
-  await expect(page.locator(".attention-list .highlighted")).toContainText("user mention");
+  await expect(page).toHaveURL(/\/tasks\/T-0002$/);
+  expect(new URL(page.url()).searchParams.has("attention")).toBe(false);
+  await page.evaluate(() => {
+    const controlled = window as typeof window & { __controlledNotifications: Array<{ onclick: (() => void) | null }> };
+    controlled.__controlledNotifications[1]?.onclick?.();
+  });
+  await expect(page).toHaveURL(/\/tasks\/T-0002\?attention=mention-attention$/);
 });
 
-test("notification delivery failure is attempted once while durable attention remains", async ({ page, request }) => {
+test("notification delivery failure is attempted once", async ({ page }) => {
+  await page.route("**/api/notification-occurrences*", async (route) => {
+    const after = new URL(route.request().url()).searchParams.get("after");
+    await route.fulfill({ json: after !== "0" ? { cursor: after === null ? 0 : 1, occurrences: [] } : {
+      cursor: 1,
+      occurrences: [{ id: "failed-occurrence", type: "failed-run", occurredAt: "2026-08-14T12:00:00.000Z",
+        task: { id: "T-0002", title: "Drag this task", boardId: "delivery", boardName: "Product delivery" },
+        attentionReasonId: "failed-attention" }],
+    } });
+  });
   await page.addInitScript(() => {
+    localStorage.setItem("coordination.desktop-notifications.consent", "accepted");
     class FailingNotification {
-      static permission: NotificationPermission = "default";
+      static permission: NotificationPermission = "granted";
       static attempts = 0;
-      static async requestPermission(): Promise<NotificationPermission> {
-        FailingNotification.permission = "granted";
-        return "granted";
-      }
-      constructor() {
-        FailingNotification.attempts += 1;
-        throw new Error("Operating-system notification service is unavailable");
-      }
+      static async requestPermission(): Promise<NotificationPermission> { return "granted"; }
+      constructor() { FailingNotification.attempts += 1; throw new Error("Unavailable"); }
     }
     Object.defineProperty(window, "Notification", { value: FailingNotification, configurable: true });
     Object.assign(window, { __FailingNotification: FailingNotification });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Desktop notifications off" }).click();
-  await request.post("/api/tasks/T-0002/comments", {
-    data: {
-      body: "@user delivery failure must not lose this reason.",
-      idempotencyKey: "failing-notification-comment",
-    },
-  });
-  await expect.poll(() => page.evaluate(() => {
-    const controlled = window as typeof window & { __FailingNotification: { attempts: number } };
-    return controlled.__FailingNotification.attempts;
-  })).toBe(1);
+  await expect.poll(() => page.evaluate(() =>
+    (window as typeof window & { __FailingNotification: { attempts: number } }).__FailingNotification.attempts,
+  )).toBe(1);
   await page.waitForTimeout(1_700);
-  expect(await page.evaluate(() => {
-    const controlled = window as typeof window & { __FailingNotification: { attempts: number } };
-    return controlled.__FailingNotification.attempts;
-  })).toBe(1);
-  const board = await request.get("/api/board");
-  const body = await board.json() as {
-    attention: Array<{ task: { id: string }; reasons: Array<{ type: string }> }>;
-  };
-  expect(body.attention.find((group) => group.task.id === "T-0002")?.reasons)
-    .toContainEqual(expect.objectContaining({ type: "user-mention" }));
+  expect(await page.evaluate(() =>
+    (window as typeof window & { __FailingNotification: { attempts: number } }).__FailingNotification.attempts,
+  )).toBe(1);
 });
 
-test("an unavailable Notification API leaves desktop delivery unavailable without affecting the board", async ({ page }) => {
+test("an unavailable Notification API is explained in Settings and marks the gear", async ({ page }) => {
+  await page.addInitScript(() => Reflect.deleteProperty(window, "Notification"));
+  await page.goto("/");
+  const settings = page.getByRole("button", { name: "Settings, notifications need attention" });
+  await expect(settings).toBeVisible();
+  await settings.click();
+  await expect(page.getByText("This browser does not support desktop notifications.")).toBeVisible();
+});
+
+test("browser-local decline is reversible while browser denial remains browser-owned", async ({ page }) => {
   await page.addInitScript(() => {
-    Reflect.deleteProperty(window, "Notification");
+    if (sessionStorage.getItem("notification-decline-test-initialized") === null) {
+      localStorage.removeItem("coordination.desktop-notifications.consent");
+      sessionStorage.setItem("notification-decline-test-initialized", "true");
+    }
+    class ControlledNotification {
+      static permission: NotificationPermission = "default";
+      static async requestPermission(): Promise<NotificationPermission> { return ControlledNotification.permission; }
+    }
+    Object.defineProperty(window, "Notification", { value: ControlledNotification, configurable: true });
   });
   await page.goto("/");
-  await expect(page.getByText("Desktop notifications unavailable")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Desktop notifications/ })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Needs attention" })).toBeVisible();
+  await page.getByRole("button", { name: "No", exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole("dialog", { name: "Allow desktop notifications?" })).toHaveCount(0);
+  await page.getByRole("button", { name: /Settings/ }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings.getByText(/locally declined/)).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Allow notifications" })).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(Notification, "permission", { value: "denied", configurable: true });
+  });
+  await expect(settings.getByText(/browser controls to allow them again/)).toBeVisible({ timeout: 3_000 });
+  await expect(settings.getByRole("button", { name: "Allow notifications" })).toHaveCount(0);
+});
+
+test("Settings groups multiple boards and restores an authoritative rejected column value", async ({ page }) => {
+  const policy = {
+    enabled: true,
+    causes: { userMention: true, failedRun: true },
+    boards: [
+      { id: "delivery", name: "Delivery", columns: [{ id: "backlog", name: "Backlog", enabled: true }] },
+      { id: "release", name: "Release", columns: [{ id: "ready", name: "Ready", enabled: false }] },
+    ],
+  };
+  await page.route("**/api/settings/notifications", async (route) => {
+    if (route.request().method() === "PATCH") {
+      await route.fulfill({ status: 404, json: { accepted: false, reason: "not-found", policy } });
+    } else {
+      await route.fulfill({ json: policy });
+    }
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Settings/ }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings.getByRole("group", { name: "Delivery" })).toBeVisible();
+  await expect(settings.getByRole("group", { name: "Release" })).toBeVisible();
+  const backlog = settings.getByRole("checkbox", { name: "Backlog" });
+  await backlog.uncheck();
+  await expect(settings.getByRole("alert")).toContainText("not found");
+  await expect(backlog).toBeChecked();
+});
+
+test("Settings applies policy and Appearance immediately with keyboard focus restoration", async ({ page }) => {
+  await page.goto("/");
+  const trigger = page.getByRole("button", { name: /Settings/ });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog).toBeVisible();
+  const closeSettings = dialog.getByRole("button", { name: "Close settings" });
+  await expect(closeSettings.locator("svg")).toHaveCount(1);
+  expect(await closeSettings.evaluate((button) => {
+    const icon = button.querySelector("svg")!;
+    const buttonRect = button.getBoundingClientRect();
+    const iconRect = icon.getBoundingClientRect();
+    return {
+      x: Math.abs(iconRect.x + iconRect.width / 2 - (buttonRect.x + buttonRect.width / 2)),
+      y: Math.abs(iconRect.y + iconRect.height / 2 - (buttonRect.y + buttonRect.height / 2)),
+    };
+  })).toEqual({ x: 0, y: 0 });
+  const notificationsCategory = dialog.getByRole("button", { name: "Notifications" });
+  await expect(notificationsCategory).toHaveAttribute("aria-current", "page");
+  const notificationBounds = await notificationsCategory.boundingBox();
+  const notificationDialogBounds = await dialog.boundingBox();
+  const global = dialog.getByRole("checkbox", { name: "Enable shared notifications" });
+  await global.uncheck();
+  await expect(global).not.toBeChecked();
+  const cause = dialog.getByRole("checkbox", { name: "Agent mentions you" });
+  await expect(cause).toBeEnabled();
+  await cause.uncheck();
+  await expect(cause).not.toBeChecked();
+  const backlog = dialog.getByRole("checkbox", { name: "Backlog" });
+  await backlog.uncheck();
+  await expect(backlog).not.toBeChecked();
+
+  await dialog.getByRole("button", { name: "Appearance" }).click();
+  const appearanceBounds = await notificationsCategory.boundingBox();
+  const appearanceDialogBounds = await dialog.boundingBox();
+  expect(appearanceBounds?.y).toBeCloseTo(notificationBounds?.y ?? 0, 0);
+  expect(appearanceDialogBounds?.height).toBeCloseTo(notificationDialogBounds?.height ?? 0, 0);
+  await dialog.getByRole("combobox", { name: "Appearance" }).selectOption("dark");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await dialog.getByRole("combobox", { name: "Appearance" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Close settings" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await page.setViewportSize({ width: 420, height: 760 });
+  await trigger.click();
+  await expect(dialog.getByRole("button", { name: "Notifications" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Appearance" })).toBeVisible();
+  const settingsBounds = await dialog.boundingBox();
+  expect(settingsBounds?.width ?? Infinity).toBeLessThanOrEqual(420);
+  await dialog.getByRole("button", { name: "Notifications" }).click();
+  await global.check();
+  await cause.check();
+  await backlog.check();
+});
+
+test("top-bar automation action transitions and Current runs navigation stay compact", async ({ page }) => {
+  let automation: "running" | "pausing" | "paused" = "running";
+  await page.route("**/api/automation/pause", async (route) => {
+    automation = "pausing";
+    setTimeout(() => { automation = "paused"; }, 400);
+    await route.fulfill({ json: { accepted: true, automation: { state: "pausing", attemptsMayStart: false } } });
+  });
+  await page.route("**/api/board", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.automation = { state: automation, attemptsMayStart: automation === "running" };
+    body.activeRuns = automation === "paused" ? [] : [{
+      attemptId: "compact-run", taskId: "T-0002", taskTitle: "Drag this task",
+      boardId: "delivery", boardName: "Product delivery", columnId: "backlog", columnName: "Backlog",
+      agentId: "implementer", status: "running", startedAt: "2026-08-14T12:00:00.000Z",
+    }];
+    await route.fulfill({ response, json: body });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
+  const topbar = page.locator(".topbar");
+  const segments = topbar.locator(".topbar-control");
+  await expect(segments).toHaveCount(3);
+  await expect(segments.first()).toHaveCSS("border-radius", "0px");
+  const segmentLayout = await topbar.evaluate((element) => {
+    const bar = element.getBoundingClientRect();
+    const controls = [...element.querySelectorAll<HTMLElement>(".topbar-control")]
+      .map((control) => control.getBoundingClientRect());
+    return {
+      barTop: bar.top,
+      barBottom: bar.bottom,
+      tops: controls.map((control) => control.top),
+      bottoms: controls.map((control) => control.bottom),
+      gaps: controls.slice(1).map((control, index) => control.left - controls[index]!.right),
+    };
+  });
+  expect(segmentLayout.tops.every((top) => Math.abs(top - segmentLayout.barTop) < 1)).toBe(true);
+  expect(segmentLayout.bottoms.every((bottom) => segmentLayout.barBottom - bottom < 4)).toBe(true);
+  expect(segmentLayout.gaps.every((gap) => Math.abs(gap) < 1)).toBe(true);
+  await page.getByText("Current runs · 1").click();
+  await page.getByRole("button", { name: /implementer.*T-0002/ }).click();
+  await expect(page).toHaveURL(/\/tasks\/T-0002$/);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Pause" }).click();
+  await expect(page.getByRole("button", { name: "Pausing…" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
+  await expect(page.getByText("No agents are changing boards.")).toHaveCount(0);
 });
 
 test("needs attention groups by task, locates the card, opens details, and resolves independently", async ({ page }) => {

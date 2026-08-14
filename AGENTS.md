@@ -19,6 +19,14 @@ before changing module boundaries, state ownership, authoritative flows, runtime
 integration, or startup invariants. Update it in the same change whenever one of
 those architectural facts changes; record durable decision reasoning in an ADR.
 
+### Browser UI controls
+
+Icon-only buttons must render a shared, geometrically centered SVG component;
+do not use font glyphs such as `×`, `+`, or Unicode symbols as button icons.
+Keep the button as the accessible control with an explicit label, mark the SVG
+as decorative, and add browser coverage that compares the icon and button
+bounding-box centers whenever a new icon-button pattern is introduced.
+
 ### Development workflow
 
 When the user asks which workflow or skill should come next, consult

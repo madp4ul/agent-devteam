@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 
 import { createChildTask, createTask } from "./api.ts";
+import { CloseIconButton } from "./CloseIconButton.tsx";
 import { errorMessage } from "./feedback.ts";
 
 interface CreationColumn {
@@ -76,7 +77,7 @@ export function TaskCreationDialog({
             </p>
             <h2 id="create-title">{childMode ? "Create child task" : "Create task"}</h2>
           </div>
-          <button type="button" className="icon-button" aria-label="Close task creation" onClick={onClose}>×</button>
+          <CloseIconButton label="Close task creation" onClick={onClose} />
         </div>
         <form onSubmit={(event) => void submit(event)}>
           <label>

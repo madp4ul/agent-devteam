@@ -97,8 +97,9 @@ between them can make an agent operate on the wrong work.
 | State | Owner | Location |
 | --- | --- | --- |
 | Workflow structure and agent instructions | User and project | Version-controlled process files in the project repository |
-| Boards, tasks, activity, activations, and run history | Coordination framework | SQLite in the bound project state root |
+| Boards, tasks, activity, activations, run history, notification policy, and eligible notification occurrences | Coordination framework | SQLite in the bound project state root |
 | Task implementation work | Process and agents | One Git worktree per task in the same state root |
+| Appearance, notification consent, and operating-system permission | Browser and operating system | Browser-local storage and browser permission state |
 
 The project repository is bound to its state root through repository-local Git
 configuration. The database and task worktrees form one recovery and relocation
@@ -119,6 +120,16 @@ an agent's task workspace.
 6. The framework records the attempt outcome and transcript. A successful run
    does not move the task implicitly; workflow changes require an explicit
    command from the user or agent.
+
+Notification delivery follows the same authority boundary: a task command or
+actionable run failure evaluates the durable process policy while recording the
+event and persists an eligible occurrence. Open browser clients poll forward
+from a cursor, advance past every observation whether or not local delivery is
+available, and make one best-effort operating-system delivery attempt. Opening
+or reloading a client starts at the current cursor, so missed or silenced
+occurrences are never replayed. Settings mutates policy through
+`CoordinationApplication`; browser permission and Appearance never enter the
+coordination database.
 
 ## Architectural principles
 

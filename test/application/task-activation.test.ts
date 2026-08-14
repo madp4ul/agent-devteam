@@ -535,6 +535,11 @@ test("a pre-attempt workspace failure is durable, correlated, and visible after 
     assert.equal(inspection.task.run.status, "failed");
     assert.deepEqual(inspection.task.unresolvedAttention.map((reason) => reason.type), ["failed-run"]);
   }
+  const failureOccurrences = firstApplication.queryNotificationOccurrences(0).occurrences;
+  assert.deepEqual(failureOccurrences.map((occurrence) => occurrence.type), ["failed-run"]);
+  assert.equal(failureOccurrences[0]?.attentionReasonId, inspection.available
+    ? inspection.task.unresolvedAttention[0]?.id
+    : undefined);
   firstApplication.close();
 
   const restarted = await CoordinationApplication.start({

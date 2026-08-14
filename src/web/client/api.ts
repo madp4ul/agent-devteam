@@ -15,6 +15,9 @@ import type {
   ArchiveCompletedTasksResult,
   TaskWorkspaceGitStateView,
   CollaboratorView,
+  NotificationPolicyView,
+  NotificationOccurrenceBatch,
+  UpdateNotificationPolicyCommand,
 } from "../../application/coordination-contract.ts";
 
 export interface BrowserColumnView extends BoardSummaryColumnView {
@@ -42,6 +45,7 @@ export interface BrowserTaskDetail {
   automation: AutomationView;
   collaborators: CollaboratorView[];
   relationshipTasks: BrowserRelationshipTask[];
+  startup: StartupView;
 }
 
 export interface BrowserRelationshipTask {
@@ -74,6 +78,26 @@ export async function readBoard(): Promise<BrowserBoardState> {
   return { ...body, activeRuns: body.activeRuns ?? [] };
 }
 
+export async function readNotificationPolicy(): Promise<NotificationPolicyView> {
+  return request("/api/settings/notifications");
+}
+
+export async function updateNotificationPolicy(
+  change: UpdateNotificationPolicyCommand["change"],
+): Promise<NotificationPolicyView> {
+  const result = await request<{ accepted: true; policy: NotificationPolicyView }>(
+    "/api/settings/notifications",
+    { method: "PATCH", body: JSON.stringify(change) },
+  );
+  return result.policy;
+}
+
+export async function readNotificationOccurrences(
+  after?: number,
+): Promise<NotificationOccurrenceBatch> {
+  return request(`/api/notification-occurrences${after === undefined ? "" : `?after=${after}`}`);
+}
+
 export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
   const result = await request<{ available: true } & BrowserTaskDetail>(
     `/api/tasks/${encodeURIComponent(taskId)}`,
@@ -87,6 +111,7 @@ export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
     automation: result.automation,
     collaborators: result.collaborators,
     relationshipTasks: result.relationshipTasks ?? [],
+    startup: result.startup,
   };
 }
 

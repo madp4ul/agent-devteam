@@ -107,6 +107,7 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
     assert.equal(taskAttention?.reasons[0]?.sourceEventId, firstSuspensionActivity.id);
     firstSuspensionReasonId = taskAttention?.reasons[0]?.id;
   }
+  assert.deepEqual(application.queryNotificationOccurrences(0).occurrences, []);
 
   const continued = application.continueInterruptedTask({
     taskId: created.task.id,

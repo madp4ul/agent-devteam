@@ -1,4 +1,11 @@
 import { expect, test } from "@playwright/test";
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem(
+    "coordination.desktop-notifications.consent",
+    "declined",
+  ));
+});
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
@@ -41,7 +48,7 @@ test("the software-delivery example completes rework, consultation, approval, an
   test.info().annotations.push({ type: "proof-server", description: server.baseUrl });
   try {
     await page.goto(server.baseUrl);
-    await expect(page.getByText("Automation paused")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
     await page.getByRole("button", { name: "Create task in Backlog" }).click();
     await page.getByLabel("Outcome-oriented title").fill("Add prefixes to generated summaries");
     await page.getByLabel("Complete description").fill(
@@ -71,7 +78,7 @@ test("the software-delivery example completes rework, consultation, approval, an
     await expect(timeline).toContainText("@code-reviewer the stable boundary");
     await expect(timeline).toContainText("Requested revision:");
     await expect(timeline).toContainText("Architecture verified");
-    await expect(page.getByText("Automation running")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
 
     const beforeApproval = application.queryTask("T-0001");
     assert.equal(beforeApproval.available, true);

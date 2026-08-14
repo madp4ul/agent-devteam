@@ -710,12 +710,26 @@ continuing it, so that task automation can resume with the next expectation.
   transcript items across a host crash is not required.
 - The copyable thread ID appears in expanded attempt details and the transcript
   overlay. Open in Codex appears only through documented supported navigation.
-- Desktop notifications are opt-in and emitted once, best-effort, for each new
-  attention reason unless the user is actively viewing that task. Existing
-  reasons are not replayed on startup or when notifications are enabled.
-- A desktop notification includes the process or board, task ID and title, and
-  attention-reason type, but no comment body, failure diagnostic, or other task
-  content. Selection navigates to the reason without resolving it.
+- A categorized Settings overlay replaces loose top-bar preferences. It owns
+  durable per-process notification policy and browser-local Appearance while
+  pause/resume and Current runs remain compact operational controls. Changes
+  apply immediately; rejected changes restore the authoritative value.
+- Notification policy is durable live state, separate from the process
+  definition and browser permission. Its master switch, agent-authored user
+  mention cause, actionable agent-run failure cause, and stable board/column
+  subscriptions are prospective. New unwatched and Completion columns default
+  subscribed; agent-watched columns default unsubscribed, and initialization is
+  never recomputed for an identity already encountered.
+- Agent-authored creation or movement into a subscribed column creates an
+  informational notification occurrence. User-authored entry, same-column
+  no-ops, replay, startup discovery, user self-mentions, user interruption, and
+  process pause do not. Independent eligible occurrences remain independent.
+- Browser delivery requires an open tab and explicit browser-local consent, is
+  best-effort with no retry or later replay, and is not suppressed on the
+  affected task. Every tab uses the stable occurrence ID as the Notification
+  tag. Content is limited to board, task ID/title, cause or destination; an
+  attention selection opens the exact reason without resolving it, while a
+  column-entry selection opens ordinary task details.
 
 ### First usable process and proof
 

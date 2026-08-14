@@ -206,6 +206,10 @@ without choosing the implementation yet.
 - [Add Notification Settings and Refine the Top Bar](./issues/59-notify-agent-handoffs-to-user.md)
   — Move notification and appearance preferences into categorized settings,
   add per-column subscriptions, and clarify top-bar operational controls.
+  **Resolved:** Durable process-bound policy and occurrence cursors now feed a
+  browser-local permission and OS-delivery adapter; categorized Settings owns
+  notification and Appearance preferences, while the top bar exposes concise
+  automation, current-run, and settings controls.
 - [Dismiss Startup Impact After Accepting Board Changes](./issues/60-dismiss-startup-impact-after-acceptance.md)
   — Remove resolved startup-impact state immediately and durably after the user
   accepts or dismisses all actionable effects.

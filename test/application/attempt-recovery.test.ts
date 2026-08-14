@@ -177,6 +177,9 @@ test("exhaustion offers retry and dismiss only on the current attention reason",
     summary: "failure three",
     actions: ["retry", "dismiss"],
   });
+  const failureOccurrences = application.queryNotificationOccurrences(0).occurrences;
+  assert.deepEqual(failureOccurrences.map((occurrence) => occurrence.type), ["failed-run"]);
+  assert.equal(failureOccurrences[0]?.attentionReasonId, reason?.id);
   const retried = application.retryFailedActivation({
     attentionReasonId: reason!.id,
     actor: { kind: "user", id: "paul" },

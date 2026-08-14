@@ -37,22 +37,26 @@ import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { CommandResponseStore } from "./command-response-store.ts";
 import { taskCreationAllowed } from "./task-creation-policy.ts";
+import type { NotificationStore } from "./notification-store.ts";
 
 export class TaskCommandStore {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
   readonly #projections: TaskProjectionStore;
   readonly #commandResponses: CommandResponseStore;
+  readonly #notifications: NotificationStore;
 
   constructor(
     database: CoordinationDatabase,
     projections: TaskProjectionStore,
     commandResponses: CommandResponseStore,
+    notifications: NotificationStore,
   ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#projections = projections;
     this.#commandResponses = commandResponses;
+    this.#notifications = notifications;
   }
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
@@ -200,6 +204,13 @@ export class TaskCommandStore {
           toColumnId: command.destinationColumnId,
           ...(attemptId === undefined ? {} : { attemptId }),
         },
+      );
+      this.#notifications.recordColumnEntry(
+        command.taskId,
+        currentTask.boardId,
+        command.destinationColumnId,
+        sourceEventId,
+        command.actor,
       );
       this.createColumnEntryActivation(
         command.taskId,
@@ -452,6 +463,7 @@ export class TaskCommandStore {
         command.taskId,
         comment.id,
         mentions.user,
+        command.actor,
         comment.occurredAt,
       );
       const updated = this.#projections.readTask(command.taskId);
@@ -861,6 +873,13 @@ export class TaskCommandStore {
       ...activityDetails,
       ...(startingRef === undefined ? {} : { startingRef }),
     });
+    this.#notifications.recordColumnEntry(
+      taskId,
+      command.boardId,
+      command.columnId,
+      sourceEventId,
+      command.actor,
+    );
     this.createColumnEntryActivation(taskId, command.boardId, command.columnId, sourceEventId);
     const task = this.#projections.readTask(taskId);
     if (task === undefined) throw new Error("Created task could not be read back");
@@ -1147,9 +1166,10 @@ export class TaskCommandStore {
     taskId: string,
     commentId: string,
     mentioned: boolean,
+    actor: Actor,
     createdAt: string,
   ): void {
-    if (!mentioned) return;
+    if (!mentioned || actor.kind !== "agent") return;
     const attentionReasonId = randomUUID();
     this.#database
       .prepare(
@@ -1158,6 +1178,13 @@ export class TaskCommandStore {
          VALUES (?, ?, 'user-mention', ?, ?, NULL)`,
       )
       .run(attentionReasonId, taskId, commentId, createdAt);
+    this.#notifications.recordAttention(
+      "user-mention",
+      taskId,
+      attentionReasonId,
+      commentId,
+      createdAt,
+    );
     this.appendActivity(
       taskId,
       "attention.created",

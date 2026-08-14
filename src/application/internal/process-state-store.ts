@@ -117,6 +117,13 @@ export class ProcessStateStore {
           1,
         );
       });
+      connection.exec(`
+        INSERT OR IGNORE INTO notification_column_subscriptions (board_id, column_id, enabled)
+        SELECT board_id, id,
+               CASE WHEN framework_owned = 1 OR watching_agent_id IS NULL THEN 1 ELSE 0 END
+        FROM columns
+        WHERE applied = 1;
+      `);
       if (definitionChanged) {
         connection
           .prepare(

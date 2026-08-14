@@ -31,7 +31,7 @@ function applyTheme(preference: ThemePreference): void {
   );
 }
 
-export function ThemeControl(): ReactNode {
+export function useThemePreference(): [ThemePreference, (choice: ThemePreference) => void] {
   const [preference, setPreference] = useState<ThemePreference>(storedPreference);
 
   useEffect(() => {
@@ -39,8 +39,16 @@ export function ThemeControl(): ReactNode {
     const followSystem = (): void => {
       if (preference === "system") applyTheme("system");
     };
+    const followChoice = (event: Event): void => {
+      const choice = (event as CustomEvent<ThemePreference>).detail;
+      setPreference(choice);
+    };
     systemTheme.addEventListener("change", followSystem);
-    return () => systemTheme.removeEventListener("change", followSystem);
+    window.addEventListener("coordination-theme-change", followChoice);
+    return () => {
+      systemTheme.removeEventListener("change", followSystem);
+      window.removeEventListener("coordination-theme-change", followChoice);
+    };
   }, [preference]);
 
   const chooseTheme = (choice: ThemePreference): void => {
@@ -52,7 +60,13 @@ export function ThemeControl(): ReactNode {
     } catch {
       // The in-memory preference still applies when device storage is unavailable.
     }
+    window.dispatchEvent(new CustomEvent<ThemePreference>("coordination-theme-change", { detail: choice }));
   };
+  return [preference, chooseTheme];
+}
+
+export function ThemeControl(): ReactNode {
+  const [preference, chooseTheme] = useThemePreference();
 
   return (
     <label className="theme-control">

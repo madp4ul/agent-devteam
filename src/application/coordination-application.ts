@@ -40,6 +40,10 @@ import type {
   InterruptTaskCommand,
   InterruptTaskResult,
   NeedsAttentionQueryResult,
+  NotificationPolicyView,
+  NotificationOccurrenceBatch,
+  UpdateNotificationPolicyCommand,
+  UpdateNotificationPolicyResult,
   ProcessDiagnostic,
   ProcessValidationResult,
   ResumeAutomationResult,
@@ -282,6 +286,18 @@ export class CoordinationApplication {
 
   queryAutomation(): AutomationView {
     return this.#automation.query();
+  }
+
+  queryNotificationPolicy(): NotificationPolicyView {
+    return this.#persistence.notifications.readPolicy();
+  }
+
+  updateNotificationPolicy(command: UpdateNotificationPolicyCommand): UpdateNotificationPolicyResult {
+    return this.#persistence.notifications.updatePolicy(command);
+  }
+
+  queryNotificationOccurrences(afterSequence?: number): NotificationOccurrenceBatch {
+    return this.#persistence.notifications.readOccurrences(afterSequence);
   }
 
   queryActiveRuns(): ActiveRunView[] {
