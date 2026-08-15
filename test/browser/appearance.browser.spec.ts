@@ -56,10 +56,15 @@ test("task description stays prominent without competing with the dark task titl
   await expect(page.locator(".authored-prose").first()).toHaveCSS("color", "rgb(237, 243, 239)");
   await expect(page.locator(".markdown-content code").first()).toHaveCSS("color", "rgb(191, 232, 209)");
   await expect(page.getByRole("button", { name: "Copy description Markdown" })).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  const attentionCard = page.locator(".task-attention-panel .attention-reason-card").first();
+  await expect(attentionCard).toHaveCSS("border-color", "rgb(158, 130, 59)");
+  await expect(attentionCard).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 
   await setAppearance(page, "light");
   await expect(page.locator(".description")).toHaveCSS("color", "rgb(77, 91, 84)");
   await expect(page.locator(".markdown-content code").first()).toHaveCSS("color", "rgb(217, 238, 227)");
+  await expect(attentionCard).toHaveCSS("border-color", "rgb(223, 194, 125)");
+  await expect(attentionCard).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 });
 
 test("explicit theme persists across navigation and reload and overrides the system", async ({ page }) => {

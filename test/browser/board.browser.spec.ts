@@ -232,6 +232,12 @@ test("task interruption waits for confirmation and offers contextual continuatio
       ? { status: "queued", activeAgentId: null, queuedActivationCount: 1, failedActivationCount: 0 }
       : { status: "running", activeAgentId: "consulting-agent", queuedActivationCount: 0, failedActivationCount: 0 };
     body.inspection.automationSuspended = interruptionState === "interrupted";
+    body.inspection.unresolvedAttention = interruptionState === "interrupted" ? [{
+      id: "automation-suspended:activity-suspended-live",
+      type: "automation-suspended",
+      sourceEventId: "activity-suspended-live",
+      createdAt: "2026-08-08T12:00:00.000Z",
+    }] : [];
     body.inspection.currentActivation = {
       id: "live-activation",
       targetAgentId: "consulting-agent",
@@ -307,7 +313,10 @@ test("task interruption waits for confirmation and offers contextual continuatio
   const interruptedCurrent = page.locator(".activity-current.interrupted");
   await expect(interruptedCurrent).toContainText("consulting-agent");
   await expect(interruptedCurrent).toContainText("Interrupted · awaiting your decision");
-  await expect(page.getByText("Task automation is suspended after this interruption.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Agent activity" }))
+    .not.toContainText("Continuation message (optional)");
+  await expect(page.getByRole("region", { name: "Needs attention" })
+    .getByRole("button", { name: "Resolve interruption" })).toBeVisible();
   await expect(page.locator(".activation-queue")).toHaveCount(0);
   await page.getByRole("link", { name: "Back to board" }).click();
   const suspendedCard = page.getByRole("link", { name: /T-0002 Drag this task/ }).locator("..");
@@ -318,8 +327,11 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await expect(attention).toContainText("T-0002 · Drag this task");
   await expect(attention).toContainText("automation suspended — Continue required");
   await page.getByRole("link", { name: /T-0002 Drag this task/ }).click();
-  await page.getByLabel("Continuation message (optional)").fill("Continue after checking the workspace.");
-  await page.getByRole("button", { name: "Continue interrupted activation" }).click();
+  await page.getByRole("button", { name: "Resolve interruption" }).click();
+  const resolution = page.getByRole("dialog", { name: "Resolve interruption" });
+  await expect(resolution.getByLabel("Continuation message (optional)")).toBeFocused();
+  await resolution.getByLabel("Continuation message (optional)").fill("Continue after checking the workspace.");
+  await resolution.getByRole("button", { name: "Continue interrupted activation" }).click();
   await expect.poll(() => continuedMessage).toBe("Continue after checking the workspace.");
   await page.getByRole("link", { name: "Back to board" }).click();
   await expect(page.getByRole("link", { name: /T-0002 Drag this task/ }).locator(".."))
@@ -385,6 +397,12 @@ test("task details confirm individual queued and interrupted activation dismissa
     const body = await response.json();
     body.task.activations = activations;
     body.inspection.automationSuspended = activations[0]?.status === "queued";
+    body.inspection.unresolvedAttention = activations[0]?.status === "queued" ? [{
+      id: "automation-suspended:interrupted-activity",
+      type: "automation-suspended",
+      sourceEventId: "interrupted-activity",
+      createdAt: "2026-08-08T12:01:00.000Z",
+    }] : [];
     body.inspection.currentActivation = activations[0]?.status === "queued"
       ? {
           id: "interrupted-activation",
@@ -420,14 +438,16 @@ test("task details confirm individual queued and interrupted activation dismissa
   await expect(current).toContainText("Interrupted · awaiting your decision");
   await expect(queue).not.toContainText("consulting-agent");
   await expect(queue.getByRole("button", { name: "Dismiss activation for implementing-agent" })).toBeVisible();
-  await page.getByRole("button", { name: "Dismiss activation", exact: true }).click();
+  await page.getByRole("button", { name: "Resolve interruption" }).click();
+  await page.getByRole("dialog", { name: "Resolve interruption" })
+    .getByRole("button", { name: "Dismiss activation", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Dismiss activation?" });
   await expect(dialog).toContainText("consulting-agent");
-  await expect(dialog).toContainText("mentioned in a comment");
   await expect(dialog).toContainText("The next queued activation may start immediately.");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toHaveCount(0);
-  await page.getByRole("button", { name: "Dismiss activation", exact: true }).click();
+  await page.getByRole("dialog", { name: "Resolve interruption" })
+    .getByRole("button", { name: "Dismiss activation", exact: true }).click();
   await dialog.getByRole("button", { name: "Dismiss activation" }).click();
   await expect(current).toHaveCount(0);
   await expect(queue.getByRole("button", { name: "Dismiss activation for implementing-agent" })).toBeVisible();
@@ -435,6 +455,65 @@ test("task details confirm individual queued and interrupted activation dismissa
   await dialog.getByRole("button", { name: "Dismiss activation" }).click();
   await expect(page.getByRole("alert")).toContainText("already started or changed state");
   await expect(queue.getByRole("button", { name: "Dismiss activation for implementing-agent" })).toHaveCount(0);
+});
+
+test("interruption recovery refreshes authoritative state after a continuation race", async ({ page }) => {
+  let raced = false;
+  await page.route("**/api/tasks/T-0002/continue", async (route) => {
+    raced = true;
+    await route.fulfill({ status: 409, json: { accepted: false, reason: "not-interrupted" } });
+  });
+  await page.route("**/api/tasks/T-0002", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.activeRun = null;
+    body.inspection.automationSuspended = !raced;
+    body.inspection.currentActivation = raced ? null : {
+      id: "racing-interrupted-activation",
+      targetAgentId: "implementer",
+      state: "interrupted",
+      model: null,
+      reasoningEffort: null,
+    };
+    body.inspection.unresolvedAttention = raced ? [] : [{
+      id: "automation-suspended:racing-activity",
+      type: "automation-suspended",
+      sourceEventId: "racing-activity",
+      createdAt: "2026-08-15T13:00:00.000Z",
+    }];
+    body.task.activations = raced ? [] : [{
+      id: "racing-interrupted-activation",
+      targetAgentId: "implementer",
+      status: "queued",
+      reason: { type: "column-entry", sourceEventId: "racing-move" },
+      attempts: [{
+        id: "racing-attempt",
+        status: "interrupted",
+        workspacePath: "C:/task-workspace",
+        startedAt: "2026-08-15T12:59:00.000Z",
+        completedAt: "2026-08-15T13:00:00.000Z",
+        outcome: { status: "user-interrupted", summary: "Interrupted." },
+        threadId: "racing-thread",
+        model: null,
+        reasoningEffort: null,
+      }],
+      startupFailure: null,
+      recovery: null,
+      stale: false,
+      model: null,
+      reasoningEffort: null,
+      dismissal: { mayStartNext: true },
+    }];
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto("/tasks/T-0002");
+  await page.getByRole("button", { name: "Resolve interruption" }).click();
+  const dialog = page.getByRole("dialog", { name: "Resolve interruption" });
+  await dialog.getByRole("button", { name: "Continue interrupted activation" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Needs attention" })).toHaveCount(0);
+  await expect(page.getByRole("alert")).toBeVisible();
 });
 
 test("task details dismiss an untouched activation through the assembled application", async ({ page }) => {
@@ -755,7 +834,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   const agentActivity = page.getByRole("region", { name: "Agent activity" });
   await expect(attention.getByText("user mention", { exact: true })).toBeVisible();
   await expect(agentActivity).not.toContainText("user mention");
-  await expect(page.locator('.detail-primary-column > [data-task-section="attention"] + [data-task-section="activity"]'))
+  await expect(page.locator('.detail-primary-column > [data-task-section="attention"] + [data-task-section="description"]'))
     .toHaveCount(1);
   await expect(page.getByText("Please preserve the authored context")).toBeVisible();
   await expect(page.getByText("Please also verify the migration behavior.")).toBeVisible();
@@ -1288,12 +1367,12 @@ test("task details prioritize agent activity and preserve the responsive reading
   expect(descriptionBounds).not.toBeNull();
   expect(attentionBounds).not.toBeNull();
   expect(activityBounds).not.toBeNull();
-  expect(attentionBounds!.y - (descriptionBounds!.y + descriptionBounds!.height)).toBeLessThanOrEqual(24);
-  expect(activityBounds!.y - (attentionBounds!.y + attentionBounds!.height)).toBeLessThanOrEqual(24);
+  expect(descriptionBounds!.y - (attentionBounds!.y + attentionBounds!.height)).toBeLessThanOrEqual(24);
+  expect(activityBounds!.y - (descriptionBounds!.y + descriptionBounds!.height)).toBeLessThanOrEqual(24);
 
   const workspaceBounds = await workspace.boundingBox();
   expect(workspaceBounds).not.toBeNull();
-  expect(Math.abs(workspaceBounds!.y - descriptionBounds!.y)).toBeLessThanOrEqual(2);
+  expect(Math.abs(workspaceBounds!.y - attentionBounds!.y)).toBeLessThanOrEqual(2);
   const overviewBounds = await page.locator('[data-task-section="overview"]').boundingBox();
   expect(overviewBounds).not.toBeNull();
   expect(overviewBounds!.width).toBeGreaterThan(descriptionBounds!.width * 1.25);
@@ -1322,8 +1401,8 @@ test("task details prioritize agent activity and preserve the responsive reading
   );
   expect(readingOrder).toEqual([
     "overview",
-    "description",
     "attention",
+    "description",
     "activity",
     "comment",
     "timeline",
@@ -1952,6 +2031,79 @@ test("an open conversation replaces one running tool entry with its terminal evi
   await page.goto("/tasks/T-0001");
   await page.getByRole("button", { name: "View conversation" }).click();
   await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText("All live checks passed.");
+});
+
+test("task attention navigates to the exact mention and resolves beside its source", async ({ page }) => {
+  const addressed = new Set<string>();
+  const addressRequests: string[] = [];
+  await page.route("**/api/attention/*/mark-addressed", async (route) => {
+    const attentionReasonId = route.request().url().split("/").at(-2)!;
+    addressed.add(attentionReasonId);
+    addressRequests.push(attentionReasonId);
+    await route.fulfill({ status: 200, json: { accepted: true, attentionReasonId } });
+  });
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.description = `${"A long agent-authored description. ".repeat(120)}\n\nEnd of description.`;
+    detail.task.comments.push({
+      id: "source-local-comment",
+      body: "Please decide whether I should continue, @user.",
+      actor: { kind: "agent", id: "implementer" },
+      occurredAt: "2026-08-15T12:30:00.000Z",
+    });
+    detail.task.comments.push({
+      id: "reply-local-comment",
+      body: "Please send the implementation decision, @user.",
+      actor: { kind: "agent", id: "implementer" },
+      occurredAt: "2026-08-15T12:31:00.000Z",
+    });
+    detail.inspection.unresolvedAttention = [{
+      id: "source-local-attention", type: "user-mention", sourceEventId: "source-local-comment",
+      createdAt: "2026-08-15T12:30:00.000Z",
+    }, {
+      id: "reply-local-attention", type: "user-mention", sourceEventId: "reply-local-comment",
+      createdAt: "2026-08-15T12:31:00.000Z",
+    }].filter((reason) => !addressed.has(reason.id));
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001?attention=source-local-attention");
+  const attention = page.getByRole("region", { name: "Needs attention" });
+  const description = page.getByRole("region", { name: "Description" });
+  const source = page.locator("#timeline-source-source-local-comment");
+  expect(await attention.evaluate((attentionElement, descriptionElement) =>
+    Boolean(attentionElement.compareDocumentPosition(descriptionElement as Node) & Node.DOCUMENT_POSITION_FOLLOWING),
+    await description.elementHandle(),
+  )).toBe(true);
+  await expect(attention.getByRole("button", { name: "View request" }).first()).toBeFocused();
+  await page.setViewportSize({ width: 520, height: 800 });
+  const highlightedReason = attention.locator(".attention-reason-card.highlighted");
+  const [reasonTextBox, actionBox] = await Promise.all([
+    highlightedReason.locator(":scope > span").first().boundingBox(),
+    highlightedReason.getByRole("button", { name: "View request" }).boundingBox(),
+  ]);
+  expect(actionBox!.y).toBeGreaterThanOrEqual(reasonTextBox!.y + reasonTextBox!.height);
+  expect(await attention.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await attention.getByRole("button", { name: "View request" }).first().click();
+  await expect(source).toBeFocused();
+  await expect(source).toHaveClass(/timeline-source-target/);
+  await expect(source.getByRole("button", { name: "Mark addressed" })).toBeVisible();
+  await expect(source.getByRole("button", { name: "Reply to Implementation Agent" })).toBeVisible();
+
+  await source.getByRole("button", { name: "Mark addressed" }).click();
+  await expect.poll(() => addressRequests).toEqual(["source-local-attention"]);
+  await expect(source.getByRole("button", { name: "Mark addressed" })).toHaveCount(0);
+  await expect(attention.locator(".attention-reason-card")).toHaveCount(1);
+
+  await attention.getByRole("button", { name: "View request" }).click();
+  const replySource = page.locator("#timeline-source-reply-local-comment");
+  await expect(replySource).toBeFocused();
+  await replySource.getByRole("button", { name: "Reply to Implementation Agent" }).click();
+  await expect.poll(() => addressRequests).toEqual(["source-local-attention", "reply-local-attention"]);
+  await expect(page.getByRole("region", { name: "Needs attention" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Comment" })).toHaveValue("@implementer ");
+  await expect(page.getByRole("textbox", { name: "Comment" })).toBeFocused();
 });
 
 test("an idle open conversation discovers externally added evidence within two seconds", async ({ page }) => {
@@ -3125,7 +3277,7 @@ test("top-bar automation action transitions and Current runs navigation stay com
   await expect(page.getByText("No agents are changing boards.")).toHaveCount(0);
 });
 
-test("needs attention groups by task, locates the card, opens details, and resolves independently", async ({ page }) => {
+test("needs attention groups by task, locates the card, and opens the task action center", async ({ page }) => {
   await page.goto("/");
   const group = page.locator(".attention-groups > li").filter({ hasText: "T-0001" });
   await expect(group).toContainText("user mention");
@@ -3133,12 +3285,11 @@ test("needs attention groups by task, locates the card, opens details, and resol
   await expect(page.locator('[data-task-id="T-0001"]')).toHaveClass(/highlighted/);
   await group.getByRole("button", { name: "Open details" }).click();
   await expect(page).toHaveURL(/\/tasks\/T-0001$/);
-  const attentionReasons = page.locator(".attention-list li");
+  const attentionReasons = page.getByRole("region", { name: "Needs attention" }).locator(".attention-list li");
   await expect(attentionReasons.first()).toBeVisible();
-  const before = await attentionReasons.count();
-  expect(before).toBeGreaterThan(0);
-  await attentionReasons.first().getByRole("button", { name: "Mark addressed" }).click();
-  await expect(attentionReasons).toHaveCount(before - 1);
+  await expect(attentionReasons.first().getByRole("button", { name: "View request" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Needs attention" }).getByRole("button"))
+    .toHaveCount(await attentionReasons.count());
 });
 
 test("pointer dragging moves through the same command and conflicts stay actionable", async ({ page, request }) => {

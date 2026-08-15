@@ -7,7 +7,7 @@ import type {
   CollaboratorView,
   UserTaskInspectionView,
 } from "../../application/coordination-contract.ts";
-import { continueInterruptedTask, dismissActivation, interruptTask } from "./api.ts";
+import { dismissActivation, interruptTask } from "./api.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
 import { Modal } from "./Modal.tsx";
@@ -39,9 +39,6 @@ export function AgentActivityPanel({
   const interruptedCurrent = state.inspection.currentActivation?.state === "interrupted"
     ? state.inspection.currentActivation
     : null;
-  const interruptedActivation = interruptedCurrent === null
-    ? null
-    : queued.find((activation) => activation.id === interruptedCurrent.id) ?? null;
   const laterQueued = interruptedCurrent === null
     ? queued
     : queued.filter((activation) => activation.id !== interruptedCurrent.id);
@@ -104,20 +101,6 @@ export function AgentActivityPanel({
             </details>
           ) : null}
         </div>
-      ) : null}
-
-      {state.inspection.automationSuspended ? (
-        <ContinueAutomationControl
-          taskId={state.taskId}
-          onDismiss={interruptedActivation?.dismissal == null
-            ? null
-            : () => setDismissal(interruptedActivation)}
-          onContinued={async () => {
-            await onChanged();
-            onFeedback({ role: "status", text: `Continued ${state.taskId}.` });
-          }}
-          onError={(error) => onFeedback({ role: "alert", text: errorMessage(error) })}
-        />
       ) : null}
 
       {laterQueued.length === 0 ? (
@@ -220,49 +203,6 @@ function activationReasonLabel(activation: ActivationView): string {
   if (activation.reason.type === "column-entry") return "Column entry";
   if (activation.reason.type === "blockers-cleared") return "Blockers cleared";
   return "Mentioned in a comment";
-}
-
-function ContinueAutomationControl({
-  taskId,
-  onDismiss,
-  onContinued,
-  onError,
-}: {
-  taskId: string;
-  onDismiss: (() => void) | null;
-  onContinued(): Promise<void>;
-  onError(error: unknown): void;
-}): ReactNode {
-  const [message, setMessage] = useState("");
-  const [pending, setPending] = useState(false);
-  return (
-    <div className="attempt-control">
-      <p>Task automation is suspended after this interruption. Continue or dismiss this activation before later queued work can run.</p>
-      <label>
-        Continuation message (optional)
-        <textarea rows={3} value={message} onChange={(event) => setMessage(event.currentTarget.value)} />
-      </label>
-      <div className="form-actions interruption-actions">
-        {onDismiss === null ? null : (
-          <button type="button" className="secondary" disabled={pending} onClick={onDismiss}>
-            Dismiss activation
-          </button>
-        )}
-        <button
-          disabled={pending}
-          onClick={() => {
-            setPending(true);
-            void continueInterruptedTask(taskId, message, crypto.randomUUID())
-              .then(onContinued)
-              .catch(onError)
-              .finally(() => setPending(false));
-          }}
-        >
-          {pending ? "Continuing…" : "Continue interrupted activation"}
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function DismissActivationConfirmation({

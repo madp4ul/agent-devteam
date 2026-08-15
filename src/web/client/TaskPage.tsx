@@ -28,6 +28,7 @@ import { TaskWorkspacePanel } from "./TaskWorkspacePanel.tsx";
 import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
 import { TaskRelationshipsPanel } from "./TaskRelationshipsPanel.tsx";
 import { TaskAttentionPanel } from "./TaskAttentionPanel.tsx";
+import { acknowledgeUserMention } from "./AttentionReasonAction.tsx";
 import { TaskConversationsPanel } from "./TaskConversationsPanel.tsx";
 import {
   captureTimelineViewportAnchor,
@@ -91,6 +92,48 @@ export function TaskPage({
     .filter((entry) => entry.type === "task.moved" && entry.details.toColumnId === task.columnId)
     .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))[0];
   const highlightedReasonId = new URLSearchParams(window.location.search).get("attention");
+  const interruptedActivation = task.activations.find((activation) =>
+    activation.id === inspection.currentActivation?.id || (
+      activation.status === "queued" &&
+      activation.attempts.at(-1)?.outcome?.status === "user-interrupted"
+    ));
+  const interruptedActivationId = inspection.currentActivation?.state === "interrupted"
+    ? inspection.currentActivation.id
+    : interruptedActivation?.id;
+  const interruptedAgentId = inspection.currentActivation?.state === "interrupted"
+    ? inspection.currentActivation.targetAgentId
+    : interruptedActivation?.targetAgentId;
+  const interruption = interruptedActivationId === undefined || interruptedAgentId === undefined
+    ? undefined
+    : {
+        taskId: task.id,
+        activationId: interruptedActivationId,
+        agentName: detail.collaborators.find((agent) => agent.id === interruptedAgentId)?.name ?? interruptedAgentId,
+        canDismiss: interruptedActivation?.dismissal !== null,
+        ...(interruptedActivation?.dismissal?.mayStartNext === undefined
+          ? {}
+          : { mayStartNext: interruptedActivation.dismissal.mayStartNext }),
+        reasonDescription: interruptionReasonDescription(interruptedActivation?.reason.type),
+      };
+  const prepareReply = (agentId: string): void => {
+    const mention = `@${agentId}`;
+    setCommentDraft((current) => containsMention(current, agentId)
+      ? current
+      : `${current}${current.length === 0 || /\s$/.test(current) ? "" : " "}${mention} `);
+    window.requestAnimationFrame(() => commentInput.current?.focus());
+  };
+  const replyToAttentionRequest = async (agentId: string, attentionReasonId?: string): Promise<void> => {
+    if (attentionReasonId !== undefined) {
+      const resolved = await acknowledgeUserMention(
+        attentionReasonId,
+        crypto.randomUUID(),
+        refresh,
+        (error) => setFeedback({ role: "alert", text: errorMessage(error) }),
+      );
+      if (!resolved) return;
+    }
+    prepareReply(agentId);
+  };
 
   const performArchive = (discardWorkspaceChanges = false): void => {
     setArchivalPending(true);
@@ -143,6 +186,18 @@ export function TaskPage({
 
         <div className="detail-grid">
           <div className="detail-primary-column">
+            {inspection.unresolvedAttention.length === 0 ? null : (
+              <div data-task-section="attention">
+                <TaskAttentionPanel
+                  reasons={inspection.unresolvedAttention}
+                  highlightedReasonId={highlightedReasonId}
+                  interruption={interruption}
+                  onChanged={refresh}
+                  onFeedback={setFeedback}
+                />
+              </div>
+            )}
+
             <section
               className="detail-panel task-description"
               data-task-section="description"
@@ -190,17 +245,6 @@ export function TaskPage({
               <MarkdownContent source={task.description} className="description" />
             </section>
 
-            {inspection.unresolvedAttention.length === 0 ? null : (
-              <div data-task-section="attention">
-                <TaskAttentionPanel
-                  reasons={inspection.unresolvedAttention}
-                  highlightedReasonId={highlightedReasonId}
-                  onChanged={refresh}
-                  onFeedback={setFeedback}
-                />
-              </div>
-            )}
-
             <div data-task-section="activity">
               <AgentActivityPanel
                 state={{
@@ -236,14 +280,11 @@ export function TaskPage({
               agents={detail.collaborators}
               columns={board.columns}
               tasks={detail.relationshipTasks}
+              unresolvedAttention={inspection.unresolvedAttention}
               transcriptsAvailable={!task.archived}
-              {...(task.archived ? {} : { onReplyToAgent: (agentId: string) => {
-                const mention = `@${agentId}`;
-                setCommentDraft((current) => containsMention(current, agentId)
-                  ? current
-                  : `${current}${current.length === 0 || /\s$/.test(current) ? "" : " "}${mention} `);
-                window.requestAnimationFrame(() => commentInput.current?.focus());
-              } })}
+              onAttentionChanged={refresh}
+              onAttentionError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })}
+              {...(task.archived ? {} : { onReplyToAgent: replyToAttentionRequest })}
             /></div>
           </div>
 
@@ -559,4 +600,11 @@ function EditDialog({
         </form>
     </Modal>
   );
+}
+
+function interruptionReasonDescription(reason: string | undefined): string {
+  if (reason === "column-entry") return "column entry";
+  if (reason === "blockers-cleared") return "blockers being cleared";
+  if (reason === "user-follow-up") return "a user follow-up";
+  return "a mention in a comment";
 }

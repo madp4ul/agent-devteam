@@ -5,12 +5,14 @@ import type {
   AttemptView,
   CollaboratorView,
   ProcessColumnView,
+  TaskAttentionView,
   TaskActivityView,
   TaskCommentView,
   TaskRelationshipView,
 } from "../../application/coordination-contract.ts";
 import { findParticipantMentions } from "../../application/participant-mentions.ts";
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
+import { MarkUserMentionAddressed } from "./AttentionReasonAction.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { MarkdownContent } from "./MarkdownContent.tsx";
@@ -37,8 +39,11 @@ export function TaskTimeline({
   agents,
   columns,
   tasks,
+  unresolvedAttention,
   transcriptsAvailable = true,
   onReplyToAgent,
+  onAttentionChanged,
+  onAttentionError,
 }: {
   taskId: string;
   comments: TaskCommentView[];
@@ -47,8 +52,11 @@ export function TaskTimeline({
   agents: TimelineAgent[];
   columns: TimelineColumn[];
   tasks: TimelineTask[];
+  unresolvedAttention: TaskAttentionView[];
   transcriptsAvailable?: boolean;
-  onReplyToAgent?(agentId: string): void;
+  onReplyToAgent?(agentId: string, attentionReasonId?: string): void | Promise<void>;
+  onAttentionChanged(): Promise<void>;
+  onAttentionError(error: unknown): void;
 }): ReactNode {
   const [conversationSelection, setConversationSelection] = useState<ConversationSelection>();
   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
@@ -60,6 +68,9 @@ export function TaskTimeline({
     agents,
     columns,
     tasks,
+    unresolvedAttention,
+    onAttentionChanged,
+    onAttentionError,
     ...(onReplyToAgent === undefined ? {} : { onReplyToAgent }),
   };
 
@@ -82,7 +93,7 @@ export function TaskTimeline({
   return (
     <>
       <section className="timeline-section" aria-labelledby="timeline-heading">
-        <h2 id="timeline-heading">Task timeline</h2>
+        <h2 id="timeline-heading" tabIndex={-1}>Task timeline</h2>
         {records.length === 0 ? <p className="quiet">No task history yet.</p> : (
           <ol className="timeline">
             {records.map((record) => (
@@ -127,7 +138,10 @@ interface TimelineContext {
   agents: TimelineAgent[];
   columns: TimelineColumn[];
   tasks: TimelineTask[];
-  onReplyToAgent?: (agentId: string) => void;
+  unresolvedAttention: TaskAttentionView[];
+  onReplyToAgent?: (agentId: string, attentionReasonId?: string) => void | Promise<void>;
+  onAttentionChanged(): Promise<void>;
+  onAttentionError(error: unknown): void;
 }
 
 function TimelineRecordView({
@@ -342,11 +356,15 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
   expanded: boolean;
   onExpanded(expanded: boolean): void;
 }): ReactNode {
+  const [replyPending, setReplyPending] = useState(false);
   const author = actorName(comment.actor, context.agents);
   const requestedAgentIds = [...new Set(context.activations
     .filter((activation) => activation.reason.type === "agent-mention" && activation.reason.sourceEventId === comment.id)
     .map((activation) => activation.targetAgentId))];
   const requestedUser = findParticipantMentions(comment.body).some((mention) => mention.participantId === "user");
+  const userAttention = context.unresolvedAttention.find(
+    (reason) => reason.type === "user-mention" && reason.sourceEventId === comment.id,
+  );
   const replyAgent = requestedUser && comment.actor.kind === "agent" &&
     context.agents.some((agent) => agent.id === comment.actor.id)
     ? comment.actor.id
@@ -384,11 +402,28 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
               </span>
             ) : null}
           </p>
-          {replyAgent === undefined || context.onReplyToAgent === undefined ? null : (
-            <button className="secondary comment-reply" onClick={() => context.onReplyToAgent?.(replyAgent)}>
-              Reply to {nameForAgent(replyAgent, context.agents)}
-            </button>
-          )}
+          <span className="comment-actions">
+            {userAttention === undefined ? null : (
+              <MarkUserMentionAddressed
+                attentionReasonId={userAttention.id}
+                onResolved={context.onAttentionChanged}
+                onError={context.onAttentionError}
+              />
+            )}
+            {replyAgent === undefined || context.onReplyToAgent === undefined ? null : (
+              <button
+                className="secondary comment-reply"
+                disabled={replyPending}
+                onClick={() => {
+                  setReplyPending(true);
+                  void Promise.resolve(context.onReplyToAgent?.(replyAgent, userAttention?.id))
+                    .finally(() => setReplyPending(false));
+                }}
+              >
+                {replyPending ? "Preparing reply…" : `Reply to ${nameForAgent(replyAgent, context.agents)}`}
+              </button>
+            )}
+          </span>
         </div>
       )}
     </>

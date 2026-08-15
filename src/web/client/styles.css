@@ -369,8 +369,8 @@ textarea { resize: vertical; line-height: 1.5; }
 .attention-list { padding-left: 1.2rem; }
 .task-attention-panel { border-color: #dfc27d; background: #fff8e8; }
 .task-attention-panel h2 { color: #72500e; }
-.task-attention-panel .attention-list { display: grid; gap: .75rem; margin: 1rem 0 0; padding: 0; list-style: none; }
-.task-attention-panel .attention-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .35rem .75rem; border-top: 1px solid #dfc27d; padding-top: .75rem; color: #72500e; }
+.task-attention-panel .attention-list { display: grid; gap: .65rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+.task-attention-panel .attention-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .35rem .75rem; border: 1px solid #dfc27d; border-radius: .7rem; color: #72500e; background: rgb(255 255 255 / 55%); padding: .8rem; }
 .agent-activity-panel.idle { display: flex; align-items: baseline; gap: 1rem; padding-block: .85rem; }
 .agent-activity-panel.idle h2 { flex: 0 0 auto; font-size: 1.1rem; }
 .agent-activity-panel.idle .quiet { margin: 0; font-size: .85rem; }
@@ -380,6 +380,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .permission-continuation label { display: grid; gap: .35rem; font-weight: 700; }
 .permission-continuation button { justify-self: end; }
 .task-attention-panel .permission-continuation { grid-column: 1 / -1; }
+.interruption-message { display: grid; gap: .42rem; margin-top: 1rem; color: var(--muted); font-size: .8rem; font-weight: 800; }
 .relationship-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; margin-top: 1.25rem; border-top: 1px solid #d8ddd9; padding-top: 1rem; }
 .relationship-action { display: grid; align-content: start; gap: .42rem; min-width: 0; }
 .relationship-action label, .relationship-action-label { color: var(--forest); font-size: .78rem; font-weight: 800; }
@@ -499,6 +500,8 @@ textarea { resize: vertical; line-height: 1.5; }
 .mention-options code { color: var(--muted); }
 .mention-options span { grid-column: 1 / -1; color: var(--muted); font-size: .75rem; }
 .comment-reply { flex: 0 0 auto; padding: .35rem .6rem; font-size: .72rem; }
+.comment-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
+.comment-actions button { padding: .35rem .6rem; font-size: .72rem; }
 .diagnostic { color: #953824; }
 .transcript-modal { width: min(68rem, 100%); min-width: 0; height: min(52rem, calc(100vh - 2rem)); display: flex; flex-direction: column; overscroll-behavior: contain; }
 .settings-modal { display: flex; width: min(68rem, 100%); height: min(42rem, calc(100vh - 2rem)); flex-direction: column; overflow: hidden; }
@@ -582,6 +585,9 @@ textarea { resize: vertical; line-height: 1.5; }
   .detail-column { margin-top: 1rem; }
   .detail-column > [data-task-section="conversations"] { position: static; }
   .detail-panel-heading { align-items: flex-start; }
+  .task-attention-panel .attention-list li { grid-template-columns: 1fr; align-items: stretch; }
+  .task-attention-panel .attention-list li > button,
+  .task-attention-panel .inline-actions { grid-column: 1; grid-row: auto; justify-self: start; }
   .agent-activity-panel.idle { align-items: flex-start; flex-direction: column; gap: .2rem; }
   .activity-current { align-items: stretch; flex-direction: column; }
   .entry-meta { align-items: flex-start; flex-direction: column; gap: .2rem; }
@@ -649,7 +655,7 @@ form label, .move-select { color: var(--text-muted); }
 .activity-current.waiting > div:first-child strong, .waiting-reasons { color: var(--warning-text); }
 .task-attention-panel { border-color: var(--attention-border); background: var(--warning-soft); }
 .task-attention-panel h2, .task-attention-panel .attention-list li { color: var(--warning-text); }
-.task-attention-panel .attention-list li { border-color: var(--attention-border); }
+.task-attention-panel .attention-list li { border-color: var(--attention-border); background: color-mix(in srgb, var(--surface) 72%, transparent); }
 .needs-attention { border-color: var(--attention-border); background: var(--attention-soft); }
 .process-impact { border-color: var(--process-border); background: var(--process-soft); }
 .attention-groups > li { border-color: var(--attention-border); }

@@ -200,6 +200,13 @@ without choosing the implementation yet.
   intentional code scrolling within the relevant content block.
   **Resolved:** Transcript headers and records now stay within narrow dialogs,
   while preformatted tool output preserves whitespace and scrolls locally.
+- [Make Every Task Attention Reason Actionable](./issues/57-make-task-attention-actionable.md)
+  — Give every task-level attention reason a concrete resolution path, move
+  user-mention acknowledgement to its source comment, and compact interruption
+  recovery into the attention panel.
+  **Resolved:** Attention now precedes long descriptions and links mention
+  requests to source-local acknowledgement and Reply actions; interruption
+  decisions open a compact Continue/Dismiss dialog from the attention reason.
 
 ## Not yet specified
 
@@ -240,10 +247,6 @@ without choosing the implementation yet.
 - [Archive Task Worktrees Owned by a Different Windows Identity](./issues/67-archive-differently-owned-worktrees.md)
   — Give host-side archival exact process-local Git trust and preserve distinct
   dirty, durability, registration, ownership, and removal outcomes.
-- [Make Every Task Attention Reason Actionable](./issues/57-make-task-attention-actionable.md)
-  — Give every task-level attention reason a concrete resolution path, move
-  user-mention acknowledgement to its source comment, and compact interruption
-  recovery into the attention panel after issue 59 establishes mention eligibility.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.
