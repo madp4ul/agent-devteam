@@ -224,6 +224,7 @@ export function TaskPage({
             /></div>}
 
             <div data-task-section="timeline"><TaskTimeline
+              taskId={task.id}
               comments={task.comments}
               activity={task.activity}
               activations={task.activations}

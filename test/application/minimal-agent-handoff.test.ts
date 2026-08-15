@@ -124,6 +124,12 @@ test("an agent comment and move hand work to the next watched-column agent", asy
     assert.equal(duringReview.task.activations[0]?.status, "completed");
     assert.equal(duringReview.task.activations[0]?.attempts[0]?.threadId, "thread-implementation");
     assert.equal(duringReview.task.activations[1]?.status, "running");
+    assert.ok(duringReview.task.activations[0]?.conversationId);
+    assert.ok(duringReview.task.activations[1]?.conversationId);
+    assert.notEqual(
+      duringReview.task.activations[0]?.conversationId,
+      duringReview.task.activations[1]?.conversationId,
+    );
   }
 
   runtime.complete({
@@ -179,15 +185,48 @@ test("a finished attempt transcript remains inspectable after application restar
   });
   await application.waitForAutomationIdle();
   const completedTask = application.queryTask(created.task.id);
-  const attemptId = completedTask.available
-    ? completedTask.task.activations[0]?.attempts[0]?.id
+  const activation = completedTask.available
+    ? completedTask.task.activations[0]
     : undefined;
+  const attemptId = completedTask.available
+    ? activation?.attempts[0]?.id
+    : undefined;
+  const conversationId = activation?.conversationId;
   assert.ok(attemptId);
+  assert.ok(conversationId);
   assert.deepEqual(await application.queryAttemptTranscript(attemptId), {
     available: true,
     threadId: "reused-codex-thread",
     items: expectedTranscript,
     usage: expectedUsage,
+  });
+  const conversation = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(conversation.available, true);
+  if (conversation.available) {
+    assert.deepEqual(conversation.conversation.owningAgent, {
+      id: "implementer",
+      name: "Implementation Agent",
+      historicalName: "Implementation Agent",
+      present: true,
+    });
+    assert.equal(conversation.conversation.taskId, created.task.id);
+    assert.equal(conversation.conversation.originatingActivationId, activation.id);
+    assert.deepEqual(conversation.conversation.originatingActivation, activation);
+    assert.equal(conversation.conversation.currentThreadId, "reused-codex-thread");
+    assert.deepEqual(conversation.conversation.continuation, { available: true });
+    assert.deepEqual(conversation.conversation.runs, [{
+      activationId: activation.id,
+      attempt: activation.attempts[0],
+      transcript: {
+        available: true,
+        items: expectedTranscript,
+        usage: expectedUsage,
+      },
+    }]);
+  }
+  assert.deepEqual(await application.queryAgentConversation("T-9999", conversationId), {
+    available: false,
+    reason: "not-found",
   });
   application.close();
 
@@ -205,6 +244,10 @@ test("a finished attempt transcript remains inspectable after application restar
     items: expectedTranscript,
     usage: expectedUsage,
   });
+  assert.deepEqual(
+    await restarted.queryAgentConversation(created.task.id, conversationId),
+    conversation,
+  );
 });
 
 test("a streamed Codex failure remains inspectable while its retry waits at the queue head", async (t) => {

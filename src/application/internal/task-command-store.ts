@@ -1135,12 +1135,14 @@ export class TaskCommandStore {
     occurredAt: string,
   ): string {
     const profile = this.#database
-      .prepare("SELECT model, reasoning_effort FROM agents WHERE id = ? AND applied = 1")
+      .prepare("SELECT name, model, reasoning_effort FROM agents WHERE id = ? AND applied = 1")
       .get(targetAgentId) as {
+        name: string;
         model: string | null;
         reasoning_effort: ActivationView["reasoningEffort"];
       };
     const activationId = randomUUID();
+    const conversationId = randomUUID();
     this.#database
       .prepare(
         `INSERT INTO activations
@@ -1159,6 +1161,25 @@ export class TaskCommandStore {
         profile.model,
         profile.reasoning_effort,
       );
+    this.#database
+      .prepare(
+        `INSERT INTO agent_conversations
+          (id, task_id, owning_agent_id, owning_agent_name_snapshot,
+           originating_activation_id, created_at, latest_activity_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        conversationId,
+        taskId,
+        targetAgentId,
+        profile.name,
+        activationId,
+        occurredAt,
+        occurredAt,
+      );
+    this.#database
+      .prepare("UPDATE activations SET conversation_id = ? WHERE id = ?")
+      .run(conversationId, activationId);
     return activationId;
   }
 

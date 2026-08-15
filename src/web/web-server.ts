@@ -200,6 +200,7 @@ async function handleBrowserApi(
     return;
   }
   const transcriptMatch = /^\/api\/attempts\/([^/]+)\/transcript$/.exec(url.pathname);
+  const conversationMatch = /^\/api\/tasks\/([^/]+)\/conversations\/([^/]+)$/.exec(url.pathname);
   const dismissStaleMatch = /^\/api\/activations\/([^/]+)\/dismiss-stale$/.exec(url.pathname);
   const dismissActivationMatch = /^\/api\/activations\/([^/]+)\/dismiss$/.exec(url.pathname);
   if (method === "POST" && dismissStaleMatch?.[1] !== undefined) {
@@ -231,6 +232,19 @@ async function handleBrowserApi(
         : result.reason === "configuration-error"
           ? 409
           : 503;
+    sendJson(response, status, result);
+    return;
+  }
+  if (method === "GET" && conversationMatch?.[1] !== undefined && conversationMatch[2] !== undefined) {
+    const result = await application.queryAgentConversation(
+      decodeURIComponent(conversationMatch[1]),
+      decodeURIComponent(conversationMatch[2]),
+    );
+    const status = result.available
+      ? 200
+      : result.reason === "not-found"
+        ? 404
+        : 409;
     sendJson(response, status, result);
     return;
   }

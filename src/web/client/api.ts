@@ -9,6 +9,7 @@ import type {
   UserTaskInspectionView,
   TaskView,
   AttemptTranscriptQueryResult,
+  AgentConversationQueryResult,
   ActivationRecoveryAction,
   ActiveRunView,
   NeedsAttentionTaskView,
@@ -335,6 +336,18 @@ export async function readAttemptTranscript(
   if (!response.ok && !(response.status === 503 && !body.available && body.reason === "unavailable")) {
     throw new ApiError(response.status, body);
   }
+  return body;
+}
+
+export async function readAgentConversation(
+  taskId: string,
+  conversationId: string,
+): Promise<AgentConversationQueryResult> {
+  const response = await fetch(
+    `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}`,
+  );
+  const body = await response.json() as AgentConversationQueryResult;
+  if (!response.ok) throw new ApiError(response.status, body);
   return body;
 }
 

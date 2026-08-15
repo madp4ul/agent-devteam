@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type {
   ActivationView,
+  AgentConversationView,
   AttemptTranscriptItem,
   AttemptTokenUsage,
   Actor,
@@ -400,6 +401,69 @@ export class TaskProjectionStore {
         };
   }
 
+  readAgentConversation(taskId: string, conversationId: string): Omit<AgentConversationView, "runs"> | undefined {
+    const row = this.#database.prepare(
+      `SELECT conversation.id, conversation.task_id, conversation.owning_agent_id,
+              conversation.owning_agent_name_snapshot, conversation.originating_activation_id,
+              conversation.current_thread_id, conversation.created_at, conversation.latest_activity_at,
+              task.archived_at, agent.name AS current_agent_name, agent.applied AS agent_applied
+       FROM agent_conversations conversation
+       JOIN tasks task ON task.id = conversation.task_id
+       LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
+       WHERE conversation.id = ? AND conversation.task_id = ?`,
+    ).get(conversationId, taskId) as {
+      id: string;
+      task_id: string;
+      owning_agent_id: string;
+      owning_agent_name_snapshot: string;
+      originating_activation_id: string;
+      current_thread_id: string | null;
+      created_at: string;
+      latest_activity_at: string;
+      archived_at: string | null;
+      current_agent_name: string | null;
+      agent_applied: number | null;
+    } | undefined;
+    if (row === undefined) return undefined;
+    const originatingActivation = this.readActivations(row.task_id)
+      .find((activation) => activation.id === row.originating_activation_id);
+    if (originatingActivation === undefined) return undefined;
+    const present = row.agent_applied === 1 && row.current_agent_name !== null;
+    const continuation = row.archived_at !== null
+      ? { available: false as const, reason: "task-archived" as const }
+      : !present
+        ? { available: false as const, reason: "owning-agent-unavailable" as const }
+        : row.current_thread_id === null
+          ? { available: false as const, reason: "thread-unavailable" as const }
+          : { available: true as const };
+    return {
+      id: row.id,
+      taskId: row.task_id,
+      originatingActivationId: row.originating_activation_id,
+      originatingActivation,
+      owningAgent: {
+        id: row.owning_agent_id,
+        name: row.current_agent_name ?? row.owning_agent_name_snapshot,
+        historicalName: row.owning_agent_name_snapshot,
+        present,
+      },
+      currentThreadId: row.current_thread_id,
+      createdAt: row.created_at,
+      latestActivityAt: row.latest_activity_at,
+      continuation,
+    };
+  }
+
+  readConversationRuns(conversationId: string): Array<{ activationId: string; attempt: AttemptView }> {
+    const activations = this.#database.prepare(
+      "SELECT id FROM activations WHERE conversation_id = ? ORDER BY sequence",
+    ).all(conversationId) as Array<{ id: string }>;
+    return activations.flatMap(({ id }) => this.readAttempts(id).map((attempt) => ({
+      activationId: id,
+      attempt,
+    })));
+  }
+
   isTaskAutomationSuspended(taskId: string): boolean {
     const row = this.#database
       .prepare("SELECT automation_suspended FROM tasks WHERE id = ?")
@@ -542,7 +606,7 @@ export class TaskProjectionStore {
     };
     const rows = this.#database
       .prepare(
-        `SELECT id, target_agent_id, reason_type, source_event_id, status,
+        `SELECT id, conversation_id, target_agent_id, reason_type, source_event_id, status,
                 model, reasoning_effort, retry_due_at, retry_cycle_start,
                 failure_kind, failure_summary, resolution, stale
          FROM activations
@@ -551,6 +615,7 @@ export class TaskProjectionStore {
       )
       .all(taskId) as Array<{
         id: string;
+        conversation_id: string | null;
         target_agent_id: string;
         reason_type: ActivationView["reason"]["type"];
         source_event_id: string;
@@ -573,6 +638,7 @@ export class TaskProjectionStore {
         ));
       return {
         id: row.id,
+        conversationId: row.conversation_id,
         targetAgentId: row.target_agent_id,
         status: row.resolution === "dismissed" ? "dismissed" : row.status,
         reason: { type: row.reason_type, sourceEventId: row.source_event_id },

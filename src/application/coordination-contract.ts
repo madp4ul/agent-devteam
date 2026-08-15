@@ -150,6 +150,7 @@ export interface AttemptTokenUsage {
 
 export interface ActivationView extends AgentExecutionProfile {
   id: string;
+  conversationId: string | null;
   targetAgentId: string;
   status: "queued" | "running" | "completed" | "failed" | "dismissed";
   reason: ActivationReasonView;
@@ -616,6 +617,39 @@ export type AttemptTranscriptQueryResult =
     }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { available: false; reason: "not-found" | "unavailable" };
+
+export type AgentConversationTranscriptView =
+  | { available: true; items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage }
+  | { available: false };
+
+export interface AgentConversationView {
+  id: string;
+  taskId: string;
+  originatingActivationId: string;
+  originatingActivation: ActivationView;
+  owningAgent: {
+    id: string;
+    name: string;
+    historicalName: string;
+    present: boolean;
+  };
+  currentThreadId: string | null;
+  createdAt: string;
+  latestActivityAt: string;
+  continuation:
+    | { available: true }
+    | { available: false; reason: "task-archived" | "owning-agent-unavailable" | "thread-unavailable" };
+  runs: Array<{
+    activationId: string;
+    attempt: AttemptView;
+    transcript: AgentConversationTranscriptView;
+  }>;
+}
+
+export type AgentConversationQueryResult =
+  | { available: true; conversation: AgentConversationView }
+  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
+  | { available: false; reason: "not-found" };
 
 export type CollaboratorsQueryResult =
   | { available: true; collaborators: CollaboratorView[] }

@@ -10,7 +10,7 @@ import type {
   TaskRelationshipView,
 } from "../../application/coordination-contract.ts";
 import { findParticipantMentions } from "../../application/participant-mentions.ts";
-import { AttemptTranscriptDialog } from "./AttemptTranscriptDialog.tsx";
+import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 import { buildTimelineRecords, type AttemptTimelineContent, type TimelineRecord } from "./timeline-model.ts";
@@ -21,6 +21,7 @@ type TimelineColumn = Pick<ProcessColumnView, "id" | "name">;
 type TimelineTask = { id: string; title: string };
 
 export function TaskTimeline({
+  taskId,
   comments,
   activity,
   activations,
@@ -30,6 +31,7 @@ export function TaskTimeline({
   transcriptsAvailable = true,
   onReplyToAgent,
 }: {
+  taskId: string;
   comments: TaskCommentView[];
   activity: TaskActivityView[];
   activations: ActivationView[];
@@ -39,7 +41,10 @@ export function TaskTimeline({
   transcriptsAvailable?: boolean;
   onReplyToAgent?(agentId: string): void;
 }): ReactNode {
-  const [transcriptSelection, setTranscriptSelection] = useState<{ attempt: AttemptView; agentName: string }>();
+  const [conversationSelection, setConversationSelection] = useState<{
+    conversationId: string;
+    attempt: AttemptView;
+  }>();
   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
   const records = buildTimelineRecords(comments, activity, activations);
   const context: TimelineContext = {
@@ -81,17 +86,18 @@ export function TaskTimeline({
                 expandedText={expandedText}
                 onTextExpanded={setTextExpanded}
                 onSource={followSource}
-                {...(transcriptsAvailable ? { onTranscript: setTranscriptSelection } : {})}
+                {...(transcriptsAvailable ? { onConversation: setConversationSelection } : {})}
               />
             ))}
           </ol>
         )}
       </section>
-      {transcriptSelection === undefined ? null : (
-        <AttemptTranscriptDialog
-          attempt={transcriptSelection.attempt}
-          agentName={transcriptSelection.agentName}
-          onClose={() => setTranscriptSelection(undefined)}
+      {conversationSelection === undefined ? null : (
+        <AgentConversationDialog
+          taskId={taskId}
+          conversationId={conversationSelection.conversationId}
+          selectedAttemptRunning={conversationSelection.attempt.status === "running"}
+          onClose={() => setConversationSelection(undefined)}
         />
       )}
     </>
@@ -114,14 +120,14 @@ function TimelineRecordView({
   expandedText,
   onTextExpanded,
   onSource,
-  onTranscript,
+  onConversation,
 }: {
   record: TimelineRecord;
   context: TimelineContext;
   expandedText: Set<string>;
   onTextExpanded(id: string, expanded: boolean): void;
   onSource(sourceId: string): void;
-  onTranscript?: (selection: { attempt: AttemptView; agentName: string }) => void;
+  onConversation?: (selection: { conversationId: string; attempt: AttemptView }) => void;
 }): ReactNode {
   if (record.kind === "comment") {
     return (
@@ -178,7 +184,7 @@ function TimelineRecordView({
       expandedText={expandedText}
       onTextExpanded={onTextExpanded}
       onSource={onSource}
-      {...(onTranscript === undefined ? {} : { onTranscript })}
+      {...(onConversation === undefined ? {} : { onConversation })}
     />
   );
 }
@@ -189,14 +195,14 @@ function AttemptCard({
   expandedText,
   onTextExpanded,
   onSource,
-  onTranscript,
+  onConversation,
 }: {
   record: Extract<TimelineRecord, { kind: "attempt" }>;
   context: TimelineContext;
   expandedText: Set<string>;
   onTextExpanded(id: string, expanded: boolean): void;
   onSource(sourceId: string): void;
-  onTranscript?: (selection: { attempt: AttemptView; agentName: string }) => void;
+  onConversation?: (selection: { conversationId: string; attempt: AttemptView }) => void;
 }): ReactNode {
   const { attempt, activation } = record;
   const agentName = nameForAgent(activation.targetAgentId, context.agents);
@@ -247,9 +253,12 @@ function AttemptCard({
             <TriggerLink record={record} context={context} onSource={onSource} />
             <span>Started <RelativeTime value={attempt.startedAt} /></span>
           </div>
-          {onTranscript === undefined ? null : (
-            <button className="secondary" onClick={() => onTranscript({ attempt, agentName })}>
-              View transcript
+          {onConversation === undefined || activation.conversationId === null ? null : (
+            <button
+              className="secondary"
+              onClick={() => onConversation({ conversationId: activation.conversationId!, attempt })}
+            >
+              View conversation
             </button>
           )}
         </footer>

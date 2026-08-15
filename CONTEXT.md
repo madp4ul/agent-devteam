@@ -149,10 +149,19 @@ where the agent left it, and the next queued activation may begin. A failed run
 pauses activation processing for that task and preserves all later activations
 in their existing order until the failure is explicitly resolved.
 
+**Agent conversation**:
+A durable, task-scoped lineage owned by one immutable agent identity. Each
+ordinary activation starts a distinct conversation, while retries of that
+activation remain runs within the same conversation. The framework retains the
+owning agent's historical name and current Codex thread identity, but run
+messages, tools, diagnostics, timing, outcomes, and token usage remain
+attempt-scoped evidence rather than duplicated conversation state.
+
 **Agent run transcript**:
-The inspectable record of an agent run's conversation and tool activity from
-the agent runtime. It lets the user evaluate agent behavior and refine the
-process, and is distinct from task activity history and authored task comments.
+The attempt-scoped inspectable evidence for one run, including its conversation
+messages and tool activity from the agent runtime. It is read through the
+containing agent conversation while remaining attributable to the attempt, and
+is distinct from task activity history and authored task comments.
 
 **Permission block**:
 An agent run outcome in which the agent runtime's permission policy prevents a

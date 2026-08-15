@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 13;
+const currentSchemaVersion = 14;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -146,6 +146,17 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       continuation_message TEXT
       ,definition_version TEXT NOT NULL
       ,stale INTEGER NOT NULL DEFAULT 0 CHECK (stale IN (0, 1))
+      ,conversation_id TEXT
+    );
+    CREATE TABLE IF NOT EXISTS agent_conversations (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      owning_agent_id TEXT NOT NULL REFERENCES agents(id),
+      owning_agent_name_snapshot TEXT NOT NULL,
+      originating_activation_id TEXT NOT NULL UNIQUE REFERENCES activations(id) ON DELETE CASCADE,
+      current_thread_id TEXT,
+      created_at TEXT NOT NULL,
+      latest_activity_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS task_workspaces (
       task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
@@ -306,6 +317,7 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     "tasks",
     "activity_ledger",
     "activations",
+    "agent_conversations",
     "task_workspaces",
     "task_starting_refs",
     "attempts",
@@ -343,6 +355,10 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
   const activationColumns = new Set(
     (database.prepare("PRAGMA table_info(activations)").all() as Array<{ name: string }>).map(({ name }) => name),
   );
+  const conversationColumns = new Set(
+    (database.prepare("PRAGMA table_info(agent_conversations)").all() as Array<{ name: string }>)
+      .map(({ name }) => name),
+  );
   const attemptColumns = new Set(
     (database.prepare("PRAGMA table_info(attempts)").all() as Array<{ name: string }>).map(({ name }) => name),
   );
@@ -367,6 +383,11 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     activationColumns.has("retry_cycle_start") &&
     activationColumns.has("definition_version") &&
     activationColumns.has("stale") &&
+    activationColumns.has("conversation_id") &&
+    conversationColumns.has("owning_agent_name_snapshot") &&
+    conversationColumns.has("originating_activation_id") &&
+    conversationColumns.has("current_thread_id") &&
+    conversationColumns.has("latest_activity_at") &&
     attemptColumns.has("outcome_kind") &&
     transcriptColumns.has("usage_json") &&
     transcriptColumns.has("reported_usage_json") &&

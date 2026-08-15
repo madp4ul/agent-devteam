@@ -61,9 +61,11 @@ than through separate state that must later be reconciled.
 ### Durable state
 
 SQLite stores the live coordination model: boards, tasks, comments,
-relationships, activity, activations, attempts, attention, and automation
-state. Read projections support the browser and summary-first agent queries
-without becoming a second source of truth.
+relationships, activity, activations, agent conversations, attempts, attention,
+and automation state. Conversations retain task, owner, originating activation,
+and current-thread identity; their run evidence stays in the existing
+attempt-scoped transcript store. Read projections aggregate that evidence for
+the browser without becoming a second source of truth or duplicating it.
 
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
@@ -78,8 +80,10 @@ and proceeds only after the user resumes it.
 
 For each run, the Codex adapter starts or resumes a thread in the task's Git
 workspace. A per-attempt MCP adapter lets that agent inspect relevant project
-coordination state and mutate only its current task. Attempt messages and tool
-activity remain available as an inspectable transcript.
+coordination state and mutate only its current task. Every activation owns a
+durable task-scoped agent conversation; retries remain in that conversation,
+while each attempt's messages and tool activity remain separately attributable
+run evidence.
 
 ### Git task workspaces
 

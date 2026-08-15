@@ -15,6 +15,7 @@ import type {
   AutomationView,
   AttemptTranscriptAccess,
   AttemptTranscriptQueryResult,
+  AgentConversationQueryResult,
   BoardMutationResult,
   BoardSummariesQueryResult,
   BoardsQueryResult,
@@ -483,6 +484,37 @@ export class CoordinationApplication {
           items,
           ...(usage === null ? {} : { usage }),
         };
+  }
+
+  async queryAgentConversation(
+    taskId: string,
+    conversationId: string,
+  ): Promise<AgentConversationQueryResult> {
+    if (this.#startup.mode === "configuration-error") {
+      return {
+        available: false,
+        reason: "configuration-error",
+        diagnostics: this.#startup.diagnostics,
+      };
+    }
+    const conversation = this.#persistence.taskProjections.readAgentConversation(taskId, conversationId);
+    if (conversation === undefined) return { available: false, reason: "not-found" };
+    const runs = await Promise.all(
+      this.#persistence.taskProjections.readConversationRuns(conversationId).map(async (run) => {
+        const transcript = await this.queryAttemptTranscript(run.attempt.id);
+        return {
+          ...run,
+          transcript: transcript.available
+            ? {
+                available: true as const,
+                items: transcript.items,
+                ...(transcript.usage === undefined ? {} : { usage: transcript.usage }),
+              }
+            : { available: false as const },
+        };
+      }),
+    );
+    return { available: true, conversation: { ...conversation, runs } };
   }
 
   queryCollaborators(): CollaboratorsQueryResult {

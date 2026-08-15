@@ -133,6 +133,11 @@ database.prepare(
 ).run(inspected.task.id, inspectableWorkspacePath, "main", "0123456789abcdef0123456789abcdef01234567");
 database.prepare("UPDATE activations SET status = 'completed' WHERE id = ?").run(activation.id);
 database.prepare(
+  `UPDATE agent_conversations
+   SET current_thread_id = ?, latest_activity_at = ?
+   WHERE id = ?`,
+).run("thread-browser-123", attemptCompletedAt, activation.conversationId);
+database.prepare(
   `INSERT INTO attempts
     (id, activation_id, status, workspace_path, started_at, completed_at,
      outcome_status, outcome_summary, thread_id)

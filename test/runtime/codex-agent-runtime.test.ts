@@ -44,6 +44,7 @@ test("a fresh activation prompt composes framework, process, role, task, and tri
   });
   activation.task.activations.push({
     id: "queued-review-request",
+    conversationId: "conversation-review-request",
     targetAgentId: "reviewer",
     status: "queued",
     reason: { type: "agent-mention", sourceEventId: "comment-review-request" },

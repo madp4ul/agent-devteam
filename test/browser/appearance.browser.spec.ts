@@ -93,7 +93,7 @@ test("semantic board, task, modal, transcript, attention, and error surfaces use
 
   await page.goto("/tasks/T-0001");
   await expect(page.locator(".comment-entry article").first()).toHaveCSS("background-color", "rgb(50, 43, 24)");
-  await page.getByRole("button", { name: /View transcript/ }).first().click();
+  await page.getByRole("button", { name: /View conversation/ }).first().click();
   await expect(page.getByRole("dialog")).toHaveCSS("background-color", "rgb(29, 37, 33)");
   await expect(page.locator("pre").first()).toHaveCSS("background-color", "rgb(10, 16, 13)");
   await page.getByRole("button", { name: "Close" }).click();

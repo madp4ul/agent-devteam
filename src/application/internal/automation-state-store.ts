@@ -646,6 +646,7 @@ export class AutomationStateStore {
       this.#database
         .prepare("UPDATE activity_ledger SET details_json = ? WHERE id = ?")
         .run(JSON.stringify({ ...details, threadId }), runStartActivityId);
+      this.updateConversationActivity(attemptId, new Date().toISOString(), threadId);
     });
   }
 
@@ -767,7 +768,25 @@ export class AutomationStateStore {
         { activationId: attempt.activation_id, attemptId },
         occurredAt,
       );
+      if (outcome.threadId !== undefined) {
+        this.updateConversationActivity(attemptId, occurredAt, outcome.threadId);
+      } else {
+        this.updateConversationActivity(attemptId, occurredAt);
+      }
     });
+  }
+
+  private updateConversationActivity(attemptId: string, occurredAt: string, threadId?: string): void {
+    this.#database.prepare(
+      `UPDATE agent_conversations
+       SET current_thread_id = COALESCE(?, current_thread_id), latest_activity_at = ?
+       WHERE id = (
+         SELECT activation.conversation_id
+         FROM attempts attempt
+         JOIN activations activation ON activation.id = attempt.activation_id
+         WHERE attempt.id = ?
+       )`,
+    ).run(threadId ?? null, occurredAt, attemptId);
   }
 
   private persistAttemptTranscript(

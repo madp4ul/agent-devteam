@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "@playwright/test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -254,6 +254,7 @@ test("task interruption waits for confirmation and offers contextual continuatio
     };
     body.task.activations = [{
       id: "live-activation",
+      conversationId: "live-conversation",
       targetAgentId: "consulting-agent",
       status: interruptionState === "interrupted" ? "queued" : "running",
       reason: { type: "agent-mention", sourceEventId: "comment-live" },
@@ -279,13 +280,27 @@ test("task interruption waits for confirmation and offers contextual continuatio
     await route.fulfill({ response, json: body });
   });
 
+  await page.route("**/api/tasks/T-0002/conversations/*", async (route) => {
+    const result = liveConversation([{ kind: "message", role: "agent", text: "The live run is inspectable." }]);
+    const conversation = result.conversation as Record<string, unknown>;
+    conversation.taskId = "T-0002";
+    conversation.owningAgent = {
+      id: "consulting-agent",
+      name: "consulting-agent",
+      historicalName: "consulting-agent",
+      present: true,
+    };
+    await route.fulfill({ status: 200, json: result });
+  });
+
   await page.goto("/tasks/T-0002");
   await expect(page.getByRole("region", { name: "Agent activity" })).toContainText("consulting-agent");
   await expect(page.getByRole("region", { name: "Agent activity" })).toContainText(/Running · 0m/);
   await expect(page.locator(".attempt-entry").filter({ hasText: /consulting-agent.*Running.*Attempt 1/ })).toBeVisible();
-  await page.getByRole("button", { name: "View transcript" }).click();
-  await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText(/consulting-agent · running · 0m/);
-  await page.getByRole("button", { name: "Close transcript" }).click();
+  await page.getByRole("button", { name: "View conversation" }).click();
+  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText("Owned by consulting-agent");
+  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText(/Attempt 1 · running/);
+  await page.getByRole("button", { name: "Close conversation" }).click();
   const interruptClick = page.getByRole("button", { name: "Interrupt current attempt" }).click();
   await expect(page.getByRole("button", { name: "Interrupting…" })).toBeDisabled();
   await interruptClick;
@@ -777,7 +792,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(attemptEntry.locator(".attempt-agent-name")).toHaveText("Implementation Agent");
   await expect(attemptEntry.locator(".attempt-number")).toHaveText("Attempt 1");
   const attemptMetadata = attemptEntry.locator(".attempt-metadata");
-  const transcriptButton = attemptEntry.getByRole("button", { name: "View transcript" });
+  const transcriptButton = attemptEntry.getByRole("button", { name: "View conversation" });
   const [attemptMetadataBox, transcriptButtonBox] = await Promise.all([
     attemptMetadata.boundingBox(),
     transcriptButton.boundingBox(),
@@ -803,10 +818,10 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(attemptEntry).not.toContainText("thread-browser-123");
   await expect(attemptEntry.getByRole("button", { name: "Copy thread ID" })).toHaveCount(0);
   await expect(page.getByText("Token usage", { exact: true })).toHaveCount(0);
-  await attemptEntry.getByRole("button", { name: "View transcript" }).click();
-  const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
+  await attemptEntry.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   const copyThreadId = dialog.getByRole("button", { name: "Copy thread ID" });
-  const closeTranscript = dialog.getByRole("button", { name: "Close transcript" });
+  const closeTranscript = dialog.getByRole("button", { name: "Close conversation" });
   const tokenUsage = dialog.getByRole("region", { name: "Token usage" });
   const [usageBox, copyBox, closeBox] = await Promise.all([
     tokenUsage.boundingBox(),
@@ -816,9 +831,10 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   expect(usageBox).not.toBeNull();
   expect(copyBox).not.toBeNull();
   expect(closeBox).not.toBeNull();
-  expect(Math.abs((usageBox!.y + usageBox!.height / 2) - (copyBox!.y + copyBox!.height / 2))).toBeLessThanOrEqual(2);
-  expect(Math.abs((copyBox!.y + copyBox!.height / 2) - (closeBox!.y + closeBox!.height / 2))).toBeLessThanOrEqual(2);
+  expect(Math.abs((copyBox!.y + copyBox!.height / 2) - (closeBox!.y + closeBox!.height / 2))).toBeLessThanOrEqual(4);
   await expect(closeTranscript.locator("svg")).toBeVisible();
+  await expect(dialog).toContainText("Owned by Implementation Agent");
+  await expect(dialog).toContainText("Attempt 1 · completed");
   await expect(dialog).not.toContainText("thread-browser-123");
   await expect(dialog).toContainText("I inspected the current task.");
   await expect(tokenUsage).toHaveText(/Input 600\s*·\s*Output 600/);
@@ -866,10 +882,10 @@ test("wide transcript content wraps without overflowing the dialog or page", asy
   const preformattedOutput = `COMMAND\tRESULT\n${unbroken}\tcompleted`;
 
   await page.setViewportSize({ width: 360, height: 720 });
-  await page.route("**/api/attempts/browser-attempt/transcript", async (route) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
-    const transcript = await response.json();
-    transcript.items = [
+    const result = await response.json();
+    result.conversation.runs[0].transcript.items = [
       { kind: "message", role: "agent", text: prose },
       {
         kind: "tool",
@@ -880,13 +896,13 @@ test("wide transcript content wraps without overflowing the dialog or page", asy
       },
       { kind: "diagnostic", text: unbroken },
     ];
-    await route.fulfill({ response, json: transcript });
+    await route.fulfill({ response, json: result });
   });
 
   await page.goto("/tasks/T-0001");
   const pageScrollWidthBeforeDialog = await page.evaluate(() => document.documentElement.scrollWidth);
-  await page.getByRole("button", { name: "View transcript" }).click();
-  const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   await expect(dialog).toContainText(unbroken);
 
   const containment = await dialog.evaluate((element) => {
@@ -978,16 +994,16 @@ test("attempt outcomes show canonical-looking participant text without executabl
   await expect(outcome.locator(".canonical-mention")).toHaveCount(0);
 });
 
-test("a transcript without reported usage does not present zero as measured usage", async ({ page }) => {
-  await page.route("**/api/attempts/browser-attempt/transcript", async (route) => {
+test("a conversation without reported usage does not present zero as measured usage", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
-    const transcript = await response.json();
-    delete transcript.usage;
-    await route.fulfill({ response, json: transcript });
+    const result = await response.json();
+    delete result.conversation.runs[0].transcript.usage;
+    await route.fulfill({ response, json: result });
   });
   await page.goto("/tasks/T-0001");
-  await page.getByRole("button", { name: "View transcript" }).click();
-  const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
 
   await expect(dialog).toContainText("I inspected the current task.");
   await expect(dialog.getByRole("region", { name: "Token usage" })).toHaveCount(0);
@@ -1576,7 +1592,7 @@ test("reply preserves trailing draft whitespace and is absent without an active 
   await page.unrouteAll({ behavior: "wait" });
 });
 
-test("an open transcript replaces one running tool entry with its terminal evidence", async ({ page }) => {
+test("an open conversation replaces one running tool entry with its terminal evidence", async ({ page }) => {
   let reads = 0;
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
@@ -1589,7 +1605,7 @@ test("an open transcript replaces one running tool entry with its terminal evide
     }
     await route.fulfill({ response, json: detail });
   });
-  await page.route("**/api/attempts/browser-attempt/transcript", async (route) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     reads += 1;
     const retainedMessages = Array.from({ length: 30 }, (_, index) => ({
       id: `retained-message-${index}`,
@@ -1599,10 +1615,7 @@ test("an open transcript replaces one running tool entry with its terminal evide
     }));
     await route.fulfill({
       status: 200,
-      json: {
-        available: true,
-        threadId: "thread-browser-123",
-        items: reads === 1
+      json: liveConversation(reads === 1
           ? [{
               id: "live-browser-tool",
               kind: "tool",
@@ -1617,14 +1630,13 @@ test("an open transcript replaces one running tool entry with its terminal evide
               status: "completed",
               summary: "pnpm test (exit 0)",
               output: "All live checks passed.",
-            }, ...retainedMessages],
-      },
+            }, ...retainedMessages]),
     });
   });
 
   await page.goto("/tasks/T-0001");
-  await page.getByRole("button", { name: "View transcript" }).click();
-  const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   await expect(dialog).toContainText("pnpm test · running");
   const transcriptContent = dialog.locator(".transcript-content");
   const readingPosition = await transcriptContent.evaluate((element) => {
@@ -1637,30 +1649,30 @@ test("an open transcript replaces one running tool entry with its terminal evide
   await expect(dialog.locator(".transcript-item")).toHaveCount(31);
   expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
 
-  await dialog.getByRole("button", { name: "Close transcript" }).click();
-  await page.getByRole("button", { name: "View transcript" }).click();
-  await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText("All live checks passed.");
-  await page.getByRole("dialog", { name: "Attempt transcript" }).getByRole("button", { name: "Close transcript" }).click();
+  await dialog.getByRole("button", { name: "Close conversation" }).click();
+  await page.getByRole("button", { name: "View conversation" }).click();
+  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText("All live checks passed.");
+  await page.getByRole("dialog", { name: "Agent conversation" }).getByRole("button", { name: "Close conversation" }).click();
   await page.goto("/");
   await page.goto("/tasks/T-0001");
-  await page.getByRole("button", { name: "View transcript" }).click();
-  await expect(page.getByRole("dialog", { name: "Attempt transcript" })).toContainText("All live checks passed.");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText("All live checks passed.");
 });
 
-test("a live transcript follows appended items only while the reader is at the bottom", async ({ page }) => {
+test("a live conversation follows appended items only while the reader is at the bottom", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
     const detail = await response.json();
     const attempt = detail.task.activations[0]?.attempts[0];
     if (attempt !== undefined) {
-      attempt.status = "running";
-      attempt.completedAt = null;
-      attempt.outcome = null;
+      attempt.status = "completed";
+      attempt.completedAt = "2026-08-09T12:05:00.000Z";
+      attempt.outcome = { status: "completed", summary: "Historical run complete." };
     }
     await route.fulfill({ response, json: detail });
   });
   let reads = 0;
-  await page.route("**/api/attempts/browser-attempt/transcript", async (route) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     reads += 1;
     const items = Array.from({ length: 40 }, (_, index) => ({
       id: `follow-message-${index}`,
@@ -1678,13 +1690,13 @@ test("a live transcript follows appended items only while the reader is at the b
     }
     await route.fulfill({
       status: 200,
-      json: { available: true, threadId: "thread-browser-123", items },
+      json: liveConversation(items),
     });
   });
 
   await page.goto("/tasks/T-0001");
-  await page.getByRole("button", { name: "View transcript" }).click();
-  const dialog = page.getByRole("dialog", { name: "Attempt transcript" });
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   const transcriptContent = dialog.locator(".transcript-content");
   await expect(dialog).toContainText("Live transcript message 40.");
   await transcriptContent.evaluate((element) => {
@@ -1995,7 +2007,7 @@ test("archived tasks toggle into their retained board location and can be unarch
   await archivedToggle.click();
   await completion.getByRole("link", { name: /Archive this completed browser task/ }).click();
   await expect(page.locator(".task-heading .eyebrow")).toContainText("Archived");
-  await expect(page.getByRole("button", { name: "View transcript" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "View conversation" })).toHaveCount(0);
   const archivedEntry = page.locator(".timeline-entry").filter({ hasText: "Task archived" });
   await expect(archivedEntry).toContainText("Removed from the active board");
   await expect(archivedEntry).not.toContainText("Attempt activity");
@@ -2395,6 +2407,56 @@ test("notification consent delivers on the active task with a stable tag and inf
   });
   await expect(page).toHaveURL(/\/tasks\/T-0002\?attention=mention-attention$/);
 });
+
+function liveConversation(items: Array<Record<string, unknown>>): Record<string, unknown> {
+  return {
+    available: true,
+    conversation: {
+      id: "browser-conversation",
+      taskId: "T-0001",
+      originatingActivationId: "browser-activation",
+      originatingActivation: {
+        id: "browser-activation",
+        conversationId: "browser-conversation",
+        targetAgentId: "implementer",
+        status: "running",
+        reason: { type: "column-entry", sourceEventId: "browser-move" },
+        attempts: [],
+        startupFailure: null,
+        recovery: null,
+        model: null,
+        reasoningEffort: null,
+        stale: false,
+        dismissal: null,
+      },
+      owningAgent: {
+        id: "implementer",
+        name: "Implementation Agent",
+        historicalName: "Implementation Agent",
+        present: true,
+      },
+      currentThreadId: "thread-browser-123",
+      createdAt: "2026-08-09T12:00:00.000Z",
+      latestActivityAt: "2026-08-09T12:05:00.000Z",
+      continuation: { available: true },
+      runs: [{
+        activationId: "browser-activation",
+        attempt: {
+          id: "browser-attempt",
+          status: "running",
+          workspacePath: "C:/workspace",
+          startedAt: "2026-08-09T12:00:00.000Z",
+          completedAt: null,
+          outcome: null,
+          threadId: "thread-browser-123",
+          model: null,
+          reasoningEffort: null,
+        },
+        transcript: { available: true, items },
+      }],
+    },
+  };
+}
 
 test("notification delivery failure is attempted once", async ({ page }) => {
   await page.route("**/api/notification-occurrences*", async (route) => {

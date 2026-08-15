@@ -398,6 +398,24 @@ test("permission block requires explicit continuation and never retries automati
   assert.equal(inspected.available, true);
   if (inspected.available) {
     assert.equal(inspected.task.activations[0]?.attempts[0]?.outcome?.status, "permission-blocked");
+    const continuedActivation = inspected.task.activations[0];
+    const laterActivation = inspected.task.activations[1];
+    assert.ok(continuedActivation?.conversationId);
+    assert.ok(laterActivation?.conversationId);
+    assert.notEqual(continuedActivation.conversationId, laterActivation.conversationId);
+    const conversation = await restarted.queryAgentConversation(taskId, continuedActivation.conversationId);
+    assert.equal(conversation.available, true);
+    if (conversation.available) {
+      assert.equal(conversation.conversation.runs.length, 4);
+      assert.deepEqual(
+        conversation.conversation.runs.map((run) => run.activationId),
+        Array.from({ length: 4 }, () => continuedActivation.id),
+      );
+      assert.deepEqual(
+        conversation.conversation.runs.map((run) => run.attempt.id),
+        [first.attemptId, resumed.attemptId, recovered.attemptId, finalAttempt.attemptId],
+      );
+    }
   }
   assert.deepEqual(await restarted.queryAttemptTranscript(first.attemptId), {
     available: true,

@@ -79,6 +79,7 @@ test("timeline leaves unprovenanced agent comments standalone rather than guessi
 function activationWithAttempts(includeRetry = false): ActivationView {
   return {
     id: "activation-1",
+    conversationId: "conversation-1",
     targetAgentId: "implementer",
     status: "completed",
     reason: { type: "column-entry", sourceEventId: "move-source" },
