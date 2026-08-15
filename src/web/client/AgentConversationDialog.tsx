@@ -8,6 +8,7 @@ import { continueAgentConversation, readAgentConversation } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
+import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { Modal } from "./Modal.tsx";
 
 export function AgentConversationDialog({
@@ -69,12 +70,9 @@ export function AgentConversationDialog({
     selectedContextPositioned.current = true;
   }, [conversation, selectedAttemptId, selectedMessageId]);
 
-  useEffect(() => {
-    let active = true;
-    const refresh = async (): Promise<void> => {
-      try {
-        const result = await readAgentConversation(taskId, conversationId);
-        if (!active) return;
+  const refresh = useLatestRefresh(
+    () => readAgentConversation(taskId, conversationId),
+    (result) => {
         if (result.available) {
           const content = contentRef.current;
           pendingScrollPosition.current = content === null
@@ -95,19 +93,16 @@ export function AgentConversationDialog({
         } else {
           setUnavailable(true);
         }
-      } catch (caught) {
-        if (active) setError(errorMessage(caught));
-      }
-    };
-    void refresh();
-    const timer = conversationRunning
-      ? window.setInterval(() => void refresh(), 1_000)
-      : undefined;
-    return () => {
-      active = false;
-      if (timer !== undefined) window.clearInterval(timer);
-    };
-  }, [conversationId, conversationRunning, refreshVersion, taskId]);
+    },
+  );
+  useEffect(() => {
+    void refresh().catch((caught) => setError(errorMessage(caught)));
+  }, [conversationId, conversationRunning, refresh, refreshVersion, taskId]);
+  usePolling(
+    refresh,
+    conversationRunning ? 1_000 : undefined,
+    (caught) => setError(errorMessage(caught)),
+  );
 
   const submitFollowUp = async (): Promise<void> => {
     if (draft.trim().length === 0 || submitting || conversation?.continuation.available !== true) return;

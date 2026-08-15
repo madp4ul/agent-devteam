@@ -20,6 +20,7 @@ import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { CommandResponseStore } from "./command-response-store.ts";
 import type { NotificationStore } from "./notification-store.ts";
+import type { ActivityJournal } from "./activity-journal.ts";
 
 export interface RunnableActivation {
   activation: ActivationView;
@@ -37,18 +38,21 @@ export class AutomationStateStore {
   readonly #taskProjections: TaskProjectionStore;
   readonly #commandResponses: CommandResponseStore;
   readonly #notifications: NotificationStore;
+  readonly #activityJournal: ActivityJournal;
 
   constructor(
     database: CoordinationDatabase,
     taskProjections: TaskProjectionStore,
     commandResponses: CommandResponseStore,
     notifications: NotificationStore,
+    activityJournal: ActivityJournal,
   ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#taskProjections = taskProjections;
     this.#commandResponses = commandResponses;
     this.#notifications = notifications;
+    this.#activityJournal = activityJournal;
   }
 
   recoverInterruptedAttempts(now = new Date()): number {
@@ -110,7 +114,7 @@ export class AutomationStateStore {
             .run(summary, attempt.activation_id);
           this.createFailureAttention(attempt.task_id, attempt.activation_id, occurredAt);
         }
-        this.appendActivity(
+        this.#activityJournal.append(
           attempt.task_id,
           "attempt.completed",
           { kind: "framework", id: "coordination" },
@@ -422,14 +426,14 @@ export class AutomationStateStore {
            WHERE id = ?`,
         )
         .run(attempt.activation_id, attempt.task_id);
-      this.appendActivity(
+      this.#activityJournal.append(
         attempt.task_id,
         "attempt.completed",
         actor,
         { activationId: attempt.activation_id, attemptId, interruption: "user" },
         occurredAt,
       );
-      this.appendActivity(
+      this.#activityJournal.append(
         attempt.task_id,
         "automation.suspended",
         actor,
@@ -474,7 +478,7 @@ export class AutomationStateStore {
         )
         .run(taskId);
       const occurredAt = new Date().toISOString();
-      this.appendActivity(
+      this.#activityJournal.append(
         taskId,
         "automation.resumed",
         actor,
@@ -552,7 +556,7 @@ export class AutomationStateStore {
       this.#database
         .prepare("UPDATE attempts SET started_at = ? WHERE id = ?")
         .run(occurredAt, attemptId);
-      const runStartActivityId = this.appendActivity(
+      const runStartActivityId = this.#activityJournal.append(
         activation.task_id,
         "attempt.started",
         { kind: "agent", id: activation.target_agent_id },
@@ -607,7 +611,7 @@ export class AutomationStateStore {
            VALUES (?, ?, 'failed-run', ?, ?, NULL)`,
         )
         .run(attentionReasonId, activation.task_id, activationId, occurredAt);
-      this.appendActivity(
+      this.#activityJournal.append(
         activation.task_id,
         "attention.created",
         { kind: "framework", id: "coordination" },
@@ -768,7 +772,7 @@ export class AutomationStateStore {
           this.createFailureAttention(attempt.task_id, attempt.activation_id, occurredAt);
         }
       }
-      this.appendActivity(
+      this.#activityJournal.append(
         attempt.task_id,
         "attempt.completed",
         { kind: "agent", id: attempt.target_agent_id },
@@ -879,7 +883,7 @@ export class AutomationStateStore {
       activationId,
       occurredAt,
     );
-    this.appendActivity(
+    this.#activityJournal.append(
       taskId,
       "attention.created",
       { kind: "framework", id: "coordination" },
@@ -888,23 +892,6 @@ export class AutomationStateStore {
     );
   }
 
-  private appendActivity(
-    taskId: string,
-    type: TaskActivityView["type"],
-    actor: TaskActivityView["actor"],
-    details: Record<string, string>,
-    occurredAt: string,
-  ): string {
-    const id = randomUUID();
-    this.#database
-      .prepare(
-        `INSERT INTO activity_ledger
-          (id, task_id, type, actor_kind, actor_id, occurred_at, details_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(id, taskId, type, actor.kind, actor.id, occurredAt, JSON.stringify(details));
-    return id;
-  }
 }
 
 function retryDueAt(now: Date, cycleAttempt: number): string {

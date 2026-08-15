@@ -353,6 +353,64 @@ test("bulk archive affects only eligible completed tasks and unarchive keeps his
   if (detail.available) assert.equal(detail.task.workspace, null);
 });
 
+test("task command and archival activity remains identical after restart", async (t) => {
+  const fixture = await createFixture("activity-journal-restart");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  const taskId = createTaskInColumn(
+    application,
+    "Retain activity across restart",
+    "completion",
+    "activity-journal-task",
+  );
+  const archived = await application.archiveTask({
+    taskId,
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "activity-journal-archive",
+  });
+  assert.equal(archived.accepted, true);
+  const beforeRestart = application.queryTask(taskId);
+  assert.equal(beforeRestart.available, true);
+  if (!beforeRestart.available) return;
+  assert.deepEqual(
+    beforeRestart.task.activity.map(({ type, actor, details }) => ({ type, actor, details })),
+    [
+      {
+        type: "task.created",
+        actor: { kind: "user", id: "local-user" },
+        details: { boardId: "delivery", columnId: "backlog" },
+      },
+      {
+        type: "task.moved",
+        actor: { kind: "user", id: "local-user" },
+        details: { fromColumnId: "backlog", toColumnId: "completion" },
+      },
+      {
+        type: "task.archived",
+        actor: { kind: "user", id: "local-user" },
+        details: {},
+      },
+    ],
+  );
+  assert.equal(new Set(beforeRestart.task.activity.map(({ id }) => id)).size, 3);
+  assert.ok(beforeRestart.task.activity.every(({ id, occurredAt }) =>
+    id.length > 0 && !Number.isNaN(Date.parse(occurredAt))
+  ));
+  const activity = beforeRestart.task.activity;
+  application.close();
+
+  const restarted = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => restarted.close());
+  const afterRestart = restarted.queryTask(taskId);
+  assert.equal(afterRestart.available, true);
+  if (afterRestart.available) assert.deepEqual(afterRestart.task.activity, activity);
+});
+
 test("an activation after unarchive provisions from the current process default rather than the discarded task ref", async (t) => {
   const fixture = await createFixture("archive-reprovision");
   await run("git", ["-C", fixture.repository, "branch", "custom-start"]);

@@ -1,32 +1,34 @@
-import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import type {
   Actor,
   ArchiveTaskCommand,
   ArchiveTaskResult,
-  TaskActivityView,
   UnarchiveTaskResult,
 } from "../coordination-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { CommandResponseStore } from "./command-response-store.ts";
+import type { ActivityJournal } from "./activity-journal.ts";
 
 export class TaskArchiveStore {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
   readonly #projections: TaskProjectionStore;
   readonly #commandResponses: CommandResponseStore;
+  readonly #activityJournal: ActivityJournal;
 
   constructor(
     database: CoordinationDatabase,
     projections: TaskProjectionStore,
     commandResponses: CommandResponseStore,
+    activityJournal: ActivityJournal,
   ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#projections = projections;
     this.#commandResponses = commandResponses;
+    this.#activityJournal = activityJournal;
   }
 
   claim(
@@ -157,7 +159,7 @@ export class TaskArchiveStore {
          WHERE id = ? AND archival_pending = 1`,
       ).run(occurredAt, taskId);
       if (marked.changes !== 1) throw new Error("Task archival claim was lost before completion");
-      this.appendActivity(taskId, "task.archived", actor, occurredAt);
+      this.#activityJournal.append(taskId, "task.archived", actor, {}, occurredAt);
       const task = this.#projections.readTask(taskId);
       if (task === undefined) throw new Error("Archived task could not be read back");
       const result = { accepted: true as const, task };
@@ -184,20 +186,13 @@ export class TaskArchiveStore {
       }
       const occurredAt = new Date().toISOString();
       this.#database.prepare("UPDATE tasks SET archived_at = NULL, revision = revision + 1 WHERE id = ?").run(taskId);
-      this.appendActivity(taskId, "task.unarchived", actor, occurredAt);
+      this.#activityJournal.append(taskId, "task.unarchived", actor, {}, occurredAt);
       const task = this.#projections.readTask(taskId);
       if (task === undefined) throw new Error("Unarchived task could not be read back");
       const result = { accepted: true as const, task };
       this.#commandResponses.write(commandType, idempotencyKey, result);
       return result;
     });
-  }
-
-  private appendActivity(taskId: string, type: TaskActivityView["type"], actor: Actor, occurredAt: string): void {
-    this.#database.prepare(
-      `INSERT INTO activity_ledger (id, task_id, type, actor_kind, actor_id, occurred_at, details_json)
-       VALUES (?, ?, ?, ?, ?, ?, '{}')`,
-    ).run(randomUUID(), taskId, type, actor.kind, actor.id, occurredAt);
   }
 
   private hasPendingActivationWork(taskId: string): boolean {

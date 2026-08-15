@@ -29,7 +29,6 @@ import type {
   MarkUserMentionAddressedCommand,
   MarkUserMentionAddressedResult,
   TaskAttentionView,
-  TaskActivityView,
   TaskRelationshipView,
   TaskRelationshipMutationResult,
   TaskView,
@@ -40,6 +39,7 @@ import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { CommandResponseStore } from "./command-response-store.ts";
 import { taskCreationAllowed } from "./task-creation-policy.ts";
 import type { NotificationStore } from "./notification-store.ts";
+import type { ActivityJournal } from "./activity-journal.ts";
 
 export class TaskCommandStore {
   readonly #owner: CoordinationDatabase;
@@ -47,18 +47,21 @@ export class TaskCommandStore {
   readonly #projections: TaskProjectionStore;
   readonly #commandResponses: CommandResponseStore;
   readonly #notifications: NotificationStore;
+  readonly #activityJournal: ActivityJournal;
 
   constructor(
     database: CoordinationDatabase,
     projections: TaskProjectionStore,
     commandResponses: CommandResponseStore,
     notifications: NotificationStore,
+    activityJournal: ActivityJournal,
   ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#projections = projections;
     this.#commandResponses = commandResponses;
     this.#notifications = notifications;
+    this.#activityJournal = activityJournal;
   }
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
@@ -138,7 +141,7 @@ export class TaskCommandStore {
            WHERE id = ?`,
         )
         .run(command.title.trim(), command.description.trim(), command.taskId);
-      this.appendActivity(
+      this.#activityJournal.append(
         command.taskId,
         "task.edited",
         command.actor,
@@ -197,7 +200,7 @@ export class TaskCommandStore {
       this.#database
         .prepare("UPDATE tasks SET column_id = ?, revision = revision + 1 WHERE id = ?")
         .run(command.destinationColumnId, command.taskId);
-      const sourceEventId = this.appendActivity(
+      const sourceEventId = this.#activityJournal.append(
         command.taskId,
         "task.moved",
         command.actor,
@@ -222,13 +225,13 @@ export class TaskCommandStore {
         attemptId,
       );
       for (const relationship of relationshipsSatisfied) {
-        const relationshipEventId = this.appendActivity(
+        const relationshipEventId = this.#activityJournal.append(
           relationship.source_task_id,
           "relationship.satisfied",
           { kind: "framework", id: "coordination" },
           this.relationshipActivityDetails(relationship, "source", command.taskId),
         );
-        this.appendActivity(
+        this.#activityJournal.append(
           command.taskId,
           "relationship.satisfied",
           { kind: "framework", id: "coordination" },
@@ -389,14 +392,14 @@ export class TaskCommandStore {
             this.#projections.readBlockingTaskIds(row.source_task_id).length === 1;
           this.#database.prepare("DELETE FROM task_relationships WHERE id = ?").run(row.id);
           const occurredAt = new Date().toISOString();
-          const sourceEventId = this.appendActivity(
+          const sourceEventId = this.#activityJournal.append(
             row.source_task_id,
             "relationship.removed",
             command.actor,
             this.relationshipActivityDetails(relationship, "source", row.target_task_id),
             occurredAt,
           );
-          this.appendActivity(
+          this.#activityJournal.append(
             row.target_task_id,
             "relationship.removed",
             command.actor,
@@ -530,7 +533,7 @@ export class TaskCommandStore {
         this.#database
           .prepare("UPDATE attention_reasons SET resolved_at = ? WHERE id = ?")
           .run(resolvedAt, command.attentionReasonId);
-        this.appendActivity(
+        this.#activityJournal.append(
           reason.task_id,
           "attention.resolved",
           command.actor,
@@ -672,7 +675,7 @@ export class TaskCommandStore {
         );
         for (const reason of attentionReasons) {
           resolveAttention.run(resolvedAt, reason.id);
-          this.appendActivity(
+          this.#activityJournal.append(
             activation.task_id,
             "attention.resolved",
             command.actor,
@@ -686,7 +689,7 @@ export class TaskCommandStore {
            WHERE id = ? AND suspended_activation_id = ?`,
         ).run(activation.task_id, command.activationId);
         if (suspension.changes === 1) {
-          this.appendActivity(
+          this.#activityJournal.append(
             activation.task_id,
             "automation.resumed",
             command.actor,
@@ -800,7 +803,7 @@ export class TaskCommandStore {
             )
             .run(attempts.count, continuationMessage, reason.activation_id);
         }
-        this.appendActivity(
+        this.#activityJournal.append(
           reason.task_id,
           "attention.resolved",
           command.actor,
@@ -835,7 +838,7 @@ export class TaskCommandStore {
     },
     occurredAt: string,
   ): void {
-    this.appendActivity(taskId, "activation.dismissed", actor, {
+    this.#activityJournal.append(taskId, "activation.dismissed", actor, {
       activationId: dismissal.activationId,
       targetAgentId: dismissal.targetAgentId,
       reasonType: dismissal.reasonType,
@@ -869,7 +872,7 @@ export class TaskCommandStore {
         .prepare("INSERT INTO task_starting_refs (task_id, starting_ref) VALUES (?, ?)")
         .run(taskId, startingRef);
     }
-    const sourceEventId = this.appendActivity(taskId, "task.created", command.actor, {
+    const sourceEventId = this.#activityJournal.append(taskId, "task.created", command.actor, {
       boardId: command.boardId,
       columnId: command.columnId,
       ...activityDetails,
@@ -920,7 +923,7 @@ export class TaskCommandStore {
     this.#database
       .prepare("INSERT INTO task_relationships VALUES (?, ?, ?, ?)")
       .run(relationship.id, relationship.type, sourceTaskId, targetTaskId);
-    this.appendActivity(sourceTaskId, "relationship.created", actor, this.relationshipActivityDetails(
+    this.#activityJournal.append(sourceTaskId, "relationship.created", actor, this.relationshipActivityDetails(
       relationship,
       "source",
       targetTaskId,
@@ -928,30 +931,12 @@ export class TaskCommandStore {
       ...(sourceAttemptId === undefined ? {} : { attemptId: sourceAttemptId }),
       },
     ));
-    this.appendActivity(targetTaskId, "relationship.created", actor, this.relationshipActivityDetails(
+    this.#activityJournal.append(targetTaskId, "relationship.created", actor, this.relationshipActivityDetails(
       relationship,
       "target",
       sourceTaskId,
     ));
     return relationship;
-  }
-
-  private appendActivity(
-    taskId: string,
-    type: TaskActivityView["type"],
-    actor: TaskActivityView["actor"],
-    details: Record<string, string>,
-    occurredAt = new Date().toISOString(),
-  ): string {
-    const id = randomUUID();
-    this.#database
-      .prepare(
-        `INSERT INTO activity_ledger
-          (id, task_id, type, actor_kind, actor_id, occurred_at, details_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(id, taskId, type, actor.kind, actor.id, occurredAt, JSON.stringify(details));
-    return id;
   }
 
   private relationshipActivityDetails(
@@ -1003,7 +988,7 @@ export class TaskCommandStore {
       sourceEventId,
       occurredAt,
     );
-    this.appendActivity(
+    this.#activityJournal.append(
       taskId,
       "activation.created",
       { kind: "framework", id: "coordination" },
@@ -1053,7 +1038,7 @@ export class TaskCommandStore {
       sourceEventId,
       occurredAt,
     );
-    this.appendActivity(
+    this.#activityJournal.append(
       taskId,
       "activation.created",
       { kind: "framework", id: "coordination" },
@@ -1119,7 +1104,7 @@ export class TaskCommandStore {
         commentId,
         occurredAt,
       );
-      this.appendActivity(
+      this.#activityJournal.append(
         taskId,
         "activation.created",
         { kind: "framework", id: "coordination" },
@@ -1248,7 +1233,7 @@ export class TaskCommandStore {
         command.body,
         command.conversationId,
       );
-      this.appendActivity(command.taskId, "conversation.continued", command.actor, {
+      this.#activityJournal.append(command.taskId, "conversation.continued", command.actor, {
         conversationId: command.conversationId,
         messageId: message.id,
         activationId,
@@ -1304,7 +1289,7 @@ export class TaskCommandStore {
       commentId,
       createdAt,
     );
-    this.appendActivity(
+    this.#activityJournal.append(
       taskId,
       "attention.created",
       { kind: "framework", id: "coordination" },

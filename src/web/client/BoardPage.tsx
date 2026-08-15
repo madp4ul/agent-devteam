@@ -17,6 +17,7 @@ import { AutomationControls } from "./AutomationControls.tsx";
 import { errorMessage } from "./feedback.ts";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { Loading } from "./Loading.tsx";
+import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import type { Navigate, NavigationState } from "./navigation.ts";
 import { TaskCreationDialog } from "./TaskCreationDialog.tsx";
@@ -63,7 +64,7 @@ export function BoardPage({
   const archivedLoadSequence = useRef(0);
   const laneRefs = useRef(new Map<string, HTMLDivElement>());
   const scrollElements = useRef(new Map<string, HTMLElement>());
-  const refresh = useCallback(async () => setState(await readBoard()), []);
+  const refresh = useLatestRefresh(readBoard, setState);
   const processImpact = state?.startup.mode === "paused" ? state.startup.processImpact : undefined;
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
   const loadArchivedTasks = useCallback(async () => {
@@ -119,11 +120,13 @@ export function BoardPage({
     void loadArchivedTasks();
     return () => { archivedLoadSequence.current += 1; };
   }, [loadArchivedTasks, showArchived]);
-  useEffect(() => {
-    if (state === undefined || (state.activeRuns.length === 0 && state.automation.state !== "pausing")) return;
-    const timer = window.setInterval(() => void refresh(), 1_000);
-    return () => window.clearInterval(timer);
-  }, [refresh, state]);
+  usePolling(
+    refresh,
+    state !== undefined && (state.activeRuns.length > 0 || state.automation.state === "pausing")
+      ? 1_000
+      : undefined,
+    (error) => setFeedback({ role: "alert", text: errorMessage(error) }),
+  );
   useLayoutEffect(() => {
     if (state === undefined || !pendingScrollRestore.current) return;
     let restored = false;

@@ -46,6 +46,8 @@ The browser is a presentation adapter. It provides boards, task details,
 history, transcripts, automation controls, and accessible task movement. It
 does not own workflow or automation policy. One shared browser module owns the
 focus, dismissal, scroll-lock, and restoration lifecycle for every modal.
+Shared live-refresh modules own request ordering and polling lifecycle, while
+each page retains its viewport, selection, feedback, and navigation policies.
 
 ### Coordination core
 
@@ -62,6 +64,9 @@ The core records a command's state change, activity provenance, projection
 updates, and idempotent response together. This is the central architectural
 choice: the UI and agents collaborate through one authoritative model rather
 than through separate state that must later be reconciled.
+Task commands, automation outcomes, and archival append that provenance through
+one internal activity journal. The persistence composition supplies the journal
+with the shared SQLite connection, so the caller remains the transaction owner.
 
 ### Durable state
 

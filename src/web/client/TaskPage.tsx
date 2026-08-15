@@ -17,6 +17,7 @@ import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
+import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { Modal } from "./Modal.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
 import { useTaskMovement } from "./task-movement.ts";
@@ -47,31 +48,28 @@ export function TaskPage({
   const commentInput = useRef<HTMLTextAreaElement>(null);
   const [archivalPending, setArchivalPending] = useState(false);
   const [discardConfirmation, setDiscardConfirmation] = useState(false);
-  const refreshSequence = useRef(0);
   const pendingTimelineAnchor = useRef<TimelineViewportAnchor | null>(null);
-  const refresh = useCallback(async () => {
-    const sequence = ++refreshSequence.current;
-    const next = await readTask(taskId);
-    if (sequence === refreshSequence.current) {
+  const refresh = useLatestRefresh(
+    () => readTask(taskId),
+    (next) => {
       pendingTimelineAnchor.current = captureTimelineViewportAnchor();
       setDetail(next);
-    }
-  }, [taskId]);
+    },
+  );
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
 
   useEffect(() => {
     void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
-  }, [refresh, setFeedback]);
+  }, [refresh, setFeedback, taskId]);
   useLayoutEffect(() => {
     restoreTimelineViewportAnchor(pendingTimelineAnchor.current);
     pendingTimelineAnchor.current = null;
   }, [detail]);
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
-    }, 1_000);
-    return () => window.clearInterval(timer);
-  }, [refresh, setFeedback]);
+  usePolling(
+    refresh,
+    1_000,
+    (error) => setFeedback({ role: "alert", text: errorMessage(error) }),
+  );
 
   const back = (event: React.MouseEvent<HTMLAnchorElement>): void => {
     event.preventDefault();

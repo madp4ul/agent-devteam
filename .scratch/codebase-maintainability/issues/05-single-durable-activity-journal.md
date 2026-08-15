@@ -4,11 +4,10 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Task commands, automation outcomes, and archival use the same activity journal.
-- [ ] Existing activity shapes, ordering, provenance, and restart durability remain unchanged.
-- [ ] The journal participates in the caller's existing database transaction.
-- [ ] No journal interface is exposed through the external application contract.
-- [ ] Application tests pass without asserting on journal implementation details.
-
+- [x] Task commands, automation outcomes, and archival use the same activity journal.
+- [x] Existing activity shapes, ordering, provenance, and restart durability remain unchanged.
+- [x] The journal participates in the caller's existing database transaction.
+- [x] No journal interface is exposed through the external application contract.
+- [x] Application tests pass without asserting on journal implementation details.
