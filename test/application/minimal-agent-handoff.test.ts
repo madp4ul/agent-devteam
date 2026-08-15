@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -19,6 +19,140 @@ import {
 } from "../../src/application/coordination-application.ts";
 
 const execFileAsync = promisify(execFile);
+
+test("task conversation index stays compact, recent, distinguishable, and historically navigable", async (t) => {
+  const fixture = await createFixture();
+  const runtime = new ControlledAgentRuntime();
+  let application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const originalDefinition = await readFile(fixture.definitionPath, "utf8");
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Index agent conversations",
+    description: "Keep task conversations easy to reach.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-conversation-index-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  const secondRequest = "@implementer verify responsive conversation navigation.";
+  const secondComment = application.addTaskComment({
+    taskId: created.task.id,
+    body: secondRequest,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "second-index-request",
+  });
+  assert.equal(secondComment.accepted, true);
+  if (!secondComment.accepted) return;
+  const firstConversationId = secondComment.task.activations[0]?.conversationId;
+  const secondConversationId = secondComment.task.activations[1]?.conversationId;
+  assert.ok(firstConversationId);
+  assert.ok(secondConversationId);
+
+  const initial = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(initial.available, true);
+  if (!initial.available) return;
+  assert.deepEqual(initial.conversations.map(({ id, label }) => ({ id, label })), [
+    { id: secondConversationId, label: secondRequest },
+    { id: firstConversationId, label: "Index agent conversations" },
+  ]);
+  assert.deepEqual(Object.keys(initial.conversations[0]!).sort(), [
+    "continuation",
+    "id",
+    "label",
+    "latestActivityAt",
+    "owningAgent",
+  ]);
+
+  await application.resumeAutomation();
+  await runtime.waitForRequest(1);
+  const reordered = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(reordered.available, true);
+  if (!reordered.available) return;
+  assert.equal(reordered.conversations[0]?.id, firstConversationId);
+
+  application.pauseAutomation();
+  runtime.complete({
+    status: "completed",
+    summary: "Indexed the existing conversations.",
+    threadId: "conversation-index-thread",
+  });
+  await application.waitForAutomationIdle();
+  application.close();
+  await writeFile(
+    fixture.definitionPath,
+    originalDefinition.replace("name: Implementation Agent", "name: Renamed Implementation Agent"),
+  );
+  application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  const renamed = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(renamed.available, true);
+  if (renamed.available) {
+    assert.equal(renamed.conversations.find(({ id }) => id === firstConversationId)?.owningAgent.name,
+      "Renamed Implementation Agent");
+  }
+
+  application.close();
+  await writeFile(
+    fixture.definitionPath,
+    `schemaVersion: 1
+name: Handoff process
+defaultTaskWorkspaceStartingRef: main
+coordinationGuidance: Keep every handoff explicit.
+agents:
+  - id: reviewer
+    name: Code Reviewer
+    role: Reviews implementations
+    summary: Reviews completed changes.
+    instructions: ./reviewer.md
+boards:
+  - id: delivery
+    name: Delivery
+    guidance: Move completed work to review.
+    columns:
+      - id: implementation
+        name: Implementation
+        watchingAgent: reviewer
+      - id: review
+        name: Review
+        watchingAgent: reviewer
+`,
+  );
+  application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  const historical = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(historical.available, true);
+  if (!historical.available) return;
+  const unavailable = historical.conversations.find(({ id }) => id === firstConversationId);
+  assert.deepEqual(unavailable?.owningAgent, {
+    id: "implementer",
+    name: "Implementation Agent",
+    historicalName: "Implementation Agent",
+    present: false,
+  });
+  assert.deepEqual(unavailable?.continuation, {
+    available: false,
+    reason: "owning-agent-unavailable",
+  });
+  assert.deepEqual(application.queryTaskConversationIndex("T-9999"), {
+    available: false,
+    reason: "not-found",
+  });
+});
 
 test("an agent comment and move hand work to the next watched-column agent", async (t) => {
   const fixture = await createFixture();

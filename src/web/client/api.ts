@@ -10,6 +10,7 @@ import type {
   TaskView,
   AttemptTranscriptQueryResult,
   AgentConversationQueryResult,
+  AgentConversationIndexEntry,
   ActivationRecoveryAction,
   ActiveRunView,
   NeedsAttentionTaskView,
@@ -47,6 +48,7 @@ export interface BrowserTaskDetail {
   collaborators: CollaboratorView[];
   relationshipTasks: BrowserRelationshipTask[];
   startup: StartupView;
+  conversations: AgentConversationIndexEntry[];
 }
 
 export interface BrowserRelationshipTask {
@@ -113,6 +115,7 @@ export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
     collaborators: result.collaborators,
     relationshipTasks: result.relationshipTasks ?? [],
     startup: result.startup,
+    conversations: result.conversations ?? [],
   };
 }
 

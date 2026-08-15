@@ -336,6 +336,7 @@ async function handleBrowserApi(
     const inspection = application.queryTaskInspectionForUser(taskId);
     if (result.available && inspection.available) {
       const collaborators = application.queryCollaborators();
+      const conversationIndex = application.queryTaskConversationIndex(taskId);
       const activeRuns = application.queryActiveRuns();
       const relatedTaskIds = new Set([
         ...result.task.relationships.map((relationship) => relationship.sourceTaskId === taskId
@@ -369,6 +370,7 @@ async function handleBrowserApi(
         automation: application.queryAutomation(),
         startup: application.queryStartup(),
         collaborators: collaborators.available ? collaborators.collaborators : [],
+        conversations: conversationIndex.available ? conversationIndex.conversations : [],
       });
     } else {
       const reason = !result.available ? result.reason : "not-found";

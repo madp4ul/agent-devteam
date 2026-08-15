@@ -153,10 +153,12 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       owning_agent_id TEXT NOT NULL REFERENCES agents(id),
       owning_agent_name_snapshot TEXT NOT NULL,
+      generated_label TEXT NOT NULL,
       originating_activation_id TEXT NOT NULL UNIQUE REFERENCES activations(id) ON DELETE CASCADE,
       current_thread_id TEXT,
       created_at TEXT NOT NULL,
-      latest_activity_at TEXT NOT NULL
+      latest_activity_at TEXT NOT NULL,
+      latest_activity_sequence INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS task_workspaces (
       task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
@@ -385,9 +387,11 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     activationColumns.has("stale") &&
     activationColumns.has("conversation_id") &&
     conversationColumns.has("owning_agent_name_snapshot") &&
+    conversationColumns.has("generated_label") &&
     conversationColumns.has("originating_activation_id") &&
     conversationColumns.has("current_thread_id") &&
     conversationColumns.has("latest_activity_at") &&
+    conversationColumns.has("latest_activity_sequence") &&
     attemptColumns.has("outcome_kind") &&
     transcriptColumns.has("usage_json") &&
     transcriptColumns.has("reported_usage_json") &&

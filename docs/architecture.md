@@ -65,7 +65,10 @@ relationships, activity, activations, agent conversations, attempts, attention,
 and automation state. Conversations retain task, owner, originating activation,
 and current-thread identity; their run evidence stays in the existing
 attempt-scoped transcript store. Read projections aggregate that evidence for
-the browser without becoming a second source of truth or duplicating it.
+the browser without becoming a second source of truth or duplicating it. Each
+conversation record persists a generated originating-request label and durable
+activity order; a task-scoped compact projection exposes that indexing metadata
+so task details can navigate recent history without loading transcript evidence.
 
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained

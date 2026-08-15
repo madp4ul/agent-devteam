@@ -24,6 +24,7 @@ import { TaskWorkspacePanel } from "./TaskWorkspacePanel.tsx";
 import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
 import { TaskRelationshipsPanel } from "./TaskRelationshipsPanel.tsx";
 import { TaskAttentionPanel } from "./TaskAttentionPanel.tsx";
+import { TaskConversationsPanel } from "./TaskConversationsPanel.tsx";
 import {
   captureTimelineViewportAnchor,
   restoreTimelineViewportAnchor,
@@ -270,6 +271,14 @@ export function TaskPage({
               onFeedback={setFeedback}
             />
             </div>
+            {detail.conversations.length === 0 ? null : (
+              <div data-task-section="conversations">
+                <TaskConversationsPanel
+                  taskId={task.id}
+                  conversations={detail.conversations}
+                />
+              </div>
+            )}
           </div>
         </div>
       </main>

@@ -27,6 +27,19 @@ Keep the button as the accessible control with an explicit label, mark the SVG
 as decorative, and add browser coverage that compares the icon and button
 bounding-box centers whenever a new icon-button pattern is introduced.
 
+### Browser visual hierarchy
+
+Design and tune browser UI primarily in dark mode, while keeping every surface,
+interaction state, and text role readable and operable in light mode. Add
+appearance coverage for both themes when a new interactive visual pattern is
+introduced or when theme-specific cascade behavior could change it.
+
+Calibrate every new UI element against the importance of the surrounding
+interface. Supporting history, navigation, and overview surfaces should remain
+visually quieter than primary task content and actions; hover, focus, and status
+states should communicate interaction without making secondary controls look
+like the page's dominant action.
+
 ### Development workflow
 
 When the user asks which workflow or skill should come next, consult

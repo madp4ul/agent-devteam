@@ -651,6 +651,19 @@ export type AgentConversationQueryResult =
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { available: false; reason: "not-found" };
 
+export interface AgentConversationIndexEntry {
+  id: string;
+  owningAgent: AgentConversationView["owningAgent"];
+  label: string;
+  latestActivityAt: string;
+  continuation: AgentConversationView["continuation"];
+}
+
+export type TaskConversationIndexQueryResult =
+  | { available: true; conversations: AgentConversationIndexEntry[] }
+  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
+  | { available: false; reason: "not-found" };
+
 export type CollaboratorsQueryResult =
   | { available: true; collaborators: CollaboratorView[] }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };

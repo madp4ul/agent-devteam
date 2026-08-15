@@ -554,6 +554,7 @@ export class AutomationStateStore {
         { activationId: activation.id, attemptId, definitionVersion: activation.definition_version },
         occurredAt,
       );
+      this.updateConversationActivity(attemptId, occurredAt);
       this.#database
         .prepare("DELETE FROM activation_dispatch_claims WHERE attempt_id = ?")
         .run(attemptId);
@@ -779,7 +780,9 @@ export class AutomationStateStore {
   private updateConversationActivity(attemptId: string, occurredAt: string, threadId?: string): void {
     this.#database.prepare(
       `UPDATE agent_conversations
-       SET current_thread_id = COALESCE(?, current_thread_id), latest_activity_at = ?
+       SET current_thread_id = COALESCE(?, current_thread_id),
+           latest_activity_at = ?,
+           latest_activity_sequence = (SELECT COALESCE(MAX(sequence), 0) FROM activity_ledger)
        WHERE id = (
          SELECT activation.conversation_id
          FROM attempts attempt

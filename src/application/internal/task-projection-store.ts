@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type {
   ActivationView,
+  AgentConversationIndexEntry,
   AgentConversationView,
   AttemptTranscriptItem,
   AttemptTokenUsage,
@@ -22,6 +23,15 @@ export interface StoredTaskOverview {
   sequence: number;
   columnEntrySequence: number;
   task: TaskOverviewView;
+}
+
+interface ConversationOwnerAndContinuationRow {
+  owning_agent_id: string;
+  owning_agent_name_snapshot: string;
+  current_agent_name: string | null;
+  agent_applied: number | null;
+  current_thread_id: string | null;
+  archived_at: string | null;
 }
 
 export class TaskProjectionStore {
@@ -428,29 +438,73 @@ export class TaskProjectionStore {
     const originatingActivation = this.readActivations(row.task_id)
       .find((activation) => activation.id === row.originating_activation_id);
     if (originatingActivation === undefined) return undefined;
-    const present = row.agent_applied === 1 && row.current_agent_name !== null;
-    const continuation = row.archived_at !== null
-      ? { available: false as const, reason: "task-archived" as const }
-      : !present
-        ? { available: false as const, reason: "owning-agent-unavailable" as const }
-        : row.current_thread_id === null
-          ? { available: false as const, reason: "thread-unavailable" as const }
-          : { available: true as const };
     return {
       id: row.id,
       taskId: row.task_id,
       originatingActivationId: row.originating_activation_id,
       originatingActivation,
-      owningAgent: {
-        id: row.owning_agent_id,
-        name: row.current_agent_name ?? row.owning_agent_name_snapshot,
-        historicalName: row.owning_agent_name_snapshot,
-        present,
-      },
+      ...this.conversationOwnerAndContinuation(row),
       currentThreadId: row.current_thread_id,
       createdAt: row.created_at,
       latestActivityAt: row.latest_activity_at,
-      continuation,
+    };
+  }
+
+  taskExists(taskId: string): boolean {
+    return this.#database.prepare("SELECT 1 FROM tasks WHERE id = ?").get(taskId) !== undefined;
+  }
+
+  readTaskConversationIndex(taskId: string): AgentConversationIndexEntry[] {
+    const rows = this.#database.prepare(
+      `SELECT conversation.id, conversation.owning_agent_id,
+              conversation.owning_agent_name_snapshot, conversation.generated_label,
+              conversation.latest_activity_at, conversation.current_thread_id,
+              task.archived_at, agent.name AS current_agent_name, agent.applied AS agent_applied
+       FROM agent_conversations conversation
+       JOIN tasks task ON task.id = conversation.task_id
+       LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
+       WHERE conversation.task_id = ?
+       ORDER BY conversation.latest_activity_sequence DESC, conversation.created_at DESC,
+                conversation.id DESC`,
+    ).all(taskId) as Array<{
+      id: string;
+      owning_agent_id: string;
+      owning_agent_name_snapshot: string;
+      generated_label: string;
+      latest_activity_at: string;
+      current_thread_id: string | null;
+      archived_at: string | null;
+      current_agent_name: string | null;
+      agent_applied: number | null;
+    }>;
+    return rows.map((row) => {
+      return {
+        id: row.id,
+        ...this.conversationOwnerAndContinuation(row),
+        label: row.generated_label,
+        latestActivityAt: row.latest_activity_at,
+      };
+    });
+  }
+
+  private conversationOwnerAndContinuation(
+    row: ConversationOwnerAndContinuationRow,
+  ): Pick<AgentConversationView, "owningAgent" | "continuation"> {
+    const present = row.agent_applied === 1 && row.current_agent_name !== null;
+    return {
+      owningAgent: {
+        id: row.owning_agent_id,
+        name: present ? row.current_agent_name! : row.owning_agent_name_snapshot,
+        historicalName: row.owning_agent_name_snapshot,
+        present,
+      },
+      continuation: row.archived_at !== null
+        ? { available: false, reason: "task-archived" }
+        : !present
+          ? { available: false, reason: "owning-agent-unavailable" }
+          : row.current_thread_id === null
+            ? { available: false, reason: "thread-unavailable" }
+            : { available: true },
     };
   }
 

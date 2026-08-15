@@ -155,6 +155,25 @@ test("dark interactive controls keep readable contrast without turning secondary
   expect(await contrastRatio(commentMarker)).toBeGreaterThanOrEqual(4.5);
 });
 
+test("conversation index remains quiet and readable in dark and light appearances", async ({ page }) => {
+  for (const theme of ["dark", "light"] as const) {
+    await page.goto("/tasks/T-0001");
+    await setAppearance(page, theme);
+    const row = page.getByRole("region", { name: "Conversations" }).getByRole("button").first();
+
+    await expect(row).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await row.hover();
+    await expect(row).toHaveCSS("color", theme === "dark" ? "rgb(237, 243, 239)" : "rgb(20, 34, 28)");
+    await expect(row).toHaveCSS("background-color", theme === "dark" ? "rgb(42, 53, 47)" : "rgb(233, 237, 231)");
+    expect(await contrastRatio(row)).toBeGreaterThanOrEqual(4.5);
+
+    await row.focus();
+    await expect(row).toHaveCSS("outline-style", "solid");
+    await expect(row).toHaveCSS("outline-width", "2px");
+    await expect(row).toHaveCSS("outline-color", theme === "dark" ? "rgb(168, 206, 233)" : "rgb(49, 81, 107)");
+  }
+});
+
 test("queued activation dismissal matches secondary round controls in both themes", async ({ page }) => {
   await page.route("**/api/tasks/T-0002", async (route) => {
     const response = await route.fetch();

@@ -1143,6 +1143,7 @@ export class TaskCommandStore {
       };
     const activationId = randomUUID();
     const conversationId = randomUUID();
+    const generatedLabel = this.generatedConversationLabel(taskId, reasonType, sourceEventId);
     this.#database
       .prepare(
         `INSERT INTO activations
@@ -1164,15 +1165,17 @@ export class TaskCommandStore {
     this.#database
       .prepare(
         `INSERT INTO agent_conversations
-          (id, task_id, owning_agent_id, owning_agent_name_snapshot,
-           originating_activation_id, created_at, latest_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (id, task_id, owning_agent_id, owning_agent_name_snapshot, generated_label,
+           originating_activation_id, created_at, latest_activity_at, latest_activity_sequence)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+           (SELECT COALESCE(MAX(sequence), 0) + 1 FROM activity_ledger))`,
       )
       .run(
         conversationId,
         taskId,
         targetAgentId,
         profile.name,
+        generatedLabel,
         activationId,
         occurredAt,
         occurredAt,
@@ -1181,6 +1184,21 @@ export class TaskCommandStore {
       .prepare("UPDATE activations SET conversation_id = ? WHERE id = ?")
       .run(conversationId, activationId);
     return activationId;
+  }
+
+  private generatedConversationLabel(
+    taskId: string,
+    reasonType: ActivationView["reason"]["type"],
+    sourceEventId: string,
+  ): string {
+    const task = this.#database.prepare("SELECT title FROM tasks WHERE id = ?")
+      .get(taskId) as { title: string };
+    const sourceComment = reasonType === "agent-mention"
+      ? this.#database.prepare("SELECT body FROM task_comments WHERE id = ? AND task_id = ?")
+          .get(sourceEventId, taskId) as { body: string } | undefined
+      : undefined;
+    const preview = (sourceComment?.body ?? task.title).replace(/\s+/g, " ").trim();
+    return preview.length <= 80 ? preview : `${preview.slice(0, 79).trimEnd()}…`;
   }
 
   private createUserMentionAttention(

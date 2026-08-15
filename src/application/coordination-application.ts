@@ -53,6 +53,7 @@ import type {
   StartupView,
   TaskActivityQueryResult,
   TaskAttachmentsQueryResult,
+  TaskConversationIndexQueryResult,
   TaskInspectionQueryResult,
   UserTaskInspectionQueryResult,
   TaskOverviewsQuery,
@@ -515,6 +516,23 @@ export class CoordinationApplication {
       }),
     );
     return { available: true, conversation: { ...conversation, runs } };
+  }
+
+  queryTaskConversationIndex(taskId: string): TaskConversationIndexQueryResult {
+    if (this.#startup.mode === "configuration-error") {
+      return {
+        available: false,
+        reason: "configuration-error",
+        diagnostics: this.#startup.diagnostics,
+      };
+    }
+    if (!this.#persistence.taskProjections.taskExists(taskId)) {
+      return { available: false, reason: "not-found" };
+    }
+    return {
+      available: true,
+      conversations: this.#persistence.taskProjections.readTaskConversationIndex(taskId),
+    };
   }
 
   queryCollaborators(): CollaboratorsQueryResult {

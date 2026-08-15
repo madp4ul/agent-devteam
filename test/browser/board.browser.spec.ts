@@ -1266,7 +1266,114 @@ test("task details prioritize agent activity and preserve the responsive reading
     "workspace",
     "move",
     "relationships",
+    "conversations",
   ]);
+});
+
+test("compact conversation rows stay last in the supporting column and open by keyboard", async ({ page, request }) => {
+  const detail = await (await request.get("/api/tasks/T-0001")).json() as {
+    task: { activations: Array<{ conversationId: string | null }> };
+  };
+  const conversationId = detail.task.activations.find(({ conversationId }) => conversationId !== null)?.conversationId;
+  expect(conversationId).not.toBeNull();
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const taskDetail = await response.json();
+    taskDetail.conversations = [
+      {
+        id: conversationId,
+        owningAgent: {
+          id: "implementer",
+          name: "Implementation Agent",
+          historicalName: "Implementation Agent",
+          present: true,
+        },
+        label: "Inspect existing coordination",
+        latestActivityAt: "2026-08-09T12:05:00.000Z",
+        continuation: { available: true },
+      },
+      {
+        id: "historical-conversation",
+        owningAgent: {
+          id: "implementer",
+          name: "Implementation Agent",
+          historicalName: "Implementation Agent",
+          present: false,
+        },
+        label: "Verify the responsive navigation order",
+        latestActivityAt: "2026-08-09T12:00:00.000Z",
+        continuation: { available: false, reason: "owning-agent-unavailable" },
+      },
+    ];
+    await route.fulfill({ response, json: taskDetail });
+  });
+
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto("/tasks/T-0001");
+  const conversations = page.getByRole("region", { name: "Conversations" });
+  const rows = conversations.getByRole("button");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText("Implementation Agent");
+  await expect(rows.nth(0)).toContainText(/ago|just now/);
+  await expect(rows.nth(0)).not.toContainText("Inspect existing coordination");
+  await expect(rows.nth(1)).not.toContainText("Verify the responsive navigation order");
+  const [agentNameBox, activityTimeBox] = await Promise.all([
+    rows.nth(0).locator("strong").boundingBox(),
+    rows.nth(0).locator("time").boundingBox(),
+  ]);
+  expect(agentNameBox).not.toBeNull();
+  expect(activityTimeBox).not.toBeNull();
+  expect(activityTimeBox!.x).toBeGreaterThan(agentNameBox!.x + agentNameBox!.width);
+  expect(Math.abs(
+    activityTimeBox!.y + activityTimeBox!.height / 2 - (agentNameBox!.y + agentNameBox!.height / 2),
+  )).toBeLessThanOrEqual(2);
+  await expect(conversations).not.toContainText(/attempt|token|duration|completed|unavailable/i);
+  const supportingOrder = await page.locator(".detail-column > [data-task-section]").evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-task-section")),
+  );
+  expect(supportingOrder.at(-1)).toBe("conversations");
+  const [widePrimary, wideSupporting, wideConversations] = await Promise.all([
+    page.locator(".detail-primary-column").boundingBox(),
+    page.locator(".detail-column").boundingBox(),
+    page.locator('[data-task-section="conversations"]').boundingBox(),
+  ]);
+  expect(widePrimary).not.toBeNull();
+  expect(wideSupporting).not.toBeNull();
+  expect(wideConversations).not.toBeNull();
+  expect(wideConversations!.x).toBeGreaterThan(widePrimary!.x + widePrimary!.width);
+  expect(Math.abs(wideConversations!.x - wideSupporting!.x)).toBeLessThanOrEqual(2);
+
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const [stickyTop, topbarBottom] = await Promise.all([
+    page.locator('[data-task-section="conversations"]').evaluate((element) => element.getBoundingClientRect().top),
+    page.locator(".detail-topbar").evaluate((element) => element.getBoundingClientRect().bottom),
+  ]);
+  expect(stickyTop).toBeGreaterThanOrEqual(topbarBottom);
+  expect(stickyTop - topbarBottom).toBeLessThanOrEqual(20);
+
+  await rows.nth(0).focus();
+  await expect(rows.nth(0)).toBeFocused();
+  await rows.nth(0).press("Enter");
+  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toBeVisible();
+  await page.getByRole("button", { name: "Close conversation" }).click();
+
+  await page.setViewportSize({ width: 600, height: 900 });
+  const narrowOrder = await page.locator("[data-task-section]").evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-task-section")),
+  );
+  expect(narrowOrder.at(-1)).toBe("conversations");
+  const [narrowTimeline, narrowConversations] = await Promise.all([
+    page.locator('[data-task-section="timeline"]').boundingBox(),
+    page.locator('[data-task-section="conversations"]').boundingBox(),
+  ]);
+  expect(narrowTimeline).not.toBeNull();
+  expect(narrowConversations).not.toBeNull();
+  expect(Math.abs(narrowConversations!.x - narrowTimeline!.x)).toBeLessThanOrEqual(2);
+  expect(Math.abs(narrowConversations!.width - narrowTimeline!.width)).toBeLessThanOrEqual(2);
+  expect(narrowConversations!.y).toBeGreaterThan(narrowTimeline!.y + narrowTimeline!.height);
+
+  await page.goto("/tasks/T-0002");
+  await expect(page.getByRole("region", { name: "Conversations" })).toHaveCount(0);
 });
 
 test("running agent activity uses the configured agent name and interruption control", async ({ page }) => {
