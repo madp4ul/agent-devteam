@@ -71,13 +71,16 @@ ownership check; it does not grant the `.git/worktrees` write permission the
 application requires.
 
 Framework-launched agents inject the exact task-workspace path through Git's
-process environment as `safe.directory`. Trust ends with the Codex process; the
-application does not change global or repository Git configuration. This fixes
-Git ownership inspection only. Writes to linked-worktree metadata remain
-subject to the user's ordinary Codex sandbox. Framework-launched runs request
-scoped escalation with `approval_policy = "on-request"`; the separate
-`auto_review` reviewer may allow or deny each request under the effective
-managed policy.
+process environment as `safe.directory`. Host-side archival applies the same
+exact, process-local trust only after confirming the framework-owned path and
+primary-repository worktree registration. Trust ends with each Git or Codex
+process; the application does not change global or repository Git
+configuration. This fixes Git ownership inspection only. Writes to
+linked-worktree metadata remain subject to the process's ordinary filesystem
+permissions, and agent writes remain subject to the user's ordinary Codex
+sandbox. Framework-launched runs request scoped escalation with
+`approval_policy = "on-request"`; the separate `auto_review` reviewer may allow
+or deny each request under the effective managed policy.
 
 From the repository root, install exactly the dependency graph in
 `pnpm-lock.yaml`:

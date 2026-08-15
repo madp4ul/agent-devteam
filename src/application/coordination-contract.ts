@@ -775,7 +775,7 @@ export interface ArchiveCompletedTasksCommand {
 
 export type ArchiveTaskResult =
   | { accepted: true; task: TaskView }
-  | { accepted: false; reason: "not-found" | "already-archived" | "archive-in-progress" | "not-completed" | "activation-work-pending" | "automation-suspended" | "workspace-dirty" | "workspace-commit-not-durable" | "workspace-cleanup-failed" | "runtime-unavailable" }
+  | { accepted: false; reason: "not-found" | "already-archived" | "archive-in-progress" | "not-completed" | "activation-work-pending" | "automation-suspended" | "workspace-dirty" | "workspace-commit-not-durable" | "workspace-registration-invalid" | "workspace-ownership-untrusted" | "workspace-locked" | "workspace-removal-failed" | "workspace-cleanup-failed" | "runtime-unavailable" }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
 export type UnarchiveTaskResult =

@@ -6,27 +6,27 @@ to run even when the application and worktree have different Windows owners.
 
 **Blocked by:** None
 
-**Status:** open
+**Status:** resolved
 
-- [ ] Apply an exact, process-local Git `safe.directory` value to host-side Git
+- [x] Apply an exact, process-local Git `safe.directory` value to host-side Git
   operations on a verified framework-owned task worktree.
-- [ ] Never set global or persistent Git configuration, use
+- [x] Never set global or persistent Git configuration, use
   `safe.directory=*`, or trust a path broader than the exact verified worktree.
-- [ ] A dirty differently owned worktree reaches the existing discard-changes
+- [x] A dirty differently owned worktree reaches the existing discard-changes
   confirmation instead of failing early with `workspace-cleanup-failed`.
-- [ ] Confirming discard removes the registered worktree and archives the task;
+- [x] Confirming discard removes the registered worktree and archives the task;
   keeping the workspace leaves both task and workspace unchanged.
-- [ ] Clean differently owned worktrees archive normally.
-- [ ] A non-durable current commit still produces
+- [x] Clean differently owned worktrees archive normally.
+- [x] A non-durable current commit still produces
   `workspace-commit-not-durable`.
-- [ ] Preserve distinct, actionable outcomes for dirty workspace, non-durable
+- [x] Preserve distinct, actionable outcomes for dirty workspace, non-durable
   HEAD, invalid or inconsistent worktree registration, locked worktree, Git
   ownership/trust failure, and actual removal failure.
-- [ ] Do not report or imply partial deletion when the worktree directory,
+- [x] Do not report or imply partial deletion when the worktree directory,
   `.git` pointer, and primary-repository registration remain intact.
-- [ ] Add automated Windows coverage using different worktree and application
+- [x] Add automated Windows coverage using different worktree and application
   identities or a faithful simulation of Git's dubious-ownership response.
-- [ ] Verify that no persistent or global Git trust configuration changes.
+- [x] Verify that no persistent or global Git trust configuration changes.
 
 ## Reproduction
 
@@ -67,3 +67,25 @@ Agent-run Git commands already receive an exact, process-local `safe.directory`
 value through issue 49. Host-side workspace management does not yet use the
 same bounded trust mechanism.
 
+## Answer
+
+Host-side archival now verifies the task's exact framework-owned path and
+primary-repository worktree registration before passing that path to Git as a
+process-local `safe.directory` value. It replaces inherited process-local Git
+trust entries without discarding unrelated Git configuration and never writes
+global, repository-local, or broader wildcard trust.
+
+Archival preserves separate outcomes for dirty work, non-durable HEAD,
+registration inconsistency, rejected ownership trust, locked worktrees,
+unexpected inspection failure, and actual removal failure. Browser feedback
+states when inspection stopped before removal and when the task, directory,
+`.git` pointer, and worktree registration remain unchanged.
+
+Focused real-Git tests faithfully simulate dubious ownership unless the exact
+worktree trust is present. They cover dirty keep/discard, clean removal,
+non-durable commits, invalid registration, residual ownership rejection,
+unexpected verification failure, actual removal failure, retained unrelated
+process-local Git configuration, and unchanged global and repository-local
+trust. Both TypeScript typechecks, the production build, and all 197 runnable
+tests pass; the two credentialed real-Codex integration tests remain skipped.
+Independent Standards and Spec reviews report no remaining findings.

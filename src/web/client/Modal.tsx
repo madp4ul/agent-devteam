@@ -4,6 +4,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 
 const focusableSelector = [
   "a[href]",
@@ -105,7 +106,7 @@ export function Modal({
     };
   }, [initialFocusRef]);
 
-  return (
+  return createPortal(
     <div
       className={["modal-backdrop", backdropClassName].filter(Boolean).join(" ")}
       role="presentation"
@@ -123,7 +124,8 @@ export function Modal({
       >
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

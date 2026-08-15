@@ -99,16 +99,21 @@ export class GitTaskWorkspaceError extends Error {
   }
 }
 
+class TaskWorkspaceRegistrationError extends Error {}
+
 export class GitTaskWorkspaceManager {
   readonly projectRepositoryPath: string;
   readonly taskWorkspaceRoot: string;
+  readonly #runGit: typeof runGit;
 
   constructor(
     projectRepositoryPath: string,
     taskWorkspaceRoot: string,
+    runGitCommand: typeof runGit = runGit,
   ) {
     this.projectRepositoryPath = projectRepositoryPath;
     this.taskWorkspaceRoot = taskWorkspaceRoot;
+    this.#runGit = runGitCommand;
   }
 
   pathFor(taskId: string): string {
@@ -128,13 +133,13 @@ export class GitTaskWorkspaceManager {
     await atBoundary(
       "repository-access",
       `Could not access project repository ${this.projectRepositoryPath}`,
-      runGit(["-C", this.projectRepositoryPath, "rev-parse", "--git-dir"]),
+      this.#runGit(["-C", this.projectRepositoryPath, "rev-parse", "--git-dir"]),
     );
     const commit = (
       await atBoundary(
         "starting-ref-resolution",
         `Could not resolve task workspace starting ref ${startingRef}`,
-        runGit([
+        this.#runGit([
           "-C",
           this.projectRepositoryPath,
           "rev-parse",
@@ -152,7 +157,7 @@ export class GitTaskWorkspaceManager {
     await atBoundary(
       "worktree-registration",
       `Could not register task ${taskId} worktree`,
-      runGit([
+      this.#runGit([
         "-C",
         this.projectRepositoryPath,
         "worktree",
@@ -171,8 +176,10 @@ export class GitTaskWorkspaceManager {
   ): Promise<void> {
     const expectedPath = this.pathFor(taskId);
     try {
-      if (!samePath(workspace.path, expectedPath)) throw new Error("unexpected path");
-      const registration = await runGit([
+      if (!samePath(workspace.path, expectedPath)) {
+        throw new TaskWorkspaceRegistrationError("unexpected path");
+      }
+      const registration = await this.#runGit([
         "-C",
         this.projectRepositoryPath,
         "worktree",
@@ -185,10 +192,16 @@ export class GitTaskWorkspaceManager {
           const registeredPath = /^worktree (.+)$/m.exec(candidate)?.[1];
           return registeredPath !== undefined && samePath(registeredPath, workspace.path);
         });
+      if (entry === undefined) throw new TaskWorkspaceRegistrationError("unexpected registration");
       const isWorktree = (
-        await runGit(["-C", workspace.path, "rev-parse", "--is-inside-work-tree"])
+        await this.#runGit(
+          ["-C", workspace.path, "rev-parse", "--is-inside-work-tree"],
+          gitSafeDirectoryEnvironment(workspace.path),
+        )
       ).trim();
-      if (entry === undefined || isWorktree !== "true") throw new Error("unexpected registration");
+      if (isWorktree !== "true") {
+        throw new TaskWorkspaceRegistrationError("unexpected registration");
+      }
     } catch (error) {
       throw new GitTaskWorkspaceError(
         "worktree-registration",
@@ -265,17 +278,54 @@ export class GitTaskWorkspaceManager {
     workspace: TaskWorkspaceView,
     discardChanges?: true,
   ): Promise<
-    { removed: true } | { removed: false; reason: "workspace-dirty" | "workspace-commit-not-durable" | "workspace-cleanup-failed" }
+    { removed: true } | {
+      removed: false;
+      reason:
+        | "workspace-dirty"
+        | "workspace-commit-not-durable"
+        | "workspace-registration-invalid"
+        | "workspace-ownership-untrusted"
+        | "workspace-locked"
+        | "workspace-removal-failed"
+        | "workspace-cleanup-failed";
+    }
   > {
     try {
       await this.verify(taskId, workspace);
-      const status = await runGit(["-C", workspace.path, "status", "--porcelain", "--untracked-files=all"]);
+    } catch (error) {
+      return {
+        removed: false,
+        reason: isDubiousOwnership(error)
+          ? "workspace-ownership-untrusted"
+          : hasErrorType(error, TaskWorkspaceRegistrationError)
+            ? "workspace-registration-invalid"
+            : "workspace-cleanup-failed",
+      };
+    }
+    try {
+      const environment = gitSafeDirectoryEnvironment(workspace.path);
+      const status = await this.#runGit(
+        ["-C", workspace.path, "status", "--porcelain", "--untracked-files=all"],
+        environment,
+      );
       if (status.trim().length > 0 && !discardChanges) {
         return { removed: false, reason: "workspace-dirty" };
       }
-      const refs = await runGit(["-C", workspace.path, "for-each-ref", "--format=%(refname)", "--contains", "HEAD"]);
+      const refs = await this.#runGit(
+        ["-C", workspace.path, "for-each-ref", "--format=%(refname)", "--contains", "HEAD"],
+        environment,
+      );
       if (refs.trim().length === 0) return { removed: false, reason: "workspace-commit-not-durable" };
-      await runGit([
+    } catch (error) {
+      return {
+        removed: false,
+        reason: isDubiousOwnership(error)
+          ? "workspace-ownership-untrusted"
+          : "workspace-cleanup-failed",
+      };
+    }
+    try {
+      await this.#runGit([
         "-C",
         this.projectRepositoryPath,
         "worktree",
@@ -284,8 +334,15 @@ export class GitTaskWorkspaceManager {
         workspace.path,
       ]);
       return { removed: true };
-    } catch {
-      return { removed: false, reason: "workspace-cleanup-failed" };
+    } catch (error) {
+      return {
+        removed: false,
+        reason: isLockedWorktree(error)
+          ? "workspace-locked"
+          : isDubiousOwnership(error)
+            ? "workspace-ownership-untrusted"
+            : "workspace-removal-failed",
+      };
     }
   }
 
@@ -345,13 +402,67 @@ function workspaceDiagnostic(
   };
 }
 
-function runGit(arguments_: string[]): Promise<string> {
+function runGit(arguments_: string[], environment?: NodeJS.ProcessEnv): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile("git", arguments_, { encoding: "utf8" }, (error, stdout) => {
+    execFile("git", arguments_, { encoding: "utf8", env: environment }, (error, stdout) => {
       if (error !== null) reject(error);
       else resolve(stdout);
     });
   });
+}
+
+function gitSafeDirectoryEnvironment(path: string): NodeJS.ProcessEnv {
+  const configuration: Array<[string, string]> = [];
+  const inheritedCount = Number.parseInt(process.env.GIT_CONFIG_COUNT ?? "0", 10);
+  for (let index = 0; index < inheritedCount; index += 1) {
+    const key = process.env[`GIT_CONFIG_KEY_${index}`];
+    const value = process.env[`GIT_CONFIG_VALUE_${index}`];
+    if (key !== undefined && value !== undefined && key.toLocaleLowerCase() !== "safe.directory") {
+      configuration.push([key, value]);
+    }
+  }
+  configuration.push([
+    "safe.directory",
+    /^(?:[A-Za-z]:\\|\\\\)/u.test(path) ? path.replaceAll("\\", "/") : path,
+  ]);
+  const environment: NodeJS.ProcessEnv = {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(
+        ([key]) => !/^GIT_CONFIG_(?:COUNT|KEY_\d+|VALUE_\d+)$/iu.test(key),
+      ),
+    ),
+    GIT_CONFIG_COUNT: configuration.length.toString(),
+  };
+  for (const [index, [key, value]] of configuration.entries()) {
+    environment[`GIT_CONFIG_KEY_${index}`] = key;
+    environment[`GIT_CONFIG_VALUE_${index}`] = value;
+  }
+  return environment;
+}
+
+function isDubiousOwnership(error: unknown): boolean {
+  return errorDescription(error).match(/dubious ownership|safe\.directory/iu) !== null;
+}
+
+function isLockedWorktree(error: unknown): boolean {
+  return errorDescription(error).match(/locked (?:working tree|worktree)|worktree is locked/iu) !== null;
+}
+
+function errorDescription(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const stderr = "stderr" in error && typeof error.stderr === "string" ? error.stderr : "";
+  const cause = error.cause === undefined ? "" : errorDescription(error.cause);
+  return `${error.message}\n${stderr}\n${cause}`;
+}
+
+function hasErrorType<T extends Error>(
+  error: unknown,
+  errorType: abstract new (...arguments_: never[]) => T,
+): boolean {
+  if (error instanceof errorType) return true;
+  return error instanceof Error && error.cause !== undefined
+    ? hasErrorType(error.cause, errorType)
+    : false;
 }
 
 function runGitForExitCode(arguments_: string[]): Promise<number> {

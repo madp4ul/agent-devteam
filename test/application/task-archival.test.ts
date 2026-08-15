@@ -286,7 +286,7 @@ test("archive rejects clean workspaces without a durable ref and worktree remova
     taskId: second,
     actor: { kind: "user", id: "local-user" },
     idempotencyKey: "archive-locked",
-  }), { accepted: false, reason: "workspace-cleanup-failed" });
+  }), { accepted: false, reason: "workspace-locked" });
   assert.equal((await stat(secondDetail.task.workspace.path)).isDirectory(), true);
   const unchanged = application.queryTaskInspectionForUser(second);
   assert.equal(unchanged.available, true);

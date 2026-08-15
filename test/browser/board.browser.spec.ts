@@ -1442,6 +1442,20 @@ test("conversation dialog contains focus, closes with Escape, and restores its o
   await expect(opener).toBeFocused();
 });
 
+test("conversation dialog opened from the conversation list covers timeline markers", async ({ page }) => {
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("region", { name: "Conversations" }).getByRole("button").first().click();
+  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toBeVisible();
+
+  const exposedMarkers = await page.locator(".timeline-marker").evaluateAll((markers) => markers.filter((marker) => {
+    const bounds = marker.getBoundingClientRect();
+    const topmost = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    return topmost === marker || marker.contains(topmost);
+  }).length);
+
+  expect(exposedMarkers).toBe(0);
+});
+
 test("conversation continuation navigation highlights and scrolls to its authored message", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();

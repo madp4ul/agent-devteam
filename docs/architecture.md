@@ -120,6 +120,19 @@ Workspace identity spans the coordination database, filesystem directory, and
 Git worktree registration. These are validated together because disagreement
 between them can make an agent operate on the wrong work.
 
+Host-side archival first matches the database workspace path to the task's
+framework-owned location and its primary-repository worktree registration.
+Only then do Git commands executed inside that worktree receive its exact path
+as process-local `safe.directory` configuration. The trust applies to that Git
+subprocess only; the host never broadens it to the workspace root or writes
+global or repository Git configuration.
+
+Archival keeps workspace inspection separate from removal. Dirty state and a
+non-durable commit remain user-correctable safety outcomes; invalid
+registration, rejected ownership trust, a worktree lock, unexpected inspection
+failure, and actual removal failure remain distinct host outcomes. The task is
+marked archived only after Git reports successful worktree removal.
+
 ## State ownership
 
 | State | Owner | Location |
