@@ -27,6 +27,7 @@ export interface RunnableActivation {
   agent: AgentRunAgent;
   sourceEvent: TaskActivityView | TaskView["comments"][number];
   continuationMessage: string | null;
+  resumeThreadId?: string;
   fullCompositionReason?: NonNullable<AttemptContextView["fullCompositionReason"]>;
 }
 
@@ -129,8 +130,10 @@ export class AutomationStateStore {
     const row = this.#database
       .prepare(
         `SELECT a.id, a.task_id, a.target_agent_id, a.source_event_id,
-                a.model, a.reasoning_effort, a.continuation_message, a.definition_version
+                a.model, a.reasoning_effort, a.continuation_message, a.definition_version,
+                conversation.current_thread_id
          FROM activations a
+         LEFT JOIN agent_conversations conversation ON conversation.id = a.conversation_id
          JOIN tasks task ON task.id = a.task_id
          JOIN mapped_tasks mapped ON mapped.id = task.id
          JOIN agents agent ON agent.id = a.target_agent_id AND agent.applied = 1
@@ -166,6 +169,7 @@ export class AutomationStateStore {
           reasoning_effort: NonNullable<AgentRunAgent["reasoningEffort"]> | null;
           continuation_message: string | null;
           definition_version: string;
+          current_thread_id: string | null;
         }
       | undefined;
     if (row === undefined) return undefined;
@@ -212,6 +216,7 @@ export class AutomationStateStore {
       },
       sourceEvent,
       continuationMessage: row.continuation_message,
+      ...(row.current_thread_id === null ? {} : { resumeThreadId: row.current_thread_id }),
       ...(precedingAttemptVersion !== undefined && precedingAttemptVersion !== row.definition_version
         ? { fullCompositionReason: "process-rebased" as const }
         : {}),
@@ -696,7 +701,7 @@ export class AutomationStateStore {
         .prepare(
           `UPDATE attempts
            SET status = ?, completed_at = ?, outcome_status = ?, outcome_summary = ?,
-               thread_id = COALESCE(?, thread_id), outcome_kind = ?
+               thread_id = COALESCE(?, thread_id), outcome_kind = ?, thread_continuity = ?
            WHERE id = ?`,
         )
         .run(
@@ -706,6 +711,7 @@ export class AutomationStateStore {
           outcome.summary,
           outcome.threadId ?? null,
           outcomeKind,
+          outcome.threadContinuity ?? null,
           attemptId,
         );
       if (outcome.status === "completed") {

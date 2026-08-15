@@ -151,11 +151,14 @@ in their existing order until the failure is explicitly resolved.
 
 **Agent conversation**:
 A durable, task-scoped lineage owned by one immutable agent identity. Each
-ordinary activation starts a distinct conversation, while retries of that
-activation remain runs within the same conversation. The framework retains the
-owning agent's historical name and current Codex thread identity, but run
-messages, tools, diagnostics, timing, outcomes, and token usage remain
-attempt-scoped evidence rather than duplicated conversation state.
+ordinary activation starts a distinct conversation, retries remain in that
+conversation, and a user follow-up adds a new activation to the selected
+conversation without transferring workflow responsibility.
+
+**Authored conversation message**:
+A user's durable follow-up within an agent conversation. It is the immutable
+source of one `user-follow-up` activation and remains distinct from agent-run
+transcript evidence and task comments.
 
 **Agent run transcript**:
 The attempt-scoped inspectable evidence for one run, including its conversation

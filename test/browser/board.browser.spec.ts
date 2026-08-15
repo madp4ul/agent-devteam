@@ -1270,6 +1270,21 @@ test("task details prioritize agent activity and preserve the responsive reading
   ]);
 });
 
+test("a conversation discloses when Codex replaced an unusable resumed thread", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.conversation.runs[0].attempt.threadContinuity = "replaced";
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText(
+    "This run started a replacement thread, so earlier model context was not retained.",
+  );
+});
+
 test("compact conversation rows stay last in the supporting column and open by keyboard", async ({ page, request }) => {
   const detail = await (await request.get("/api/tasks/T-0001")).json() as {
     task: { activations: Array<{ conversationId: string | null }> };
@@ -1813,6 +1828,85 @@ test("a live conversation follows appended items only while the reader is at the
   await expect.poll(() => transcriptContent.evaluate((element) =>
     element.scrollHeight - element.clientHeight - element.scrollTop,
   )).toBeLessThanOrEqual(1);
+});
+
+test("a conversation follow-up retains its draft on failure and refreshes in place after retry", async ({ page }) => {
+  let submitted = false;
+  const submissions: Array<{ body: string; idempotencyKey: string }> = [];
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    if (route.request().method() === "POST") {
+      submissions.push(route.request().postDataJSON() as { body: string; idempotencyKey: string });
+      if (submissions.length === 1) {
+        await route.fulfill({ status: 500, json: { error: "temporary failure" } });
+        return;
+      }
+      submitted = true;
+      await route.fulfill({
+        status: 200,
+        json: {
+          accepted: true,
+          activationId: "browser-follow-up-activation",
+          message: {
+            id: "browser-follow-up-message",
+            conversationId: "browser-conversation",
+            body: submissions.at(-1)?.body,
+            actor: { kind: "user", id: "local-user" },
+            occurredAt: "2026-08-09T12:06:00.000Z",
+          },
+        },
+      });
+      return;
+    }
+    const result = liveConversation([]);
+    if (submitted) {
+      (result.conversation as Record<string, unknown>).messages = [{
+        id: "browser-follow-up-message",
+        conversationId: "browser-conversation",
+        body: "Please check this edge case.\nIt affects retries.",
+        actor: { kind: "user", id: "local-user" },
+        occurredAt: "2026-08-09T12:06:00.000Z",
+      }];
+      ((result.conversation as Record<string, unknown>).runs as Array<Record<string, unknown>>).push({
+        activationId: "browser-follow-up-activation",
+        sourceMessageId: "browser-follow-up-message",
+        attempt: {
+          id: "browser-follow-up-attempt",
+          status: "completed",
+          workspacePath: "C:/workspace",
+          startedAt: "2026-08-09T12:06:01.000Z",
+          completedAt: "2026-08-09T12:06:02.000Z",
+          outcome: { status: "completed", summary: "Checked the edge case." },
+          threadId: "thread-browser-123",
+          model: null,
+          reasoningEffort: null,
+        },
+        transcript: {
+          available: true,
+          items: [{ id: "browser-follow-up-answer", kind: "message", role: "agent", text: "The edge case is covered." }],
+        },
+      });
+    }
+    await route.fulfill({ status: 200, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const composer = dialog.getByRole("textbox", { name: "Follow-up message" });
+  await composer.fill("Please check this edge case.\nIt affects retries.");
+  await dialog.getByRole("button", { name: "Send follow-up" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("500");
+  await expect(composer).toHaveValue("Please check this edge case.\nIt affects retries.");
+  await dialog.getByRole("button", { name: "Send follow-up" }).click();
+  await expect(composer).toHaveValue("");
+  await expect(dialog).toContainText("Please check this edge case.");
+  await expect(dialog).toContainText("The edge case is covered.");
+  const historyKinds = await dialog.locator(".conversation-run, .conversation-message").evaluateAll((entries) =>
+    entries.map((entry) => entry.classList.contains("conversation-message") ? "message" : "run"),
+  );
+  expect(historyKinds).toEqual(["run", "message", "run"]);
+  expect(submissions).toHaveLength(2);
+  expect(submissions[1]?.idempotencyKey).toBe(submissions[0]?.idempotencyKey);
 });
 
 test("task details expose lazy and provisioned task workspaces", async ({ page, context }) => {
@@ -2546,6 +2640,7 @@ function liveConversation(items: Array<Record<string, unknown>>): Record<string,
       createdAt: "2026-08-09T12:00:00.000Z",
       latestActivityAt: "2026-08-09T12:05:00.000Z",
       continuation: { available: true },
+      messages: [],
       runs: [{
         activationId: "browser-activation",
         attempt: {
@@ -2884,4 +2979,62 @@ test("dropping a task into its current column is inert", async ({ page, request 
   expect(after.task.revision).toBe(before.task.revision);
   expect(after.task.activity).toEqual(before.task.activity);
   expect(after.task.activations).toEqual(before.task.activations);
+});
+
+test("an assembled conversation follow-up runs and remains attributable in the task timeline", async ({ page, request }) => {
+  const startupFailure = await (await request.get("/api/tasks/T-0003")).json() as {
+    task: { activations: Array<{ id: string; status: string }> };
+  };
+  for (const activation of startupFailure.task.activations.filter(({ status }) => status === "queued")) {
+    const dismissed = await request.post(`/api/activations/${activation.id}/dismiss`, {
+      data: { idempotencyKey: `dismiss-startup-${activation.id}` },
+    });
+    expect(dismissed.status()).toBe(200);
+  }
+  const permissionDismissed = await request.post("/api/attention/browser-permission-attention/continue", {
+    data: {
+      message: "Continue the fixture permission activation before the follow-up.",
+      idempotencyKey: "continue-browser-permission-before-follow-up",
+    },
+  });
+  expect(permissionDismissed.status()).toBe(200);
+  const before = await (await request.get("/api/tasks/T-0001")).json() as {
+    task: {
+      relationships: Array<{ id: string }>;
+      activations: Array<{ id: string; status: string }>;
+    };
+  };
+  for (const relationship of before.task.relationships) {
+    const removed = await request.delete(`/api/tasks/T-0001/relationships/${relationship.id}`, {
+      data: { idempotencyKey: `remove-before-follow-up-${relationship.id}` },
+    });
+    expect(removed.status()).toBe(200);
+  }
+  const unblocked = await (await request.get("/api/tasks/T-0001")).json() as typeof before;
+  for (const activation of unblocked.task.activations.filter(
+    ({ id, status }) => status === "queued" && id !== "browser-permission-activation",
+  )) {
+    const dismissed = await request.post(`/api/activations/${activation.id}/dismiss`, {
+      data: { idempotencyKey: `dismiss-before-follow-up-${activation.id}` },
+    });
+    expect(dismissed.status()).toBe(200);
+  }
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  await dialog.getByRole("textbox", { name: "Follow-up message" }).fill("Run this assembled follow-up.");
+  await dialog.getByRole("button", { name: "Send follow-up" }).click();
+  await expect(dialog.getByRole("textbox", { name: "Follow-up message" })).toHaveValue("");
+  await dialog.getByRole("button", { name: "Close conversation" }).click();
+  await page.getByRole("button", { name: "Resume" }).click();
+
+  const timeline = page.getByRole("region", { name: "Task timeline" });
+  await expect(timeline).toContainText("Conversation continued");
+  await expect(timeline).toContainText("Follow-up resumed thread-browser-123");
+  await expect(timeline).toContainText("Triggered by a user follow-up");
+  await page.getByRole("button", { name: "View conversation" }).last().click();
+  const refreshed = page.getByRole("dialog", { name: "Agent conversation" });
+  await expect(refreshed).toContainText("Run this assembled follow-up.");
+  await expect(refreshed).toContainText("Attempt 2 · completed");
 });

@@ -199,6 +199,17 @@ Created: ${renderTimestamp(source.occurredAt)}
 Comment:
 ${source.body}`;
   }
+  if (request.reason.type === "user-follow-up" && isAuthoredMessage(source)) {
+    return `You are running because the user continued this agent conversation. The follow-up resumes this conversation without transferring primary workflow responsibility or moving the task.
+
+Respond to the authored follow-up in the context of the current task state and later activity.
+
+Follow-up message ${source.id}
+Author: ${renderActor(source.actor, request)}
+Created: ${renderTimestamp(source.occurredAt)}
+Message:
+${source.body}`;
+  }
   if (request.reason.type === "column-entry" && isActivity(source)) {
     const destinationId = source.type === "task.created"
       ? source.details.columnId
@@ -234,7 +245,7 @@ ${renderSourceActivity("Source blocker clearance", source, request)}`;
   }
   return `Activation reason: ${request.reason.type}
 Source event: ${request.reason.sourceEventId}
-${isComment(source) ? renderComment(source, request) : renderSourceActivity("Source event", source, request)}`;
+${isAuthoredMessage(source) ? renderComment(source, request) : renderSourceActivity("Source event", source, request)}`;
 }
 
 function renderAttemptContinuationSection(request: AgentRunRequest): string {
@@ -261,7 +272,10 @@ function renderAttemptFacts(request: AgentRunRequest): string {
   return facts.join("\n");
 }
 
-function renderComment(comment: TaskCommentView, request: AgentRunRequest): string {
+function renderComment(
+  comment: Exclude<AgentRunRequest["sourceEvent"], TaskActivityView>,
+  request: AgentRunRequest,
+): string {
   return `Comment ${comment.id}\nAuthor: ${renderActor(comment.actor, request)}\nCreated: ${renderTimestamp(comment.occurredAt)}\n${comment.body}`;
 }
 
@@ -300,6 +314,12 @@ function renderTimestamp(value: string): string {
 }
 
 function isComment(source: AgentRunRequest["sourceEvent"]): source is TaskCommentView {
+  return "body" in source && !("conversationId" in source);
+}
+
+function isAuthoredMessage(
+  source: AgentRunRequest["sourceEvent"],
+): source is Exclude<AgentRunRequest["sourceEvent"], TaskActivityView> {
   return "body" in source;
 }
 

@@ -69,6 +69,9 @@ the browser without becoming a second source of truth or duplicating it. Each
 conversation record persists a generated originating-request label and durable
 activity order; a task-scoped compact projection exposes that indexing metadata
 so task details can navigate recent history without loading transcript evidence.
+User follow-ups are stored as authored conversation messages. One application
+transaction records the message, `conversation.continued` activity, and a
+`user-follow-up` activation linked to the existing conversation.
 
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
@@ -87,6 +90,16 @@ coordination state and mutate only its current task. Every activation owns a
 durable task-scoped agent conversation; retries remain in that conversation,
 while each attempt's messages and tool activity remain separately attributable
 run evidence.
+For a `user-follow-up` activation, runnable selection still uses the ordinary
+task activation order and safety gates, but dispatch resolves the conversation's
+current thread as the resume target. It uses the conversation's immutable owning
+agent, current applied instructions, verified existing task workspace, and a new
+attempt-scoped MCP authorization; the runtime releases that authorization through
+the normal attempt lifecycle.
+If Codex cannot resume that thread, the runtime marks the attempt's continuity as
+replaced while adopting the replacement thread as the conversation's next resume
+target. Conversation projections retain and display that marker so the replacement
+is not presented as preserved model history.
 
 ### Git task workspaces
 

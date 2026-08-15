@@ -1,17 +1,33 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
 import type { AttemptTranscriptItem } from "../../src/application/coordination-contract.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
 
+const execFileAsync = promisify(execFile);
+
 export async function startBrowserFixture(): Promise<() => Promise<void>> {
 const directory = await mkdtemp(join(tmpdir(), "coordination-browser-"));
 const definitionPath = join(directory, "process.yaml");
 const databasePath = join(directory, "coordination.sqlite3");
+// Keep the historical path label so the startup-diagnostic fixture remains
+// recognizable while the repository is temporarily moved out of the way.
+const projectRepositoryPath = join(directory, "missing-project-repository");
+await execFileAsync("git", ["init", "--initial-branch=main", projectRepositoryPath]);
+await writeFile(join(projectRepositoryPath, "README.md"), "# Browser fixture\n");
+await execFileAsync("git", ["-C", projectRepositoryPath, "add", "README.md"]);
+await execFileAsync("git", [
+  "-C", projectRepositoryPath,
+  "-c", "user.name=Browser Fixture",
+  "-c", "user.email=browser-fixture@example.invalid",
+  "commit", "-m", "Initial browser fixture",
+]);
 await writeFile(join(directory, "agent.md"), "Implement the current task.\n");
 await writeFile(
   definitionPath,
@@ -53,11 +69,19 @@ const application = await CoordinationApplication.start({
   processDefinitionPath: definitionPath,
   databasePath,
   runtimeDispatch: {
-    projectRepositoryPath: join(directory, "missing-project-repository"),
+    projectRepositoryPath,
     taskWorkspaceRoot: join(directory, "task-workspaces"),
     agentRuntime: {
-      run: () => {
-        throw new Error("The browser startup-failure fixture must fail before runtime dispatch");
+      run: async (request, lifecycle) => {
+        const threadId = request.resumeThreadId ?? `thread-${request.attemptId}`;
+        lifecycle.started(threadId);
+        return {
+          status: "completed",
+          summary: request.reason.type === "user-follow-up"
+            ? `Follow-up resumed ${threadId} in ${request.workspace.path}.`
+            : "Browser fixture run completed.",
+          threadId,
+        };
       },
     },
   },
@@ -125,8 +149,10 @@ const attemptStartedAt = new Date(Date.parse(activationOccurredAt) + 1_000).toIS
 const attemptCompletedAt = new Date(Date.parse(attemptStartedAt) + 150_000).toISOString();
 const database = new DatabaseSync(databasePath);
 database.exec("PRAGMA foreign_keys = ON");
-const inspectableWorkspacePath = join(directory, "task workspace with spaces");
-await mkdir(inspectableWorkspacePath);
+const taskWorkspaceRoot = join(directory, "task-workspaces");
+const inspectableWorkspacePath = join(taskWorkspaceRoot, inspected.task.id);
+await mkdir(taskWorkspaceRoot);
+await execFileAsync("git", ["-C", projectRepositoryPath, "worktree", "add", "--detach", inspectableWorkspacePath, "main"]);
 database.prepare(
   `INSERT INTO task_workspaces (task_id, path, starting_ref, commit_id)
    VALUES (?, ?, ?, ?)`,
@@ -203,7 +229,10 @@ if (startupFailed.task.activations[0] === undefined) {
   throw new Error("Expected a startup-failure activation");
 }
 database.close();
+const unavailableRepositoryPath = join(directory, "temporarily-unavailable-project-repository");
+await rename(projectRepositoryPath, unavailableRepositoryPath);
 const startupFailure = await application.resumeAutomation();
+await rename(unavailableRepositoryPath, projectRepositoryPath);
 if (startupFailure.accepted || startupFailure.reason !== "runtime-start-failed") {
   throw new Error("Expected the browser fixture's pre-attempt repository failure");
 }

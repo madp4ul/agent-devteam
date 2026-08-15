@@ -248,6 +248,25 @@ async function handleBrowserApi(
     sendJson(response, status, result);
     return;
   }
+  if (method === "POST" && conversationMatch?.[1] !== undefined && conversationMatch[2] !== undefined) {
+    const body = await readJsonBody(request);
+    const result = application.continueAgentConversation({
+      taskId: decodeURIComponent(conversationMatch[1]),
+      conversationId: decodeURIComponent(conversationMatch[2]),
+      body: stringField(body, "body"),
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    const status = result.accepted
+      ? 200
+      : result.reason === "not-found"
+        ? 404
+        : result.reason === "empty-message"
+          ? 400
+          : 409;
+    sendJson(response, status, result);
+    return;
+  }
   const taskMatch = /^\/api\/tasks\/([^/]+)$/.exec(url.pathname);
   const archiveTaskMatch = /^\/api\/tasks\/([^/]+)\/archive$/.exec(url.pathname);
   const unarchiveTaskMatch = /^\/api\/tasks\/([^/]+)\/unarchive$/.exec(url.pathname);

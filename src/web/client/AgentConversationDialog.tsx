@@ -4,7 +4,7 @@ import type {
   AgentConversationView,
   AttemptTokenUsage,
 } from "../../application/coordination-contract.ts";
-import { readAgentConversation } from "./api.ts";
+import { continueAgentConversation, readAgentConversation } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
@@ -24,8 +24,14 @@ export function AgentConversationDialog({
   const [conversationRunning, setConversationRunning] = useState(selectedAttemptRunning);
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string>();
+  const [draft, setDraft] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string>();
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
   const pendingScrollPosition = useRef<number | "bottom" | null>(null);
+  const idempotencyKey = useRef(crypto.randomUUID());
+  const pendingActivationId = useRef<string | undefined>(undefined);
 
   useLayoutEffect(() => {
     if (pendingScrollPosition.current === null || contentRef.current === null) return;
@@ -57,7 +63,13 @@ export function AgentConversationDialog({
               ? "bottom"
               : content.scrollTop;
           setConversation(result.conversation);
-          setConversationRunning(result.conversation.runs.some((run) => run.attempt.status === "running"));
+          const pendingAppeared = pendingActivationId.current !== undefined &&
+            result.conversation.runs.some((run) => run.activationId === pendingActivationId.current);
+          if (pendingAppeared) pendingActivationId.current = undefined;
+          setConversationRunning(
+            result.conversation.runs.some((run) => run.attempt.status === "running") ||
+            (pendingActivationId.current !== undefined && !pendingAppeared),
+          );
           setUnavailable(false);
           setError(undefined);
         } else {
@@ -75,7 +87,35 @@ export function AgentConversationDialog({
       active = false;
       if (timer !== undefined) window.clearInterval(timer);
     };
-  }, [conversationId, conversationRunning, taskId]);
+  }, [conversationId, conversationRunning, refreshVersion, taskId]);
+
+  const submitFollowUp = async (): Promise<void> => {
+    if (draft.trim().length === 0 || submitting || conversation?.continuation.available !== true) return;
+    setSubmitting(true);
+    setSubmissionError(undefined);
+    try {
+      const result = await continueAgentConversation(
+        taskId,
+        conversationId,
+        draft,
+        idempotencyKey.current,
+      );
+      if (!result.accepted) throw new Error(`Follow-up unavailable: ${result.reason}`);
+      pendingActivationId.current = result.activationId;
+      setConversationRunning(true);
+      setConversation((current) => current === undefined || current.messages.some(({ id }) => id === result.message.id)
+        ? current
+        : { ...current, messages: [...current.messages, result.message] });
+      setDraft("");
+      idempotencyKey.current = crypto.randomUUID();
+      setRefreshVersion((version) => version + 1);
+    } catch (caught) {
+      setSubmissionError(errorMessage(caught));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  const history = conversation === undefined ? [] : conversationHistory(conversation);
 
   return (
     <div
@@ -93,7 +133,7 @@ export function AgentConversationDialog({
       >
         <header className="modal-heading">
           <div>
-            <p className="eyebrow">Read-only conversation</p>
+            <p className="eyebrow">Agent conversation</p>
             <h2 id="conversation-title">Agent conversation</h2>
             {conversation === undefined ? null : (
               <p>Owned by {conversation.owningAgent.name}</p>
@@ -124,26 +164,36 @@ export function AgentConversationDialog({
                 {activationReasonLabel(conversation.originatingActivation.reason.type)} · {conversation.originatingActivation.status}
               </p>
             </section>
-            {conversation.runs.map((run, runIndex) => (
-            <section className="conversation-run" key={run.attempt.id} aria-labelledby={`run-${run.attempt.id}`}>
+            {history.map((entry) => entry.kind === "message" ? (
+              <article key={`message-${entry.message.id}`} className="conversation-message user-message">
+                <p className="eyebrow">You</p>
+                <p>{entry.message.body}</p>
+              </article>
+            ) : (
+            <section className="conversation-run" key={entry.run.attempt.id} aria-labelledby={`run-${entry.run.attempt.id}`}>
               <header className="conversation-run-heading">
                 <div>
-                  <p className="eyebrow">Run {runIndex + 1}</p>
-                  <h3 id={`run-${run.attempt.id}`}>Attempt {runIndex + 1} · {run.attempt.status}</h3>
-                  <p><ElapsedTime startedAt={run.attempt.startedAt} completedAt={run.attempt.completedAt} /></p>
+                  <p className="eyebrow">Run {entry.runIndex + 1}</p>
+                  <h3 id={`run-${entry.run.attempt.id}`}>Attempt {entry.runIndex + 1} · {entry.run.attempt.status}</h3>
+                  <p><ElapsedTime startedAt={entry.run.attempt.startedAt} completedAt={entry.run.attempt.completedAt} /></p>
                 </div>
-                {run.transcript.available && run.transcript.usage !== undefined
-                  ? <TokenUsageSummary usage={run.transcript.usage} />
+                {entry.run.transcript.available && entry.run.transcript.usage !== undefined
+                  ? <TokenUsageSummary usage={entry.run.transcript.usage} />
                   : null}
               </header>
-              {!run.transcript.available ? (
+              {entry.run.attempt.threadContinuity === "replaced" ? (
+                <p className="unavailable">
+                  Codex could not resume the prior thread. This run started a replacement thread, so earlier model context was not retained.
+                </p>
+              ) : null}
+              {!entry.run.transcript.available ? (
                 <p className="unavailable">
                   Codex produced no inspectable evidence for this run.
                 </p>
-              ) : run.transcript.items.length === 0 ? (
+              ) : entry.run.transcript.items.length === 0 ? (
                 <p className="unavailable">Codex produced no inspectable conversation items for this run.</p>
-              ) : run.transcript.items.map((item, index) => (
-                <article key={item.id ?? `${run.attempt.id}-${index}`} className={`transcript-item ${item.kind}`}>
+              ) : entry.run.transcript.items.map((item, index) => (
+                <article key={item.id ?? `${entry.run.attempt.id}-${index}`} className={`transcript-item ${item.kind}`}>
                   <p className="eyebrow">
                     {item.kind === "message"
                       ? "Codex message"
@@ -169,10 +219,69 @@ export function AgentConversationDialog({
             </section>
             ))}
           </>)}
+          {conversation === undefined ? null : (
+            <form
+              className="conversation-composer"
+              aria-label="Continue conversation"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitFollowUp();
+              }}
+            >
+              <label htmlFor={`conversation-follow-up-${conversation.id}`}>Follow-up message</label>
+              <textarea
+                id={`conversation-follow-up-${conversation.id}`}
+                rows={3}
+                value={draft}
+                disabled={!conversation.continuation.available || submitting}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+              {!conversation.continuation.available ? (
+                <p className="unavailable">{continuationUnavailableMessage(conversation.continuation.reason)}</p>
+              ) : null}
+              {submissionError === undefined ? null : <p className="unavailable" role="alert">{submissionError}</p>}
+              <div className="conversation-composer-actions">
+                <button type="submit" disabled={draft.trim().length === 0 || submitting || !conversation.continuation.available}>
+                  {submitting ? "Sending…" : "Send follow-up"}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </section>
     </div>
   );
+}
+
+type ConversationHistoryEntry =
+  | { kind: "message"; message: AgentConversationView["messages"][number] }
+  | { kind: "run"; run: AgentConversationView["runs"][number]; runIndex: number };
+
+function conversationHistory(conversation: AgentConversationView): ConversationHistoryEntry[] {
+  const messages = new Map(conversation.messages.map((message) => [message.id, message]));
+  const history: ConversationHistoryEntry[] = [];
+  conversation.runs.forEach((run, runIndex) => {
+    const message = run.sourceMessageId === undefined ? undefined : messages.get(run.sourceMessageId);
+    if (message !== undefined) {
+      history.push({ kind: "message", message });
+      messages.delete(message.id);
+    }
+    history.push({ kind: "run", run, runIndex });
+  });
+  history.push(...[...messages.values()]
+    .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
+    .map((message) => ({ kind: "message" as const, message })));
+  return history;
+}
+
+function continuationUnavailableMessage(
+  reason: Extract<AgentConversationView["continuation"], { available: false }>["reason"],
+): string {
+  switch (reason) {
+    case "task-archived": return "Archived task conversations cannot be continued.";
+    case "owning-agent-unavailable": return "The owning agent is no longer available in the applied process.";
+    case "thread-unavailable": return "This conversation has no resumable Codex thread.";
+  }
 }
 
 function activationReasonLabel(reason: AgentConversationView["originatingActivation"]["reason"]["type"]): string {
@@ -180,6 +289,7 @@ function activationReasonLabel(reason: AgentConversationView["originatingActivat
     case "column-entry": return "Column entry";
     case "agent-mention": return "Agent mention";
     case "blockers-cleared": return "Blockers cleared";
+    case "user-follow-up": return "User follow-up";
   }
 }
 

@@ -118,6 +118,7 @@ function initializeCurrentSchema(database: DatabaseSync): void {
           'attempt.completed',
           'automation.suspended',
           'automation.resumed',
+          'conversation.continued',
           'task.archived',
           'task.unarchived'
         )
@@ -132,7 +133,7 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       id TEXT NOT NULL UNIQUE,
       task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       target_agent_id TEXT NOT NULL REFERENCES agents(id),
-      reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention', 'blockers-cleared')),
+      reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention', 'blockers-cleared', 'user-follow-up')),
       source_event_id TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
       created_at TEXT NOT NULL,
@@ -160,6 +161,15 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       latest_activity_at TEXT NOT NULL,
       latest_activity_sequence INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS agent_conversation_messages (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      actor_kind TEXT NOT NULL CHECK (actor_kind = 'user'),
+      actor_id TEXT NOT NULL,
+      occurred_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS task_workspaces (
       task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
       path TEXT NOT NULL UNIQUE,
@@ -183,6 +193,7 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       model TEXT,
       reasoning_effort TEXT,
       outcome_kind TEXT
+      ,thread_continuity TEXT CHECK (thread_continuity IS NULL OR thread_continuity = 'replaced')
     );
     CREATE TABLE IF NOT EXISTS attempt_transcripts (
       attempt_id TEXT PRIMARY KEY REFERENCES attempts(id) ON DELETE CASCADE,
@@ -320,6 +331,7 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     "activity_ledger",
     "activations",
     "agent_conversations",
+    "agent_conversation_messages",
     "task_workspaces",
     "task_starting_refs",
     "attempts",
@@ -393,10 +405,12 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     conversationColumns.has("latest_activity_at") &&
     conversationColumns.has("latest_activity_sequence") &&
     attemptColumns.has("outcome_kind") &&
+    attemptColumns.has("thread_continuity") &&
     transcriptColumns.has("usage_json") &&
     transcriptColumns.has("reported_usage_json") &&
     commentColumns.has("attempt_id") &&
     activityTable?.sql.includes("task.archived") === true &&
+    activityTable.sql.includes("conversation.continued") === true &&
     activityTable.sql.includes("activation.dismissed") === true &&
     activityTable.sql.includes("relationship.removed") === true;
 }

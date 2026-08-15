@@ -10,6 +10,7 @@ import type {
   TaskView,
   AttemptTranscriptQueryResult,
   AgentConversationQueryResult,
+  ContinueAgentConversationResult,
   AgentConversationIndexEntry,
   ActivationRecoveryAction,
   ActiveRunView,
@@ -352,6 +353,18 @@ export async function readAgentConversation(
   const body = await response.json() as AgentConversationQueryResult;
   if (!response.ok) throw new ApiError(response.status, body);
   return body;
+}
+
+export async function continueAgentConversation(
+  taskId: string,
+  conversationId: string,
+  body: string,
+  idempotencyKey: string,
+): Promise<ContinueAgentConversationResult> {
+  return request(
+    `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}`,
+    { method: "POST", body: JSON.stringify({ body, idempotencyKey }) },
+  );
 }
 
 async function mutation(

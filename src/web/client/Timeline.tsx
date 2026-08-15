@@ -583,6 +583,7 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "attempt.completed": "Attempt completed",
     "automation.suspended": "Task automation suspended",
     "automation.resumed": "Task automation continued",
+    "conversation.continued": "Conversation continued",
     "task.archived": "Task archived",
     "task.unarchived": "Task unarchived",
   }[type];
@@ -667,6 +668,7 @@ function reasonLabel(reason: ActivationView["reason"]["type"]): string {
     "agent-mention": "an agent mention",
     "column-entry": "entering a watched column",
     "blockers-cleared": "the final blocker being cleared",
+    "user-follow-up": "a user follow-up",
   }[reason];
 }
 

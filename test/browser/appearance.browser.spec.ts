@@ -174,6 +174,24 @@ test("conversation index remains quiet and readable in dark and light appearance
   }
 });
 
+test("conversation follow-up composer remains readable and operable in both appearances", async ({ page }) => {
+  for (const theme of ["dark", "light"] as const) {
+    await page.goto("/tasks/T-0001");
+    await setAppearance(page, theme);
+    await page.getByRole("button", { name: "View conversation" }).click();
+    const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+    const composer = dialog.getByRole("textbox", { name: "Follow-up message" });
+    await composer.fill("Check the appearance boundary.");
+    const send = dialog.getByRole("button", { name: "Send follow-up" });
+
+    expect(await contrastRatio(composer)).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(send)).toBeGreaterThanOrEqual(4.5);
+    await composer.focus();
+    await expect(composer).toBeFocused();
+    await dialog.getByRole("button", { name: "Close conversation" }).click();
+  }
+});
+
 test("queued activation dismissal matches secondary round controls in both themes", async ({ page }) => {
   await page.route("**/api/tasks/T-0002", async (route) => {
     const response = await route.fetch();

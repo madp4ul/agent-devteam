@@ -110,6 +110,20 @@ test("typed activation prompts preserve exact mention and blocker-clearance sour
   assert.match(mentionPrompt, /consultation, investigation, review, or a bounded change/);
   assert.match(mentionPrompt, /Please verify the revised boundary\./);
 
+  const followUp = request("activation-follow-up", "T-0038");
+  followUp.reason = { type: "user-follow-up", sourceEventId: "conversation-message" };
+  followUp.sourceEvent = {
+    id: "conversation-message",
+    conversationId: "conversation-existing",
+    body: "Please re-check the edge case.",
+    actor: { kind: "user", id: "local-user" },
+    occurredAt: "2026-08-11T14:40:00.000Z",
+  };
+  const followUpPrompt = composeActivationPrompt(followUp);
+  assert.match(followUpPrompt, /the user continued this agent conversation/);
+  assert.match(followUpPrompt, /without transferring primary workflow responsibility or moving the task/);
+  assert.match(followUpPrompt, /Please re-check the edge case\./);
+
   const blockers = request("activation-unblocked", "T-0039");
   blockers.reason = { type: "blockers-cleared", sourceEventId: "relationship-satisfied" };
   blockers.sourceEvent = {
@@ -424,6 +438,7 @@ test("an unusable interrupted thread falls back to a fresh thread with honest co
 
   assert.equal(freshStarts, 1);
   assert.equal(outcome.threadId, "thread-replacement");
+  assert.equal(outcome.threadContinuity, "replaced");
   assert.match(prompt, /Thread: replaced/);
   assert.match(prompt, /previous host stopped/i);
 });
@@ -964,6 +979,8 @@ test("a completed agent message is inspectable before the Codex turn finishes", 
 
 test("continued attempts sharing one Codex thread retain isolated transcripts", async () => {
   let runNumber = 0;
+  const acquiredScopes: Array<{ taskId: string; agentId: string; attemptId: string }> = [];
+  const releasedScopes: Array<{ taskId: string; agentId: string; attemptId: string }> = [];
   let resumedThreadOptions: CodexThreadOptionsLike | undefined;
   let resumedClientOptions: CodexClientOptionsLike | undefined;
   const sharedThread = (): CodexThreadLike => ({
@@ -986,7 +1003,22 @@ test("continued attempts sharing one Codex thread retain isolated transcripts", 
     },
   });
   const runtime = createRuntime({
-    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    mcpServer: {
+      command: "node",
+      args: (request) => {
+        acquiredScopes.push({
+          taskId: request.task.id,
+          agentId: request.agent.id,
+          attemptId: request.attemptId,
+        });
+        return ["coordination-mcp.ts", "--attempt", request.attemptId];
+      },
+      release: (request) => releasedScopes.push({
+        taskId: request.task.id,
+        agentId: request.agent.id,
+        attemptId: request.attemptId,
+      }),
+    },
     createClient: (options) => {
       resumedClientOptions = options;
       return {
@@ -1003,6 +1035,14 @@ test("continued attempts sharing one Codex thread retain isolated transcripts", 
   continued.attemptId = "attempt-activation-shared-2";
   continued.resumeThreadId = "shared-thread";
   continued.workspace.path = "C:\\tasks\\resumed workspace (2)";
+  continued.reason = { type: "user-follow-up", sourceEventId: "follow-up-message" };
+  continued.sourceEvent = {
+    id: "follow-up-message",
+    conversationId: "conversation-shared",
+    body: "Continue the existing discussion.",
+    actor: { kind: "user", id: "local-user" },
+    occurredAt: "2026-08-11T16:00:00.000Z",
+  };
 
   await runtime.run(first, { started() {} });
   await runtime.run(continued, { started() {} });
@@ -1031,6 +1071,13 @@ test("continued attempts sharing one Codex thread retain isolated transcripts", 
   });
   assert.equal(resumedClientOptions?.config?.approval_policy, "on-request");
   assert.equal(resumedClientOptions?.config?.approvals_reviewer, "auto_review");
+  const expectedScopes = [first, continued].map((run) => ({
+    taskId: run.task.id,
+    agentId: run.agent.id,
+    attemptId: run.attemptId,
+  }));
+  assert.deepEqual(acquiredScopes, expectedScopes);
+  assert.deepEqual(releasedScopes, expectedScopes);
   for (const key of ["default_permissions", "permissions", "sandbox_mode", "web_search"]) {
     assert.equal(key in (resumedClientOptions?.config ?? {}), false);
   }

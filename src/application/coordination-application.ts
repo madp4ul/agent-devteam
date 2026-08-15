@@ -21,6 +21,8 @@ import type {
   BoardsQueryResult,
   CollaboratorsQueryResult,
   ContinuePermissionBlockedActivationCommand,
+  ContinueAgentConversationCommand,
+  ContinueAgentConversationResult,
   ContinueInterruptedTaskCommand,
   ContinueInterruptedTaskResult,
   DismissActivationCommand,
@@ -533,6 +535,15 @@ export class CoordinationApplication {
       available: true,
       conversations: this.#persistence.taskProjections.readTaskConversationIndex(taskId),
     };
+  }
+
+  continueAgentConversation(command: ContinueAgentConversationCommand): ContinueAgentConversationResult {
+    if (this.#startup.mode === "configuration-error") {
+      return { accepted: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
+    }
+    const result = this.#persistence.taskCommands.continueAgentConversation(command);
+    if (result.accepted) this.#automation.kick();
+    return result;
   }
 
   queryCollaborators(): CollaboratorsQueryResult {

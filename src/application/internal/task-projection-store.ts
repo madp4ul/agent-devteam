@@ -34,6 +34,16 @@ interface ConversationOwnerAndContinuationRow {
   archived_at: string | null;
 }
 
+interface ConversationMessageRow {
+  id: string;
+  conversation_id: string;
+  body: string;
+  actor_id: string;
+  occurred_at: string;
+}
+
+const conversationMessageColumns = "id, conversation_id, body, actor_id, occurred_at";
+
 export class TaskProjectionStore {
   readonly #database: DatabaseSync;
 
@@ -447,7 +457,18 @@ export class TaskProjectionStore {
       currentThreadId: row.current_thread_id,
       createdAt: row.created_at,
       latestActivityAt: row.latest_activity_at,
+      messages: this.readConversationMessages(row.id),
     };
+  }
+
+  private readConversationMessages(conversationId: string): AgentConversationView["messages"] {
+    const rows = this.#database.prepare(
+      `SELECT ${conversationMessageColumns}
+       FROM agent_conversation_messages
+       WHERE conversation_id = ?
+       ORDER BY rowid`,
+    ).all(conversationId) as unknown as ConversationMessageRow[];
+    return rows.map(conversationMessageView);
   }
 
   taskExists(taskId: string): boolean {
@@ -508,12 +529,21 @@ export class TaskProjectionStore {
     };
   }
 
-  readConversationRuns(conversationId: string): Array<{ activationId: string; attempt: AttemptView }> {
+  readConversationRuns(conversationId: string): Array<{
+    activationId: string;
+    sourceMessageId?: string;
+    attempt: AttemptView;
+  }> {
     const activations = this.#database.prepare(
-      "SELECT id FROM activations WHERE conversation_id = ? ORDER BY sequence",
-    ).all(conversationId) as Array<{ id: string }>;
-    return activations.flatMap(({ id }) => this.readAttempts(id).map((attempt) => ({
+      "SELECT id, reason_type, source_event_id FROM activations WHERE conversation_id = ? ORDER BY sequence",
+    ).all(conversationId) as Array<{
+      id: string;
+      reason_type: ActivationView["reason"]["type"];
+      source_event_id: string;
+    }>;
+    return activations.flatMap(({ id, reason_type, source_event_id }) => this.readAttempts(id).map((attempt) => ({
       activationId: id,
+      ...(reason_type === "user-follow-up" ? { sourceMessageId: source_event_id } : {}),
       attempt,
     })));
   }
@@ -541,7 +571,7 @@ export class TaskProjectionStore {
       .get(taskId) !== undefined;
   }
 
-  readSourceEvent(id: string): TaskActivityView | TaskView["comments"][number] | undefined {
+  readSourceEvent(id: string): TaskActivityView | TaskView["comments"][number] | AgentConversationView["messages"][number] | undefined {
     const row = this.#database
       .prepare(
         `SELECT id, type, actor_kind, actor_id, occurred_at, details_json
@@ -567,6 +597,11 @@ export class TaskProjectionStore {
         details: JSON.parse(row.details_json) as Record<string, string>,
       };
     }
+    const conversationMessage = this.#database.prepare(
+      `SELECT ${conversationMessageColumns}
+       FROM agent_conversation_messages WHERE id = ?`,
+    ).get(id) as ConversationMessageRow | undefined;
+    if (conversationMessage !== undefined) return conversationMessageView(conversationMessage);
     const comment = this.#database
       .prepare(
         `SELECT id, body, actor_kind, actor_id, occurred_at, attempt_id
@@ -794,7 +829,8 @@ export class TaskProjectionStore {
     const rows = this.#database
       .prepare(
         `SELECT id, status, workspace_path, started_at, completed_at,
-                outcome_status, outcome_summary, outcome_kind, thread_id, model, reasoning_effort
+                outcome_status, outcome_summary, outcome_kind, thread_id, model, reasoning_effort,
+                thread_continuity
          FROM attempts
          WHERE activation_id = ?
            AND NOT EXISTS (
@@ -815,6 +851,7 @@ export class TaskProjectionStore {
         thread_id: string | null;
         model: string | null;
         reasoning_effort: AttemptView["reasoningEffort"];
+        thread_continuity: "replaced" | null;
       }>;
     return rows.map((row) => ({
       id: row.id,
@@ -834,6 +871,7 @@ export class TaskProjectionStore {
               summary: row.outcome_summary ?? "",
             },
       threadId: row.thread_id,
+      ...(row.thread_continuity === null ? {} : { threadContinuity: row.thread_continuity }),
       model: row.model,
       reasoningEffort: row.reasoning_effort,
     }));
@@ -863,4 +901,14 @@ export class TaskProjectionStore {
       ...(row.attempt_id === null ? {} : { attemptId: row.attempt_id }),
     }));
   }
+}
+
+function conversationMessageView(row: ConversationMessageRow): AgentConversationView["messages"][number] {
+  return {
+    id: row.id,
+    conversationId: row.conversation_id,
+    body: row.body,
+    actor: { kind: "user", id: row.actor_id },
+    occurredAt: row.occurred_at,
+  };
 }

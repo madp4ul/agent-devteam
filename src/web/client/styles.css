@@ -498,6 +498,12 @@ textarea { resize: vertical; line-height: 1.5; }
 .conversation-origin p { margin: 0; }
 .conversation-run { display: grid; min-width: 0; gap: .8rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .conversation-run:first-child { border-top: 0; padding-top: 0; }
+.conversation-message { border-radius: .65rem; background: var(--surface-subtle); padding: .8rem 1rem; white-space: pre-wrap; }
+.conversation-message p { margin: 0; }
+.conversation-composer { display: grid; gap: .55rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+.conversation-composer label { font-weight: 700; }
+.conversation-composer textarea { min-height: 5rem; resize: vertical; }
+.conversation-composer-actions { display: flex; justify-content: flex-end; }
 .conversation-run-heading { display: flex; min-width: 0; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .8rem; }
 .conversation-run-heading > div { min-width: 0; }
 .conversation-run-heading h3, .conversation-run-heading p { margin: 0; }

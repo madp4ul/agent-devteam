@@ -20,6 +20,165 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+test("continuing a conversation persists one authored message and activation idempotently", async (t) => {
+  const fixture = await createFixture();
+  const runtime = new ControlledAgentRuntime();
+  let application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Continue the implementation discussion",
+    description: "Retain the owning agent and existing Codex context.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-follow-up-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  await application.resumeAutomation();
+  await runtime.waitForRequest(1);
+  runtime.complete({ status: "completed", summary: "Initial answer.", threadId: "thread-initial" });
+  await application.waitForAutomationIdle();
+  const completed = application.queryTask(created.task.id);
+  assert.equal(completed.available, true);
+  if (!completed.available) return;
+  const conversationId = completed.task.activations[0]?.conversationId;
+  assert.ok(conversationId);
+  application.pauseAutomation();
+
+  const command = {
+    taskId: created.task.id,
+    conversationId,
+    body: "\nPlease verify the edge case.\n\n",
+    actor: { kind: "user" as const, id: "paul" },
+    idempotencyKey: "continue-existing-conversation",
+  };
+  const accepted = application.continueAgentConversation(command);
+  const replayed = application.continueAgentConversation(command);
+
+  assert.equal(accepted.accepted, true);
+  assert.deepEqual(replayed, accepted);
+  if (!accepted.accepted) return;
+  assert.equal(accepted.message.body, command.body);
+  const task = application.queryTask(created.task.id);
+  assert.equal(task.available, true);
+  if (!task.available) return;
+  const followUps = task.task.activations.filter(({ reason }) => reason.type === "user-follow-up");
+  assert.equal(followUps.length, 1);
+  assert.equal(followUps[0]?.conversationId, conversationId);
+  assert.equal(followUps[0]?.targetAgentId, "implementer");
+  assert.equal(followUps[0]?.reason.sourceEventId, accepted.message.id);
+  assert.equal(task.task.activity.filter(({ type }) => type === "conversation.continued").length, 1);
+  const conversation = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(conversation.available, true);
+  if (conversation.available) assert.deepEqual(conversation.conversation.messages, [accepted.message]);
+
+  application.close();
+  application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  assert.deepEqual(application.continueAgentConversation(command), accepted);
+  const afterRestart = application.queryTask(created.task.id);
+  assert.equal(afterRestart.available, true);
+  if (afterRestart.available) {
+    assert.equal(afterRestart.task.activations.filter(({ reason }) => reason.type === "user-follow-up").length, 1);
+    assert.equal(afterRestart.task.activity.filter(({ type }) => type === "conversation.continued").length, 1);
+  }
+});
+
+test("a follow-up resumes the owning agent's thread and existing task workspace in activation order", async (t) => {
+  const fixture = await createFixture();
+  const runtime = new ControlledAgentRuntime();
+  let application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Resume the implementation conversation",
+    description: "Run a follow-up after the task has moved to review.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-resumed-follow-up-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  await application.resumeAutomation();
+  const initialRequest = await runtime.waitForRequest(1);
+  runtime.complete({ status: "completed", summary: "Initial implementation answer.", threadId: "thread-owner" });
+  await application.waitForAutomationIdle();
+  application.pauseAutomation();
+  const current = application.queryTask(created.task.id);
+  assert.equal(current.available, true);
+  if (!current.available) return;
+  const conversationId = current.task.activations[0]?.conversationId;
+  assert.ok(conversationId);
+  const moved = application.moveTask({
+    taskId: created.task.id,
+    destinationColumnId: "review",
+    expectedRevision: current.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "move-before-follow-up",
+  });
+  assert.equal(moved.accepted, true);
+  const continued = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Re-check the implementation detail.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "follow-up-after-move",
+  });
+  assert.equal(continued.accepted, true);
+  if (!continued.accepted) return;
+
+  application.close();
+  await writeFile(fixture.implementerInstructionsPath, "Use the current follow-up instructions.\n");
+  application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  assert.equal((await application.resumeWithCurrentProcess()).accepted, true);
+
+  const reviewRequest = await runtime.waitForRequest(2);
+  assert.equal(reviewRequest.agent.id, "reviewer");
+  runtime.complete({ status: "completed", summary: "Review complete.", threadId: "thread-reviewer" });
+  const followUpRequest = await runtime.waitForRequest(3);
+  assert.equal(followUpRequest.agent.id, "implementer");
+  assert.equal(followUpRequest.resumeThreadId, "thread-owner");
+  assert.equal(followUpRequest.workspace.path, initialRequest.workspace.path);
+  assert.equal(followUpRequest.task.columnId, "review");
+  assert.equal(followUpRequest.attempt.thread, "resumed");
+  assert.equal(followUpRequest.attempt.continuationMessage, "Re-check the implementation detail.");
+  assert.equal(followUpRequest.agent.instructions, "Use the current follow-up instructions.\n");
+  runtime.complete({ status: "completed", summary: "Follow-up complete.", threadId: "thread-owner" });
+  await application.waitForAutomationIdle();
+  const conversation = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(conversation.available, true);
+  if (conversation.available) {
+    assert.equal(conversation.conversation.runs.at(-1)?.sourceMessageId, continued.message.id);
+  }
+});
+
 test("task conversation index stays compact, recent, distinguishable, and historically navigable", async (t) => {
   const fixture = await createFixture();
   const runtime = new ControlledAgentRuntime();
@@ -606,6 +765,7 @@ async function createFixture(): Promise<{
   databasePath: string;
   repositoryPath: string;
   workspaceRoot: string;
+  implementerInstructionsPath: string;
 }> {
   const directory = await mkdtemp(join(tmpdir(), "coordination-handoff-"));
   const repositoryPath = join(directory, "project");
@@ -623,7 +783,8 @@ async function createFixture(): Promise<{
     "-m",
     "Initial commit",
   ]);
-  await writeFile(join(directory, "implementer.md"), "Implement and hand off the task.\n");
+  const implementerInstructionsPath = join(directory, "implementer.md");
+  await writeFile(implementerInstructionsPath, "Implement and hand off the task.\n");
   await writeFile(join(directory, "reviewer.md"), "Review the completed implementation.\n");
   const definitionPath = join(directory, "process.yaml");
   await writeFile(
@@ -665,5 +826,6 @@ boards:
     databasePath: join(directory, "coordination.sqlite3"),
     repositoryPath,
     workspaceRoot: join(directory, "workspaces"),
+    implementerInstructionsPath,
   };
 }

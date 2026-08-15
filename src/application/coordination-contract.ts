@@ -82,6 +82,7 @@ export interface TaskActivityView {
     | "attempt.completed"
     | "automation.suspended"
     | "automation.resumed"
+    | "conversation.continued"
     | "task.archived"
     | "task.unarchived";
   actor: Actor | { kind: "framework"; id: "coordination" };
@@ -90,7 +91,7 @@ export interface TaskActivityView {
 }
 
 export interface ActivationReasonView {
-  type: "column-entry" | "agent-mention" | "blockers-cleared";
+  type: "column-entry" | "agent-mention" | "blockers-cleared" | "user-follow-up";
   sourceEventId: string;
 }
 
@@ -107,6 +108,7 @@ export interface AttemptView extends AgentExecutionProfile {
   completedAt: string | null;
   outcome: AttemptOutcomeView | null;
   threadId: string | null;
+  threadContinuity?: "replaced";
 }
 
 export type RuntimeStartupBoundary =
@@ -229,7 +231,7 @@ export interface AgentRunRequest {
   board: ProcessBoardView;
   collaborators: Array<Pick<AgentRunAgent, "id" | "name" | "role" | "summary">>;
   reason: ActivationReasonView;
-  sourceEvent: TaskActivityView | TaskCommentView;
+  sourceEvent: TaskActivityView | TaskCommentView | AgentConversationMessageView;
   task: TaskView;
   workspace: TaskWorkspaceView;
   resumeThreadId?: string;
@@ -240,6 +242,7 @@ export interface AgentRunOutcome {
   status: "completed" | "failed" | "permission-blocked";
   summary: string;
   threadId?: string;
+  threadContinuity?: "replaced";
 }
 
 export type AttemptOutcomeView = AgentRunOutcome | {
@@ -639,8 +642,10 @@ export interface AgentConversationView {
   continuation:
     | { available: true }
     | { available: false; reason: "task-archived" | "owning-agent-unavailable" | "thread-unavailable" };
+  messages: AgentConversationMessageView[];
   runs: Array<{
     activationId: string;
+    sourceMessageId?: string;
     attempt: AttemptView;
     transcript: AgentConversationTranscriptView;
   }>;
@@ -657,6 +662,14 @@ export interface AgentConversationIndexEntry {
   label: string;
   latestActivityAt: string;
   continuation: AgentConversationView["continuation"];
+}
+
+export interface AgentConversationMessageView {
+  id: string;
+  conversationId: string;
+  body: string;
+  actor: Actor & { kind: "user" };
+  occurredAt: string;
 }
 
 export type TaskConversationIndexQueryResult =
@@ -724,6 +737,19 @@ export interface AddTaskCommentCommand {
   attemptId?: string;
   idempotencyKey: string;
 }
+
+export interface ContinueAgentConversationCommand {
+  taskId: string;
+  conversationId: string;
+  body: string;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
+export type ContinueAgentConversationResult =
+  | { accepted: true; message: AgentConversationMessageView; activationId: string }
+  | { accepted: false; reason: "not-found" | "empty-message" | "task-archived" | "owning-agent-unavailable" | "thread-unavailable" }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
 export interface MarkUserMentionAddressedCommand {
   attentionReasonId: string;

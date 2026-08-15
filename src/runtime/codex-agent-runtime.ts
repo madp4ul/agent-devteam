@@ -104,6 +104,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
       },
     };
     let threadId: string | undefined;
+    let threadReplaced = false;
     const transcript: AttemptTranscriptItem[] = [];
     try {
       const client = (this.#options.createClient ?? createCodexClient)(clientOptions);
@@ -121,6 +122,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           thread = client.startThread(threadOptions);
         } else if (client.resumeThread === undefined) {
           effectiveRequest = replacementRequest(request);
+          threadReplaced = true;
           thread = client.startThread(threadOptions);
         } else {
           thread = client.resumeThread(request.resumeThreadId, threadOptions);
@@ -128,6 +130,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
       } catch (error) {
         if (request.resumeThreadId === undefined) throw error;
         effectiveRequest = replacementRequest(request);
+        threadReplaced = true;
         thread = client.startThread(threadOptions);
       }
       let streamed;
@@ -141,6 +144,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           throw error;
         }
         effectiveRequest = replacementRequest(request);
+        threadReplaced = true;
         thread = client.startThread(threadOptions);
         streamed = await thread.runStreamed(
           composeActivationPrompt(effectiveRequest),
@@ -197,52 +201,52 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           if (threadId !== undefined) {
             this.#remember(request.attemptId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
           }
-          return runtimeFailure(diagnostic, threadId);
+          return withThreadContinuity(runtimeFailure(diagnostic, threadId), threadReplaced);
         }
       }
       if (threadId === undefined) {
-        return {
+        return withThreadContinuity({
           status: "failed",
           summary: "Codex could not complete the activation: no thread identity was received",
-        };
+        }, threadReplaced);
       }
       if (!turnCompleted) {
         this.#remember(request.attemptId, [
           ...transcript,
           { kind: "diagnostic", text: "The Codex stream ended before turn.completed." },
         ]);
-        return {
+        return withThreadContinuity({
           status: "failed",
           summary: "Codex could not complete the activation: the stream ended before turn.completed",
           threadId,
-        };
+        }, threadReplaced);
       }
       if (failedCoordinationTools.size > 0) {
         const diagnostic = [...failedCoordinationTools]
           .map(([name, cause]) => `Required coordination tool ${name} failed: ${cause}`)
           .join("; ");
         this.#remember(request.attemptId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
-        return { status: "failed", summary: diagnostic, threadId };
+        return withThreadContinuity({ status: "failed", summary: diagnostic, threadId }, threadReplaced);
       }
       if (permissionBlockSummary !== undefined) {
         this.#remember(request.attemptId, transcript);
-        return {
+        return withThreadContinuity({
           status: "permission-blocked",
           summary: permissionBlockSummary,
           threadId,
-        };
+        }, threadReplaced);
       }
       this.#remember(request.attemptId, transcript);
-      return {
+      return withThreadContinuity({
         status: "completed",
         summary: finalResponse,
         threadId,
-      };
+      }, threadReplaced);
     } catch (error) {
       if (threadId === undefined) throw error;
       const diagnostic = error instanceof Error ? error.message : "the streamed run failed";
       this.#remember(request.attemptId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
-      return runtimeFailure(diagnostic, threadId);
+      return withThreadContinuity(runtimeFailure(diagnostic, threadId), threadReplaced);
     } finally {
       this.#options.mcpServer.release?.(request);
     }
@@ -309,6 +313,10 @@ function runtimeFailure(diagnostic: string, threadId?: string): AgentRunOutcome 
     summary: `Codex could not complete the activation: ${diagnostic}`,
     ...(threadId === undefined ? {} : { threadId }),
   };
+}
+
+function withThreadContinuity(outcome: AgentRunOutcome, replaced: boolean): AgentRunOutcome {
+  return replaced ? { ...outcome, threadContinuity: "replaced" } : outcome;
 }
 
 function permissionBlockFrom(item: { type: string; [key: string]: unknown }): string {

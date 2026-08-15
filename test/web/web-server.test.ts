@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { promisify } from "node:util";
 
@@ -142,6 +143,59 @@ test("browser commands preserve creation idempotency and revision conflicts", as
   });
   assert.equal(invalid.response.status, 400);
   assert.equal((invalid.body as { reason: string }).reason, "empty-title");
+});
+
+test("browser conversation continuation accepts and replays one authored follow-up", async (t) => {
+  const fixture = await createFixture("browser-conversation-follow-up");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Continue through the browser adapter",
+    description: "Resume the existing conversation through HTTP.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "browser-follow-up-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const activation = created.task.activations[0];
+  assert.ok(activation?.conversationId);
+  const database = new DatabaseSync(fixture.databasePath);
+  database.prepare("UPDATE activations SET status = 'completed' WHERE id = ?").run(activation.id);
+  database.prepare("UPDATE agent_conversations SET current_thread_id = ? WHERE id = ?")
+    .run("browser-existing-thread", activation.conversationId);
+  database.close();
+  const server = await startWebServer(application, {
+    host: "127.0.0.1",
+    port: 0,
+    assetDirectory: fixture.assetDirectory,
+  });
+  t.after(() => server.close());
+  const body = { body: "Please check the browser boundary.", idempotencyKey: "browser-follow-up" };
+
+  const accepted = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/conversations/${activation.conversationId}`,
+    body,
+  );
+  const replayed = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/conversations/${activation.conversationId}`,
+    body,
+  );
+
+  assert.equal(accepted.response.status, 200);
+  assert.deepEqual(replayed.body, accepted.body);
+  const conversationResponse = await fetch(
+    `${server.baseUrl}/api/tasks/${created.task.id}/conversations/${activation.conversationId}`,
+  );
+  assert.equal(conversationResponse.status, 200);
+  const conversation = await conversationResponse.json() as {
+    conversation: { messages: Array<{ body: string }>; runs: unknown[] };
+  };
+  assert.deepEqual(conversation.conversation.messages.map(({ body: messageBody }) => messageBody), [body.body]);
 });
 
 test("browser attention projection is grouped and user mentions resolve through their explicit action", async (t) => {
