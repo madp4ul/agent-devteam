@@ -13,12 +13,16 @@ export function AgentConversationDialog({
   taskId,
   conversationId,
   selectedAttemptRunning,
+  selectedAttemptId,
+  selectedMessageId,
   selectedPendingActivationId,
   onClose,
 }: {
   taskId: string;
   conversationId: string;
   selectedAttemptRunning: boolean;
+  selectedAttemptId?: string;
+  selectedMessageId?: string;
   selectedPendingActivationId?: string;
   onClose(): void;
 }): ReactNode {
@@ -33,9 +37,14 @@ export function AgentConversationDialog({
   const [submissionError, setSubmissionError] = useState<string>();
   const [refreshVersion, setRefreshVersion] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const pendingScrollPosition = useRef<number | "bottom" | null>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   const pendingActivationId = useRef<string | undefined>(selectedPendingActivationId);
+  const onCloseRef = useRef(onClose);
+  const returnFocus = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  const selectedContextPositioned = useRef(false);
+  onCloseRef.current = onClose;
 
   useLayoutEffect(() => {
     if (pendingScrollPosition.current === null || contentRef.current === null) return;
@@ -45,11 +54,53 @@ export function AgentConversationDialog({
     pendingScrollPosition.current = null;
   }, [conversation]);
 
+  useLayoutEffect(() => {
+    if (
+      (selectedAttemptId === undefined && selectedMessageId === undefined) ||
+      selectedContextPositioned.current ||
+      contentRef.current === null
+    ) return;
+    const candidates = [...contentRef.current.querySelectorAll<HTMLElement>(
+      "[data-conversation-attempt], [data-conversation-message]",
+    )];
+    const selectedContext = selectedAttemptId === undefined
+      ? candidates.find((element) => element.dataset.conversationMessage === selectedMessageId)
+      : candidates.find((element) => element.dataset.conversationAttempt === selectedAttemptId);
+    if (selectedContext === undefined) return;
+    selectedContext.scrollIntoView({ block: "start" });
+    selectedContextPositioned.current = true;
+  }, [conversation, selectedAttemptId, selectedMessageId]);
+
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    dialogRef.current?.querySelector<HTMLElement>('[aria-label="Close conversation"]')?.focus();
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
+      ) ?? [])];
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (first === undefined || last === undefined) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+      if (returnFocus.current?.isConnected === true) returnFocus.current.focus();
     };
   }, []);
 
@@ -126,11 +177,12 @@ export function AgentConversationDialog({
     <div
       className="modal-backdrop transcript-backdrop"
       role="presentation"
-      onClick={(event) => {
+      onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
       <section
+        ref={dialogRef}
         className="modal transcript-modal"
         role="dialog"
         aria-modal="true"
@@ -172,7 +224,10 @@ export function AgentConversationDialog({
             {history.map((entry) => entry.kind === "message" ? (
               <section
                 key={`message-${entry.message.id}`}
-                className={`conversation-user-turn${entry.awaitingRun ? " awaiting-run" : ""}`}
+                className={`conversation-user-turn${entry.awaitingRun ? " awaiting-run" : ""}${
+                  entry.message.id === selectedMessageId ? " selected-message-turn" : ""
+                }`}
+                data-conversation-message={entry.message.id}
               >
                 <article className="conversation-message user-message">
                   <p className="eyebrow">You</p>
@@ -190,9 +245,17 @@ export function AgentConversationDialog({
                 ) : null}
               </section>
             ) : (
-            <section className="conversation-run" key={entry.run.attempt.id} aria-labelledby={`run-${entry.run.attempt.id}`}>
+            <section
+              className={`conversation-run${entry.run.attempt.id === selectedAttemptId ? " selected-run" : ""}`}
+              key={entry.run.attempt.id}
+              data-conversation-attempt={entry.run.attempt.id}
+              aria-labelledby={`run-${entry.run.attempt.id}`}
+            >
               <header className="conversation-run-heading">
-                <h3 id={`run-${entry.run.attempt.id}`}>Run {entry.runIndex + 1} · {entry.run.attempt.status}</h3>
+                <div className="conversation-run-identity">
+                  <h3 id={`run-${entry.run.attempt.id}`}>Run {entry.runIndex + 1} · {entry.run.attempt.status}</h3>
+                  <p>{conversation.owningAgent.name}</p>
+                </div>
                 <div className="conversation-run-metrics">
                   <p className="conversation-run-duration">
                     <span>Runtime</span> <strong><ElapsedTime startedAt={entry.run.attempt.startedAt} completedAt={entry.run.attempt.completedAt} /></strong>

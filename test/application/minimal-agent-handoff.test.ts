@@ -282,6 +282,7 @@ test("task conversation index stays compact, recent, distinguishable, and histor
     "label",
     "latestActivityAt",
     "owningAgent",
+    "status",
   ]);
   assert.deepEqual(application.continueAgentConversation({
     taskId: created.task.id,
@@ -791,6 +792,53 @@ test("agent command idempotency replays stay scoped to the current task", async 
     assert.equal(firstMove.task.id, first.task.id);
     assert.equal(secondMove.task.id, second.task.id);
   }
+});
+
+test("conversation index status follows running work and unresolved attention", async (t) => {
+  const fixture = await createFixture();
+  const runtime = new ControlledAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Project compact conversation status",
+    description: "Keep ordinary history quiet and exceptional work visible.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-conversation-status-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const conversationId = created.task.activations[0]?.conversationId;
+  assert.ok(conversationId);
+
+  const idle = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(idle.available, true);
+  if (idle.available) assert.equal(idle.conversations[0]?.status, null);
+
+  await application.resumeAutomation();
+  await runtime.waitForRequest(1);
+  const running = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(running.available, true);
+  if (running.available) assert.equal(running.conversations[0]?.status, "running");
+
+  runtime.complete({
+    status: "permission-blocked",
+    summary: "The user must authorize the protected operation.",
+    threadId: "conversation-status-thread",
+  });
+  await application.waitForAutomationIdle();
+  const attention = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(attention.available, true);
+  if (attention.available) assert.equal(attention.conversations[0]?.status, "needs-attention");
 });
 
 class ControlledAgentRuntime implements AgentRuntime, AttemptTranscriptAccess {

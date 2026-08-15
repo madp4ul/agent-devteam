@@ -174,6 +174,40 @@ test("conversation index remains quiet and readable in dark and light appearance
   }
 });
 
+test("conversation status dots remain distinct in dark and light appearances", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const template = detail.conversations[0];
+    detail.conversations = [
+      { ...template, id: "appearance-running-conversation", status: "running" },
+      { ...template, id: "appearance-attention-conversation", status: "needs-attention" },
+    ];
+    await route.fulfill({ response, json: detail });
+  });
+
+  for (const theme of ["dark", "light"] as const) {
+    await page.goto("/tasks/T-0001");
+    await setAppearance(page, theme);
+    const conversations = page.getByRole("region", { name: "Conversations" });
+    const running = conversations.getByRole("status", { name: "Conversation running" });
+    const attention = conversations.getByRole("status", { name: "Conversation needs attention" });
+    await expect(running).toHaveCSS(
+      "background-color",
+      theme === "dark" ? "rgb(156, 229, 187)" : "rgb(20, 80, 57)",
+    );
+    await expect(attention).toHaveCSS(
+      "background-color",
+      theme === "dark" ? "rgb(243, 207, 120)" : "rgb(114, 80, 14)",
+    );
+    for (const dot of [running, attention]) {
+      const bounds = await dot.boundingBox();
+      expect(bounds?.width).toBe(8);
+      expect(bounds?.height).toBe(8);
+    }
+  }
+});
+
 test("conversation follow-up composer remains readable and operable in both appearances", async ({ page }) => {
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
@@ -197,12 +231,20 @@ test("conversation follow-up composer remains readable and operable in both appe
     const send = dialog.getByRole("button", { name: "Send follow-up" });
     const userMessage = dialog.locator(".user-message");
     const queuedTurn = dialog.getByRole("status", { name: "Follow-up queued" });
+    const selectedRun = dialog.locator(".conversation-run.selected-run");
 
     expect(await contrastRatio(composer)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(send)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(userMessage)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(queuedTurn)).toBeGreaterThanOrEqual(4.5);
     await expect(userMessage).toHaveCSS("border-right-width", "4px");
+    await expect(selectedRun).toHaveCSS(
+      "background-color",
+      theme === "dark" ? "rgb(29, 48, 61)" : "rgb(243, 247, 250)",
+    );
+    await expect(selectedRun).toHaveCSS("box-shadow", "none");
+    expect(await selectedRun.evaluate((element) => parseFloat(getComputedStyle(element).paddingLeft)))
+      .toBeGreaterThanOrEqual(12);
     await composer.focus();
     await expect(composer).toBeFocused();
     await dialog.getByRole("button", { name: "Close conversation" }).click();

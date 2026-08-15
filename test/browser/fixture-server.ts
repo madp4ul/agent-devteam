@@ -65,6 +65,7 @@ const browserTranscript: AttemptTranscriptItem[] = [
   },
   { kind: "diagnostic", text: "No unresolved runtime diagnostics." },
 ];
+const liveTranscripts = new Map<string, AttemptTranscriptItem[]>();
 const application = await CoordinationApplication.start({
   processDefinitionPath: definitionPath,
   databasePath,
@@ -75,6 +76,30 @@ const application = await CoordinationApplication.start({
       run: async (request, lifecycle) => {
         const threadId = request.resumeThreadId ?? `thread-${request.attemptId}`;
         lifecycle.started(threadId);
+        if (request.reason.type === "user-follow-up") {
+          liveTranscripts.set(request.attemptId, [
+            { id: "assembled-live-message", kind: "message", role: "agent", text: "Checking the assembled follow-up now." },
+            {
+              id: "assembled-live-tool",
+              kind: "tool",
+              name: "command_execution",
+              status: "running",
+              summary: "Verify conversation boundaries",
+            },
+          ]);
+          await new Promise((resolve) => setTimeout(resolve, 1_800));
+          liveTranscripts.set(request.attemptId, [
+            { id: "assembled-live-message", kind: "message", role: "agent", text: "Checking the assembled follow-up now." },
+            {
+              id: "assembled-live-tool",
+              kind: "tool",
+              name: "command_execution",
+              status: "completed",
+              summary: "Verify conversation boundaries (exit 0)",
+              output: "Assembled follow-up verified.",
+            },
+          ]);
+        }
         return {
           status: "completed",
           summary: request.reason.type === "user-follow-up"
@@ -86,7 +111,9 @@ const application = await CoordinationApplication.start({
     },
   },
   transcriptAccess: {
-    read: async (attemptId) => attemptId === "browser-attempt" ? browserTranscript : null,
+    read: async (attemptId) => attemptId === "browser-attempt"
+      ? browserTranscript
+      : (liveTranscripts.get(attemptId) ?? null),
     readUsage: async (attemptId) => attemptId === "browser-attempt"
       ? {
           inputTokens: 2_400,

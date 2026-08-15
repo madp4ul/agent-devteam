@@ -661,6 +661,7 @@ export interface AgentConversationIndexEntry {
   owningAgent: AgentConversationView["owningAgent"];
   label: string;
   latestActivityAt: string;
+  status: "running" | "needs-attention" | null;
   continuation: AgentConversationView["continuation"];
 }
 

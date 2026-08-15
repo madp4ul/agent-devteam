@@ -820,6 +820,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByText("Token usage", { exact: true })).toHaveCount(0);
   await attemptEntry.getByRole("button", { name: "View conversation" }).click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  await expect(dialog.locator(".conversation-run.selected-run")).toContainText("Run 1 · completed");
   const copyThreadId = dialog.getByRole("button", { name: "Copy thread ID" });
   const closeTranscript = dialog.getByRole("button", { name: "Close conversation" });
   const tokenUsage = dialog.getByRole("region", { name: "Token usage" });
@@ -837,6 +838,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(dialog.locator(".modal-heading .conversation-origin-summary")).toHaveText("Origin · Column entry");
   await expect(dialog.locator(".transcript-content .conversation-origin-summary")).toHaveCount(0);
   await expect(dialog).toContainText("Run 1 · completed");
+  await expect(dialog.locator(".conversation-run")).toContainText("Implementation Agent");
   await expect(dialog).not.toContainText("Attempt 1 · completed");
   await expect(dialog.locator(".conversation-run-metrics")).toContainText(/Runtime\s+2m 30s/);
   await expect(dialog).not.toContainText("thread-browser-123");
@@ -1309,6 +1311,7 @@ test("compact conversation rows stay last in the supporting column and open by k
         },
         label: "Inspect existing coordination",
         latestActivityAt: "2026-08-09T12:05:00.000Z",
+        status: null,
         continuation: { available: true },
       },
       {
@@ -1321,6 +1324,7 @@ test("compact conversation rows stay last in the supporting column and open by k
         },
         label: "Verify the responsive navigation order",
         latestActivityAt: "2026-08-09T12:00:00.000Z",
+        status: null,
         continuation: { available: false, reason: "owning-agent-unavailable" },
       },
     ];
@@ -1393,6 +1397,95 @@ test("compact conversation rows stay last in the supporting column and open by k
 
   await page.goto("/tasks/T-0002");
   await expect(page.getByRole("region", { name: "Conversations" })).toHaveCount(0);
+});
+
+test("compact conversation dots expose running and attention without decorating idle history", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const template = detail.conversations[0];
+    detail.conversations = [
+      { ...template, id: "idle-conversation", status: null },
+      { ...template, id: "running-conversation", status: "running" },
+      { ...template, id: "attention-conversation", status: "needs-attention" },
+    ];
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const rows = page.getByRole("region", { name: "Conversations" }).getByRole("button");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0).getByRole("status")).toHaveCount(0);
+  const running = rows.nth(1).getByRole("status", { name: "Conversation running" });
+  await expect(running).toHaveAttribute("title", "Conversation running");
+  await expect(running).toHaveCSS("background-color", "rgb(20, 80, 57)");
+  const attention = rows.nth(2).getByRole("status", { name: "Conversation needs attention" });
+  await expect(attention).toHaveAttribute("title", "Conversation needs attention");
+  await expect(attention).toHaveCSS("background-color", "rgb(114, 80, 14)");
+  await expect(rows.nth(1)).not.toContainText("running");
+  await expect(rows.nth(2)).not.toContainText("needs attention");
+});
+
+test("conversation dialog contains focus, closes with Escape, and restores its opener", async ({ page }) => {
+  await page.goto("/tasks/T-0001");
+  const opener = page.getByRole("button", { name: "View conversation" }).first();
+  await opener.focus();
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const close = dialog.getByRole("button", { name: "Close conversation" });
+  await expect(close).toBeFocused();
+  await dialog.getByRole("textbox", { name: "Follow-up message" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Copy thread ID" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+});
+
+test("conversation continuation navigation highlights and scrolls to its authored message", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.activity.push({
+      id: "selected-conversation-continuation",
+      type: "conversation.continued",
+      actor: { kind: "user", id: "local-user" },
+      occurredAt: "2026-08-15T12:00:00.000Z",
+      details: {
+        conversationId: "browser-conversation",
+        messageId: "selected-conversation-message",
+        activationId: "selected-conversation-activation",
+        messageBody: "Focus this exact authored follow-up.",
+      },
+    });
+    await route.fulfill({ response, json: detail });
+  });
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const items = Array.from({ length: 40 }, (_, index) => ({
+      id: `selected-history-${index}`,
+      kind: "message",
+      role: "agent",
+      text: `Prior conversation evidence ${index + 1}.`,
+    }));
+    const result = liveConversation(items);
+    (result.conversation as Record<string, unknown>).messages = [{
+      id: "selected-conversation-message",
+      conversationId: "browser-conversation",
+      body: "Focus this exact authored follow-up.",
+      actor: { kind: "user", id: "local-user" },
+      occurredAt: "2026-08-15T12:00:00.000Z",
+    }];
+    await route.fulfill({ status: 200, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const continuation = page.locator(".event-entry").filter({ hasText: "Focus this exact authored follow-up." });
+  await continuation.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const selectedMessage = dialog.locator(".conversation-user-turn.selected-message-turn");
+  await expect(selectedMessage).toContainText("Focus this exact authored follow-up.");
+  await expect(selectedMessage).toHaveCSS("background-color", "rgb(243, 247, 250)");
+  expect(await dialog.locator(".transcript-content").evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
 
 test("running agent activity uses the configured agent name and interruption control", async ({ page }) => {
@@ -2299,7 +2392,39 @@ test("a dirty workspace requires explicit discard confirmation before archival",
   expect(archiveRequests[2]?.discardWorkspaceChanges).toBe(true);
 });
 
-test("task relationships are discoverable, searchable, and recoverable", async ({ page }) => {
+test("task relationships are discoverable, searchable, and recoverable", async ({ page, request }) => {
+  let prerequisite = await (await request.get("/api/tasks/T-0001")).json() as {
+    task: { archived: boolean; columnId: string; revision: number; title: string; description: string };
+  };
+  if (prerequisite.task.archived) {
+    const unarchived = await request.post("/api/tasks/T-0001/unarchive", {
+      data: { idempotencyKey: "restore-relationship-prerequisite" },
+    });
+    expect(unarchived.status()).toBe(200);
+    prerequisite = await (await request.get("/api/tasks/T-0001")).json() as typeof prerequisite;
+  }
+  if (prerequisite.task.title !== "Inspect existing coordination") {
+    const renamed = await request.patch("/api/tasks/T-0001", {
+      data: {
+        title: "Inspect existing coordination",
+        description: prerequisite.task.description,
+        expectedRevision: prerequisite.task.revision,
+        idempotencyKey: "restore-relationship-prerequisite-title",
+      },
+    });
+    expect(renamed.status()).toBe(200);
+    prerequisite = await (await request.get("/api/tasks/T-0001")).json() as typeof prerequisite;
+  }
+  if (prerequisite.task.columnId !== "implementation") {
+    const moved = await request.post("/api/tasks/T-0001/move", {
+      data: {
+        destinationColumnId: "implementation",
+        expectedRevision: prerequisite.task.revision,
+        idempotencyKey: "position-relationship-prerequisite",
+      },
+    });
+    expect(moved.status()).toBe(200);
+  }
   await page.route("**/api/board", async (route) => {
     const response = await route.fetch();
     const body = await response.json() as {
@@ -3053,7 +3178,9 @@ test("an assembled conversation follow-up runs and remains attributable in the t
   }
 
   await page.goto("/tasks/T-0001");
-  await page.getByRole("button", { name: "View conversation" }).click();
+  const conversations = page.getByRole("region", { name: "Conversations" });
+  const originatingConversation = conversations.getByTitle("Inspect existing coordination", { exact: true });
+  await originatingConversation.click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   await dialog.getByRole("textbox", { name: "Follow-up message" }).fill(followUpBody);
   await dialog.getByRole("button", { name: "Send follow-up" }).click();
@@ -3078,14 +3205,25 @@ test("an assembled conversation follow-up runs and remains attributable in the t
   );
   await page.getByRole("button", { name: "Close conversation" }).click();
   await page.getByRole("button", { name: "Resume" }).click();
+  const runningStatus = originatingConversation.getByRole("status", { name: "Conversation running" });
+  await expect(runningStatus).toBeVisible();
+  await originatingConversation.click();
+  const runningConversation = page.getByRole("dialog", { name: "Agent conversation" });
+  await expect(runningConversation).toContainText("Run 2 · running");
+  await expect(runningConversation).toContainText("Checking the assembled follow-up now.");
+  await expect(runningConversation).toContainText("Verify conversation boundaries · running");
+  await runningConversation.getByRole("button", { name: "Close conversation" }).click();
   await expect(timeline).toContainText("Follow-up resumed thread-browser-123");
   const followUpAttempt = timeline.locator(".attempt-entry").filter({ hasText: "Follow-up resumed thread-browser-123" });
   const triggerLink = followUpAttempt.getByRole("link", { name: "the conversation continuation" });
   await expect(triggerLink).toBeVisible();
   await triggerLink.click();
   await expect(continuationEntry.locator("article")).toBeFocused();
-  await page.getByRole("button", { name: "View conversation" }).last().click();
+  await page.reload();
+  await page.getByRole("region", { name: "Conversations" })
+    .getByTitle("Inspect existing coordination", { exact: true }).click();
   const refreshed = page.getByRole("dialog", { name: "Agent conversation" });
   await expect(refreshed).toContainText(followUpBody);
   await expect(refreshed).toContainText("Run 2 · completed");
+  await expect(refreshed).toContainText("Assembled follow-up verified.");
 });

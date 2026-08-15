@@ -19,6 +19,13 @@ import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-
 type TimelineAgent = Pick<CollaboratorView, "id" | "name">;
 type TimelineColumn = Pick<ProcessColumnView, "id" | "name">;
 type TimelineTask = { id: string; title: string };
+type ConversationSelection = {
+  conversationId: string;
+  selectedAttemptRunning: boolean;
+  selectedAttemptId?: string;
+  selectedMessageId?: string;
+  pendingActivationId?: string;
+};
 
 export function TaskTimeline({
   taskId,
@@ -41,11 +48,7 @@ export function TaskTimeline({
   transcriptsAvailable?: boolean;
   onReplyToAgent?(agentId: string): void;
 }): ReactNode {
-  const [conversationSelection, setConversationSelection] = useState<{
-    conversationId: string;
-    selectedAttemptRunning: boolean;
-    pendingActivationId?: string;
-  }>();
+  const [conversationSelection, setConversationSelection] = useState<ConversationSelection>();
   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
   const records = buildTimelineRecords(comments, activity, activations);
   const context: TimelineContext = {
@@ -99,6 +102,12 @@ export function TaskTimeline({
           taskId={taskId}
           conversationId={conversationSelection.conversationId}
           selectedAttemptRunning={conversationSelection.selectedAttemptRunning}
+          {...(conversationSelection.selectedAttemptId === undefined
+            ? {}
+            : { selectedAttemptId: conversationSelection.selectedAttemptId })}
+          {...(conversationSelection.selectedMessageId === undefined
+            ? {}
+            : { selectedMessageId: conversationSelection.selectedMessageId })}
           {...(conversationSelection.pendingActivationId === undefined
             ? {}
             : { selectedPendingActivationId: conversationSelection.pendingActivationId })}
@@ -132,7 +141,7 @@ function TimelineRecordView({
   expandedText: Set<string>;
   onTextExpanded(id: string, expanded: boolean): void;
   onSource(sourceId: string): void;
-  onConversation?: (selection: { conversationId: string; selectedAttemptRunning: boolean; pendingActivationId?: string }) => void;
+  onConversation?: (selection: ConversationSelection) => void;
 }): ReactNode {
   if (record.kind === "comment") {
     return (
@@ -213,7 +222,7 @@ function AttemptCard({
   expandedText: Set<string>;
   onTextExpanded(id: string, expanded: boolean): void;
   onSource(sourceId: string): void;
-  onConversation?: (selection: { conversationId: string; selectedAttemptRunning: boolean; pendingActivationId?: string }) => void;
+  onConversation?: (selection: ConversationSelection) => void;
 }): ReactNode {
   const { attempt, activation } = record;
   const agentName = nameForAgent(activation.targetAgentId, context.agents);
@@ -270,6 +279,7 @@ function AttemptCard({
               onClick={() => onConversation({
                 conversationId: activation.conversationId!,
                 selectedAttemptRunning: attempt.status === "running",
+                selectedAttemptId: attempt.id,
               })}
             >
               View conversation
@@ -387,11 +397,12 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
   nested?: boolean;
   expanded: boolean;
   onExpanded(expanded: boolean): void;
-  onConversation?: (selection: { conversationId: string; selectedAttemptRunning: boolean; pendingActivationId?: string }) => void;
+  onConversation?: (selection: ConversationSelection) => void;
 }): ReactNode {
   const relationship = relationshipActivityPresentation(activity, context.tasks);
   const conversationId = activity.type === "conversation.continued" ? activity.details.conversationId : undefined;
   const activationId = activity.type === "conversation.continued" ? activity.details.activationId : undefined;
+  const messageId = activity.type === "conversation.continued" ? activity.details.messageId : undefined;
   const contents = (
     <>
       <div className="entry-meta">
@@ -413,12 +424,13 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
       {nested ? null : (
         <footer className="activity-footer">
           <small>{actorName(activity.actor, context.agents)}</small>
-          {onConversation === undefined || conversationId === undefined || activationId === undefined ? null : (
+          {onConversation === undefined || conversationId === undefined || activationId === undefined || messageId === undefined ? null : (
             <button
               className="secondary"
               onClick={() => onConversation({
                 conversationId,
                 selectedAttemptRunning: false,
+                selectedMessageId: messageId,
                 pendingActivationId: activationId,
               })}
             >

@@ -492,7 +492,34 @@ export class TaskProjectionStore {
       `SELECT conversation.id, conversation.owning_agent_id,
               conversation.owning_agent_name_snapshot, conversation.generated_label,
               conversation.latest_activity_at, conversation.current_thread_id,
-              task.archived_at, agent.name AS current_agent_name, agent.applied AS agent_applied
+              task.archived_at, agent.name AS current_agent_name, agent.applied AS agent_applied,
+              CASE
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM attention_reasons attention
+                  LEFT JOIN activations direct_activation
+                    ON direct_activation.id = attention.source_event_id
+                  LEFT JOIN task_comments source_comment
+                    ON source_comment.id = attention.source_event_id
+                  LEFT JOIN attempts source_attempt
+                    ON source_attempt.id = source_comment.attempt_id
+                  LEFT JOIN activations comment_activation
+                    ON comment_activation.id = source_attempt.activation_id
+                  WHERE attention.task_id = conversation.task_id
+                    AND attention.resolved_at IS NULL
+                    AND (direct_activation.conversation_id = conversation.id
+                      OR comment_activation.conversation_id = conversation.id)
+                ) THEN 'needs-attention'
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM activations running_activation
+                  JOIN attempts running_attempt
+                    ON running_attempt.activation_id = running_activation.id
+                  WHERE running_activation.conversation_id = conversation.id
+                    AND running_attempt.status = 'running'
+                ) THEN 'running'
+                ELSE NULL
+              END AS status
        FROM agent_conversations conversation
        JOIN tasks task ON task.id = conversation.task_id
        LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
@@ -509,6 +536,7 @@ export class TaskProjectionStore {
       archived_at: string | null;
       current_agent_name: string | null;
       agent_applied: number | null;
+      status: AgentConversationIndexEntry["status"];
     }>;
     return rows.map((row) => {
       return {
@@ -516,6 +544,7 @@ export class TaskProjectionStore {
         ...this.conversationOwnerAndContinuation(row),
         label: row.generated_label,
         latestActivityAt: row.latest_activity_at,
+        status: row.status,
       };
     });
   }
