@@ -1,7 +1,5 @@
 import type {
   AutomationView,
-  BoardSummaryColumnView,
-  BoardSummaryView,
   BoardView,
   BoardMutationResult,
   StartupView,
@@ -14,7 +12,6 @@ import type {
   AgentConversationIndexEntry,
   ActivationRecoveryAction,
   ActiveRunView,
-  NeedsAttentionTaskView,
   ArchiveCompletedTasksResult,
   TaskWorkspaceGitStateView,
   CollaboratorView,
@@ -22,22 +19,15 @@ import type {
   NotificationOccurrenceBatch,
   UpdateNotificationPolicyCommand,
 } from "../../application/coordination-contract.ts";
+import type {
+  UserBoardColumnView,
+  UserBoardProjection,
+  UserBoardView,
+} from "../../application/user-board-contract.ts";
 
-export interface BrowserColumnView extends BoardSummaryColumnView {
-  tasks: TaskOverviewView[];
-}
-
-export interface BrowserBoardView extends Omit<BoardSummaryView, "columns"> {
-  columns: BrowserColumnView[];
-}
-
-export interface BrowserBoardState {
-  startup: StartupView;
-  automation: AutomationView;
-  activeRuns: ActiveRunView[];
-  boards: BrowserBoardView[];
-  attention: NeedsAttentionTaskView[];
-}
+export type BrowserBoardState = UserBoardProjection;
+export type BrowserBoardView = UserBoardView;
+export type BrowserColumnView = UserBoardColumnView;
 
 export interface BrowserTaskDetail {
   task: TaskView;

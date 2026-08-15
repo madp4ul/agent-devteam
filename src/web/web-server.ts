@@ -10,8 +10,8 @@ import {
   type CreateChildTaskCommand,
   type CreateTaskRelationshipCommand,
   type TaskWorkspaceView,
-  type TaskOverviewView,
 } from "../application/coordination-application.ts";
+import type { UserBoardProjection } from "../application/user-board-contract.ts";
 import type { AgentToolScopeRegistry } from "../mcp/agent-tool-scope.ts";
 
 export interface WebServerOptions {
@@ -129,32 +129,8 @@ async function handleBrowserApi(
     return;
   }
   if (method === "GET" && url.pathname === "/api/board") {
-    const startup = application.queryStartup();
-    const automation = application.queryAutomation();
-    if (startup.mode === "configuration-error") {
-      sendJson(response, 409, { startup, automation, activeRuns: [], boards: [], attention: [] });
-      return;
-    }
-    const summaries = application.queryBoardSummaries();
-    if (!summaries.available) {
-      sendJson(response, 409, { startup, automation, activeRuns: [], boards: [], attention: [] });
-      return;
-    }
-    const boards = summaries.boards.map((board) => ({
-      ...board,
-      columns: board.columns.map((column) => ({
-        ...column,
-        tasks: readAllColumnTaskOverviews(application, board.id, column.id),
-      })),
-    }));
-    const attention = application.queryNeedsAttention();
-    sendJson(response, 200, {
-      startup,
-      automation,
-      activeRuns: application.queryActiveRuns(),
-      boards,
-      attention: attention.available ? attention.tasks : [],
-    });
+    const board: UserBoardProjection = application.queryUserBoard();
+    sendJson(response, board.startup.mode === "configuration-error" ? 409 : 200, board);
     return;
   }
   if (method === "POST" && url.pathname === "/api/automation/resume") {
@@ -550,28 +526,6 @@ async function handleBrowserApi(
     return;
   }
   sendJson(response, 404, { error: "unknown-browser-api" });
-}
-
-function readAllColumnTaskOverviews(
-  application: CoordinationApplication,
-  boardId: string,
-  columnId: string,
-): TaskOverviewView[] {
-  const tasks = [];
-  let cursor: string | undefined;
-  do {
-    const page = application.queryTaskOverviews({
-      boardId,
-      columnIds: [columnId],
-      order: "recent-column-entry",
-      pageSize: 50,
-      ...(cursor === undefined ? {} : { cursor }),
-    });
-    if (!page.available) throw new Error(`Could not project column ${columnId}`);
-    tasks.push(...page.tasks);
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor !== undefined);
-  return tasks;
 }
 
 function sendMutation(

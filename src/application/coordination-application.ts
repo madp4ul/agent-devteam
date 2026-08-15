@@ -57,6 +57,7 @@ import type {
   TaskAttachmentsQueryResult,
   TaskConversationIndexQueryResult,
   TaskInspectionQueryResult,
+  TaskOverviewView,
   UserTaskInspectionQueryResult,
   TaskOverviewsQuery,
   TaskOverviewsQueryResult,
@@ -71,8 +72,10 @@ import type {
   UnarchiveTaskCommand,
   UnarchiveTaskResult,
 } from "./coordination-contract.ts";
+import type { UserBoardProjection } from "./user-board-contract.ts";
 
 export * from "./coordination-contract.ts";
+export * from "./user-board-contract.ts";
 
 export class CoordinationApplication {
   readonly #persistence: CoordinationPersistence;
@@ -412,8 +415,52 @@ export class CoordinationApplication {
     return this.#discovery.queryBoardSummaries();
   }
 
+  queryUserBoard(): UserBoardProjection {
+    const startup = this.queryStartup();
+    const automation = this.queryAutomation();
+    if (startup.mode === "configuration-error") {
+      return { startup, automation, activeRuns: [], boards: [], attention: [] };
+    }
+    const summaries = this.queryBoardSummaries();
+    if (!summaries.available) {
+      return { startup, automation, activeRuns: [], boards: [], attention: [] };
+    }
+    const attention = this.queryNeedsAttention();
+    return {
+      startup,
+      automation,
+      activeRuns: this.queryActiveRuns(),
+      boards: summaries.boards.map((board) => ({
+        ...board,
+        columns: board.columns.map((column) => ({
+          ...column,
+          tasks: this.readAllColumnTaskOverviews(board.id, column.id),
+        })),
+      })),
+      attention: attention.available ? attention.tasks : [],
+    };
+  }
+
   queryTaskOverviews(query: TaskOverviewsQuery): TaskOverviewsQueryResult {
     return this.#discovery.queryTaskOverviews(query);
+  }
+
+  private readAllColumnTaskOverviews(boardId: string, columnId: string): TaskOverviewView[] {
+    const tasks: TaskOverviewView[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = this.queryTaskOverviews({
+        boardId,
+        columnIds: [columnId],
+        order: "recent-column-entry",
+        pageSize: 50,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      if (!page.available) throw new Error(`Could not project column ${columnId}`);
+      tasks.push(...page.tasks);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor !== undefined);
+    return tasks;
   }
 
   queryArchivedTaskOverviews(): ArchivedTaskOverviewsQueryResult {

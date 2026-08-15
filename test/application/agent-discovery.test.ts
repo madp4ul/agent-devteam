@@ -7,6 +7,44 @@ import test from "node:test";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
 
+test("the user board projection returns complete browser-ready coordination state", async (t) => {
+  const fixture = await createDiscoveryFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Visible board task",
+    description: "The complete description remains behind task inspection.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-user-board-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  const board = application.queryUserBoard();
+
+  assert.equal(board.startup.mode, "paused");
+  assert.deepEqual(board.automation, { state: "paused", attemptsMayStart: false });
+  assert.deepEqual(board.activeRuns, []);
+  assert.deepEqual(board.attention, []);
+  assert.deepEqual(
+    board.boards[0]?.columns.map((column) => ({
+      id: column.id,
+      taskCount: column.taskCount,
+      taskIds: column.tasks.map((task) => task.id),
+    })),
+    [
+      { id: "backlog", taskCount: 1, taskIds: [created.task.id] },
+      { id: "implementation", taskCount: 0, taskIds: [] },
+      { id: "review", taskCount: 0, taskIds: [] },
+      { id: "completion", taskCount: 0, taskIds: [] },
+    ],
+  );
+  assert.doesNotMatch(JSON.stringify(board.boards), /complete description/i);
+});
+
 test("board summaries orient agents without returning task payloads", async (t) => {
   const fixture = await createDiscoveryFixture();
   const application = await CoordinationApplication.start(fixture);
