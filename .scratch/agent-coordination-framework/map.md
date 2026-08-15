@@ -234,6 +234,9 @@ without choosing the implementation yet.
 - [Render Markdown in Task Descriptions and Timeline Comments](./issues/66-render-task-markdown.md)
   — Safely render a defined Markdown subset while preserving mentions,
   authored source, compact previews, and responsive layout.
+  **Resolved:** Task descriptions, authored timeline messages, and outcomes now
+  render safe CommonMark with raw-source copy controls; unsafe HTML, images,
+  and URL schemes remain inert, and Mermaid remains ordinary fenced code.
 - [Archive Task Worktrees Owned by a Different Windows Identity](./issues/67-archive-differently-owned-worktrees.md)
   — Give host-side archival exact process-local Git trust and preserve distinct
   dirty, durability, registration, ownership, and removal outcomes.

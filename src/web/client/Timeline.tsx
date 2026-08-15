@@ -11,7 +11,9 @@ import type {
 } from "../../application/coordination-contract.ts";
 import { findParticipantMentions } from "../../application/participant-mentions.ts";
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
+import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
+import { MarkdownContent } from "./MarkdownContent.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 import { buildTimelineRecords, type AttemptTimelineContent, type TimelineRecord } from "./timeline-model.ts";
 import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
@@ -187,6 +189,7 @@ function TimelineRecordView({
             <TextPreview
               id={`startup-${record.activation.id}`}
               text={record.failure.diagnostic}
+              markdown={false}
               expanded={expandedText.has(`startup-${record.activation.id}`)}
               onExpanded={(expanded) => onTextExpanded(`startup-${record.activation.id}`, expanded)}
             />
@@ -246,7 +249,10 @@ function AttemptCard({
         </div>
         {attempt.outcome === null ? null : (
           <section className="attempt-outcome" aria-label="Outcome" data-timeline-record={`outcome-${attempt.id}`}>
-            <h3>Outcome</h3>
+            <div className="entry-meta authored-heading">
+              <h3>Outcome</h3>
+              <CopyMarkdownButton source={attempt.outcome.summary} label="Copy outcome Markdown" />
+            </div>
             <TextPreview
               id={outcomeTextId}
               text={attempt.outcome.summary}
@@ -349,7 +355,10 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
     <>
       <div className="entry-meta">
         <strong>{nested ? "Commented" : `${author} commented`}</strong>
-        <RelativeTime value={comment.occurredAt} />
+        <span className="entry-meta-actions">
+          <RelativeTime value={comment.occurredAt} />
+          <CopyMarkdownButton source={comment.body} label="Copy comment Markdown" />
+        </span>
       </div>
       <TextPreview
         id={`comment-${comment.id}`}
@@ -407,7 +416,12 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
     <>
       <div className="entry-meta">
         <strong>{relationship?.label ?? activityLabel(activity.type)}</strong>
-        <RelativeTime value={activity.occurredAt} />
+        <span className="entry-meta-actions">
+          <RelativeTime value={activity.occurredAt} />
+          {activity.type === "conversation.continued" && activity.details.messageBody !== undefined ? (
+            <CopyMarkdownButton source={activity.details.messageBody} label="Copy message Markdown" />
+          ) : null}
+        </span>
       </div>
       {activity.type === "conversation.continued" && activity.details.messageBody !== undefined ? (
         <TextPreview
@@ -515,14 +529,15 @@ function SourceLink({ sourceId, label, onSource }: {
   );
 }
 
-function TextPreview({ id, text, expanded, onExpanded, participants }: {
+function TextPreview({ id, text, expanded, onExpanded, participants, markdown = true }: {
   id: string;
   text: string;
   expanded: boolean;
   onExpanded(expanded: boolean): void;
   participants?: Map<string, string>;
+  markdown?: boolean;
 }): ReactNode {
-  const ref = useRef<HTMLParagraphElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const [hiddenLineCount, setHiddenLineCount] = useState(0);
   useLayoutEffect(() => {
     const element = ref.current;
@@ -548,9 +563,13 @@ function TextPreview({ id, text, expanded, onExpanded, participants }: {
   }, [text]);
   return (
     <div className="authored-text">
-      <p id={id} ref={ref} className={`authored-prose${expanded ? " expanded" : ""}`}>
-        {participants === undefined ? text : <MentionedText text={text} participants={participants} />}
-      </p>
+      <div id={id} ref={ref} className={`authored-prose${expanded ? " expanded" : ""}`}>
+        {markdown ? (
+          <MarkdownContent source={text} {...(participants === undefined ? {} : { participants })} />
+        ) : (
+          <p className="authored-plain-text">{text}</p>
+        )}
+      </div>
       {hiddenLineCount === 0 ? null : (
         <button className="text-disclosure" aria-controls={id} aria-expanded={expanded} onClick={() => onExpanded(!expanded)}>
           {expanded ? "Show less" : `Show ${hiddenLineCount} more ${hiddenLineCount === 1 ? "line" : "lines"}`}
@@ -560,10 +579,10 @@ function TextPreview({ id, text, expanded, onExpanded, participants }: {
   );
 }
 
-function measureHiddenRenderedLines(element: HTMLParagraphElement): number {
+function measureHiddenRenderedLines(element: HTMLDivElement): number {
   const parent = element.parentElement;
   if (parent === null || element.clientWidth === 0) return 0;
-  const measurement = element.cloneNode(true) as HTMLParagraphElement;
+  const measurement = element.cloneNode(true) as HTMLDivElement;
   measurement.removeAttribute("id");
   measurement.classList.remove("expanded");
   measurement.setAttribute("aria-hidden", "true");
@@ -577,46 +596,13 @@ function measureHiddenRenderedLines(element: HTMLParagraphElement): number {
   try {
     const collapsedHeight = measurement.clientHeight;
     measurement.classList.add("expanded");
-    const range = document.createRange();
-    range.selectNodeContents(measurement);
-    const lineBounds: Array<{ top: number; bottom: number }> = [];
-    for (const rect of range.getClientRects()) {
-      if (rect.height === 0) continue;
-      const currentLine = lineBounds.find((line) => rect.top < line.bottom - 1 && rect.bottom > line.top + 1);
-      if (currentLine === undefined) lineBounds.push({ top: rect.top, bottom: rect.bottom });
-      else {
-        currentLine.top = Math.min(currentLine.top, rect.top);
-        currentLine.bottom = Math.max(currentLine.bottom, rect.bottom);
-      }
-    }
-    const collapsedBottom = measurement.getBoundingClientRect().top + collapsedHeight;
-    const visibleLineCount = lineBounds.filter((line) => line.top < collapsedBottom - 1).length;
-    return Math.max(0, lineBounds.length - visibleLineCount);
+    const expandedHeight = measurement.scrollHeight;
+    const lineHeight = Number.parseFloat(getComputedStyle(measurement).lineHeight);
+    if (expandedHeight <= collapsedHeight + 1) return 0;
+    return Math.max(1, Math.ceil((expandedHeight - collapsedHeight) / (Number.isFinite(lineHeight) ? lineHeight : 24)));
   } finally {
     measurement.remove();
   }
-}
-
-function MentionedText({ text, participants }: { text: string; participants: Map<string, string> }): ReactNode {
-  const parts: ReactNode[] = [];
-  let cursor = 0;
-  for (const match of findParticipantMentions(text)) {
-    const participantName = participants.get(match.participantId);
-    if (participantName === undefined) continue;
-    const mention = text.slice(match.start, match.end);
-    if (match.start > cursor) parts.push(text.slice(cursor, match.start));
-    parts.push(
-      <strong
-        className={`canonical-mention ${match.participantId === "user" ? "user-mention" : "agent-mention"}`}
-        key={`${match.start}-${mention}`}
-        title={participantName}
-        aria-label={`${mention}, ${participantName}`}
-      >{mention}</strong>,
-    );
-    cursor = match.end;
-  }
-  if (cursor < text.length) parts.push(text.slice(cursor));
-  return parts;
 }
 
 function attemptStatus(attempt: AttemptView): { label: string; className: string } {

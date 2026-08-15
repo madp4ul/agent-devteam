@@ -17,6 +17,8 @@ import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
+import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
+import { MarkdownContent } from "./MarkdownContent.tsx";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { Modal } from "./Modal.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
@@ -147,7 +149,10 @@ export function TaskPage({
               aria-labelledby="description-heading"
             >
               <div className="detail-panel-heading">
-                <h2 id="description-heading">Description</h2>
+                <div className="detail-heading-title">
+                  <h2 id="description-heading">Description</h2>
+                  <CopyMarkdownButton source={task.description} label="Copy description Markdown" />
+                </div>
                 <div className="task-actions">
                   {task.archived ? (
                     <button
@@ -182,7 +187,7 @@ export function TaskPage({
                   )}
                 </div>
               </div>
-              <p className="description">{task.description}</p>
+              <MarkdownContent source={task.description} className="description" />
             </section>
 
             {inspection.unresolvedAttention.length === 0 ? null : (

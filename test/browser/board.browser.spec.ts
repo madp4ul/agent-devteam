@@ -737,7 +737,16 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   const description = page.getByRole("region", { name: "Description" });
   await expect(description.getByRole("button", { name: "Edit task" })).toBeVisible();
   await expect(description.getByText("More actions", { exact: true })).toBeVisible();
-  await expect(page.getByText("Understand the full task history")).toBeVisible();
+  await expect(description.getByRole("heading", { name: "Coordination evidence" })).toBeVisible();
+  await expect(description.getByText("full task history", { exact: true })).toHaveCSS("font-weight", "700");
+  await expect(description.getByRole("listitem")).toHaveText([
+    "Keep authored context readable",
+    "Preserve the exact Markdown source",
+  ]);
+  await expect(description.getByRole("link", { name: "current automation state" })).toHaveAttribute("target", "_blank");
+  await expect(description.locator("img")).toHaveCount(0);
+  await expect(description.getByRole("link", { name: "Unsafe link" })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (window as Window & { markdownInjected?: boolean }).markdownInjected)).not.toBe(true);
   const relationships = page.getByRole("region", { name: "Relationships" });
   await expect(relationships.getByRole("heading", { name: "Depends on" })).toBeVisible();
   await expect(relationships.getByRole("link", { name: "Drag this task" })).toBeVisible();
@@ -754,7 +763,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByText(/Immutable framework event/)).toHaveCount(0);
   await expect(page.getByText(/Implementation Agent.*Attempt 1/)).toBeVisible();
   await expect(page.getByText("2m 30s")).toBeVisible();
-  await expect(page.getByText("Inspected the task and completed the handoff.")).toBeVisible();
+  await expect(page.getByText("handoff", { exact: true })).toHaveCSS("font-weight", "700");
   await expect(page.getByText(/Model: Codex default/)).toHaveCount(0);
   await expect(page.getByText("Activation queued")).toHaveCount(0);
   await expect(page.getByText("Attempt started")).toHaveCount(0);
@@ -809,11 +818,59 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(nestedComment).toContainText("Requested Implementation Agent");
   await expect(nestedComment).toHaveCSS("background-color", "rgb(255, 249, 232)");
   await expect(nestedComment.locator(".comment-consequence")).toHaveCSS("font-weight", "600");
+  await expect(nestedComment.getByRole("heading", { name: "Preserve authored context" })).toBeVisible();
+  await expect(nestedComment.getByRole("listitem")).toHaveCount(2);
+  await expect(nestedComment.locator("pre code")).toContainText('const source = "raw Markdown";');
   const authoredProse = nestedComment.locator(".authored-prose");
   expect(await authoredProse.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   await nestedComment.getByRole("button", { name: /Show \d+ more lines?/ }).click();
   await expect(nestedComment.getByRole("button", { name: "Show less" })).toBeVisible();
   expect(await authoredProse.evaluate((element) => element.scrollHeight === element.clientHeight)).toBe(true);
+
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const expectedDescription = [
+    "## Coordination evidence",
+    "",
+    "Understand the **full task history** and its [current automation state](https://example.com/automation).",
+    "",
+    "- Keep authored context readable",
+    "- Preserve the exact Markdown source",
+    "",
+    '<img src=x onerror="window.markdownInjected=true">',
+    "![Remote image](https://example.com/tracker.png)",
+    "[Unsafe link](javascript:window.markdownInjected=true)",
+  ].join("\n");
+  await description.getByRole("button", { name: "Copy description Markdown" }).click();
+  await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n"))).toBe(expectedDescription);
+  const commentCopy = nestedComment.getByRole("button", { name: "Copy comment Markdown" });
+  await commentCopy.click();
+  await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n"))).toContain("### Preserve authored context");
+  const outcome = attemptEntry.getByRole("region", { name: "Outcome" });
+  await outcome.getByRole("button", { name: "Copy outcome Markdown" }).click();
+  await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n"))).toBe(
+    [
+      "Completed the **handoff** with [verification](https://example.com/result).",
+      "",
+      "- Tests passed",
+      "- Source preserved",
+      "",
+      "```mermaid",
+      "graph TD",
+      "  A --> B",
+      "```",
+    ].join("\n"),
+  );
+  await expect(outcome.locator("pre code")).toContainText("graph TD");
+  await expect(outcome.locator(".markdown-content svg")).toHaveCount(0);
+  await expect(outcome.getByRole("heading", { name: "Outcome" })).toHaveCSS("text-transform", "none");
+  const [copyButtonBox, copyIconBox] = await Promise.all([
+    commentCopy.boundingBox(),
+    commentCopy.locator("svg").boundingBox(),
+  ]);
+  expect(copyButtonBox).not.toBeNull();
+  expect(copyIconBox).not.toBeNull();
+  expect(Math.abs((copyButtonBox!.x + copyButtonBox!.width / 2) - (copyIconBox!.x + copyIconBox!.width / 2))).toBeLessThanOrEqual(1);
+  expect(Math.abs((copyButtonBox!.y + copyButtonBox!.height / 2) - (copyIconBox!.y + copyIconBox!.height / 2))).toBeLessThanOrEqual(1);
   await expect(attemptEntry.getByText("Thread information")).toHaveCount(0);
   await expect(attemptEntry).not.toContainText("thread-browser-123");
   await expect(attemptEntry.getByRole("button", { name: "Copy thread ID" })).toHaveCount(0);
@@ -866,6 +923,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(dialog).toBeHidden();
 
   await description.getByRole("button", { name: "Edit task" }).click();
+  await expect(page.getByLabel("Task description")).toHaveValue(expectedDescription);
   await page.getByLabel("Task title").fill("Inspect all coordination evidence");
   await page.getByRole("button", { name: "Save task" }).click();
   await expect(page.getByRole("heading", { name: "Inspect all coordination evidence" })).toBeVisible();
@@ -939,12 +997,12 @@ test("wide transcript content wraps without overflowing the dialog or page", asy
 });
 
 test("collapsed timeline prose reports hidden rendered lines at desktop and narrow widths", async ({ page }) => {
-  let authoredBody = "First line.\nSecond line.\nThird line.\nFourth line.\nFifth line.";
+  let authoredBody = "First line.  \nSecond line.  \nThird line.  \nFourth line.  \nFifth line.";
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
     const detail = await response.json();
     const authoredComment = detail.task.comments.find((comment: { body: string }) =>
-      comment.body.startsWith("Please preserve the authored context"));
+      comment.body.includes("Please preserve the **authored context**"));
     if (authoredComment !== undefined) {
       authoredComment.body = authoredBody;
     }
@@ -956,7 +1014,7 @@ test("collapsed timeline prose reports hidden rendered lines at desktop and narr
   const authoredProseId = await authoredComment.locator(".authored-prose").getAttribute("id");
   expect(authoredProseId).not.toBeNull();
   const authoredText = page.locator(`[id="${authoredProseId}"]`).locator("..");
-  const disclosure = authoredText.getByRole("button", { name: "Show 1 more line" });
+  const disclosure = authoredText.getByRole("button", { name: /Show \d+ more lines?/ });
   await expect(disclosure).toHaveAttribute("aria-expanded", "false");
   await disclosure.press("Enter");
   await expect(authoredText.getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
