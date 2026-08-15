@@ -298,8 +298,8 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await expect(page.getByRole("region", { name: "Agent activity" })).toContainText(/Running · 0m/);
   await expect(page.locator(".attempt-entry").filter({ hasText: /consulting-agent.*Running.*Attempt 1/ })).toBeVisible();
   await page.getByRole("button", { name: "View conversation" }).click();
-  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText("Owned by consulting-agent");
-  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText(/Attempt 1 · running/);
+  await expect(page.getByRole("dialog", { name: "Agent conversation" }).getByRole("heading", { name: "consulting-agent" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText(/Run 1 · running/);
   await page.getByRole("button", { name: "Close conversation" }).click();
   const interruptClick = page.getByRole("button", { name: "Interrupt current attempt" }).click();
   await expect(page.getByRole("button", { name: "Interrupting…" })).toBeDisabled();
@@ -833,8 +833,12 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   expect(closeBox).not.toBeNull();
   expect(Math.abs((copyBox!.y + copyBox!.height / 2) - (closeBox!.y + closeBox!.height / 2))).toBeLessThanOrEqual(4);
   await expect(closeTranscript.locator("svg")).toBeVisible();
-  await expect(dialog).toContainText("Owned by Implementation Agent");
-  await expect(dialog).toContainText("Attempt 1 · completed");
+  await expect(dialog.getByRole("heading", { name: "Implementation Agent", exact: true })).toBeVisible();
+  await expect(dialog.locator(".modal-heading .conversation-origin-summary")).toHaveText("Origin · Column entry");
+  await expect(dialog.locator(".transcript-content .conversation-origin-summary")).toHaveCount(0);
+  await expect(dialog).toContainText("Run 1 · completed");
+  await expect(dialog).not.toContainText("Attempt 1 · completed");
+  await expect(dialog.locator(".conversation-run-metrics")).toContainText(/Runtime\s+2m 30s/);
   await expect(dialog).not.toContainText("thread-browser-123");
   await expect(dialog).toContainText("I inspected the current task.");
   await expect(tokenUsage).toHaveText(/Input 600\s*·\s*Output 600/);
@@ -1832,6 +1836,7 @@ test("a live conversation follows appended items only while the reader is at the
 
 test("a conversation follow-up retains its draft on failure and refreshes in place after retry", async ({ page }) => {
   let submitted = false;
+  let followUpReads = 0;
   const submissions: Array<{ body: string; idempotencyKey: string }> = [];
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     if (route.request().method() === "POST") {
@@ -1859,6 +1864,7 @@ test("a conversation follow-up retains its draft on failure and refreshes in pla
     }
     const result = liveConversation([]);
     if (submitted) {
+      followUpReads += 1;
       (result.conversation as Record<string, unknown>).messages = [{
         id: "browser-follow-up-message",
         conversationId: "browser-conversation",
@@ -1866,7 +1872,14 @@ test("a conversation follow-up retains its draft on failure and refreshes in pla
         actor: { kind: "user", id: "local-user" },
         occurredAt: "2026-08-09T12:06:00.000Z",
       }];
-      ((result.conversation as Record<string, unknown>).runs as Array<Record<string, unknown>>).push({
+      if (followUpReads > 1) {
+        (result.conversation as { originatingActivation: { status: string } }).originatingActivation.status = "completed";
+        const runs = (result.conversation as Record<string, unknown>).runs as Array<Record<string, unknown>>;
+        Object.assign(runs[0]!.attempt as Record<string, unknown>, {
+          status: "completed",
+          completedAt: "2026-08-09T12:05:00.000Z",
+        });
+        runs.push({
         activationId: "browser-follow-up-activation",
         sourceMessageId: "browser-follow-up-message",
         attempt: {
@@ -1884,7 +1897,8 @@ test("a conversation follow-up retains its draft on failure and refreshes in pla
           available: true,
           items: [{ id: "browser-follow-up-answer", kind: "message", role: "agent", text: "The edge case is covered." }],
         },
-      });
+        });
+      }
     }
     await route.fulfill({ status: 200, json: result });
   });
@@ -1900,7 +1914,16 @@ test("a conversation follow-up retains its draft on failure and refreshes in pla
   await dialog.getByRole("button", { name: "Send follow-up" }).click();
   await expect(composer).toHaveValue("");
   await expect(dialog).toContainText("Please check this edge case.");
+  const queuedTurn = dialog.getByRole("status", { name: "Follow-up queued" });
+  await expect(queuedTurn).toContainText("Waiting for Implementation Agent to finish the current run.");
+  const queuedMessage = dialog.locator(".conversation-user-turn.awaiting-run .user-message");
+  await expect(queuedMessage).toHaveCSS("border-right-width", "4px");
+  const [messageBox, queuedBox] = await Promise.all([queuedMessage.boundingBox(), queuedTurn.boundingBox()]);
+  expect(messageBox).not.toBeNull();
+  expect(queuedBox).not.toBeNull();
+  expect(queuedBox!.y).toBeGreaterThanOrEqual(messageBox!.y + messageBox!.height);
   await expect(dialog).toContainText("The edge case is covered.");
+  await expect(queuedTurn).toHaveCount(0);
   const historyKinds = await dialog.locator(".conversation-run, .conversation-message").evaluateAll((entries) =>
     entries.map((entry) => entry.classList.contains("conversation-message") ? "message" : "run"),
   );
@@ -2982,6 +3005,15 @@ test("dropping a task into its current column is inert", async ({ page, request 
 });
 
 test("an assembled conversation follow-up runs and remains attributable in the task timeline", async ({ page, request }) => {
+  const followUpBody = [
+    "Run this assembled follow-up and preserve the exact authored request.",
+    "Check the application boundary.",
+    "Check the runtime boundary.",
+    "Check the task timeline attribution.",
+    "Keep the existing workspace.",
+    "Resume the existing thread.",
+    "Report the final result here.",
+  ].join("\n");
   const startupFailure = await (await request.get("/api/tasks/T-0003")).json() as {
     task: { activations: Array<{ id: string; status: string }> };
   };
@@ -3023,18 +3055,37 @@ test("an assembled conversation follow-up runs and remains attributable in the t
   await page.goto("/tasks/T-0001");
   await page.getByRole("button", { name: "View conversation" }).click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
-  await dialog.getByRole("textbox", { name: "Follow-up message" }).fill("Run this assembled follow-up.");
+  await dialog.getByRole("textbox", { name: "Follow-up message" }).fill(followUpBody);
   await dialog.getByRole("button", { name: "Send follow-up" }).click();
   await expect(dialog.getByRole("textbox", { name: "Follow-up message" })).toHaveValue("");
   await dialog.getByRole("button", { name: "Close conversation" }).click();
-  await page.getByRole("button", { name: "Resume" }).click();
+  await page.reload();
 
   const timeline = page.getByRole("region", { name: "Task timeline" });
-  await expect(timeline).toContainText("Conversation continued");
+  const continuationEntry = timeline.locator(".event-entry").filter({ hasText: "Conversation continued" });
+  await expect(continuationEntry).toContainText("Run this assembled follow-up and preserve the exact authored request.");
+  await expect(continuationEntry).not.toContainText("Conversation continuedConversation continued");
+  const continuationText = continuationEntry.locator(".authored-prose");
+  expect(await continuationText.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await continuationEntry.getByRole("button", { name: /Show \d+ more lines?/ }).click();
+  await expect(continuationEntry.getByRole("button", { name: "Show less" })).toBeVisible();
+  await expect(continuationEntry).toContainText("Report the final result here.");
+  await continuationEntry.getByRole("button", { name: "View conversation" }).click();
+  const queuedConversation = page.getByRole("dialog", { name: "Agent conversation" });
+  await expect(queuedConversation).toContainText(followUpBody);
+  await expect(queuedConversation.getByRole("status", { name: "Follow-up queued" })).toContainText(
+    "Waiting for Implementation Agent's next run to start.",
+  );
+  await page.getByRole("button", { name: "Close conversation" }).click();
+  await page.getByRole("button", { name: "Resume" }).click();
   await expect(timeline).toContainText("Follow-up resumed thread-browser-123");
-  await expect(timeline).toContainText("Triggered by a user follow-up");
+  const followUpAttempt = timeline.locator(".attempt-entry").filter({ hasText: "Follow-up resumed thread-browser-123" });
+  const triggerLink = followUpAttempt.getByRole("link", { name: "the conversation continuation" });
+  await expect(triggerLink).toBeVisible();
+  await triggerLink.click();
+  await expect(continuationEntry.locator("article")).toBeFocused();
   await page.getByRole("button", { name: "View conversation" }).last().click();
   const refreshed = page.getByRole("dialog", { name: "Agent conversation" });
-  await expect(refreshed).toContainText("Run this assembled follow-up.");
-  await expect(refreshed).toContainText("Attempt 2 · completed");
+  await expect(refreshed).toContainText(followUpBody);
+  await expect(refreshed).toContainText("Run 2 · completed");
 });

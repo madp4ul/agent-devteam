@@ -175,6 +175,18 @@ test("conversation index remains quiet and readable in dark and light appearance
 });
 
 test("conversation follow-up composer remains readable and operable in both appearances", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.conversation.messages.push({
+      id: "appearance-queued-message",
+      conversationId: result.conversation.id,
+      body: "Please verify this queued turn.",
+      actor: { kind: "user", id: "local-user" },
+      occurredAt: "2026-08-15T12:00:00.000Z",
+    });
+    await route.fulfill({ response, json: result });
+  });
   for (const theme of ["dark", "light"] as const) {
     await page.goto("/tasks/T-0001");
     await setAppearance(page, theme);
@@ -183,9 +195,14 @@ test("conversation follow-up composer remains readable and operable in both appe
     const composer = dialog.getByRole("textbox", { name: "Follow-up message" });
     await composer.fill("Check the appearance boundary.");
     const send = dialog.getByRole("button", { name: "Send follow-up" });
+    const userMessage = dialog.locator(".user-message");
+    const queuedTurn = dialog.getByRole("status", { name: "Follow-up queued" });
 
     expect(await contrastRatio(composer)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(send)).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(userMessage)).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(queuedTurn)).toBeGreaterThanOrEqual(4.5);
+    await expect(userMessage).toHaveCSS("border-right-width", "4px");
     await composer.focus();
     await expect(composer).toBeFocused();
     await dialog.getByRole("button", { name: "Close conversation" }).click();

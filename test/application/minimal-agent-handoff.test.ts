@@ -76,7 +76,10 @@ test("continuing a conversation persists one authored message and activation ide
   assert.equal(followUps[0]?.conversationId, conversationId);
   assert.equal(followUps[0]?.targetAgentId, "implementer");
   assert.equal(followUps[0]?.reason.sourceEventId, accepted.message.id);
-  assert.equal(task.task.activity.filter(({ type }) => type === "conversation.continued").length, 1);
+  const continuationActivity = task.task.activity.filter(({ type }) => type === "conversation.continued");
+  assert.equal(continuationActivity.length, 1);
+  assert.equal(continuationActivity[0]?.details.messageId, accepted.message.id);
+  assert.equal(continuationActivity[0]?.details.messageBody, command.body);
   const conversation = await application.queryAgentConversation(created.task.id, conversationId);
   assert.equal(conversation.available, true);
   if (conversation.available) assert.deepEqual(conversation.conversation.messages, [accepted.message]);

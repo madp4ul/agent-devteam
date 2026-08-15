@@ -43,7 +43,8 @@ export function TaskTimeline({
 }): ReactNode {
   const [conversationSelection, setConversationSelection] = useState<{
     conversationId: string;
-    attempt: AttemptView;
+    selectedAttemptRunning: boolean;
+    pendingActivationId?: string;
   }>();
   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
   const records = buildTimelineRecords(comments, activity, activations);
@@ -67,6 +68,7 @@ export function TaskTimeline({
   };
   const followSource = (sourceId: string): void => {
     setTextExpanded(`comment-${sourceId}`, true);
+    setTextExpanded(`activity-${sourceId}`, true);
     window.setTimeout(() => {
       focusTimelineSource(sourceId);
     });
@@ -96,7 +98,10 @@ export function TaskTimeline({
         <AgentConversationDialog
           taskId={taskId}
           conversationId={conversationSelection.conversationId}
-          selectedAttemptRunning={conversationSelection.attempt.status === "running"}
+          selectedAttemptRunning={conversationSelection.selectedAttemptRunning}
+          {...(conversationSelection.pendingActivationId === undefined
+            ? {}
+            : { selectedPendingActivationId: conversationSelection.pendingActivationId })}
           onClose={() => setConversationSelection(undefined)}
         />
       )}
@@ -127,7 +132,7 @@ function TimelineRecordView({
   expandedText: Set<string>;
   onTextExpanded(id: string, expanded: boolean): void;
   onSource(sourceId: string): void;
-  onConversation?: (selection: { conversationId: string; attempt: AttemptView }) => void;
+  onConversation?: (selection: { conversationId: string; selectedAttemptRunning: boolean; pendingActivationId?: string }) => void;
 }): ReactNode {
   if (record.kind === "comment") {
     return (
@@ -149,7 +154,13 @@ function TimelineRecordView({
         data-timeline-record={record.activity.id}
       >
         <div className="timeline-marker" aria-hidden="true">{record.activity.type === "task.moved" ? "→" : "◆"}</div>
-        <ActivityCard activity={record.activity} context={context} />
+        <ActivityCard
+          activity={record.activity}
+          context={context}
+          expanded={expandedText.has(`activity-${record.activity.id}`)}
+          onExpanded={(expanded) => onTextExpanded(`activity-${record.activity.id}`, expanded)}
+          {...(onConversation === undefined ? {} : { onConversation })}
+        />
       </li>
     );
   }
@@ -202,7 +213,7 @@ function AttemptCard({
   expandedText: Set<string>;
   onTextExpanded(id: string, expanded: boolean): void;
   onSource(sourceId: string): void;
-  onConversation?: (selection: { conversationId: string; attempt: AttemptView }) => void;
+  onConversation?: (selection: { conversationId: string; selectedAttemptRunning: boolean; pendingActivationId?: string }) => void;
 }): ReactNode {
   const { attempt, activation } = record;
   const agentName = nameForAgent(activation.targetAgentId, context.agents);
@@ -256,7 +267,10 @@ function AttemptCard({
           {onConversation === undefined || activation.conversationId === null ? null : (
             <button
               className="secondary"
-              onClick={() => onConversation({ conversationId: activation.conversationId!, attempt })}
+              onClick={() => onConversation({
+                conversationId: activation.conversationId!,
+                selectedAttemptRunning: attempt.status === "running",
+              })}
             >
               View conversation
             </button>
@@ -294,7 +308,13 @@ function AttemptContentView({
   }
   return (
     <li className={`attempt-history-item nested-activity${content.activity.type === "task.moved" ? " nested-movement" : ""}`}>
-      <ActivityCard activity={content.activity} context={context} nested />
+      <ActivityCard
+        activity={content.activity}
+        context={context}
+        nested
+        expanded={expandedText.has(`activity-${content.activity.id}`)}
+        onExpanded={(expanded) => onTextExpanded(`activity-${content.activity.id}`, expanded)}
+      />
     </li>
   );
 }
@@ -361,22 +381,52 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
   );
 }
 
-function ActivityCard({ activity, context, nested = false }: {
+function ActivityCard({ activity, context, nested = false, expanded, onExpanded, onConversation }: {
   activity: TaskActivityView;
   context: TimelineContext;
   nested?: boolean;
+  expanded: boolean;
+  onExpanded(expanded: boolean): void;
+  onConversation?: (selection: { conversationId: string; selectedAttemptRunning: boolean; pendingActivationId?: string }) => void;
 }): ReactNode {
   const relationship = relationshipActivityPresentation(activity, context.tasks);
+  const conversationId = activity.type === "conversation.continued" ? activity.details.conversationId : undefined;
+  const activationId = activity.type === "conversation.continued" ? activity.details.activationId : undefined;
   const contents = (
     <>
       <div className="entry-meta">
         <strong>{relationship?.label ?? activityLabel(activity.type)}</strong>
         <RelativeTime value={activity.occurredAt} />
       </div>
-      <p>{relationship === undefined
-        ? activityDescription(activity, context.columns)
-        : relationshipDescription(relationship)}</p>
-      {nested ? null : <small>{actorName(activity.actor, context.agents)}</small>}
+      {activity.type === "conversation.continued" && activity.details.messageBody !== undefined ? (
+        <TextPreview
+          id={`activity-${activity.id}`}
+          text={activity.details.messageBody}
+          expanded={expanded}
+          onExpanded={onExpanded}
+        />
+      ) : (
+        <p>{relationship === undefined
+          ? activityDescription(activity, context.columns)
+          : relationshipDescription(relationship)}</p>
+      )}
+      {nested ? null : (
+        <footer className="activity-footer">
+          <small>{actorName(activity.actor, context.agents)}</small>
+          {onConversation === undefined || conversationId === undefined || activationId === undefined ? null : (
+            <button
+              className="secondary"
+              onClick={() => onConversation({
+                conversationId,
+                selectedAttemptRunning: false,
+                pendingActivationId: activationId,
+              })}
+            >
+              View conversation
+            </button>
+          )}
+        </footer>
+      )}
     </>
   );
   return nested ? (
@@ -420,6 +470,16 @@ function TriggerLink({
   const activity = context.activity.find((candidate) => candidate.id === sourceId);
   if (activity !== undefined) {
     return <SourceLink sourceId={sourceId} label={triggerDescription(activity, context)} onSource={onSource} />;
+  }
+  const conversationContinuation = context.activity.find((candidate) =>
+    candidate.type === "conversation.continued" && candidate.details.messageId === sourceId,
+  );
+  if (conversationContinuation !== undefined) {
+    return <SourceLink
+      sourceId={conversationContinuation.id}
+      label="the conversation continuation"
+      onSource={onSource}
+    />;
   }
   return <span>Triggered by {reasonLabel(record.activation.reason.type)}</span>;
 }

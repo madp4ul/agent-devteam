@@ -70,8 +70,14 @@ export class TaskProjectionStore {
     if (row === undefined) return undefined;
     const activity = this.#database
       .prepare(
-        `SELECT id, type, actor_kind, actor_id, occurred_at, details_json
-         FROM activity_ledger
+        `SELECT activity.id, activity.type, activity.actor_kind, activity.actor_id,
+                activity.occurred_at, activity.details_json,
+                CASE WHEN activity.type = 'conversation.continued' THEN (
+                  SELECT message.body
+                  FROM agent_conversation_messages message
+                  WHERE message.id = json_extract(activity.details_json, '$.messageId')
+                ) ELSE NULL END AS conversation_message_body
+         FROM activity_ledger activity
          WHERE task_id = ?
          ORDER BY sequence`,
       )
@@ -82,6 +88,7 @@ export class TaskProjectionStore {
       actor_id: string;
       occurred_at: string;
       details_json: string;
+      conversation_message_body: string | null;
     }>;
     return {
       id: row.id,
@@ -101,7 +108,12 @@ export class TaskProjectionStore {
             ? { kind: "framework", id: "coordination" }
             : { kind: event.actor_kind, id: event.actor_id },
         occurredAt: event.occurred_at,
-        details: JSON.parse(event.details_json) as Record<string, string>,
+        details: {
+          ...(JSON.parse(event.details_json) as Record<string, string>),
+          ...(event.conversation_message_body === null
+            ? {}
+            : { messageBody: event.conversation_message_body }),
+        },
       })),
       activations: this.readActivations(taskId),
     };

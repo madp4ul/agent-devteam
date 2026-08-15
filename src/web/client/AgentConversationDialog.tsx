@@ -13,15 +13,19 @@ export function AgentConversationDialog({
   taskId,
   conversationId,
   selectedAttemptRunning,
+  selectedPendingActivationId,
   onClose,
 }: {
   taskId: string;
   conversationId: string;
   selectedAttemptRunning: boolean;
+  selectedPendingActivationId?: string;
   onClose(): void;
 }): ReactNode {
   const [conversation, setConversation] = useState<AgentConversationView>();
-  const [conversationRunning, setConversationRunning] = useState(selectedAttemptRunning);
+  const [conversationRunning, setConversationRunning] = useState(
+    selectedAttemptRunning || selectedPendingActivationId !== undefined,
+  );
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string>();
   const [draft, setDraft] = useState("");
@@ -31,7 +35,7 @@ export function AgentConversationDialog({
   const contentRef = useRef<HTMLDivElement>(null);
   const pendingScrollPosition = useRef<number | "bottom" | null>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
-  const pendingActivationId = useRef<string | undefined>(undefined);
+  const pendingActivationId = useRef<string | undefined>(selectedPendingActivationId);
 
   useLayoutEffect(() => {
     if (pendingScrollPosition.current === null || contentRef.current === null) return;
@@ -116,6 +120,7 @@ export function AgentConversationDialog({
     }
   };
   const history = conversation === undefined ? [] : conversationHistory(conversation);
+  const activeRunPresent = conversation?.runs.some(({ attempt }) => attempt.status === "running") ?? false;
 
   return (
     <div
@@ -132,11 +137,17 @@ export function AgentConversationDialog({
         aria-labelledby="conversation-title"
       >
         <header className="modal-heading">
-          <div>
-            <p className="eyebrow">Agent conversation</p>
-            <h2 id="conversation-title">Agent conversation</h2>
-            {conversation === undefined ? null : (
-              <p>Owned by {conversation.owningAgent.name}</p>
+          <div className="conversation-heading-copy">
+            <p className="eyebrow" id="conversation-title">Agent conversation</p>
+            {conversation === undefined ? (
+              <h2>Loading…</h2>
+            ) : (
+              <div className="conversation-title-row">
+                <h2>{conversation.owningAgent.name}</h2>
+                <p className="conversation-origin-summary">
+                  <span>Origin</span> · {activationReasonLabel(conversation.originatingActivation.reason.type)}
+                </p>
+              </div>
             )}
           </div>
           <div className="transcript-header-actions">
@@ -158,28 +169,38 @@ export function AgentConversationDialog({
           ) : conversation.runs.length === 0 ? (
             <p className="unavailable">This conversation has not started a run yet.</p>
           ) : (<>
-            <section className="conversation-origin" aria-label="Originating activation">
-              <p className="eyebrow">Originating activation</p>
-              <p>
-                {activationReasonLabel(conversation.originatingActivation.reason.type)} · {conversation.originatingActivation.status}
-              </p>
-            </section>
             {history.map((entry) => entry.kind === "message" ? (
-              <article key={`message-${entry.message.id}`} className="conversation-message user-message">
-                <p className="eyebrow">You</p>
-                <p>{entry.message.body}</p>
-              </article>
+              <section
+                key={`message-${entry.message.id}`}
+                className={`conversation-user-turn${entry.awaitingRun ? " awaiting-run" : ""}`}
+              >
+                <article className="conversation-message user-message">
+                  <p className="eyebrow">You</p>
+                  <p>{entry.message.body}</p>
+                </article>
+                {entry.awaitingRun ? (
+                  <div className="conversation-turn-pending" role="status" aria-label="Follow-up queued">
+                    <span className="signal queued">Queued</span>
+                    <p>
+                      {activeRunPresent
+                        ? `Waiting for ${conversation.owningAgent.name} to finish the current run.`
+                        : `Waiting for ${conversation.owningAgent.name}'s next run to start.`}
+                    </p>
+                  </div>
+                ) : null}
+              </section>
             ) : (
             <section className="conversation-run" key={entry.run.attempt.id} aria-labelledby={`run-${entry.run.attempt.id}`}>
               <header className="conversation-run-heading">
-                <div>
-                  <p className="eyebrow">Run {entry.runIndex + 1}</p>
-                  <h3 id={`run-${entry.run.attempt.id}`}>Attempt {entry.runIndex + 1} · {entry.run.attempt.status}</h3>
-                  <p><ElapsedTime startedAt={entry.run.attempt.startedAt} completedAt={entry.run.attempt.completedAt} /></p>
+                <h3 id={`run-${entry.run.attempt.id}`}>Run {entry.runIndex + 1} · {entry.run.attempt.status}</h3>
+                <div className="conversation-run-metrics">
+                  <p className="conversation-run-duration">
+                    <span>Runtime</span> <strong><ElapsedTime startedAt={entry.run.attempt.startedAt} completedAt={entry.run.attempt.completedAt} /></strong>
+                  </p>
+                  {entry.run.transcript.available && entry.run.transcript.usage !== undefined
+                    ? <TokenUsageSummary usage={entry.run.transcript.usage} />
+                    : null}
                 </div>
-                {entry.run.transcript.available && entry.run.transcript.usage !== undefined
-                  ? <TokenUsageSummary usage={entry.run.transcript.usage} />
-                  : null}
               </header>
               {entry.run.attempt.threadContinuity === "replaced" ? (
                 <p className="unavailable">
@@ -254,7 +275,7 @@ export function AgentConversationDialog({
 }
 
 type ConversationHistoryEntry =
-  | { kind: "message"; message: AgentConversationView["messages"][number] }
+  | { kind: "message"; message: AgentConversationView["messages"][number]; awaitingRun: boolean }
   | { kind: "run"; run: AgentConversationView["runs"][number]; runIndex: number };
 
 function conversationHistory(conversation: AgentConversationView): ConversationHistoryEntry[] {
@@ -263,14 +284,14 @@ function conversationHistory(conversation: AgentConversationView): ConversationH
   conversation.runs.forEach((run, runIndex) => {
     const message = run.sourceMessageId === undefined ? undefined : messages.get(run.sourceMessageId);
     if (message !== undefined) {
-      history.push({ kind: "message", message });
+      history.push({ kind: "message", message, awaitingRun: false });
       messages.delete(message.id);
     }
     history.push({ kind: "run", run, runIndex });
   });
   history.push(...[...messages.values()]
     .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
-    .map((message) => ({ kind: "message" as const, message })));
+    .map((message) => ({ kind: "message" as const, message, awaitingRun: true })));
   return history;
 }
 
