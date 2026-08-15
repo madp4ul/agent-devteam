@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import type { ActiveRunView, AutomationView } from "../../application/coordination-contract.ts";
 import { pauseAutomation, resumeAutomation } from "./api.ts";
@@ -25,12 +25,7 @@ export function AutomationControls({
   onOpenTask(taskId: string, boardId: string): void;
 }): ReactNode {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const settingsTrigger = useRef<HTMLButtonElement>(null);
   const reportFailure = (error: unknown): void => onFeedback({ role: "alert", text: errorMessage(error) });
-  const closeSettings = useCallback((): void => {
-    setSettingsOpen(false);
-    queueMicrotask(() => settingsTrigger.current?.focus());
-  }, []);
 
   return (
     <div className="automation-control">
@@ -60,13 +55,13 @@ export function AutomationControls({
           ))}</ul>
         )}
       </details>
-      <button ref={settingsTrigger} className="topbar-control settings-action"
+      <button className="topbar-control settings-action"
         aria-label={notifications.deliveryMismatch ? "Settings, notifications need attention" : "Settings"}
         onClick={() => setSettingsOpen(true)}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8 3.5-.1-1.2 2-1.6-2-3.4-2.4 1a8.7 8.7 0 0 0-2-1.2L15.2 3h-4l-.4 2.6a8.7 8.7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A8 8 0 0 0 6.3 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2l.4 2.6h4l.4-2.6a8.7 8.7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6.1-.4.1-.8V12Z" /></svg>
         <span>Settings</span>{notifications.deliveryMismatch ? <span className="warning-badge" aria-hidden="true">!</span> : null}
       </button>
-      {settingsOpen ? <SettingsDialog notifications={notifications} onClose={closeSettings} /> : null}
+      {settingsOpen ? <SettingsDialog notifications={notifications} onClose={() => setSettingsOpen(false)} /> : null}
     </div>
   );
 }

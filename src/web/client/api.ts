@@ -1,20 +1,12 @@
 import type {
-  AutomationView,
-  BoardView,
   BoardMutationResult,
-  StartupView,
   TaskOverviewView,
-  UserTaskInspectionView,
-  TaskView,
   AttemptTranscriptQueryResult,
   AgentConversationQueryResult,
   ContinueAgentConversationResult,
-  AgentConversationIndexEntry,
   ActivationRecoveryAction,
-  ActiveRunView,
   ArchiveCompletedTasksResult,
   TaskWorkspaceGitStateView,
-  CollaboratorView,
   NotificationPolicyView,
   NotificationOccurrenceBatch,
   UpdateNotificationPolicyCommand,
@@ -24,33 +16,18 @@ import type {
   UserBoardProjection,
   UserBoardView,
 } from "../../application/user-board-contract.ts";
+import type {
+  UserRelatedTaskView,
+  UserTaskDetailQueryResult,
+  UserTaskDetailView,
+} from "../../application/user-task-detail-contract.ts";
 
 export type BrowserBoardState = UserBoardProjection;
 export type BrowserBoardView = UserBoardView;
 export type BrowserColumnView = UserBoardColumnView;
 
-export interface BrowserTaskDetail {
-  task: TaskView;
-  board: BoardView;
-  inspection: UserTaskInspectionView;
-  activeRun: ActiveRunView | null;
-  activeRuns: ActiveRunView[];
-  automation: AutomationView;
-  collaborators: CollaboratorView[];
-  relationshipTasks: BrowserRelationshipTask[];
-  startup: StartupView;
-  conversations: AgentConversationIndexEntry[];
-}
-
-export interface BrowserRelationshipTask {
-  id: string;
-  title: string;
-  boardId: string;
-  boardName: string;
-  column: { id: string; name: string };
-  blocking: TaskOverviewView["blocking"];
-  archived?: true;
-}
+export type BrowserTaskDetail = UserTaskDetailView;
+export type BrowserRelationshipTask = UserRelatedTaskView;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -93,21 +70,11 @@ export async function readNotificationOccurrences(
 }
 
 export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
-  const result = await request<{ available: true } & BrowserTaskDetail>(
+  const result = await request<Extract<UserTaskDetailQueryResult, { available: true }>>(
     `/api/tasks/${encodeURIComponent(taskId)}`,
   );
-  return {
-    task: result.task,
-    board: result.board,
-    inspection: result.inspection,
-    activeRun: result.activeRun,
-    activeRuns: result.activeRuns ?? (result.activeRun === null ? [] : [result.activeRun]),
-    automation: result.automation,
-    collaborators: result.collaborators,
-    relationshipTasks: result.relationshipTasks ?? [],
-    startup: result.startup,
-    conversations: result.conversations ?? [],
-  };
+  const { available: _available, ...detail } = result;
+  return detail;
 }
 
 export async function readArchivedTasks(): Promise<TaskOverviewView[]> {

@@ -3,6 +3,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { createChildTask, createTask } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import { errorMessage } from "./feedback.ts";
+import { Modal } from "./Modal.tsx";
 
 interface CreationColumn {
   id: string;
@@ -63,13 +64,7 @@ export function TaskCreationDialog({
   };
   const childMode = parent !== undefined;
   return (
-    <div className="modal-backdrop" role="presentation">
-      <section
-        className="modal create-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-title"
-      >
+    <Modal labelledBy="create-title" className="create-modal" onClose={onClose}>
         <div className="modal-heading">
           <div>
             <p className="eyebrow">
@@ -117,7 +112,6 @@ export function TaskCreationDialog({
             </button>
           </div>
         </form>
-      </section>
-    </div>
+    </Modal>
   );
 }

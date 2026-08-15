@@ -8,6 +8,7 @@ import { continueAgentConversation, readAgentConversation } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
+import { Modal } from "./Modal.tsx";
 
 export function AgentConversationDialog({
   taskId,
@@ -37,14 +38,11 @@ export function AgentConversationDialog({
   const [submissionError, setSubmissionError] = useState<string>();
   const [refreshVersion, setRefreshVersion] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const pendingScrollPosition = useRef<number | "bottom" | null>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   const pendingActivationId = useRef<string | undefined>(selectedPendingActivationId);
-  const onCloseRef = useRef(onClose);
-  const returnFocus = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const selectedContextPositioned = useRef(false);
-  onCloseRef.current = onClose;
 
   useLayoutEffect(() => {
     if (pendingScrollPosition.current === null || contentRef.current === null) return;
@@ -70,39 +68,6 @@ export function AgentConversationDialog({
     selectedContext.scrollIntoView({ block: "start" });
     selectedContextPositioned.current = true;
   }, [conversation, selectedAttemptId, selectedMessageId]);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    dialogRef.current?.querySelector<HTMLElement>('[aria-label="Close conversation"]')?.focus();
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
-        'button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
-      ) ?? [])];
-      const first = focusable[0];
-      const last = focusable.at(-1);
-      if (first === undefined || last === undefined) return;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-      if (returnFocus.current?.isConnected === true) returnFocus.current.focus();
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -174,20 +139,13 @@ export function AgentConversationDialog({
   const activeRunPresent = conversation?.runs.some(({ attempt }) => attempt.status === "running") ?? false;
 
   return (
-    <div
-      className="modal-backdrop transcript-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <Modal
+      labelledBy="conversation-title"
+      className="transcript-modal"
+      backdropClassName="transcript-backdrop"
+      initialFocusRef={closeButtonRef}
+      onClose={onClose}
     >
-      <section
-        ref={dialogRef}
-        className="modal transcript-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="conversation-title"
-      >
         <header className="modal-heading">
           <div className="conversation-heading-copy">
             <p className="eyebrow" id="conversation-title">Agent conversation</p>
@@ -206,7 +164,7 @@ export function AgentConversationDialog({
             {conversation?.currentThreadId == null
               ? null
               : <CopyThreadIdButton threadId={conversation.currentThreadId} />}
-            <CloseIconButton label="Close conversation" onClick={onClose} />
+            <CloseIconButton buttonRef={closeButtonRef} label="Close conversation" onClick={onClose} />
           </div>
         </header>
         <div ref={contentRef} className="transcript-content">
@@ -332,8 +290,7 @@ export function AgentConversationDialog({
             </form>
           )}
         </div>
-      </section>
-    </div>
+    </Modal>
   );
 }
 

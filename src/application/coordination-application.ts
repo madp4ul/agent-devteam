@@ -58,6 +58,7 @@ import type {
   TaskConversationIndexQueryResult,
   TaskInspectionQueryResult,
   TaskOverviewView,
+  TaskView,
   UserTaskInspectionQueryResult,
   TaskOverviewsQuery,
   TaskOverviewsQueryResult,
@@ -73,9 +74,14 @@ import type {
   UnarchiveTaskResult,
 } from "./coordination-contract.ts";
 import type { UserBoardProjection } from "./user-board-contract.ts";
+import type {
+  UserRelatedTaskView,
+  UserTaskDetailQueryResult,
+} from "./user-task-detail-contract.ts";
 
 export * from "./coordination-contract.ts";
 export * from "./user-board-contract.ts";
+export * from "./user-task-detail-contract.ts";
 
 export class CoordinationApplication {
   readonly #persistence: CoordinationPersistence;
@@ -473,6 +479,53 @@ export class CoordinationApplication {
 
   queryTaskInspectionForUser(taskId: string): UserTaskInspectionQueryResult {
     return this.#discovery.queryTaskInspectionForUser(taskId);
+  }
+
+  queryUserTaskDetail(taskId: string): UserTaskDetailQueryResult {
+    const loaded = this.queryTask(taskId);
+    if (!loaded.available) return loaded;
+    const inspection = this.queryTaskInspectionForUser(taskId);
+    if (!inspection.available) return inspection;
+    const collaborators = this.queryCollaborators();
+    const conversationIndex = this.queryTaskConversationIndex(taskId);
+    const activeRuns = this.queryActiveRuns();
+    return {
+      ...loaded,
+      inspection: inspection.task,
+      relationshipTasks: this.readUserRelatedTasks(loaded.task),
+      activeRun: activeRuns.find((run) => run.taskId === taskId) ?? null,
+      activeRuns,
+      automation: this.queryAutomation(),
+      startup: this.queryStartup(),
+      collaborators: collaborators.available ? collaborators.collaborators : [],
+      conversations: conversationIndex.available ? conversationIndex.conversations : [],
+    };
+  }
+
+  private readUserRelatedTasks(task: TaskView): UserRelatedTaskView[] {
+    const relatedTaskIds = new Set([
+      ...task.relationships.map((relationship) => relationship.sourceTaskId === task.id
+        ? relationship.targetTaskId
+        : relationship.sourceTaskId),
+      ...task.activity.flatMap((activity) => {
+        const relatedTaskId = activity.details.relatedTaskId;
+        return relatedTaskId === undefined ? [] : [relatedTaskId];
+      }),
+    ]);
+    return [...relatedTaskIds].flatMap((relatedTaskId) => {
+      const related = this.queryTask(relatedTaskId);
+      const relatedInspection = this.queryTaskInspectionForUser(relatedTaskId);
+      if (!related.available || !relatedInspection.available) return [];
+      return [{
+        id: related.task.id,
+        title: related.task.title,
+        boardId: related.task.boardId,
+        boardName: related.board.name,
+        column: relatedInspection.task.column,
+        blocking: relatedInspection.task.blocking,
+        ...(related.task.archived ? { archived: true as const } : {}),
+      }];
+    });
   }
 
   async queryTaskWorkspaceGitState(taskId: string): Promise<TaskWorkspaceGitStateQueryResult> {

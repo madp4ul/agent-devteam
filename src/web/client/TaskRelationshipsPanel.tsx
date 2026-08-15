@@ -15,6 +15,7 @@ import {
   type BrowserTaskDetail,
 } from "./api.ts";
 import { errorMessage } from "./feedback.ts";
+import { Modal } from "./Modal.tsx";
 import type { Navigate } from "./navigation.ts";
 import { TaskCreationDialog } from "./TaskCreationDialog.tsx";
 
@@ -348,8 +349,7 @@ function RemovalConfirmation({
     : entry.related;
   const clearsFinalBlocker = entry.unresolved && source.blocking.blockerTaskIds.length === 1;
   return (
-    <div className="modal-backdrop" role="presentation">
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="remove-relationship-title">
+    <Modal labelledBy="remove-relationship-title" onClose={onCancel}>
         <h2 id="remove-relationship-title">Remove {entry.label.toLocaleLowerCase()}?</h2>
         <p>
           Remove the relationship between {detail.task.title} and {entry.related.title}?
@@ -368,7 +368,6 @@ function RemovalConfirmation({
             {pending ? "Removing…" : "Remove relationship"}
           </button>
         </div>
-      </section>
-    </div>
+    </Modal>
   );
 }

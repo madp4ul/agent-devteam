@@ -45,6 +45,67 @@ test("the user board projection returns complete browser-ready coordination stat
   assert.doesNotMatch(JSON.stringify(board.boards), /complete description/i);
 });
 
+test("the user task-detail projection returns complete browser-ready task context", async (t) => {
+  const fixture = await createDiscoveryFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+
+  const task = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Primary task",
+    description: "Complete primary task description.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-user-task-detail-primary",
+  });
+  const related = application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Related task",
+    description: "Complete related task description.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-user-task-detail-related",
+  });
+  assert.equal(task.accepted, true);
+  assert.equal(related.accepted, true);
+  if (!task.accepted || !related.accepted) return;
+  const relationship = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: task.task.id,
+    targetTaskId: related.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "relate-user-task-detail",
+  });
+  assert.equal(relationship.accepted, true);
+
+  const result = application.queryUserTaskDetail(task.task.id);
+
+  assert.equal(result.available, true);
+  if (!result.available) return;
+  assert.equal(result.task.id, task.task.id);
+  assert.equal(result.board.id, "delivery");
+  assert.equal(result.inspection.id, task.task.id);
+  assert.deepEqual(result.activeRuns, []);
+  assert.equal(result.activeRun, null);
+  assert.deepEqual(result.automation, { state: "paused", attemptsMayStart: false });
+  assert.equal(result.startup.mode, "paused");
+  assert.deepEqual(result.collaborators.map(({ id }) => id), ["implementer", "reviewer"]);
+  assert.deepEqual(result.relationshipTasks, [{
+    id: related.task.id,
+    title: "Related task",
+    boardId: "delivery",
+    boardName: "Delivery",
+    column: { id: "backlog", name: "Backlog" },
+    blocking: { blocked: false, blockerTaskIds: [] },
+  }]);
+  assert.equal(result.conversations.length, 1);
+  assert.equal(result.conversations[0]?.owningAgent.id, "implementer");
+  assert.deepEqual(application.queryUserTaskDetail("missing-task"), {
+    available: false,
+    reason: "not-found",
+  });
+});
+
 test("board summaries orient agents without returning task payloads", async (t) => {
   const fixture = await createDiscoveryFixture();
   const application = await CoordinationApplication.start(fixture);

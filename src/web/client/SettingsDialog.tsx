@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import type { UpdateNotificationPolicyCommand } from "../../application/coordination-contract.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage } from "./feedback.ts";
+import { Modal } from "./Modal.tsx";
 import { ThemeControl } from "./ThemeControl.tsx";
 
 export function SettingsDialog({ notifications, onClose }: {
@@ -13,34 +14,6 @@ export function SettingsDialog({ notifications, onClose }: {
   const [category, setCategory] = useState<"notifications" | "appearance">("notifications");
   const [error, setError] = useState<string>();
   const firstCategory = useRef<HTMLButtonElement>(null);
-  const dialog = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    firstCategory.current?.focus();
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") onClose();
-      if (event.key === "Tab") {
-        const focusable = [...(dialog.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
-        ) ?? [])];
-        const first = focusable[0];
-        const last = focusable.at(-1);
-        if (first === undefined || last === undefined) return;
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault(); last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault(); first.focus();
-        }
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [onClose]);
 
   const change = (policyChange: UpdateNotificationPolicyCommand["change"]): void => {
     setError(undefined);
@@ -48,10 +21,13 @@ export function SettingsDialog({ notifications, onClose }: {
   };
   const policy = notifications.policy;
   return (
-    <div className="modal-backdrop settings-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <section ref={dialog} className="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <Modal
+      labelledBy="settings-title"
+      className="settings-modal"
+      backdropClassName="settings-backdrop"
+      initialFocusRef={firstCategory}
+      onClose={onClose}
+    >
         <header className="modal-heading">
           <div><p className="eyebrow">Process and browser preferences</p><h2 id="settings-title">Settings</h2></div>
           <CloseIconButton label="Close settings" onClick={onClose} />
@@ -106,8 +82,7 @@ export function SettingsDialog({ notifications, onClose }: {
             )}
           </div>
         </div>
-      </section>
-    </div>
+    </Modal>
   );
 }
 
@@ -116,16 +91,19 @@ export function NotificationConsentDialog({ notifications }: {
 }): ReactNode {
   if (!notifications.consentPromptOpen) return null;
   return (
-    <div className="modal-backdrop consent-backdrop" role="presentation">
-      <section className="modal consent-modal" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+    <Modal
+      labelledBy="consent-title"
+      className="consent-modal"
+      backdropClassName="consent-backdrop"
+      onClose={notifications.decline}
+    >
         <h2 id="consent-title">Allow desktop notifications?</h2>
         <p>This browser can show enabled process notifications while an application tab is open.</p>
         <div className="dialog-actions">
           <button autoFocus onClick={() => void notifications.allow()}>Yes, ask browser</button>
           <button className="secondary" onClick={notifications.decline}>No</button>
         </div>
-      </section>
-    </div>
+    </Modal>
   );
 }
 

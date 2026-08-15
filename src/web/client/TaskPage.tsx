@@ -17,6 +17,7 @@ import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
+import { Modal } from "./Modal.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
 import { useTaskMovement } from "./task-movement.ts";
 import { TaskTimeline } from "./Timeline.tsx";
@@ -299,13 +300,11 @@ export function TaskPage({
         />
       ) : null}
       {discardConfirmation ? (
-        <div className="modal-backdrop" role="presentation">
-          <section
-            className="modal discard-confirmation"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="discard-title"
-          >
+        <Modal
+          labelledBy="discard-title"
+          className="discard-confirmation"
+          onClose={() => setDiscardConfirmation(false)}
+        >
             <div className="modal-heading">
               <div>
                 <p className="eyebrow">Destructive archive</p>
@@ -336,8 +335,7 @@ export function TaskPage({
                 {archivalPending ? "Archiving…" : "Discard changes and archive"}
               </button>
             </div>
-          </section>
-        </div>
+        </Modal>
       ) : null}
     </div>
   );
@@ -527,8 +525,7 @@ function EditDialog({
     }
   };
   return (
-    <div className="modal-backdrop" role="presentation">
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <Modal labelledBy="edit-title" onClose={onClose}>
         <div className="modal-heading">
           <h2 id="edit-title">Edit {detail.task.id}</h2>
           <CloseIconButton label="Close task editing" onClick={onClose} />
@@ -557,7 +554,6 @@ function EditDialog({
             <button disabled={pending} type="submit">{pending ? "Saving…" : "Save task"}</button>
           </div>
         </form>
-      </section>
-    </div>
+    </Modal>
   );
 }

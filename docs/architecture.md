@@ -44,7 +44,8 @@ browser application, and exposes local HTTP endpoints.
 
 The browser is a presentation adapter. It provides boards, task details,
 history, transcripts, automation controls, and accessible task movement. It
-does not own workflow or automation policy.
+does not own workflow or automation policy. One shared browser module owns the
+focus, dismissal, scroll-lock, and restoration lifecycle for every modal.
 
 ### Coordination core
 
@@ -53,9 +54,9 @@ user and agent interaction. It applies task, relationship, activation,
 attention, archival, and process-evolution rules, and exposes projections for
 inspection.
 
-The complete user-board read projection is assembled inside this boundary
-before the web adapter serializes it. The adapter does not reconstruct that
-authoritative board view by coordinating lower-level queries.
+Complete user-facing board and task-detail read projections are assembled
+inside this boundary before the web adapter serializes them. The adapter does
+not reconstruct those authoritative views by coordinating lower-level queries.
 
 The core records a command's state change, activity provenance, projection
 updates, and idempotent response together. This is the central architectural

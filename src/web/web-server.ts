@@ -12,6 +12,7 @@ import {
   type TaskWorkspaceView,
 } from "../application/coordination-application.ts";
 import type { UserBoardProjection } from "../application/user-board-contract.ts";
+import type { UserTaskDetailQueryResult } from "../application/user-task-detail-contract.ts";
 import type { AgentToolScopeRegistry } from "../mcp/agent-tool-scope.ts";
 
 export interface WebServerOptions {
@@ -327,50 +328,8 @@ async function handleBrowserApi(
   }
   if (method === "GET" && taskMatch?.[1] !== undefined) {
     const taskId = decodeURIComponent(taskMatch[1]);
-    const result = application.queryTask(taskId);
-    const inspection = application.queryTaskInspectionForUser(taskId);
-    if (result.available && inspection.available) {
-      const collaborators = application.queryCollaborators();
-      const conversationIndex = application.queryTaskConversationIndex(taskId);
-      const activeRuns = application.queryActiveRuns();
-      const relatedTaskIds = new Set([
-        ...result.task.relationships.map((relationship) => relationship.sourceTaskId === taskId
-          ? relationship.targetTaskId
-          : relationship.sourceTaskId),
-        ...result.task.activity.flatMap((activity) => {
-          const relatedTaskId = activity.details.relatedTaskId;
-          return relatedTaskId === undefined ? [] : [relatedTaskId];
-        }),
-      ]);
-      const relationshipTasks = [...relatedTaskIds].flatMap((relatedTaskId) => {
-        const related = application.queryTask(relatedTaskId);
-        const relatedInspection = application.queryTaskInspectionForUser(relatedTaskId);
-        if (!related.available || !relatedInspection.available) return [];
-        return [{
-          id: related.task.id,
-          title: related.task.title,
-          boardId: related.task.boardId,
-          boardName: related.board.name,
-          column: relatedInspection.task.column,
-          blocking: relatedInspection.task.blocking,
-          ...(related.task.archived ? { archived: true as const } : {}),
-        }];
-      });
-      sendJson(response, 200, {
-        ...result,
-        inspection: inspection.task,
-        relationshipTasks,
-        activeRun: activeRuns.find((run) => run.taskId === taskId) ?? null,
-        activeRuns,
-        automation: application.queryAutomation(),
-        startup: application.queryStartup(),
-        collaborators: collaborators.available ? collaborators.collaborators : [],
-        conversations: conversationIndex.available ? conversationIndex.conversations : [],
-      });
-    } else {
-      const reason = !result.available ? result.reason : "not-found";
-      sendJson(response, reason === "not-found" ? 404 : 409, !result.available ? result : inspection);
-    }
+    const result: UserTaskDetailQueryResult = application.queryUserTaskDetail(taskId);
+    sendJson(response, result.available ? 200 : result.reason === "not-found" ? 404 : 409, result);
     return;
   }
   const interruptMatch = /^\/api\/tasks\/([^/]+)\/interrupt$/.exec(url.pathname);

@@ -10,6 +10,7 @@ import type {
 import { continueInterruptedTask, dismissActivation, interruptTask } from "./api.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
+import { Modal } from "./Modal.tsx";
 
 interface AgentActivityState {
   taskId: string;
@@ -280,8 +281,7 @@ function DismissActivationConfirmation({
   onConfirm(): void;
 }): ReactNode {
   return (
-    <div className="modal-backdrop" role="presentation">
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="dismiss-activation-title">
+    <Modal labelledBy="dismiss-activation-title" onClose={onCancel}>
         <h2 id="dismiss-activation-title">Dismiss activation?</h2>
         <p>
           Dismiss the activation for <strong>{agentName}</strong>, activated by {activationReasonLabel(activation).toLocaleLowerCase()}?
@@ -298,7 +298,6 @@ function DismissActivationConfirmation({
             {pending ? "Dismissing…" : "Dismiss activation"}
           </button>
         </div>
-      </section>
-    </div>
+    </Modal>
   );
 }

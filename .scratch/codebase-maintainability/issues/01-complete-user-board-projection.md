@@ -4,11 +4,16 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] The complete user board is returned through one application query rather than assembled by the HTTP adapter.
-- [ ] Host and browser compile against the same board response contract.
-- [ ] Existing board ordering, task paging, attention, automation, and configuration-error behavior is preserved.
-- [ ] Application, HTTP, and browser tests verify behavior only through their public seams.
-- [ ] Typechecking and the full relevant test suites pass.
+- [x] The complete user board is returned through one application query rather than assembled by the HTTP adapter.
+- [x] Host and browser compile against the same board response contract.
+- [x] Existing board ordering, task paging, attention, automation, and configuration-error behavior is preserved.
+- [x] Application, HTTP, and browser tests verify behavior only through their public seams.
+- [x] Typechecking and the full relevant test suites pass.
 
+## Comments
+
+Implemented and verified against the application and browser HTTP seams. The
+production build, complete non-browser suite, and complete browser suite passed;
+the final Standards and Spec reviews reported no findings.

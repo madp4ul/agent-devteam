@@ -77,9 +77,17 @@ test("the browser adapter serves the React application and authoritative board p
 
   const taskResponse = await fetch(`${server.baseUrl}/api/tasks/${created.task.id}`);
   assert.equal(taskResponse.status, 200);
-  const detail = (await taskResponse.json()) as { task: { id: string }; board: { id: string } };
-  assert.equal(detail.task.id, created.task.id);
-  assert.equal(detail.board.id, "delivery");
+  assert.deepEqual(
+    await taskResponse.json(),
+    JSON.parse(JSON.stringify(application.queryUserTaskDetail(created.task.id))),
+  );
+
+  const missingTaskResponse = await fetch(`${server.baseUrl}/api/tasks/missing-task`);
+  assert.equal(missingTaskResponse.status, 404);
+  assert.deepEqual(await missingTaskResponse.json(), {
+    available: false,
+    reason: "not-found",
+  });
 });
 
 test("browser commands preserve creation idempotency and revision conflicts", async (t) => {
@@ -277,6 +285,13 @@ test("browser state reports configuration errors and resume rejection as JSON", 
   const stateBody = (await state.json()) as { startup: { mode: string; diagnostics: unknown[] } };
   assert.equal(stateBody.startup.mode, "configuration-error");
   assert.equal(stateBody.startup.diagnostics.length, 1);
+
+  const task = await fetch(`${server.baseUrl}/api/tasks/any-task`);
+  assert.equal(task.status, 409);
+  assert.deepEqual(
+    await task.json(),
+    JSON.parse(JSON.stringify(application.queryUserTaskDetail("any-task"))),
+  );
 
   const resume = await postJson(`${server.baseUrl}/api/automation/resume`, {});
   assert.equal(resume.response.status, 409);
