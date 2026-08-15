@@ -3,7 +3,7 @@ import { TaskCommandStore } from "./task-command-store.ts";
 import { TaskProjectionStore } from "./task-projection-store.ts";
 import { ProcessStateStore } from "./process-state-store.ts";
 import { AutomationStateStore } from "./automation-state-store.ts";
-import { CommandResponseStore } from "./command-response-store.ts";
+import { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import { TaskArchiveStore } from "./task-archive-store.ts";
 import { NotificationStore } from "./notification-store.ts";
 import { ActivityJournal } from "./activity-journal.ts";
@@ -22,7 +22,7 @@ export interface CoordinationPersistence {
 export function openCoordinationPersistence(path: string): CoordinationPersistence {
   const database = CoordinationDatabase.open(path);
   const taskProjections = new TaskProjectionStore(database);
-  const commandResponses = new CommandResponseStore(database);
+  const idempotentCommands = new IdempotentCommandExecutor(database);
   const notifications = new NotificationStore(database);
   const activityJournal = new ActivityJournal(database.connection);
   const attentionRecorder = new AttentionRecorder(
@@ -35,7 +35,7 @@ export function openCoordinationPersistence(path: string): CoordinationPersisten
     taskCommands: new TaskCommandStore(
       database,
       taskProjections,
-      commandResponses,
+      idempotentCommands,
       notifications,
       activityJournal,
       attentionRecorder,
@@ -44,11 +44,11 @@ export function openCoordinationPersistence(path: string): CoordinationPersisten
     automation: new AutomationStateStore(
       database,
       taskProjections,
-      commandResponses,
+      idempotentCommands,
       activityJournal,
       attentionRecorder,
     ),
-    taskArchive: new TaskArchiveStore(database, taskProjections, commandResponses, activityJournal),
+    taskArchive: new TaskArchiveStore(database, taskProjections, idempotentCommands, activityJournal),
     notifications,
     close: () => database.close(),
   };

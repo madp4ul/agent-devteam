@@ -8,26 +8,26 @@ import type {
 } from "../coordination-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
-import type { CommandResponseStore } from "./command-response-store.ts";
+import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
 
 export class TaskArchiveStore {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
   readonly #projections: TaskProjectionStore;
-  readonly #commandResponses: CommandResponseStore;
+  readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
 
   constructor(
     database: CoordinationDatabase,
     projections: TaskProjectionStore,
-    commandResponses: CommandResponseStore,
+    idempotentCommands: IdempotentCommandExecutor,
     activityJournal: ActivityJournal,
   ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#projections = projections;
-    this.#commandResponses = commandResponses;
+    this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
   }
 
@@ -39,7 +39,7 @@ export class TaskArchiveStore {
     | { claimed: false; result: ArchiveTaskResult } {
     return this.#owner.transaction(() => {
       const commandType = `archive-task:${command.taskId}`;
-      const prior = this.#commandResponses.read<ArchiveTaskResult>(
+      const prior = this.#idempotentCommands.replay<ArchiveTaskResult>(
         commandType,
         command.idempotencyKey,
       );
@@ -67,7 +67,7 @@ export class TaskArchiveStore {
                   ? { accepted: false as const, reason: "activation-work-pending" as const }
                   : undefined;
       if (rejection !== undefined) {
-        this.#commandResponses.write(commandType, command.idempotencyKey, rejection);
+        this.#idempotentCommands.retain(commandType, command.idempotencyKey, rejection);
         return { claimed: false, result: rejection };
       }
       this.#database.prepare(
@@ -97,7 +97,7 @@ export class TaskArchiveStore {
          SET archival_pending = 0, archival_actor_id = NULL, archival_idempotency_key = NULL
          WHERE id = ? AND archived_at IS NULL`,
       ).run(command.taskId);
-      this.#commandResponses.write(
+      this.#idempotentCommands.retain(
         `archive-task:${command.taskId}`,
         command.idempotencyKey,
         result,
@@ -133,11 +133,11 @@ export class TaskArchiveStore {
   }
 
   readBulkCommand<Result>(boardId: string, idempotencyKey: string): Result | undefined {
-    return this.#commandResponses.read<Result>(`archive-completed-tasks:${boardId}`, idempotencyKey);
+    return this.#idempotentCommands.replay<Result>(`archive-completed-tasks:${boardId}`, idempotencyKey);
   }
 
   rememberBulkCommand(boardId: string, idempotencyKey: string, result: unknown): void {
-    this.#commandResponses.write(`archive-completed-tasks:${boardId}`, idempotencyKey, result);
+    this.#idempotentCommands.retain(`archive-completed-tasks:${boardId}`, idempotencyKey, result);
   }
 
   archive(
@@ -149,7 +149,9 @@ export class TaskArchiveStore {
       const occurredAt = new Date().toISOString();
       this.#database.prepare("DELETE FROM attempt_transcripts WHERE attempt_id IN (SELECT attempt.id FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id WHERE activation.task_id = ?)").run(taskId);
       this.#database.prepare("DELETE FROM agent_conversation_messages WHERE task_id = ?").run(taskId);
-      this.#commandResponses.deleteConversationContinuationsForTask(taskId);
+      this.#idempotentCommands.forgetByCommandTypePrefix(
+        `continue-agent-conversation:${taskId}:`,
+      );
       this.#database.prepare("DELETE FROM task_workspaces WHERE task_id = ?").run(taskId);
       this.#database.prepare("DELETE FROM task_starting_refs WHERE task_id = ?").run(taskId);
       const marked = this.#database.prepare(
@@ -163,35 +165,26 @@ export class TaskArchiveStore {
       const task = this.#projections.readTask(taskId);
       if (task === undefined) throw new Error("Archived task could not be read back");
       const result = { accepted: true as const, task };
-      this.#commandResponses.write(`archive-task:${taskId}`, idempotencyKey, result);
+      this.#idempotentCommands.retain(`archive-task:${taskId}`, idempotencyKey, result);
       return result;
     });
   }
 
   unarchive(taskId: string, actor: Actor, idempotencyKey: string): UnarchiveTaskResult {
-    return this.#owner.transaction(() => {
+    return this.#idempotentCommands.execute(`unarchive-task:${taskId}`, idempotencyKey, () => {
       const row = this.#database.prepare("SELECT archived_at FROM tasks WHERE id = ?").get(taskId) as { archived_at: string | null } | undefined;
-      const commandType = `unarchive-task:${taskId}`;
-      const prior = this.#commandResponses.read<UnarchiveTaskResult>(commandType, idempotencyKey);
-      if (prior !== undefined) return prior;
       if (row === undefined) {
-        const result = { accepted: false as const, reason: "not-found" as const };
-        this.#commandResponses.write(commandType, idempotencyKey, result);
-        return result;
+        return { accepted: false as const, reason: "not-found" as const };
       }
       if (row.archived_at === null) {
-        const result = { accepted: false as const, reason: "not-archived" as const };
-        this.#commandResponses.write(commandType, idempotencyKey, result);
-        return result;
+        return { accepted: false as const, reason: "not-archived" as const };
       }
       const occurredAt = new Date().toISOString();
       this.#database.prepare("UPDATE tasks SET archived_at = NULL, revision = revision + 1 WHERE id = ?").run(taskId);
       this.#activityJournal.append(taskId, "task.unarchived", actor, {}, occurredAt);
       const task = this.#projections.readTask(taskId);
       if (task === undefined) throw new Error("Unarchived task could not be read back");
-      const result = { accepted: true as const, task };
-      this.#commandResponses.write(commandType, idempotencyKey, result);
-      return result;
+      return { accepted: true as const, task };
     });
   }
 

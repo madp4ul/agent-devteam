@@ -41,6 +41,38 @@ boards:
   });
   assert.deepEqual(missingTitle, { accepted: false, reason: "empty-title" });
 
+  const correctedRetry = application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Retry corrected input",
+    description: "Validation rejections remain eligible for a corrected retry.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "missing-title",
+  });
+  assert.equal(correctedRetry.accepted, true);
+  if (!correctedRetry.accepted) return;
+
+  const rejectedUnarchive = application.unarchiveTask({
+    taskId: correctedRetry.task.id,
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "retain-unarchive-rejection",
+  });
+  assert.deepEqual(rejectedUnarchive, { accepted: false, reason: "not-archived" });
+  const archivedAfterRejection = await application.archiveTask({
+    taskId: correctedRetry.task.id,
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "archive-after-unarchive-rejection",
+  });
+  assert.equal(archivedAfterRejection.accepted, true);
+  assert.deepEqual(application.unarchiveTask({
+    taskId: correctedRetry.task.id,
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "retain-unarchive-rejection",
+  }), rejectedUnarchive);
+  const stillArchived = application.queryTask(correctedRetry.task.id);
+  assert.equal(stillArchived.available, true);
+  if (stillArchived.available) assert.equal(stillArchived.task.archived, true);
+
   const missingDescription = application.createTask({
     boardId: "delivery",
     columnId: "backlog",

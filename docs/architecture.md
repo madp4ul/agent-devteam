@@ -70,6 +70,11 @@ with the shared SQLite connection, so the caller remains the transaction owner.
 Attention-producing workflows use one internal recorder to create the attention
 reason, its provenance activity, and any eligible notification occurrence. The
 recorder shares the caller's transaction rather than opening a separate one.
+Compatible transactional commands use one internal executor to replay a prior
+response or execute and retain a new response in the same SQLite transaction.
+Commands whose lifecycle crosses external work, such as interruption and
+archival, use the same durable replay and retention operations explicitly across
+their phases rather than holding a database transaction open.
 
 ### Durable state
 

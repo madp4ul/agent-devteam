@@ -18,7 +18,7 @@ import type {
 } from "../coordination-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
-import type { CommandResponseStore } from "./command-response-store.ts";
+import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
 import type { AttentionRecorder } from "./attention-recorder.ts";
 
@@ -36,21 +36,21 @@ export class AutomationStateStore {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
   readonly #taskProjections: TaskProjectionStore;
-  readonly #commandResponses: CommandResponseStore;
+  readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
   readonly #attentionRecorder: AttentionRecorder;
 
   constructor(
     database: CoordinationDatabase,
     taskProjections: TaskProjectionStore,
-    commandResponses: CommandResponseStore,
+    idempotentCommands: IdempotentCommandExecutor,
     activityJournal: ActivityJournal,
     attentionRecorder: AttentionRecorder,
   ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#taskProjections = taskProjections;
-    this.#commandResponses = commandResponses;
+    this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
     this.#attentionRecorder = attentionRecorder;
   }
@@ -440,7 +440,7 @@ export class AutomationStateStore {
         { activationId: attempt.activation_id, attemptId },
         occurredAt,
       );
-      this.#commandResponses.write("interrupt-task", idempotencyKey, {
+      this.#idempotentCommands.retain("interrupt-task", idempotencyKey, {
         taskId: attempt.task_id,
       });
     });
@@ -452,12 +452,7 @@ export class AutomationStateStore {
     idempotencyKey: string,
     actor: Actor & { kind: "user" },
   ): string | undefined {
-    return this.#owner.transaction(() => {
-      const replay = this.#commandResponses.read<{ activationId: string }>(
-        "continue-interrupted-task",
-        idempotencyKey,
-      );
-      if (replay !== undefined) return replay.activationId;
+    const result = this.#idempotentCommands.execute("continue-interrupted-task", idempotencyKey, () => {
       const row = this.#database
         .prepare(
           `SELECT suspended_activation_id
@@ -485,17 +480,13 @@ export class AutomationStateStore {
         { activationId: row.suspended_activation_id },
         occurredAt,
       );
-      this.#commandResponses.write(
-        "continue-interrupted-task",
-        idempotencyKey,
-        { activationId: row.suspended_activation_id },
-      );
-      return row.suspended_activation_id;
-    });
+      return { activationId: row.suspended_activation_id };
+    }, (commandResult) => commandResult !== undefined);
+    return result?.activationId;
   }
 
   readInterruptedCommand(idempotencyKey: string): { taskId: string } | undefined {
-    return this.#commandResponses.read("interrupt-task", idempotencyKey);
+    return this.#idempotentCommands.replay("interrupt-task", idempotencyKey);
   }
 
   readActiveRuns(): ActiveRunView[] {
