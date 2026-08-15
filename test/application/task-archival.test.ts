@@ -53,6 +53,31 @@ test("archive removes a clean durable workspace and retains task history without
   if (!created.accepted) return;
   await application.resumeAutomation();
   await application.waitForAutomationIdle();
+  application.pauseAutomation();
+  const taskAfterInitialRun = application.queryTask(created.task.id);
+  assert.equal(taskAfterInitialRun.available, true);
+  if (!taskAfterInitialRun.available) return;
+  const conversationId = taskAfterInitialRun.task.activations[0]?.conversationId;
+  assert.ok(conversationId);
+  const followUpCommand = {
+    taskId: created.task.id,
+    conversationId,
+    body: "Retain the coordination event without retaining this detailed follow-up.",
+    actor: { kind: "user" as const, id: "local-user" },
+    idempotencyKey: "continue-before-archive",
+  };
+  const continued = application.continueAgentConversation(followUpCommand);
+  assert.equal(continued.accepted, true);
+  assert.equal((await application.resumeAutomation()).accepted, true);
+  await application.waitForAutomationIdle();
+  const conversationBeforeArchive = await application.queryAgentConversation(
+    created.task.id,
+    conversationId,
+  );
+  assert.equal(conversationBeforeArchive.available, true);
+  if (conversationBeforeArchive.available) {
+    assert.equal(conversationBeforeArchive.conversation.messages.length, 1);
+  }
   const before = application.queryTaskInspectionForUser(created.task.id);
   assert.equal(before.available, true);
   if (!before.available || before.task.workspace === null) return;
@@ -113,7 +138,7 @@ test("archive removes a clean durable workspace and retains task history without
   await assert.rejects(stat(before.task.workspace.path));
   const queried = application.queryTask(created.task.id);
   const attemptId = queried.available ? queried.task.activations[0]?.attempts[0]?.id : undefined;
-  if (queried.available) assert.equal(queried.task.activations.length, 1);
+  if (queried.available) assert.equal(queried.task.activations.length, 2);
   assert.notEqual(attemptId, undefined);
   if (attemptId !== undefined) {
     assert.deepEqual(await application.queryAttemptTranscript(attemptId), {
@@ -121,6 +146,32 @@ test("archive removes a clean durable workspace and retains task history without
       reason: "unavailable",
     });
   }
+  const conversationAfterArchive = await application.queryAgentConversation(
+    created.task.id,
+    conversationId,
+  );
+  assert.equal(conversationAfterArchive.available, true);
+  if (conversationAfterArchive.available) {
+    assert.deepEqual(conversationAfterArchive.conversation.messages, []);
+    assert.deepEqual(conversationAfterArchive.conversation.continuation, {
+      available: false,
+      reason: "task-archived",
+    });
+    assert.ok(conversationAfterArchive.conversation.runs.every(
+      ({ transcript }) => transcript.available === false,
+    ));
+  }
+  assert.deepEqual(application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Do not continue archived work.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "continue-after-archive",
+  }), { accepted: false, reason: "task-archived" });
+  assert.deepEqual(application.continueAgentConversation(followUpCommand), {
+    accepted: false,
+    reason: "task-archived",
+  });
   assert.equal(archived.accepted && archived.task.activity.at(-1)?.type, "task.archived");
 });
 

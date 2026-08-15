@@ -96,6 +96,22 @@ test("continuing a conversation persists one authored message and activation ide
     assert.equal(afterRestart.task.activations.filter(({ reason }) => reason.type === "user-follow-up").length, 1);
     assert.equal(afterRestart.task.activity.filter(({ type }) => type === "conversation.continued").length, 1);
   }
+  const conversationAfterRestart = await application.queryAgentConversation(
+    created.task.id,
+    conversationId,
+  );
+  assert.equal(conversationAfterRestart.available, true);
+  if (conversationAfterRestart.available) {
+    assert.equal(conversationAfterRestart.conversation.currentThreadId, "thread-initial");
+    assert.deepEqual(conversationAfterRestart.conversation.owningAgent, {
+      id: "implementer",
+      name: "Implementation Agent",
+      historicalName: "Implementation Agent",
+      present: true,
+    });
+    assert.deepEqual(conversationAfterRestart.conversation.messages, [accepted.message]);
+    assert.equal(conversationAfterRestart.conversation.runs.length, 1);
+  }
 });
 
 test("a follow-up resumes the owning agent's thread and existing task workspace in activation order", async (t) => {
@@ -151,6 +167,13 @@ test("a follow-up resumes the owning agent's thread and existing task workspace 
 
   application.close();
   await writeFile(fixture.implementerInstructionsPath, "Use the current follow-up instructions.\n");
+  await writeFile(
+    fixture.definitionPath,
+    (await readFile(fixture.definitionPath, "utf8")).replace(
+      "name: Implementation Agent",
+      "name: Renamed Implementation Agent",
+    ),
+  );
   application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
@@ -167,19 +190,44 @@ test("a follow-up resumes the owning agent's thread and existing task workspace 
   runtime.complete({ status: "completed", summary: "Review complete.", threadId: "thread-reviewer" });
   const followUpRequest = await runtime.waitForRequest(3);
   assert.equal(followUpRequest.agent.id, "implementer");
+  assert.equal(followUpRequest.agent.name, "Renamed Implementation Agent");
   assert.equal(followUpRequest.resumeThreadId, "thread-owner");
   assert.equal(followUpRequest.workspace.path, initialRequest.workspace.path);
   assert.equal(followUpRequest.task.columnId, "review");
   assert.equal(followUpRequest.attempt.thread, "resumed");
   assert.equal(followUpRequest.attempt.continuationMessage, "Re-check the implementation detail.");
   assert.equal(followUpRequest.agent.instructions, "Use the current follow-up instructions.\n");
-  runtime.complete({ status: "completed", summary: "Follow-up complete.", threadId: "thread-owner" });
+  runtime.complete({
+    status: "completed",
+    summary: "Follow-up continued after replacing an unusable thread.",
+    threadId: "thread-replacement",
+    threadContinuity: "replaced",
+  });
   await application.waitForAutomationIdle();
   const conversation = await application.queryAgentConversation(created.task.id, conversationId);
   assert.equal(conversation.available, true);
   if (conversation.available) {
     assert.equal(conversation.conversation.runs.at(-1)?.sourceMessageId, continued.message.id);
+    assert.equal(conversation.conversation.runs.at(-1)?.attempt.threadContinuity, "replaced");
+    assert.equal(conversation.conversation.currentThreadId, "thread-replacement");
   }
+  const afterReplacement = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Continue from the honest replacement lineage.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "follow-up-after-thread-replacement",
+  });
+  assert.equal(afterReplacement.accepted, true);
+  const replacementFollowUp = await runtime.waitForRequest(4);
+  assert.equal(replacementFollowUp.agent.id, "implementer");
+  assert.equal(replacementFollowUp.resumeThreadId, "thread-replacement");
+  runtime.complete({
+    status: "completed",
+    summary: "Replacement lineage continued.",
+    threadId: "thread-replacement",
+  });
+  await application.waitForAutomationIdle();
 });
 
 test("task conversation index stays compact, recent, distinguishable, and historically navigable", async (t) => {
@@ -235,6 +283,27 @@ test("task conversation index stays compact, recent, distinguishable, and histor
     "latestActivityAt",
     "owningAgent",
   ]);
+  assert.deepEqual(application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId: secondConversationId,
+    body: "Do not continue before a usable thread exists.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reject-threadless-conversation",
+  }), { accepted: false, reason: "thread-unavailable" });
+  assert.deepEqual(application.continueAgentConversation({
+    taskId: "T-9999",
+    conversationId: firstConversationId,
+    body: "Do not cross the task boundary.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reject-wrong-task-conversation",
+  }), { accepted: false, reason: "not-found" });
+  assert.deepEqual(application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId: "missing-conversation",
+    body: "Do not invent a conversation.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reject-missing-conversation",
+  }), { accepted: false, reason: "not-found" });
 
   await application.resumeAutomation();
   await runtime.waitForRequest(1);
@@ -310,6 +379,30 @@ boards:
     available: false,
     reason: "owning-agent-unavailable",
   });
+  const historicalDetail = await application.queryAgentConversation(
+    created.task.id,
+    firstConversationId,
+  );
+  assert.equal(historicalDetail.available, true);
+  if (historicalDetail.available) {
+    assert.deepEqual(historicalDetail.conversation.owningAgent, {
+      id: "implementer",
+      name: "Implementation Agent",
+      historicalName: "Implementation Agent",
+      present: false,
+    });
+    assert.deepEqual(historicalDetail.conversation.continuation, {
+      available: false,
+      reason: "owning-agent-unavailable",
+    });
+  }
+  assert.deepEqual(application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId: firstConversationId,
+    body: "Do not substitute the reviewer for the removed owner.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reject-removed-conversation-owner",
+  }), { accepted: false, reason: "owning-agent-unavailable" });
   assert.deepEqual(application.queryTaskConversationIndex("T-9999"), {
     available: false,
     reason: "not-found",

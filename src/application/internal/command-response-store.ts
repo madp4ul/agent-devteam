@@ -23,4 +23,11 @@ export class CommandResponseStore {
       .prepare("INSERT INTO command_responses VALUES (?, ?, ?)")
       .run(commandType, idempotencyKey, JSON.stringify(result));
   }
+
+  deleteConversationContinuationsForTask(taskId: string): void {
+    const commandTypePrefix = `continue-agent-conversation:${taskId}:`;
+    this.#database.prepare(
+      "DELETE FROM command_responses WHERE substr(command_type, 1, length(?)) = ?",
+    ).run(commandTypePrefix, commandTypePrefix);
+  }
 }

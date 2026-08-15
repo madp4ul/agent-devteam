@@ -108,6 +108,8 @@ test("technical failure schedules the same head activation with capped exponenti
   if (!moved.accepted) return;
   const firstActivationId = moved.task.activations[0]!.id;
   const laterActivationId = moved.task.activations[1]!.id;
+  const conversationId = moved.task.activations[0]!.conversationId;
+  assert.ok(conversationId);
 
   await application.resumeAutomation();
   const first = await runtime.waitForRequest(1);
@@ -132,12 +134,27 @@ test("technical failure schedules the same head activation with capped exponenti
   const second = await runtime.waitForRequest(2);
   assert.equal(second.activationId, first.activationId);
   assert.equal(second.attempt.number, 2);
+  assert.equal(second.resumeThreadId, "thread-1");
   runtime.complete({ status: "completed", summary: "Recovered.", threadId: "thread-1" });
 
   const later = await runtime.waitForRequest(3);
   assert.equal(later.activationId, laterActivationId);
   runtime.complete({ status: "completed", summary: "Later work preserved." });
   await application.waitForAutomationIdle();
+  const conversation = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(conversation.available, true);
+  if (conversation.available) {
+    assert.deepEqual(
+      conversation.conversation.runs.map(({ activationId, attempt }) => ({
+        activationId,
+        threadId: attempt.threadId,
+      })),
+      [
+        { activationId: firstActivationId, threadId: "thread-1" },
+        { activationId: firstActivationId, threadId: "thread-1" },
+      ],
+    );
+  }
 });
 
 test("exhaustion offers retry and dismiss only on the current attention reason", async (t) => {
@@ -194,12 +211,26 @@ test("exhaustion offers retry and dismiss only on the current attention reason",
   const fourth = await runtime.waitForRequest(4);
   assert.equal(fourth.activationId, firstActivationId);
   assert.equal(fourth.attempt.number, 4);
+  assert.equal(fourth.resumeThreadId, "thread-1");
   assert.equal(fourth.workspace.path, runtime.requests[0]?.workspace.path);
   await runtime.finish({ status: "completed", summary: "Recovered after user retry." });
   const later = await runtime.waitForRequest(5);
   assert.equal(later.activationId, laterActivationId);
   await runtime.finish({ status: "completed", summary: "Queue advanced." });
   await application.waitForAutomationIdle();
+  const recovered = application.queryTask(taskId);
+  assert.equal(recovered.available, true);
+  if (!recovered.available) return;
+  const conversationId = recovered.task.activations[0]?.conversationId;
+  assert.ok(conversationId);
+  const conversation = await application.queryAgentConversation(taskId, conversationId);
+  assert.equal(conversation.available, true);
+  if (conversation.available) {
+    assert.equal(conversation.conversation.runs.length, 4);
+    assert.ok(conversation.conversation.runs.every(
+      ({ activationId }) => activationId === firstActivationId,
+    ));
+  }
 });
 
 test("dismiss records abandonment and permits the preserved queue to advance", async (t) => {

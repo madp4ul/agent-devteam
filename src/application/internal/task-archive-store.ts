@@ -146,6 +146,8 @@ export class TaskArchiveStore {
     return this.#owner.transaction(() => {
       const occurredAt = new Date().toISOString();
       this.#database.prepare("DELETE FROM attempt_transcripts WHERE attempt_id IN (SELECT attempt.id FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id WHERE activation.task_id = ?)").run(taskId);
+      this.#database.prepare("DELETE FROM agent_conversation_messages WHERE task_id = ?").run(taskId);
+      this.#commandResponses.deleteConversationContinuationsForTask(taskId);
       this.#database.prepare("DELETE FROM task_workspaces WHERE task_id = ?").run(taskId);
       this.#database.prepare("DELETE FROM task_starting_refs WHERE task_id = ?").run(taskId);
       const marked = this.#database.prepare(

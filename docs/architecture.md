@@ -72,6 +72,10 @@ so task details can navigate recent history without loading transcript evidence.
 User follow-ups are stored as authored conversation messages. One application
 transaction records the message, `conversation.continued` activity, and a
 `user-follow-up` activation linked to the existing conversation.
+Archival retains the conversation, activation, and coordination-activity lineage
+but removes its attempt transcripts and authored follow-up bodies. It also removes
+cached continuation-command responses that duplicate those bodies, so archived
+history cannot recover detailed conversation content through an idempotency replay.
 
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
