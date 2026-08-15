@@ -83,6 +83,9 @@ speculative abstraction or additional deployment boundaries.
 - Keep persistence helpers internal. Durable activity, attention, notification,
   and idempotency helpers are implementation seams and do not become part of the
   external application interface.
+- Represent idempotent command identity as one structured internal value. The
+  executor owns its durable serialization and scoped-cleanup encoding so workflow
+  modules do not construct or parse storage-oriented command prefixes.
 - Introduce shared browser behavior only where at least two existing consumers
   demonstrate the seam. Modal lifecycle and refresh sequencing qualify; arbitrary
   visual fragments do not.
@@ -99,9 +102,9 @@ speculative abstraction or additional deployment boundaries.
   fixture builders. Do not create tests for private stores or private helpers.
 - Preserve the current pre-release database compatibility policy. No durable
   schema migration is required merely to reorganize implementation modules.
-- Update the architecture map if the final module seams or authoritative query
-  flow materially change. Record an ADR only for durable decisions not already
-  implied by the accepted architecture and this specification.
+- Keep the architecture map focused on major authorities, state owners, and
+  end-to-end flows rather than source-level module inventory. Record the durable
+  reasoning for newly established module seams in an ADR.
 - Leave all work unstaged for user review. The user continues to own staging,
   commits, and pushes.
 

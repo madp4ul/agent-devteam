@@ -38,11 +38,12 @@ export class TaskArchiveStore {
     | { claimed: true }
     | { claimed: false; result: ArchiveTaskResult } {
     return this.#owner.transaction(() => {
-      const commandType = `archive-task:${command.taskId}`;
-      const prior = this.#idempotentCommands.replay<ArchiveTaskResult>(
-        commandType,
-        command.idempotencyKey,
-      );
+      const commandIdentity = {
+        kind: "archive-task" as const,
+        scope: [command.taskId] as const,
+        idempotencyKey: command.idempotencyKey,
+      };
+      const prior = this.#idempotentCommands.replay<ArchiveTaskResult>(commandIdentity);
       if (prior !== undefined) return { claimed: false, result: prior };
       const task = this.#database.prepare(
         `SELECT column_id, archived_at, archival_pending, automation_suspended
@@ -67,7 +68,7 @@ export class TaskArchiveStore {
                   ? { accepted: false as const, reason: "activation-work-pending" as const }
                   : undefined;
       if (rejection !== undefined) {
-        this.#idempotentCommands.retain(commandType, command.idempotencyKey, rejection);
+        this.#idempotentCommands.retain(commandIdentity, rejection);
         return { claimed: false, result: rejection };
       }
       this.#database.prepare(
@@ -97,11 +98,11 @@ export class TaskArchiveStore {
          SET archival_pending = 0, archival_actor_id = NULL, archival_idempotency_key = NULL
          WHERE id = ? AND archived_at IS NULL`,
       ).run(command.taskId);
-      this.#idempotentCommands.retain(
-        `archive-task:${command.taskId}`,
-        command.idempotencyKey,
-        result,
-      );
+      this.#idempotentCommands.retain({
+        kind: "archive-task",
+        scope: [command.taskId],
+        idempotencyKey: command.idempotencyKey,
+      }, result);
     });
   }
 
@@ -133,11 +134,19 @@ export class TaskArchiveStore {
   }
 
   readBulkCommand<Result>(boardId: string, idempotencyKey: string): Result | undefined {
-    return this.#idempotentCommands.replay<Result>(`archive-completed-tasks:${boardId}`, idempotencyKey);
+    return this.#idempotentCommands.replay<Result>({
+      kind: "archive-completed-tasks",
+      scope: [boardId],
+      idempotencyKey,
+    });
   }
 
   rememberBulkCommand(boardId: string, idempotencyKey: string, result: unknown): void {
-    this.#idempotentCommands.retain(`archive-completed-tasks:${boardId}`, idempotencyKey, result);
+    this.#idempotentCommands.retain({
+      kind: "archive-completed-tasks",
+      scope: [boardId],
+      idempotencyKey,
+    }, result);
   }
 
   archive(
@@ -149,9 +158,10 @@ export class TaskArchiveStore {
       const occurredAt = new Date().toISOString();
       this.#database.prepare("DELETE FROM attempt_transcripts WHERE attempt_id IN (SELECT attempt.id FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id WHERE activation.task_id = ?)").run(taskId);
       this.#database.prepare("DELETE FROM agent_conversation_messages WHERE task_id = ?").run(taskId);
-      this.#idempotentCommands.forgetByCommandTypePrefix(
-        `continue-agent-conversation:${taskId}:`,
-      );
+      this.#idempotentCommands.forgetScope({
+        kind: "continue-agent-conversation",
+        scope: [taskId],
+      });
       this.#database.prepare("DELETE FROM task_workspaces WHERE task_id = ?").run(taskId);
       this.#database.prepare("DELETE FROM task_starting_refs WHERE task_id = ?").run(taskId);
       const marked = this.#database.prepare(
@@ -165,13 +175,21 @@ export class TaskArchiveStore {
       const task = this.#projections.readTask(taskId);
       if (task === undefined) throw new Error("Archived task could not be read back");
       const result = { accepted: true as const, task };
-      this.#idempotentCommands.retain(`archive-task:${taskId}`, idempotencyKey, result);
+      this.#idempotentCommands.retain({
+        kind: "archive-task",
+        scope: [taskId],
+        idempotencyKey,
+      }, result);
       return result;
     });
   }
 
   unarchive(taskId: string, actor: Actor, idempotencyKey: string): UnarchiveTaskResult {
-    return this.#idempotentCommands.execute(`unarchive-task:${taskId}`, idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "unarchive-task",
+      scope: [taskId],
+      idempotencyKey,
+    }, () => {
       const row = this.#database.prepare("SELECT archived_at FROM tasks WHERE id = ?").get(taskId) as { archived_at: string | null } | undefined;
       if (row === undefined) {
         return { accepted: false as const, reason: "not-found" as const };

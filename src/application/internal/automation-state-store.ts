@@ -440,7 +440,10 @@ export class AutomationStateStore {
         { activationId: attempt.activation_id, attemptId },
         occurredAt,
       );
-      this.#idempotentCommands.retain("interrupt-task", idempotencyKey, {
+      this.#idempotentCommands.retain({
+        kind: "interrupt-task",
+        idempotencyKey,
+      }, {
         taskId: attempt.task_id,
       });
     });
@@ -452,7 +455,10 @@ export class AutomationStateStore {
     idempotencyKey: string,
     actor: Actor & { kind: "user" },
   ): string | undefined {
-    const result = this.#idempotentCommands.execute("continue-interrupted-task", idempotencyKey, () => {
+    const result = this.#idempotentCommands.execute({
+      kind: "continue-interrupted-task",
+      idempotencyKey,
+    }, () => {
       const row = this.#database
         .prepare(
           `SELECT suspended_activation_id
@@ -486,7 +492,7 @@ export class AutomationStateStore {
   }
 
   readInterruptedCommand(idempotencyKey: string): { taskId: string } | undefined {
-    return this.#idempotentCommands.replay("interrupt-task", idempotencyKey);
+    return this.#idempotentCommands.replay({ kind: "interrupt-task", idempotencyKey });
   }
 
   readActiveRuns(): ActiveRunView[] {

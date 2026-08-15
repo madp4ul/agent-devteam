@@ -67,7 +67,10 @@ export class TaskCommandStore {
   }
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
-    return this.#idempotentCommands.execute("create-task", command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "create-task",
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const rejection = this.taskCreationRejection(command);
       if (rejection !== undefined) return rejection;
 
@@ -77,7 +80,10 @@ export class TaskCommandStore {
   }
 
   createChildTask(command: CreateChildTaskCommand): BoardMutationResult {
-    return this.#idempotentCommands.execute("create-child-task", command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "create-child-task",
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const attemptId = this.validatedAgentAttemptId(command.parentTaskId, command);
       if (this.#projections.readTask(command.parentTaskId) === undefined) {
         return { accepted: false, reason: "not-found" };
@@ -104,7 +110,11 @@ export class TaskCommandStore {
   }
 
   editTask(command: EditTaskCommand): BoardMutationResult {
-    return this.#idempotentCommands.execute(`edit-task:${command.taskId}`, command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "edit-task",
+      scope: [command.taskId],
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const currentTask = this.#projections.readTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
       if (this.taskIsReadOnly(currentTask)) {
@@ -139,7 +149,11 @@ export class TaskCommandStore {
   }
 
   moveTask(command: MoveTaskCommand): MoveTaskResult {
-    return this.#idempotentCommands.execute(`move-task:${command.taskId}`, command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "move-task",
+      scope: [command.taskId],
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const currentTask = this.#projections.readTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
       if (this.taskIsReadOnly(currentTask)) {
@@ -239,7 +253,11 @@ export class TaskCommandStore {
   }
 
   resolveInertMove(command: MoveTaskCommand): InertMoveTaskResult | MoveTaskResult | undefined {
-    return this.#idempotentCommands.execute(`move-task:${command.taskId}`, command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "move-task",
+      scope: [command.taskId],
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const currentTask = this.#projections.readTask(command.taskId);
       if (
         currentTask === undefined ||
@@ -267,7 +285,10 @@ export class TaskCommandStore {
   }
 
   createTaskRelationship(command: CreateTaskRelationshipCommand): TaskRelationshipMutationResult {
-    return this.#idempotentCommands.execute("create-task-relationship", command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "create-task-relationship",
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const attemptId = this.validatedAgentAttemptId(command.sourceTaskId, command);
       const sourceTask = this.#projections.readTask(command.sourceTaskId);
       const targetTask = this.#projections.readTask(command.targetTaskId);
@@ -311,7 +332,10 @@ export class TaskCommandStore {
   }
 
   removeTaskRelationship(command: RemoveTaskRelationshipCommand): RemoveTaskRelationshipResult {
-    return this.#idempotentCommands.execute("remove-task-relationship", command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "remove-task-relationship",
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const currentTask = this.#projections.readTask(command.taskId);
       let result: RemoveTaskRelationshipResult;
       if (currentTask === undefined) {
@@ -380,7 +404,11 @@ export class TaskCommandStore {
   }
 
   addTaskComment(command: AddTaskCommentCommand): AddTaskCommentResult {
-    return this.#idempotentCommands.execute(`add-task-comment:${command.taskId}`, command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "add-task-comment",
+      scope: [command.taskId],
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const task = this.#projections.readTask(command.taskId);
       if (task === undefined) return { accepted: false, reason: "not-found" };
       if (this.taskIsReadOnly(task)) {
@@ -458,7 +486,10 @@ export class TaskCommandStore {
   markUserMentionAddressed(
     command: MarkUserMentionAddressedCommand,
   ): MarkUserMentionAddressedResult {
-    return this.#idempotentCommands.execute("mark-user-mention-addressed", command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "mark-user-mention-addressed",
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const reason = this.#database
         .prepare("SELECT task_id, type, resolved_at FROM attention_reasons WHERE id = ?")
         .get(command.attentionReasonId) as
@@ -497,7 +528,10 @@ export class TaskCommandStore {
   }
 
   dismissActivation(command: DismissActivationCommand): DismissActivationResult {
-    return this.#idempotentCommands.execute("dismiss-activation", command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "dismiss-activation",
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const activation = this.#database.prepare(
         `SELECT activation.task_id, activation.target_agent_id,
                 activation.reason_type, activation.source_event_id, activation.status,
@@ -566,7 +600,10 @@ export class TaskCommandStore {
   dismissStaleActivation(
     command: DismissStaleActivationCommand,
   ): DismissStaleActivationResult {
-    return this.#idempotentCommands.execute("dismiss-stale-activation", command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "dismiss-stale-activation",
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const activation = this.#database.prepare(
         `SELECT activation.stale, activation.resolution, activation.task_id,
                 activation.target_agent_id, activation.reason_type,
@@ -654,7 +691,10 @@ export class TaskCommandStore {
     expectedFailureKind: "technical" | "permission",
     continuationMessage: string | null = null,
   ): ActivationRecoveryResult {
-    return this.#idempotentCommands.execute(`${action}-failed-activation`, command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: `${action}-failed-activation`,
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       const reason = this.#database
         .prepare(
           `SELECT attention.task_id, attention.resolved_at,
@@ -1091,8 +1131,11 @@ export class TaskCommandStore {
   }
 
   continueAgentConversation(command: ContinueAgentConversationCommand): ContinueAgentConversationResult {
-    const commandType = `continue-agent-conversation:${command.taskId}:${command.conversationId}`;
-    return this.#idempotentCommands.execute(commandType, command.idempotencyKey, () => {
+    return this.#idempotentCommands.execute({
+      kind: "continue-agent-conversation",
+      scope: [command.taskId, command.conversationId],
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
       if (command.body.trim().length === 0) return { accepted: false, reason: "empty-message" };
       const conversation = this.#database.prepare(
         `SELECT conversation.owning_agent_id, conversation.current_thread_id,

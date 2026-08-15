@@ -1,8 +1,8 @@
-# 12 — Migrate adapter contracts
+# 13 — Migrate adapter contracts
 
 **What to build:** Move browser, host, and MCP adapters onto their shared transport and capability contracts without changing their externally visible interfaces.
 
-**Blocked by:** 10 — Expand capability-focused contracts.
+**Blocked by:** 11 — Expand capability-focused contracts.
 
 **Status:** ready-for-agent
 
@@ -11,4 +11,3 @@
 - [ ] Adapter status mapping, error behavior, and payloads remain unchanged.
 - [ ] No compatibility export is removed in this ticket.
 - [ ] Typechecking and adapter tests pass.
-

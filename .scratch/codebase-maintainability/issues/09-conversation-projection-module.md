@@ -1,4 +1,4 @@
-# 08 — Conversation projection module
+# 09 — Conversation projection module
 
 **What to build:** Give conversation index, status, detail, messages, runs, transcript availability, owner identity, and continuation availability one cohesive projection module.
 
@@ -11,4 +11,3 @@
 - [ ] Status and continuation availability preserve their current precedence and archival behavior.
 - [ ] Historical agent identity and replacement-thread evidence remain intact.
 - [ ] Conversation behavior is tested through the application seam.
-

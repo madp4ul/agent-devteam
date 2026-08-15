@@ -1,8 +1,8 @@
-# 11 — Migrate core and runtime contracts
+# 12 — Migrate core and runtime contracts
 
 **What to build:** Move application, persistence, automation, process, workspace, notification, and runtime callers onto the capability contracts they actually use.
 
-**Blocked by:** 10 — Expand capability-focused contracts.
+**Blocked by:** 11 — Expand capability-focused contracts.
 
 **Status:** ready-for-agent
 
@@ -10,4 +10,3 @@
 - [ ] The authoritative application interface and runtime behavior remain unchanged.
 - [ ] No compatibility export is removed in this ticket.
 - [ ] Typechecking and application, runtime, and integration tests pass.
-
