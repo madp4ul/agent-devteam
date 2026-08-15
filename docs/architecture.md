@@ -67,6 +67,9 @@ than through separate state that must later be reconciled.
 Task commands, automation outcomes, and archival append that provenance through
 one internal activity journal. The persistence composition supplies the journal
 with the shared SQLite connection, so the caller remains the transaction owner.
+Attention-producing workflows use one internal recorder to create the attention
+reason, its provenance activity, and any eligible notification occurrence. The
+recorder shares the caller's transaction rather than opening a separate one.
 
 ### Durable state
 

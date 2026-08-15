@@ -40,6 +40,7 @@ import type { CommandResponseStore } from "./command-response-store.ts";
 import { taskCreationAllowed } from "./task-creation-policy.ts";
 import type { NotificationStore } from "./notification-store.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
+import type { AttentionRecorder } from "./attention-recorder.ts";
 
 export class TaskCommandStore {
   readonly #owner: CoordinationDatabase;
@@ -48,6 +49,7 @@ export class TaskCommandStore {
   readonly #commandResponses: CommandResponseStore;
   readonly #notifications: NotificationStore;
   readonly #activityJournal: ActivityJournal;
+  readonly #attentionRecorder: AttentionRecorder;
 
   constructor(
     database: CoordinationDatabase,
@@ -55,6 +57,7 @@ export class TaskCommandStore {
     commandResponses: CommandResponseStore,
     notifications: NotificationStore,
     activityJournal: ActivityJournal,
+    attentionRecorder: AttentionRecorder,
   ) {
     this.#owner = database;
     this.#database = database.connection;
@@ -62,6 +65,7 @@ export class TaskCommandStore {
     this.#commandResponses = commandResponses;
     this.#notifications = notifications;
     this.#activityJournal = activityJournal;
+    this.#attentionRecorder = attentionRecorder;
   }
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
@@ -1274,26 +1278,10 @@ export class TaskCommandStore {
     createdAt: string,
   ): void {
     if (!mentioned || actor.kind !== "agent") return;
-    const attentionReasonId = randomUUID();
-    this.#database
-      .prepare(
-        `INSERT INTO attention_reasons
-          (id, task_id, type, source_event_id, created_at, resolved_at)
-         VALUES (?, ?, 'user-mention', ?, ?, NULL)`,
-      )
-      .run(attentionReasonId, taskId, commentId, createdAt);
-    this.#notifications.recordAttention(
+    this.#attentionRecorder.record(
       "user-mention",
       taskId,
-      attentionReasonId,
       commentId,
-      createdAt,
-    );
-    this.#activityJournal.append(
-      taskId,
-      "attention.created",
-      { kind: "framework", id: "coordination" },
-      { attentionReasonId, reasonType: "user-mention", sourceEventId: commentId },
       createdAt,
     );
   }

@@ -19,8 +19,8 @@ import type {
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { CommandResponseStore } from "./command-response-store.ts";
-import type { NotificationStore } from "./notification-store.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
+import type { AttentionRecorder } from "./attention-recorder.ts";
 
 export interface RunnableActivation {
   activation: ActivationView;
@@ -37,22 +37,22 @@ export class AutomationStateStore {
   readonly #database: DatabaseSync;
   readonly #taskProjections: TaskProjectionStore;
   readonly #commandResponses: CommandResponseStore;
-  readonly #notifications: NotificationStore;
   readonly #activityJournal: ActivityJournal;
+  readonly #attentionRecorder: AttentionRecorder;
 
   constructor(
     database: CoordinationDatabase,
     taskProjections: TaskProjectionStore,
     commandResponses: CommandResponseStore,
-    notifications: NotificationStore,
     activityJournal: ActivityJournal,
+    attentionRecorder: AttentionRecorder,
   ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#taskProjections = taskProjections;
     this.#commandResponses = commandResponses;
-    this.#notifications = notifications;
     this.#activityJournal = activityJournal;
+    this.#attentionRecorder = attentionRecorder;
   }
 
   recoverInterruptedAttempts(now = new Date()): number {
@@ -603,25 +603,9 @@ export class AutomationStateStore {
            VALUES (?, ?, ?, ?, NULL)`,
         )
         .run(activationId, occurredAt, boundary, diagnostic);
-      const attentionReasonId = randomUUID();
-      this.#database
-        .prepare(
-          `INSERT INTO attention_reasons
-            (id, task_id, type, source_event_id, created_at, resolved_at)
-           VALUES (?, ?, 'failed-run', ?, ?, NULL)`,
-        )
-        .run(attentionReasonId, activation.task_id, activationId, occurredAt);
-      this.#activityJournal.append(
-        activation.task_id,
-        "attention.created",
-        { kind: "framework", id: "coordination" },
-        { attentionReasonId, reasonType: "failed-run", sourceEventId: activationId },
-        occurredAt,
-      );
-      this.#notifications.recordAttention(
+      this.#attentionRecorder.record(
         "failed-run",
         activation.task_id,
-        attentionReasonId,
         activationId,
         occurredAt,
       );
@@ -868,26 +852,10 @@ export class AutomationStateStore {
   }
 
   private createFailureAttention(taskId: string, activationId: string, occurredAt: string): void {
-    const attentionReasonId = randomUUID();
-    this.#database
-      .prepare(
-        `INSERT INTO attention_reasons
-          (id, task_id, type, source_event_id, created_at, resolved_at)
-         VALUES (?, ?, 'failed-run', ?, ?, NULL)`,
-      )
-      .run(attentionReasonId, taskId, activationId, occurredAt);
-    this.#notifications.recordAttention(
+    this.#attentionRecorder.record(
       "failed-run",
       taskId,
-      attentionReasonId,
       activationId,
-      occurredAt,
-    );
-    this.#activityJournal.append(
-      taskId,
-      "attention.created",
-      { kind: "framework", id: "coordination" },
-      { attentionReasonId, reasonType: "failed-run", sourceEventId: activationId },
       occurredAt,
     );
   }

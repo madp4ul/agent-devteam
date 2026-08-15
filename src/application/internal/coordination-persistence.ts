@@ -7,6 +7,7 @@ import { CommandResponseStore } from "./command-response-store.ts";
 import { TaskArchiveStore } from "./task-archive-store.ts";
 import { NotificationStore } from "./notification-store.ts";
 import { ActivityJournal } from "./activity-journal.ts";
+import { AttentionRecorder } from "./attention-recorder.ts";
 
 export interface CoordinationPersistence {
   process: ProcessStateStore;
@@ -24,6 +25,11 @@ export function openCoordinationPersistence(path: string): CoordinationPersisten
   const commandResponses = new CommandResponseStore(database);
   const notifications = new NotificationStore(database);
   const activityJournal = new ActivityJournal(database.connection);
+  const attentionRecorder = new AttentionRecorder(
+    database.connection,
+    activityJournal,
+    notifications,
+  );
   return {
     process: new ProcessStateStore(database),
     taskCommands: new TaskCommandStore(
@@ -32,14 +38,15 @@ export function openCoordinationPersistence(path: string): CoordinationPersisten
       commandResponses,
       notifications,
       activityJournal,
+      attentionRecorder,
     ),
     taskProjections,
     automation: new AutomationStateStore(
       database,
       taskProjections,
       commandResponses,
-      notifications,
       activityJournal,
+      attentionRecorder,
     ),
     taskArchive: new TaskArchiveStore(database, taskProjections, commandResponses, activityJournal),
     notifications,
