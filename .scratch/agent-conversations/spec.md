@@ -102,6 +102,7 @@ second live-operations dashboard.
 50. As a user, I want conversation and follow-up state to survive application restarts, so that the feature is not dependent on one host process.
 51. As a user, I want stale or duplicate follow-up submissions handled idempotently, so that network retries cannot create duplicate activations or messages.
 52. As a user, I want conversation access to remain task-scoped, so that a conversation cannot be continued from the wrong task or workspace.
+53. As a user, I want every open conversation to refresh within two seconds, while known active work may refresh more frequently, so that newly started turns and completed answers appear promptly without a manual reload.
 
 ## Implementation Decisions
 
@@ -229,6 +230,10 @@ second live-operations dashboard.
   removing navigation.
 - Conversation ordering updates after a follow-up or new run so the most
   recently active entry rises to the top.
+- Keep a visible conversation on a short polling cadence even when its latest
+  known run is idle, so work started by another client becomes visible. Poll
+  idle conversations every two seconds and preserve the existing one-second
+  cadence for known running or locally queued work.
 
 ### Runtime boundary
 
@@ -243,6 +248,10 @@ second live-operations dashboard.
 - Token savings are not an acceptance criterion. Continuity reduces repeated
   user explanation, but resumed history may grow and usage remains measured
   through existing attempt-level reporting.
+- Do not estimate live token usage. The installed SDK reports authoritative
+  usage only with `turn.completed`, so the conversation keeps its existing
+  completion-based usage summary unless the runtime later exposes trustworthy
+  intermediate usage snapshots.
 
 ## Testing Decisions
 
@@ -287,6 +296,9 @@ second live-operations dashboard.
   agent, keyboard operation, missing-agent read-only access, composer error
   behavior, responsive placement, and preservation of reading position during
   live updates.
+- Browser polling coverage proves an open conversation receives changed
+  evidence within the two-second idle freshness bound while retaining its
+  established scroll-position behavior.
 - Existing application tests for minimal handoff, recovery, interruption,
   restart persistence, process evolution, archival, and token usage provide
   the behavioral prior art. Existing task-detail and live-transcript browser
@@ -317,6 +329,8 @@ second live-operations dashboard.
   suspension, blocker, pause, retry, or stale-activation rules.
 - Guaranteeing lower token usage, reconstructing unavailable Codex history, or
   retaining archived detailed transcripts beyond the existing policy.
+- Estimated or token-by-token live usage before Codex reports completed-turn
+  usage.
 - Elaborate recovery for the rare case in which the owning agent has been
   removed from the process.
 

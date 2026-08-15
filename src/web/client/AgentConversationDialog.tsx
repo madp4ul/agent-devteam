@@ -11,6 +11,9 @@ import { errorMessage } from "./feedback.ts";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { Modal } from "./Modal.tsx";
 
+const ACTIVE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 1_000;
+const IDLE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 2_000;
+
 export function AgentConversationDialog({
   taskId,
   conversationId,
@@ -97,10 +100,12 @@ export function AgentConversationDialog({
   );
   useEffect(() => {
     void refresh().catch((caught) => setError(errorMessage(caught)));
-  }, [conversationId, conversationRunning, refresh, refreshVersion, taskId]);
+  }, [conversationId, refresh, refreshVersion, taskId]);
   usePolling(
     refresh,
-    conversationRunning ? 1_000 : undefined,
+    conversationRunning
+      ? ACTIVE_CONVERSATION_POLL_INTERVAL_MILLISECONDS
+      : IDLE_CONVERSATION_POLL_INTERVAL_MILLISECONDS,
     (caught) => setError(errorMessage(caught)),
   );
 

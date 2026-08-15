@@ -1812,6 +1812,7 @@ test("reply preserves trailing draft whitespace and is absent without an active 
 });
 
 test("an open conversation replaces one running tool entry with its terminal evidence", async ({ page }) => {
+  await page.clock.install();
   let reads = 0;
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
@@ -1857,12 +1858,15 @@ test("an open conversation replaces one running tool entry with its terminal evi
   await page.getByRole("button", { name: "View conversation" }).click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   await expect(dialog).toContainText("pnpm test · running");
+  expect(reads).toBe(1);
   const transcriptContent = dialog.locator(".transcript-content");
   const readingPosition = await transcriptContent.evaluate((element) => {
     element.scrollTop = 120;
     return element.scrollTop;
   });
   expect(readingPosition).toBeGreaterThan(0);
+  await page.clock.fastForward(2_000);
+  await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
   await expect(dialog).toContainText("pnpm test (exit 0) · completed");
   await expect(dialog).toContainText("All live checks passed.");
   await expect(dialog.locator(".transcript-item")).toHaveCount(31);
@@ -1876,6 +1880,46 @@ test("an open conversation replaces one running tool entry with its terminal evi
   await page.goto("/tasks/T-0001");
   await page.getByRole("button", { name: "View conversation" }).click();
   await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText("All live checks passed.");
+});
+
+test("an idle open conversation discovers externally added evidence within two seconds", async ({ page }) => {
+  await page.clock.install();
+  let reads = 0;
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    reads += 1;
+    const result = liveConversation([{
+      id: "external-message",
+      kind: "message",
+      role: "agent",
+      text: reads === 1 ? "No external follow-up yet." : "An external follow-up is now visible.",
+    }]);
+    const conversation = result.conversation as {
+      originatingActivation: { status: string };
+      runs: Array<{
+        attempt: {
+          status: string;
+          completedAt: string | null;
+          outcome: { status: string; summary: string } | null;
+        };
+      }>;
+    };
+    conversation.originatingActivation.status = "completed";
+    const attempt = conversation.runs[0]!.attempt;
+    attempt.status = "completed";
+    attempt.completedAt = "2026-08-09T12:05:00.000Z";
+    attempt.outcome = { status: "completed", summary: "Idle conversation." };
+    await route.fulfill({ status: 200, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("region", { name: "Conversations" }).getByRole("button").first().click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  await expect(dialog).toContainText("No external follow-up yet.");
+  expect(reads).toBe(1);
+
+  await page.clock.fastForward(2_000);
+  await expect(dialog).toContainText("An external follow-up is now visible.");
+  expect(reads).toBeGreaterThanOrEqual(2);
 });
 
 test("a live conversation follows appended items only while the reader is at the bottom", async ({ page }) => {
