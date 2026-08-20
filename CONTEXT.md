@@ -151,9 +151,24 @@ in their existing order until the failure is explicitly resolved.
 
 **Agent conversation**:
 A durable, task-scoped lineage owned by one immutable agent identity. Each
-ordinary activation starts a distinct conversation, retries remain in that
-conversation, and a user follow-up adds a new activation to the selected
-conversation without transferring workflow responsibility.
+ordinary activation for the same task and agent normally joins that pair's
+current conversation, retries remain in that conversation, and a user follow-up
+adds a new activation without transferring workflow responsibility.
+
+**Conversation retirement**:
+A user decision that retires a task-and-agent pair's current conversation from
+automatic reuse without activating the agent; the pair's next ordinary
+activation starts a replacement conversation with complete initial task context
+and the required user-authored retirement explanation. Retirement is unavailable
+while that pair has a running or otherwise unfinished activation, which the user
+must first finish, interrupt and dismiss, or resolve through its existing
+recovery flow.
+_Avoid_: Conversation reset, reset agent
+
+**Retired agent conversation**:
+An agent conversation excluded from automatic reuse after conversation
+retirement. It remains readable and explicitly continuable without becoming the
+task-and-agent pair's current conversation again.
 
 **Authored conversation message**:
 A user's durable follow-up within an agent conversation. It is the immutable
@@ -199,8 +214,9 @@ the framework does not retain the old process definition for execution.
 **Activation reason**:
 The typed cause of an activation together with an immutable pointer to the
 exact source event, supplied to the agent run alongside the task's current
-state. The coordination framework preserves this provenance without generating
-its own interpretation of the expected work.
+state. The coordination framework supplies an authored source comment or
+follow-up in full and preserves its provenance without generating its own
+interpretation of the expected work.
 
 **Attempt context**:
 Framework-supplied facts about a run attempt, including its sequence number,
