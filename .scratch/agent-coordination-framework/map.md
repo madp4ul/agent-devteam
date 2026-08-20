@@ -247,6 +247,21 @@ without choosing the implementation yet.
 - [Archive Task Worktrees Owned by a Different Windows Identity](./issues/67-archive-differently-owned-worktrees.md)
   — Give host-side archival exact process-local Git trust and preserve distinct
   dirty, durability, registration, ownership, and removal outcomes.
+- [Define User File Attachment Workflows](./issues/68-define-user-file-attachment-workflows.md)
+  — Start from file uploads on continuing-conversation follow-ups and decide
+  ownership, storage, agent delivery, safety, and whether task or comment
+  attachments belong in the first increment.
+- [Wrap Long Lines in Rendered Markdown Code Blocks](./issues/69-wrap-rendered-markdown-code-lines.md)
+  — Keep fenced Markdown code inside its content surface and visibly wrap long
+  lines instead of widening the task UI or relying on horizontal scrolling.
+- [Define Process-Owned Token Pricing and Cost Display](./issues/70-define-process-owned-token-pricing.md)
+  — Specify optional, version-safe model pricing in the process definition and
+  calculate cost only when trustworthy per-attempt usage and complete pricing
+  metadata are available.
+- [Isolate Token Usage for User Follow-Ups](./issues/71-isolate-follow-up-token-usage.md)
+  — Use the resolved resumed-thread identity when persisting completed or
+  interrupted follow-ups so the transcript shows only the new attempt's usage
+  delta.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.
