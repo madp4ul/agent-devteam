@@ -9,7 +9,7 @@ import type {
   TaskActivityView,
   TaskCommentView,
   TaskRelationshipView,
-} from "../../application/coordination-contract.ts";
+} from "../../application/browser-transport-contract.ts";
 import { findParticipantMentions } from "../../application/participant-mentions.ts";
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
 import { MarkUserMentionAddressed } from "./AttentionReasonAction.tsx";

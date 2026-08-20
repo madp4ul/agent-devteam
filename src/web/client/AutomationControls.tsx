@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 
-import type { ActiveRunView, AutomationView } from "../../application/coordination-contract.ts";
+import type { ActiveRunView, AutomationView } from "../../application/browser-transport-contract.ts";
 import { pauseAutomation, resumeAutomation } from "./api.ts";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";

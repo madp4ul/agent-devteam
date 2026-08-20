@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import type {
   ActivationRecoveryAction,
   TaskAttentionView,
-} from "../../application/coordination-contract.ts";
+} from "../../application/browser-transport-contract.ts";
 import {
   continueInterruptedTask,
   dismissActivation,

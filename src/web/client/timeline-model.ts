@@ -4,7 +4,7 @@ import type {
   AttemptView,
   TaskActivityView,
   TaskCommentView,
-} from "../../application/coordination-contract.ts";
+} from "../../application/browser-transport-contract.ts";
 
 export type AttemptTimelineContent =
   | { kind: "comment"; occurredAt: string; comment: TaskCommentView }

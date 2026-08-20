@@ -6,13 +6,13 @@ import { join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
-import {
-  type AgentRunLifecycle,
-  type AgentRunOutcome,
-  type AgentRunRequest,
-  type AgentRuntime,
-  CoordinationApplication,
-} from "../../src/application/coordination-application.ts";
+import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import type {
+  AgentRunLifecycle,
+  AgentRunOutcome,
+  AgentRunRequest,
+  AgentRuntime,
+} from "../../src/application/runtime-contract.ts";
 
 const execFileAsync = promisify(execFile);
 

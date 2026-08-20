@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
-import type { TaskOverviewView } from "../../application/coordination-contract.ts";
+import type { TaskOverviewView } from "../../application/browser-transport-contract.ts";
 import type { BrowserBoardState } from "./api.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 

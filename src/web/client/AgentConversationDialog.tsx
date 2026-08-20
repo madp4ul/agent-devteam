@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import type {
   AgentConversationView,
   AttemptTokenUsage,
-} from "../../application/coordination-contract.ts";
+} from "../../application/browser-transport-contract.ts";
 import { continueAgentConversation, readAgentConversation } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";

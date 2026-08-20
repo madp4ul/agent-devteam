@@ -10,7 +10,7 @@ import type {
   AddTaskCommentResult,
   BoardMutationResult,
   TaskRelationshipMutationResult,
-} from "../../src/application/coordination-contract.ts";
+} from "../../src/application/task-contract.ts";
 import {
   READY_COUNT_INDEX,
   RELEASED,

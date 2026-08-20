@@ -11,11 +11,13 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 import {
   CoordinationApplication,
-  type AgentRunLifecycle,
-  type AgentRunOutcome,
-  type AgentRunRequest,
-  type AgentRuntime,
 } from "../../src/application/coordination-application.ts";
+import type {
+  AgentRunLifecycle,
+  AgentRunOutcome,
+  AgentRunRequest,
+  AgentRuntime,
+} from "../../src/application/runtime-contract.ts";
 import { AgentToolScopeRegistry } from "../../src/mcp/agent-tool-scope.ts";
 import {
   CodexAgentRuntime,

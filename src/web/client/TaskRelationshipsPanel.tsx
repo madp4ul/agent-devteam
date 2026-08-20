@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 
-import type { TaskRelationshipView } from "../../application/coordination-contract.ts";
+import type { TaskRelationshipView } from "../../application/browser-transport-contract.ts";
 import {
   addTaskDependency,
   readBoard,

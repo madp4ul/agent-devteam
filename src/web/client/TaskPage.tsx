@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import type { CollaboratorView } from "../../application/coordination-contract.ts";
+import type { CollaboratorView } from "../../application/browser-transport-contract.ts";
 import { findPartialParticipantMention, findParticipantMentions } from "../../application/participant-mentions.ts";
 
 import {

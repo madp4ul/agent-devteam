@@ -89,10 +89,6 @@ import type {
   UserTaskDetailQueryResult,
 } from "./user-task-detail-contract.ts";
 
-export * from "./coordination-contract.ts";
-export * from "./user-board-contract.ts";
-export * from "./user-task-detail-contract.ts";
-
 export class CoordinationApplication {
   readonly #persistence: CoordinationPersistence;
   readonly #startup: StartupView;

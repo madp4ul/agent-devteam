@@ -4,16 +4,83 @@ import type { AddressInfo } from "node:net";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  CoordinationApplication,
-  type Actor,
-  type CreateChildTaskCommand,
-  type CreateTaskRelationshipCommand,
-  type TaskWorkspaceView,
-} from "../application/coordination-application.ts";
-import type { UserBoardProjection } from "../application/user-board-contract.ts";
-import type { UserTaskDetailQueryResult } from "../application/user-task-detail-contract.ts";
+import type { CoordinationApplication } from "../application/coordination-application.ts";
+import type {
+  Actor,
+  CreateChildTaskCommand,
+  CreateTaskRelationshipCommand,
+} from "../application/task-contract.ts";
+import type {
+  ActivationRecoveryRequest,
+  AddTaskCommentRequest,
+  ArchiveCompletedTasksRequest,
+  ArchiveTaskRequest,
+  ContinueAgentConversationRequest,
+  ContinueInterruptedTaskRequest,
+  CreateChildTaskRequest,
+  CreateTaskRelationshipRequest,
+  CreateTaskRequest,
+  EditTaskRequest,
+  IdempotentBrowserRequest,
+  MoveTaskRequest,
+  TaskWorkspaceView,
+  UpdateNotificationPolicyRequest,
+  UserBoardProjection,
+  UserTaskDetailQueryResult,
+} from "../application/browser-transport-contract.ts";
 import type { AgentToolScopeRegistry } from "../mcp/agent-tool-scope.ts";
+
+type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
+  | "queryNotificationPolicy"
+  | "updateNotificationPolicy"
+  | "queryNotificationOccurrences"
+  | "queryUserBoard"
+  | "resumeAutomation"
+  | "resumeWithCurrentProcess"
+  | "pauseAutomation"
+  | "createTask"
+  | "queryArchivedTaskOverviews"
+  | "archiveCompletedTasks"
+  | "dismissStaleActivation"
+  | "dismissActivation"
+  | "queryAttemptTranscript"
+  | "queryAgentConversation"
+  | "continueAgentConversation"
+  | "archiveTask"
+  | "unarchiveTask"
+  | "queryTaskInspectionForUser"
+  | "queryTaskWorkspaceGitState"
+  | "queryUserTaskDetail"
+  | "interruptTask"
+  | "continueInterruptedTask"
+  | "editTask"
+  | "moveTask"
+  | "createChildTask"
+  | "createTaskRelationship"
+  | "removeTaskRelationship"
+  | "addTaskComment"
+  | "markUserMentionAddressed"
+  | "continuePermissionBlockedActivation"
+  | "retryFailedActivation"
+  | "dismissFailedActivation"
+>;
+
+type AgentCoordinationCapabilities = Pick<CoordinationApplication,
+  | "queryBoardSummaries"
+  | "queryTaskOverviews"
+  | "queryArchivedTaskOverviews"
+  | "queryTaskInspection"
+  | "queryTaskActivity"
+  | "queryTaskAttachments"
+  | "queryCollaborators"
+  | "addTaskComment"
+  | "resolveInertTaskMove"
+  | "moveTask"
+  | "createChildTask"
+  | "createTaskRelationship"
+>;
+
+type WebCoordinationCapabilities = BrowserCoordinationCapabilities & AgentCoordinationCapabilities;
 
 export interface WebServerOptions {
   host: string;
@@ -30,7 +97,7 @@ export interface RunningWebServer {
 }
 
 export async function startWebServer(
-  application: CoordinationApplication,
+  application: WebCoordinationCapabilities,
   options: WebServerOptions,
 ): Promise<RunningWebServer> {
   const server = createServer((request, response) => {
@@ -58,7 +125,7 @@ export async function startWebServer(
 }
 
 async function handleRequest(
-  application: CoordinationApplication,
+  application: WebCoordinationCapabilities,
   options: WebServerOptions,
   request: IncomingMessage,
   response: ServerResponse,
@@ -81,7 +148,7 @@ async function handleRequest(
 }
 
 async function handleBrowserApi(
-  application: CoordinationApplication,
+  application: BrowserCoordinationCapabilities,
   options: WebServerOptions,
   request: IncomingMessage,
   response: ServerResponse,
@@ -93,7 +160,7 @@ async function handleBrowserApi(
     return;
   }
   if (method === "PATCH" && url.pathname === "/api/settings/notifications") {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<UpdateNotificationPolicyRequest>(request);
     const type = stringField(body, "type");
     const enabled = booleanField(body, "enabled");
     const result = type === "global"
@@ -149,7 +216,7 @@ async function handleBrowserApi(
     return;
   }
   if (method === "POST" && url.pathname === "/api/tasks") {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<CreateTaskRequest>(request);
     const result = application.createTask({
       boardId: stringField(body, "boardId"),
       columnId: stringField(body, "columnId"),
@@ -167,7 +234,7 @@ async function handleBrowserApi(
     return;
   }
   if (method === "POST" && url.pathname === "/api/archive/completed") {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<ArchiveCompletedTasksRequest>(request);
     const result = await application.archiveCompletedTasks({
       boardId: stringField(body, "boardId"),
       actor: { kind: "user", id: "local-user" },
@@ -181,7 +248,7 @@ async function handleBrowserApi(
   const dismissStaleMatch = /^\/api\/activations\/([^/]+)\/dismiss-stale$/.exec(url.pathname);
   const dismissActivationMatch = /^\/api\/activations\/([^/]+)\/dismiss$/.exec(url.pathname);
   if (method === "POST" && dismissStaleMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<IdempotentBrowserRequest>(request);
     const result = application.dismissStaleActivation({
       activationId: decodeURIComponent(dismissStaleMatch[1]),
       actor: { kind: "user", id: "local-user" },
@@ -191,7 +258,7 @@ async function handleBrowserApi(
     return;
   }
   if (method === "POST" && dismissActivationMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<IdempotentBrowserRequest>(request);
     const result = application.dismissActivation({
       activationId: decodeURIComponent(dismissActivationMatch[1]),
       actor: { kind: "user", id: "local-user" },
@@ -226,7 +293,7 @@ async function handleBrowserApi(
     return;
   }
   if (method === "POST" && conversationMatch?.[1] !== undefined && conversationMatch[2] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<ContinueAgentConversationRequest>(request);
     const result = application.continueAgentConversation({
       taskId: decodeURIComponent(conversationMatch[1]),
       conversationId: decodeURIComponent(conversationMatch[2]),
@@ -248,7 +315,7 @@ async function handleBrowserApi(
   const archiveTaskMatch = /^\/api\/tasks\/([^/]+)\/archive$/.exec(url.pathname);
   const unarchiveTaskMatch = /^\/api\/tasks\/([^/]+)\/unarchive$/.exec(url.pathname);
   if (method === "POST" && archiveTaskMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<ArchiveTaskRequest>(request);
     const result = await application.archiveTask({
       taskId: decodeURIComponent(archiveTaskMatch[1]),
       ...(body.discardWorkspaceChanges === true ? { discardWorkspaceChanges: true } : {}),
@@ -259,7 +326,7 @@ async function handleBrowserApi(
     return;
   }
   if (method === "POST" && unarchiveTaskMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<IdempotentBrowserRequest>(request);
     const result = application.unarchiveTask({
       taskId: decodeURIComponent(unarchiveTaskMatch[1]),
       actor: { kind: "user", id: "local-user" },
@@ -334,7 +401,7 @@ async function handleBrowserApi(
   }
   const interruptMatch = /^\/api\/tasks\/([^/]+)\/interrupt$/.exec(url.pathname);
   if (method === "POST" && interruptMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<IdempotentBrowserRequest>(request);
     const result = application.interruptTask({
       taskId: decodeURIComponent(interruptMatch[1]),
       actor: { kind: "user", id: "local-user" },
@@ -350,7 +417,7 @@ async function handleBrowserApi(
   }
   const continueInterruptedMatch = /^\/api\/tasks\/([^/]+)\/continue$/.exec(url.pathname);
   if (method === "POST" && continueInterruptedMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<ContinueInterruptedTaskRequest>(request);
     const result = application.continueInterruptedTask({
       taskId: decodeURIComponent(continueInterruptedMatch[1]),
       message: stringField(body, "message"),
@@ -361,7 +428,7 @@ async function handleBrowserApi(
     return;
   }
   if (method === "PATCH" && taskMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<EditTaskRequest>(request);
     const result = application.editTask({
       taskId: decodeURIComponent(taskMatch[1]),
       title: stringField(body, "title"),
@@ -375,7 +442,7 @@ async function handleBrowserApi(
   }
   const moveMatch = /^\/api\/tasks\/([^/]+)\/move$/.exec(url.pathname);
   if (method === "POST" && moveMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<MoveTaskRequest>(request);
     const result = application.moveTask({
       taskId: decodeURIComponent(moveMatch[1]),
       destinationColumnId: stringField(body, "destinationColumnId"),
@@ -388,7 +455,7 @@ async function handleBrowserApi(
   }
   const childrenMatch = /^\/api\/tasks\/([^/]+)\/children$/.exec(url.pathname);
   if (method === "POST" && childrenMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<CreateChildTaskRequest>(request);
     const result = application.createChildTask(childTaskCommand(
       body,
       decodeURIComponent(childrenMatch[1]),
@@ -399,7 +466,7 @@ async function handleBrowserApi(
   }
   const relationshipsMatch = /^\/api\/tasks\/([^/]+)\/relationships$/.exec(url.pathname);
   if (method === "POST" && relationshipsMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<CreateTaskRelationshipRequest>(request);
     const relationshipType = stringField(body, "type");
     if (relationshipType !== "parent-child" && relationshipType !== "dependency") {
       throw new Error("type must be parent-child or dependency");
@@ -415,7 +482,7 @@ async function handleBrowserApi(
   }
   const relationshipRemovalMatch = /^\/api\/tasks\/([^/]+)\/relationships\/([^/]+)$/.exec(url.pathname);
   if (method === "DELETE" && relationshipRemovalMatch?.[1] !== undefined && relationshipRemovalMatch[2] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<IdempotentBrowserRequest>(request);
     const result = application.removeTaskRelationship({
       taskId: decodeURIComponent(relationshipRemovalMatch[1]),
       relationshipId: decodeURIComponent(relationshipRemovalMatch[2]),
@@ -431,7 +498,7 @@ async function handleBrowserApi(
   }
   const commentsMatch = /^\/api\/tasks\/([^/]+)\/comments$/.exec(url.pathname);
   if (method === "POST" && commentsMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<AddTaskCommentRequest>(request);
     const result = application.addTaskComment({
       taskId: decodeURIComponent(commentsMatch[1]),
       body: stringField(body, "body"),
@@ -450,7 +517,7 @@ async function handleBrowserApi(
   }
   const markAddressedMatch = /^\/api\/attention\/([^/]+)\/mark-addressed$/.exec(url.pathname);
   if (method === "POST" && markAddressedMatch?.[1] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<IdempotentBrowserRequest>(request);
     const result = application.markUserMentionAddressed({
       attentionReasonId: decodeURIComponent(markAddressedMatch[1]),
       actor: { kind: "user", id: "local-user" },
@@ -466,7 +533,7 @@ async function handleBrowserApi(
   }
   const recoveryMatch = /^\/api\/attention\/([^/]+)\/(retry|dismiss|continue)$/.exec(url.pathname);
   if (method === "POST" && recoveryMatch?.[1] !== undefined && recoveryMatch[2] !== undefined) {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<ActivationRecoveryRequest>(request);
     const action = recoveryMatch[2] as "retry" | "dismiss" | "continue";
     const command = {
       attentionReasonId: decodeURIComponent(recoveryMatch[1]),
@@ -489,7 +556,7 @@ async function handleBrowserApi(
 
 function sendMutation(
   response: ServerResponse,
-  result: ReturnType<CoordinationApplication["createTask"]>,
+  result: ReturnType<BrowserCoordinationCapabilities["createTask"]>,
   acceptedStatus = 200,
 ): void {
   if (result.accepted) {
@@ -558,7 +625,7 @@ function contentType(path: string): string {
 }
 
 async function handleAgentApi(
-  application: CoordinationApplication,
+  application: AgentCoordinationCapabilities,
   scopes: AgentToolScopeRegistry | undefined,
   request: IncomingMessage,
   response: ServerResponse,
@@ -729,13 +796,15 @@ async function readBody(request: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+async function readJsonBody<Payload extends object = Record<string, unknown>>(
+  request: IncomingMessage,
+): Promise<Record<string, unknown> & Payload> {
   const text = await readBody(request);
   const parsed = JSON.parse(text.length === 0 ? "{}" : text) as unknown;
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Expected a JSON object");
   }
-  return parsed as Record<string, unknown>;
+  return parsed as Record<string, unknown> & Payload;
 }
 
 function stringField(body: Record<string, unknown>, name: string): string {
@@ -813,7 +882,7 @@ function relationshipCommand(
 
 function sendRelationshipMutation(
   response: ServerResponse,
-  result: ReturnType<CoordinationApplication["createTaskRelationship"]>,
+  result: ReturnType<AgentCoordinationCapabilities["createTaskRelationship"]>,
 ): void {
   sendJson(response, result.accepted ? 201 : result.reason === "not-found" ? 404 : 409, result);
 }
@@ -821,13 +890,13 @@ function sendRelationshipMutation(
 function sendAgentQuery(
   response: ServerResponse,
   result:
-    | ReturnType<CoordinationApplication["queryBoardSummaries"]>
-    | ReturnType<CoordinationApplication["queryTaskOverviews"]>
-    | ReturnType<CoordinationApplication["queryArchivedTaskOverviews"]>
-    | ReturnType<CoordinationApplication["queryTaskInspection"]>
-    | ReturnType<CoordinationApplication["queryTaskActivity"]>
-    | ReturnType<CoordinationApplication["queryTaskAttachments"]>
-    | ReturnType<CoordinationApplication["queryCollaborators"]>,
+    | ReturnType<AgentCoordinationCapabilities["queryBoardSummaries"]>
+    | ReturnType<AgentCoordinationCapabilities["queryTaskOverviews"]>
+    | ReturnType<AgentCoordinationCapabilities["queryArchivedTaskOverviews"]>
+    | ReturnType<AgentCoordinationCapabilities["queryTaskInspection"]>
+    | ReturnType<AgentCoordinationCapabilities["queryTaskActivity"]>
+    | ReturnType<AgentCoordinationCapabilities["queryTaskAttachments"]>
+    | ReturnType<AgentCoordinationCapabilities["queryCollaborators"]>,
 ): void {
   if (result.available) {
     sendJson(response, 200, result);

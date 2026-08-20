@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { TaskAttentionView } from "../../application/coordination-contract.ts";
+import type { TaskAttentionView } from "../../application/browser-transport-contract.ts";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { errorMessage } from "./feedback.ts";
 import { focusTimelineSource } from "./timeline-scroll-anchor.ts";

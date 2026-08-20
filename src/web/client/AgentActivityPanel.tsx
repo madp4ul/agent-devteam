@@ -6,7 +6,7 @@ import type {
   AutomationView,
   CollaboratorView,
   UserTaskInspectionView,
-} from "../../application/coordination-contract.ts";
+} from "../../application/browser-transport-contract.ts";
 import { dismissActivation, interruptTask } from "./api.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";

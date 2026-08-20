@@ -1,4 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./browser-fixture.ts";
+
+test.use({ desktopNotificationConsent: "unset" });
 
 test("nested and successive dialogs share focus, dismissal, and scroll-lock behavior", async ({ page }) => {
   let releasePolicy!: () => void;

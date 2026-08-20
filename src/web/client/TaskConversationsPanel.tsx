@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 
-import type { AgentConversationIndexEntry } from "../../application/coordination-contract.ts";
+import type { AgentConversationIndexEntry } from "../../application/browser-transport-contract.ts";
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 

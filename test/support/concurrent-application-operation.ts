@@ -3,7 +3,7 @@ import type {
   CreateTaskRelationshipCommand,
   EditTaskCommand,
   MoveTaskCommand,
-} from "../../src/application/coordination-contract.ts";
+} from "../../src/application/task-contract.ts";
 
 export const READY_COUNT_INDEX = 0;
 export const RELEASE_INDEX = 1;

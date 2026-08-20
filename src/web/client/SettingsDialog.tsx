@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 
-import type { UpdateNotificationPolicyCommand } from "../../application/coordination-contract.ts";
+import type { UpdateNotificationPolicyCommand } from "../../application/browser-transport-contract.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage } from "./feedback.ts";

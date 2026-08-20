@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { ActivationView, TaskActivityView, TaskCommentView } from "../../src/application/coordination-contract.ts";
+import type { ActivationView } from "../../src/application/automation-contract.ts";
+import type { TaskActivityView, TaskCommentView } from "../../src/application/task-contract.ts";
 import { buildTimelineRecords } from "../../src/web/client/timeline-model.ts";
 
 test("timeline groups explicit attempt work and orders top-level records by start", () => {

@@ -1,4 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./browser-fixture.ts";
+
+test.use({ desktopNotificationConsent: "unset" });
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -87,7 +89,10 @@ test("explicit theme persists across navigation and reload and overrides the sys
   await setAppearance(page, "light");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(page.locator("html")).toHaveCSS("background-color", "rgb(242, 244, 239)");
-  await expect(page.locator(".detail-panel").first()).toHaveCSS("background-color", "rgb(255, 254, 249)");
+  await expect(page.locator('[data-task-section="description"]')).toHaveCSS(
+    "background-color",
+    "rgb(255, 254, 249)",
+  );
 });
 
 test("semantic board, task, modal, transcript, attention, and error surfaces use the dark palette", async ({ page }) => {

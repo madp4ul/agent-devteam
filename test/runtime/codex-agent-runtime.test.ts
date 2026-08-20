@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { AgentRunRequest } from "../../src/application/coordination-application.ts";
+import type { AgentRunRequest } from "../../src/application/runtime-contract.ts";
 import {
   CodexAgentRuntime,
   composeActivationPrompt,

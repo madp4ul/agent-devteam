@@ -1,11 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./browser-fixture.ts";
 
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem(
-    "coordination.desktop-notifications.consent",
-    "declined",
-  ));
-});
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
@@ -13,13 +7,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import {
-  type AgentRunLifecycle,
-  type AgentRunOutcome,
-  type AgentRunRequest,
-  type AgentRuntime,
-  CoordinationApplication,
-} from "../../src/application/coordination-application.ts";
+import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import type {
+  AgentRunLifecycle,
+  AgentRunOutcome,
+  AgentRunRequest,
+  AgentRuntime,
+} from "../../src/application/runtime-contract.ts";
 import { AgentToolScopeRegistry } from "../../src/mcp/agent-tool-scope.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
 

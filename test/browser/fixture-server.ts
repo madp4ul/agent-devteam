@@ -1,13 +1,13 @@
-import { DatabaseSync } from "node:sqlite";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
+import { mkdtemp, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
-import type { AttemptTranscriptItem } from "../../src/application/coordination-contract.ts";
+import type { AutomationClock } from "../../src/application/automation-contract.ts";
+import type { AttemptTranscriptItem } from "../../src/application/runtime-contract.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
 
 const execFileAsync = promisify(execFile);
@@ -66,7 +66,10 @@ const browserTranscript: AttemptTranscriptItem[] = [
   { kind: "diagnostic", text: "No unresolved runtime diagnostics." },
 ];
 const liveTranscripts = new Map<string, AttemptTranscriptItem[]>();
-const application = await CoordinationApplication.start({
+const automationClock = new BrowserFixtureClock();
+let fixtureAttemptId: string | undefined;
+let application!: CoordinationApplication;
+application = await CoordinationApplication.start({
   processDefinitionPath: definitionPath,
   databasePath,
   runtimeDispatch: {
@@ -74,7 +77,9 @@ const application = await CoordinationApplication.start({
     taskWorkspaceRoot: join(directory, "task-workspaces"),
     agentRuntime: {
       run: async (request, lifecycle) => {
-        const threadId = request.resumeThreadId ?? `thread-${request.attemptId}`;
+        const threadId = request.reason.type === "column-entry"
+          ? "thread-browser-123"
+          : (request.resumeThreadId ?? `thread-${request.attemptId}`);
         lifecycle.started(threadId);
         if (request.reason.type === "user-follow-up") {
           liveTranscripts.set(request.attemptId, [
@@ -87,7 +92,9 @@ const application = await CoordinationApplication.start({
               summary: "Verify conversation boundaries",
             },
           ]);
-          await new Promise((resolve) => setTimeout(resolve, 1_800));
+          // Leave enough observable running time for the browser to poll the
+          // in-progress transcript before the fixture publishes completion.
+          await new Promise((resolve) => setTimeout(resolve, 10_000));
           liveTranscripts.set(request.attemptId, [
             { id: "assembled-live-message", kind: "message", role: "agent", text: "Checking the assembled follow-up now." },
             {
@@ -99,22 +106,71 @@ const application = await CoordinationApplication.start({
               output: "Assembled follow-up verified.",
             },
           ]);
+        } else if (request.reason.type === "agent-mention" && request.attempt.number === 1) {
+          return {
+            status: "permission-blocked",
+            summary: "Writing the protected release file requires user approval.",
+            threadId,
+          };
+        } else {
+          fixtureAttemptId = request.attemptId;
+          const duringAttempt = application.addTaskComment({
+            taskId: request.task.id,
+            body: "Please also verify the migration behavior.",
+            actor: { kind: "user", id: "local-user" },
+            idempotencyKey: "browser-during-attempt-comment",
+          });
+          if (!duringAttempt.accepted) throw new Error("Could not add the browser fixture user comment");
+          const authored = application.addTaskComment({
+            taskId: request.task.id,
+            body: [
+              "### Preserve authored context",
+              "",
+              "Please preserve the **authored context** beside framework history.",
+              "",
+              "- Verify the causal grouping",
+              "- Keep `@user` illustrative inside code",
+              "",
+              "```ts",
+              "const source = \"raw Markdown\";",
+              "```",
+              "",
+              "The implementation agent should verify the causal grouping. This intentionally long comment explains that authored text remains readable without allowing one message to dominate the task timeline. It also provides enough prose to exercise the compact preview and inline expansion behavior at ordinary desktop and narrow viewport widths.",
+            ].join("\n"),
+            actor: { kind: "agent", id: "implementer" },
+            attemptId: request.attemptId,
+            idempotencyKey: "browser-comment",
+          });
+          if (!authored.accepted) throw new Error("Could not add the browser fixture agent comment");
+          automationClock.advanceBy(151_000);
         }
         return {
           status: "completed",
           summary: request.reason.type === "user-follow-up"
             ? `Follow-up resumed ${threadId} in ${request.workspace.path}.`
-            : "Browser fixture run completed.",
+            : request.reason.type === "agent-mention"
+              ? "Authorized permission retry completed."
+            : [
+                "Completed the **handoff** with [verification](https://example.com/result).",
+                "",
+                "- Tests passed",
+                "- Source preserved",
+                "",
+                "```mermaid",
+                "graph TD",
+                "  A --> B",
+                "```",
+              ].join("\n"),
           threadId,
         };
       },
     },
   },
   transcriptAccess: {
-    read: async (attemptId) => attemptId === "browser-attempt"
+    read: async (attemptId) => attemptId === fixtureAttemptId
       ? browserTranscript
       : (liveTranscripts.get(attemptId) ?? null),
-    readUsage: async (attemptId) => attemptId === "browser-attempt"
+    readUsage: async (attemptId) => attemptId === fixtureAttemptId
       ? {
           inputTokens: 2_400,
           cachedInputTokens: 1_800,
@@ -124,6 +180,7 @@ const application = await CoordinationApplication.start({
         }
       : null,
   },
+  automationClock,
 });
 const inspected = application.createTask({
   boardId: "delivery",
@@ -145,26 +202,6 @@ const inspected = application.createTask({
   idempotencyKey: "browser-inspected",
 });
 if (!inspected.accepted) throw new Error("Could not create inspected browser fixture");
-const authored = application.addTaskComment({
-  taskId: inspected.task.id,
-  body: [
-    "### Preserve authored context",
-    "",
-    "Please preserve the **authored context** beside framework history.",
-    "",
-    "- Verify the causal grouping",
-    "- Keep `@user` illustrative inside code",
-    "",
-    "```ts",
-    "const source = \"raw Markdown\";",
-    "```",
-    "",
-    "The implementation agent should verify the causal grouping. This intentionally long comment explains that authored text remains readable without allowing one message to dominate the task timeline. It also provides enough prose to exercise the compact preview and inline expansion behavior at ordinary desktop and narrow viewport widths.",
-  ].join("\n"),
-  actor: { kind: "agent", id: "implementer" },
-  idempotencyKey: "browser-comment",
-});
-if (!authored.accepted) throw new Error("Could not add authored browser fixture comment");
 const moved = application.moveTask({
   taskId: inspected.task.id,
   destinationColumnId: "implementation",
@@ -182,6 +219,41 @@ const draggable = application.createTask({
   idempotencyKey: "browser-draggable",
 });
 if (!draggable.accepted) throw new Error("Could not create draggable browser fixture");
+const initialResume = await application.resumeAutomation();
+if (!initialResume.accepted) throw new Error("Could not run the inspected browser fixture task");
+await application.waitForAutomationIdle();
+application.pauseAutomation();
+automationClock.reset();
+
+const userAttentionComment = application.addTaskComment({
+  taskId: inspected.task.id,
+  body: "@user Please confirm the completed handoff.",
+  actor: { kind: "agent", id: "implementer" },
+  idempotencyKey: "browser-user-attention-comment",
+});
+if (!userAttentionComment.accepted) throw new Error("Could not create the browser user-attention reason");
+
+const permissionComment = application.addTaskComment({
+  taskId: draggable.task.id,
+  body: "@implementer Please retry the protected release-file write after authorization.",
+  actor: { kind: "user", id: "local-user" },
+  idempotencyKey: "browser-permission-comment",
+});
+if (!permissionComment.accepted) throw new Error("Could not create the browser permission activation");
+const permissionResume = await application.resumeAutomation();
+if (!permissionResume.accepted) throw new Error("Could not run the browser permission activation");
+await application.waitForAutomationIdle();
+application.pauseAutomation();
+
+const relationship = application.createTaskRelationship({
+  type: "dependency",
+  sourceTaskId: inspected.task.id,
+  targetTaskId: draggable.task.id,
+  actor: { kind: "user", id: "local-user" },
+  idempotencyKey: "browser-relationship",
+});
+if (!relationship.accepted) throw new Error("Could not create the browser fixture relationship");
+
 const startupFailed = application.createTask({
   boardId: "delivery",
   columnId: "implementation",
@@ -192,104 +264,9 @@ const startupFailed = application.createTask({
 });
 if (!startupFailed.accepted) throw new Error("Could not create startup-failed browser fixture");
 
-const activation = moved.task.activations[0];
-if (activation === undefined) throw new Error("Expected a watched-column activation");
-const activationOccurredAt = moved.task.activity.at(-1)?.occurredAt;
-if (activationOccurredAt === undefined) throw new Error("Expected activation activity");
-const attemptStartedAt = new Date(Date.parse(activationOccurredAt) + 1_000).toISOString();
-const attemptCompletedAt = new Date(Date.parse(attemptStartedAt) + 150_000).toISOString();
-const database = new DatabaseSync(databasePath);
-database.exec("PRAGMA foreign_keys = ON");
-const taskWorkspaceRoot = join(directory, "task-workspaces");
-const inspectableWorkspacePath = join(taskWorkspaceRoot, inspected.task.id);
-await mkdir(taskWorkspaceRoot);
-await execFileAsync("git", ["-C", projectRepositoryPath, "worktree", "add", "--detach", inspectableWorkspacePath, "main"]);
-database.prepare(
-  `INSERT INTO task_workspaces (task_id, path, starting_ref, commit_id)
-   VALUES (?, ?, ?, ?)`,
-).run(inspected.task.id, inspectableWorkspacePath, "main", "0123456789abcdef0123456789abcdef01234567");
-database.prepare("UPDATE activations SET status = 'completed' WHERE id = ?").run(activation.id);
-database.prepare(
-  `UPDATE agent_conversations
-   SET current_thread_id = ?, latest_activity_at = ?
-   WHERE id = ?`,
-).run("thread-browser-123", attemptCompletedAt, activation.conversationId);
-database.prepare(
-  `INSERT INTO attempts
-    (id, activation_id, status, workspace_path, started_at, completed_at,
-     outcome_status, outcome_summary, thread_id)
-   VALUES (?, ?, 'completed', ?, ?, ?, 'completed', ?, ?)`,
-).run(
-  "browser-attempt",
-  activation.id,
-  join(directory, "task-workspace"),
-  attemptStartedAt,
-  attemptCompletedAt,
-  [
-    "Completed the **handoff** with [verification](https://example.com/result).",
-    "",
-    "- Tests passed",
-    "- Source preserved",
-    "",
-    "```mermaid",
-    "graph TD",
-    "  A --> B",
-    "```",
-  ].join("\n"),
-  "thread-browser-123",
-);
-database.prepare(
-  "UPDATE task_comments SET attempt_id = ?, occurred_at = ? WHERE id = ?",
-).run(
-  "browser-attempt",
-  new Date(Date.parse(attemptStartedAt) + 60_000).toISOString(),
-  authored.comment.id,
-);
-database.prepare(
-  `INSERT INTO task_comments
-    (id, task_id, body, actor_kind, actor_id, occurred_at, attempt_id)
-   VALUES (?, ?, ?, 'user', 'local-user', ?, NULL)`,
-).run(
-  "browser-during-attempt-comment",
-  inspected.task.id,
-  "Please also verify the migration behavior.",
-  new Date(Date.parse(attemptStartedAt) + 30_000).toISOString(),
-);
-database.prepare(
-  `INSERT INTO attention_reasons
-    (id, task_id, type, source_event_id, created_at, resolved_at)
-   VALUES (?, ?, 'user-mention', NULL, ?, NULL)`,
-).run("browser-attention", inspected.task.id, attemptCompletedAt);
-database.prepare(
-  `INSERT INTO activations
-    (id, task_id, target_agent_id, reason_type, source_event_id, status, created_at,
-     model, reasoning_effort, failure_kind, failure_summary, definition_version)
-   VALUES (?, ?, 'implementer', 'agent-mention', ?, 'failed', ?, NULL, NULL,
-           'permission', ?, (SELECT definition_version FROM runtime WHERE singleton = 1))`,
-).run(
-  "browser-permission-activation",
-  inspected.task.id,
-  authored.comment.id,
-  attemptCompletedAt,
-  "Writing the protected release file requires user approval.",
-);
-database.prepare(
-  `INSERT INTO attention_reasons
-    (id, task_id, type, source_event_id, created_at, resolved_at)
-   VALUES (?, ?, 'failed-run', ?, ?, NULL)`,
-).run(
-  "browser-permission-attention",
-  inspected.task.id,
-  "browser-permission-activation",
-  attemptCompletedAt,
-);
-database.prepare(
-  "INSERT INTO task_relationships VALUES (?, 'dependency', ?, ?)",
-).run("browser-relationship", inspected.task.id, draggable.task.id);
 if (startupFailed.task.activations[0] === undefined) {
   throw new Error("Expected a startup-failure activation");
 }
-database.close();
 const unavailableRepositoryPath = join(directory, "temporarily-unavailable-project-repository");
 await rename(projectRepositoryPath, unavailableRepositoryPath);
 const startupFailure = await application.resumeAutomation();
@@ -304,12 +281,30 @@ const server = await startWebServer(application, {
   openWorkspace: async () => undefined,
   openWorkspaceInVisualStudioCode: async () => undefined,
 });
-console.log(`Browser fixture listening at ${server.baseUrl}`);
-
 return async () => {
   await server.close();
   application.close();
 };
+}
+
+class BrowserFixtureClock implements AutomationClock {
+  #now = new Date();
+
+  now(): Date {
+    return new Date(this.#now);
+  }
+
+  waitUntil(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  advanceBy(milliseconds: number): void {
+    this.#now = new Date(this.#now.getTime() + milliseconds);
+  }
+
+  reset(): void {
+    this.#now = new Date();
+  }
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {

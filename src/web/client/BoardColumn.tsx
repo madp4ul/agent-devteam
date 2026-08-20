@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
-import type { TaskOverviewView } from "../../application/coordination-contract.ts";
+import type { TaskOverviewView } from "../../application/browser-transport-contract.ts";
 import type { BrowserBoardState, BrowserColumnView } from "./api.ts";
 import { TaskCard } from "./TaskCard.tsx";
 

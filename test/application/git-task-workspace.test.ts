@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
-import type { TaskWorkspaceView } from "../../src/application/coordination-contract.ts";
+import type { TaskWorkspaceView } from "../../src/application/task-contract.ts";
 import { GitTaskWorkspaceManager } from "../../src/application/internal/git-task-workspace.ts";
 
 const run = promisify(execFile);

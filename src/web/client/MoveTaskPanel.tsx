@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { BoardColumnView } from "../../application/coordination-contract.ts";
+import type { BoardColumnView } from "../../application/browser-transport-contract.ts";
 import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
 
 export function MoveTaskPanel({

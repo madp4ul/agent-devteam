@@ -6,10 +6,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
-import {
-  CoordinationApplication,
-  type AttemptTranscriptItem,
-} from "../../src/application/coordination-application.ts";
+import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import type { AttemptTranscriptItem } from "../../src/application/runtime-contract.ts";
 import { AgentToolScopeRegistry } from "../../src/mcp/agent-tool-scope.ts";
 import { CodexAgentRuntime } from "../../src/runtime/codex-agent-runtime.ts";
 import { startWebServer } from "../../src/web/web-server.ts";

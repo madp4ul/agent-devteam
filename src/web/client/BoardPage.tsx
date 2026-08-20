@@ -11,7 +11,7 @@ import {
   resumeWithCurrentProcess,
   type BrowserBoardState,
 } from "./api.ts";
-import type { TaskOverviewView } from "../../application/coordination-contract.ts";
+import type { TaskOverviewView } from "../../application/browser-transport-contract.ts";
 import { BoardColumn, type BoardLayout } from "./BoardColumn.tsx";
 import { AutomationControls } from "./AutomationControls.tsx";
 import { errorMessage } from "./feedback.ts";

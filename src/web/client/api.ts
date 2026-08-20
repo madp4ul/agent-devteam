@@ -1,5 +1,18 @@
 import type {
+  ActivationRecoveryRequest,
   BoardMutationResult,
+  AddTaskCommentRequest,
+  ArchiveCompletedTasksRequest,
+  ArchiveTaskRequest,
+  ContinueAgentConversationRequest,
+  ContinueInterruptedTaskRequest,
+  CreateChildTaskRequest,
+  CreateTaskRelationshipRequest,
+  CreateTaskRequest,
+  EditTaskRequest,
+  EmptyBrowserRequest,
+  IdempotentBrowserRequest,
+  MoveTaskRequest,
   TaskOverviewView,
   AttemptTranscriptQueryResult,
   AgentConversationQueryResult,
@@ -9,19 +22,14 @@ import type {
   TaskWorkspaceGitStateView,
   NotificationPolicyView,
   NotificationOccurrenceBatch,
-  UpdateNotificationPolicyCommand,
-} from "../../application/coordination-contract.ts";
-import type {
+  UpdateNotificationPolicyRequest,
   UserBoardColumnView,
   UserBoardProjection,
   UserBoardView,
-} from "../../application/user-board-contract.ts";
-import type {
   UserRelatedTaskView,
   UserTaskDetailQueryResult,
   UserTaskDetailView,
-} from "../../application/user-task-detail-contract.ts";
-
+} from "../../application/browser-transport-contract.ts";
 export type BrowserBoardState = UserBoardProjection;
 export type BrowserBoardView = UserBoardView;
 export type BrowserColumnView = UserBoardColumnView;
@@ -54,11 +62,11 @@ export async function readNotificationPolicy(): Promise<NotificationPolicyView> 
 }
 
 export async function updateNotificationPolicy(
-  change: UpdateNotificationPolicyCommand["change"],
+  change: UpdateNotificationPolicyRequest,
 ): Promise<NotificationPolicyView> {
   const result = await request<{ accepted: true; policy: NotificationPolicyView }>(
     "/api/settings/notifications",
-    { method: "PATCH", body: JSON.stringify(change) },
+    { method: "PATCH", body: serializeBrowserRequest<UpdateNotificationPolicyRequest>(change) },
   );
   return result.policy;
 }
@@ -89,7 +97,7 @@ export async function archiveTask(
 ): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/archive`, {
     method: "POST",
-    body: JSON.stringify({
+    body: serializeBrowserRequest<ArchiveTaskRequest>({
       idempotencyKey,
       ...(discardWorkspaceChanges ? { discardWorkspaceChanges: true } : {}),
     }),
@@ -99,7 +107,7 @@ export async function archiveTask(
 export async function unarchiveTask(taskId: string, idempotencyKey: string): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/unarchive`, {
     method: "POST",
-    body: JSON.stringify({ idempotencyKey }),
+    body: serializeBrowserRequest<IdempotentBrowserRequest>({ idempotencyKey }),
   });
 }
 
@@ -109,21 +117,21 @@ export async function archiveCompletedTasks(
 ): Promise<Extract<ArchiveCompletedTasksResult, { accepted: true }>> {
   return request("/api/archive/completed", {
     method: "POST",
-    body: JSON.stringify({ boardId, idempotencyKey }),
+    body: serializeBrowserRequest<ArchiveCompletedTasksRequest>({ boardId, idempotencyKey }),
   });
 }
 
 export async function openTaskWorkspace(taskId: string): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/workspace/open`, {
     method: "POST",
-    body: "{}",
+    body: serializeBrowserRequest<EmptyBrowserRequest>({}),
   });
 }
 
 export async function openTaskWorkspaceInVisualStudioCode(taskId: string): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/workspace/open-vscode`, {
     method: "POST",
-    body: "{}",
+    body: serializeBrowserRequest<EmptyBrowserRequest>({}),
   });
 }
 
@@ -134,26 +142,15 @@ export async function readTaskWorkspaceGitState(taskId: string): Promise<TaskWor
   return result.state;
 }
 
-export async function createTask(input: {
-  boardId: string;
-  columnId: string;
-  title: string;
-  description: string;
-  idempotencyKey: string;
-}): Promise<Extract<BoardMutationResult, { accepted: true }>> {
+export async function createTask(
+  input: CreateTaskRequest,
+): Promise<Extract<BoardMutationResult, { accepted: true }>> {
   return mutation("/api/tasks", "POST", input);
 }
 
 export async function createChildTask(
   parentTaskId: string,
-  input: {
-    boardId: string;
-    columnId: string;
-    title: string;
-    description: string;
-    startingRef?: string;
-    idempotencyKey: string;
-  },
+  input: CreateChildTaskRequest,
 ): Promise<Extract<BoardMutationResult, { accepted: true }>> {
   return mutation(`/api/tasks/${encodeURIComponent(parentTaskId)}/children`, "POST", input);
 }
@@ -165,7 +162,11 @@ export async function addTaskDependency(
 ): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/relationships`, {
     method: "POST",
-    body: JSON.stringify({ type: "dependency", targetTaskId, idempotencyKey }),
+    body: serializeBrowserRequest<CreateTaskRelationshipRequest>({
+      type: "dependency",
+      targetTaskId,
+      idempotencyKey,
+    }),
   });
 }
 
@@ -176,41 +177,38 @@ export async function removeTaskRelationship(
 ): Promise<void> {
   await request(
     `/api/tasks/${encodeURIComponent(taskId)}/relationships/${encodeURIComponent(relationshipId)}`,
-    { method: "DELETE", body: JSON.stringify({ idempotencyKey }) },
+    {
+      method: "DELETE",
+      body: serializeBrowserRequest<IdempotentBrowserRequest>({ idempotencyKey }),
+    },
   );
 }
 
 export async function editTask(
   taskId: string,
-  input: {
-    title: string;
-    description: string;
-    expectedRevision: number;
-    idempotencyKey: string;
-  },
+  input: EditTaskRequest,
 ): Promise<Extract<BoardMutationResult, { accepted: true }>> {
   return mutation(`/api/tasks/${encodeURIComponent(taskId)}`, "PATCH", input);
 }
 
 export async function moveTask(
   taskId: string,
-  input: {
-    destinationColumnId: string;
-    expectedRevision: number;
-    idempotencyKey: string;
-  },
+  input: MoveTaskRequest,
 ): Promise<Extract<BoardMutationResult, { accepted: true }>> {
   return mutation(`/api/tasks/${encodeURIComponent(taskId)}/move`, "POST", input);
 }
 
 export async function resumeAutomation(): Promise<void> {
-  await request("/api/automation/resume", { method: "POST", body: "{}" });
+  await request("/api/automation/resume", {
+    method: "POST",
+    body: serializeBrowserRequest<EmptyBrowserRequest>({}),
+  });
 }
 
 export async function resumeWithCurrentProcess(): Promise<void> {
   await request("/api/automation/resume-with-current-process", {
     method: "POST",
-    body: "{}",
+    body: serializeBrowserRequest<EmptyBrowserRequest>({}),
   });
 }
 
@@ -220,7 +218,7 @@ export async function dismissStaleActivation(
 ): Promise<void> {
   await request(`/api/activations/${encodeURIComponent(activationId)}/dismiss-stale`, {
     method: "POST",
-    body: JSON.stringify({ idempotencyKey }),
+    body: serializeBrowserRequest<IdempotentBrowserRequest>({ idempotencyKey }),
   });
 }
 
@@ -230,18 +228,21 @@ export async function dismissActivation(
 ): Promise<void> {
   await request(`/api/activations/${encodeURIComponent(activationId)}/dismiss`, {
     method: "POST",
-    body: JSON.stringify({ idempotencyKey }),
+    body: serializeBrowserRequest<IdempotentBrowserRequest>({ idempotencyKey }),
   });
 }
 
 export async function pauseAutomation(): Promise<void> {
-  await request("/api/automation/pause", { method: "POST", body: "{}" });
+  await request("/api/automation/pause", {
+    method: "POST",
+    body: serializeBrowserRequest<EmptyBrowserRequest>({}),
+  });
 }
 
 export async function interruptTask(taskId: string, idempotencyKey: string): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/interrupt`, {
     method: "POST",
-    body: JSON.stringify({ idempotencyKey }),
+    body: serializeBrowserRequest<IdempotentBrowserRequest>({ idempotencyKey }),
   });
 }
 
@@ -252,7 +253,7 @@ export async function continueInterruptedTask(
 ): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/continue`, {
     method: "POST",
-    body: JSON.stringify({ message, idempotencyKey }),
+    body: serializeBrowserRequest<ContinueInterruptedTaskRequest>({ message, idempotencyKey }),
   });
 }
 
@@ -262,7 +263,7 @@ export async function markUserMentionAddressed(
 ): Promise<void> {
   await request(`/api/attention/${encodeURIComponent(attentionReasonId)}/mark-addressed`, {
     method: "POST",
-    body: JSON.stringify({ idempotencyKey }),
+    body: serializeBrowserRequest<IdempotentBrowserRequest>({ idempotencyKey }),
   });
 }
 
@@ -274,7 +275,10 @@ export async function recoverFailedActivation(
 ): Promise<void> {
   await request(`/api/attention/${encodeURIComponent(attentionReasonId)}/${action}`, {
     method: "POST",
-    body: JSON.stringify({ idempotencyKey, ...(message === undefined ? {} : { message }) }),
+    body: serializeBrowserRequest<ActivationRecoveryRequest>({
+      idempotencyKey,
+      ...(message === undefined ? {} : { message }),
+    }),
   });
 }
 
@@ -285,7 +289,7 @@ export async function addTaskComment(
 ): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/comments`, {
     method: "POST",
-    body: JSON.stringify({ body, idempotencyKey }),
+    body: serializeBrowserRequest<AddTaskCommentRequest>({ body, idempotencyKey }),
   });
 }
 
@@ -320,16 +324,23 @@ export async function continueAgentConversation(
 ): Promise<ContinueAgentConversationResult> {
   return request(
     `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}`,
-    { method: "POST", body: JSON.stringify({ body, idempotencyKey }) },
+    {
+      method: "POST",
+      body: serializeBrowserRequest<ContinueAgentConversationRequest>({ body, idempotencyKey }),
+    },
   );
 }
 
-async function mutation(
+async function mutation<Request extends CreateTaskRequest | CreateChildTaskRequest | EditTaskRequest | MoveTaskRequest>(
   url: string,
   method: "POST" | "PATCH",
-  body: unknown,
+  body: Request,
 ): Promise<Extract<BoardMutationResult, { accepted: true }>> {
-  return request(url, { method, body: JSON.stringify(body) });
+  return request(url, { method, body: serializeBrowserRequest<Request>(body) });
+}
+
+function serializeBrowserRequest<Request>(request: Request): string {
+  return JSON.stringify(request);
 }
 
 async function request<Result>(url: string, init?: RequestInit): Promise<Result> {

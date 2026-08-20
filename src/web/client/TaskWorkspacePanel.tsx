@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import type { TaskWorkspaceGitStateView, TaskWorkspaceView } from "../../application/coordination-contract.ts";
+import type { TaskWorkspaceGitStateView, TaskWorkspaceView } from "../../application/browser-transport-contract.ts";
 import {
   openTaskWorkspace,
   openTaskWorkspaceInVisualStudioCode,

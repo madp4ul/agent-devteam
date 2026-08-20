@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   NotificationPolicyView,
   UpdateNotificationPolicyCommand,
-} from "../../application/coordination-contract.ts";
+} from "../../application/browser-transport-contract.ts";
 import {
   readNotificationOccurrences,
   readNotificationPolicy,

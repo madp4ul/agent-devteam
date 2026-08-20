@@ -7,12 +7,12 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 
-import {
-  CoordinationApplication,
-  type AgentRuntime,
-  type AgentRunRequest,
-  type AttemptTranscriptAccess,
-} from "../../src/application/coordination-application.ts";
+import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import type {
+  AgentRuntime,
+  AgentRunRequest,
+  AttemptTranscriptAccess,
+} from "../../src/application/runtime-contract.ts";
 
 const run = promisify(execFile);
 
