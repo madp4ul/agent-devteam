@@ -2,12 +2,12 @@ import { execFile } from "node:child_process";
 import { mkdir, readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
+import type { ProcessDiagnostic } from "../process-contract.ts";
+import type { RuntimeStartupBoundary } from "../runtime-contract.ts";
 import type {
-  ProcessDiagnostic,
-  RuntimeStartupBoundary,
   TaskWorkspaceGitStateView,
   TaskWorkspaceView,
-} from "../coordination-contract.ts";
+} from "../task-contract.ts";
 import { normalizedPath, samePath } from "./path-identity.ts";
 
 export async function validateTaskWorkspaceConsistency(

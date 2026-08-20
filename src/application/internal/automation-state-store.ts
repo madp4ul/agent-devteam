@@ -4,7 +4,8 @@ import type { DatabaseSync } from "node:sqlite";
 import type {
   ActiveRunView,
   ActivationView,
-  Actor,
+} from "../automation-contract.ts";
+import type {
   AgentRunAgent,
   AgentRunOutcome,
   AttemptContextView,
@@ -12,15 +13,19 @@ import type {
   AttemptTokenUsage,
   RuntimeStartupBoundary,
   RuntimeStartupDiagnostic,
+} from "../runtime-contract.ts";
+import type {
+  Actor,
   TaskActivityView,
   TaskWorkspaceView,
   TaskView,
-} from "../coordination-contract.ts";
+} from "../task-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
 import type { AttentionRecorder } from "./attention-recorder.ts";
+import type { ConversationProjectionModule } from "./conversation-projection-module.ts";
 
 export interface RunnableActivation {
   activation: ActivationView;
@@ -36,6 +41,7 @@ export class AutomationStateStore {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
   readonly #taskProjections: TaskProjectionStore;
+  readonly #conversationProjections: ConversationProjectionModule;
   readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
   readonly #attentionRecorder: AttentionRecorder;
@@ -43,6 +49,7 @@ export class AutomationStateStore {
   constructor(
     database: CoordinationDatabase,
     taskProjections: TaskProjectionStore,
+    conversationProjections: ConversationProjectionModule,
     idempotentCommands: IdempotentCommandExecutor,
     activityJournal: ActivityJournal,
     attentionRecorder: AttentionRecorder,
@@ -50,6 +57,7 @@ export class AutomationStateStore {
     this.#owner = database;
     this.#database = database.connection;
     this.#taskProjections = taskProjections;
+    this.#conversationProjections = conversationProjections;
     this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
     this.#attentionRecorder = attentionRecorder;
@@ -194,7 +202,8 @@ export class AutomationStateStore {
           instructions_content: string;
         }
       | undefined;
-    const sourceEvent = this.#taskProjections.readSourceEvent(row.source_event_id);
+    const sourceEvent = this.#taskProjections.readSourceEvent(row.source_event_id)
+      ?? this.#conversationProjections.readMessage(row.source_event_id);
     if (
       task === undefined ||
       activation === undefined ||

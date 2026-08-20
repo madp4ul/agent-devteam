@@ -1,12 +1,12 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import type {
-  Actor,
   NotificationOccurrenceBatch,
   NotificationPolicyView,
   UpdateNotificationPolicyCommand,
   UpdateNotificationPolicyResult,
-} from "../coordination-contract.ts";
+} from "../notification-contract.ts";
+import type { Actor } from "../task-contract.ts";
 import { randomUUID } from "node:crypto";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 

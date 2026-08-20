@@ -13,7 +13,7 @@ import {
   type ParsedNode,
 } from "yaml";
 
-import type { ProcessDiagnostic } from "../coordination-contract.ts";
+import type { ProcessDiagnostic } from "../process-contract.ts";
 
 export interface ProcessAgentDefinition {
   id: string;

@@ -5,7 +5,7 @@ import type {
   ArchiveTaskCommand,
   ArchiveTaskResult,
   UnarchiveTaskResult,
-} from "../coordination-contract.ts";
+} from "../task-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";

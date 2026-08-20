@@ -1,15 +1,19 @@
 import type {
   ActiveRunView,
-  AgentConversationIndexEntry,
   AutomationView,
-  BoardView,
+} from "./automation-contract.ts";
+import type { AgentConversationIndexEntry } from "./conversation-contract.ts";
+import type {
   CollaboratorView,
   ProcessDiagnostic,
   StartupView,
+} from "./process-contract.ts";
+import type {
+  BoardView,
   TaskOverviewView,
   TaskView,
   UserTaskInspectionView,
-} from "./coordination-contract.ts";
+} from "./task-contract.ts";
 
 export interface UserRelatedTaskView {
   id: string;

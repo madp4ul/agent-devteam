@@ -1,12 +1,16 @@
 import type {
   ActiveRunView,
   AutomationView,
+} from "./automation-contract.ts";
+import type {
   BoardSummaryColumnView,
   BoardSummaryView,
-  NeedsAttentionTaskView,
   StartupView,
+} from "./process-contract.ts";
+import type {
+  NeedsAttentionTaskView,
   TaskOverviewView,
-} from "./coordination-contract.ts";
+} from "./task-contract.ts";
 
 export interface UserBoardColumnView extends BoardSummaryColumnView {
   tasks: TaskOverviewView[];

@@ -8,7 +8,7 @@ import type {
   AttemptTranscriptAccess,
   AttemptTranscriptItem,
   AttemptTokenUsage,
-} from "../application/coordination-application.ts";
+} from "../application/runtime-contract.ts";
 import { summarizeCoordinationTool } from "./coordination-tool-transcript.ts";
 import { composeActivationPrompt } from "../application/activation-prompt.ts";
 

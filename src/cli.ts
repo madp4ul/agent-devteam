@@ -3,9 +3,9 @@ import { fileURLToPath } from "node:url";
 
 import {
   CoordinationApplication,
-  type ProcessDiagnostic,
-  type TaskWorkspaceView,
 } from "./application/coordination-application.ts";
+import type { ProcessDiagnostic } from "./application/process-contract.ts";
+import type { TaskWorkspaceView } from "./application/task-contract.ts";
 import { AgentToolScopeRegistry } from "./mcp/agent-tool-scope.ts";
 import { CodexAgentRuntime } from "./runtime/codex-agent-runtime.ts";
 import { startWebServer } from "./web/web-server.ts";

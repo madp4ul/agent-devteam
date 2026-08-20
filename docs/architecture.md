@@ -73,9 +73,11 @@ the browser without becoming a second source of truth or duplicating it. Each
 conversation record persists a generated originating-request label and durable
 activity order; a task-scoped compact projection exposes that indexing metadata
 so task details can navigate recent history without loading transcript evidence.
-User follow-ups are stored as authored conversation messages. One application
-transaction records the message, `conversation.continued` activity, and a
-`user-follow-up` activation linked to the existing conversation.
+User follow-ups pass through a focused internal conversation command module.
+One application transaction records the authored message,
+`conversation.continued` activity, `user-follow-up` activation, conversation
+activity order, and idempotent response while enforcing ownership and
+continuation availability.
 Archival retains the conversation, activation, and coordination-activity lineage
 but removes its attempt transcripts and authored follow-up bodies. It also removes
 cached continuation-command responses that duplicate those bodies, so archived

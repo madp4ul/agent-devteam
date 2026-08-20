@@ -1,0 +1,22 @@
+/** Automation lifecycle, activation, interruption, and recovery facts. */
+export type {
+  ActiveRunView,
+  ActivationRecoveryAction,
+  ActivationRecoveryCommand,
+  ActivationRecoveryResult,
+  ActivationReasonView,
+  ActivationView,
+  AutomationClock,
+  AutomationView,
+  ContinueInterruptedTaskCommand,
+  ContinueInterruptedTaskResult,
+  ContinuePermissionBlockedActivationCommand,
+  DismissActivationCommand,
+  DismissActivationResult,
+  DismissStaleActivationCommand,
+  DismissStaleActivationResult,
+  InterruptTaskCommand,
+  InterruptTaskResult,
+  PauseAutomationResult,
+  ResumeAutomationResult,
+} from "./coordination-contract.ts";

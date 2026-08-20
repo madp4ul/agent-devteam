@@ -8,18 +8,26 @@ import { TaskArchiveStore } from "./task-archive-store.ts";
 import { NotificationStore } from "./notification-store.ts";
 import { ActivityJournal } from "./activity-journal.ts";
 import { AttentionRecorder } from "./attention-recorder.ts";
+import { ConversationProjectionModule } from "./conversation-projection-module.ts";
+import { ConversationCommandModule } from "./conversation-command-module.ts";
+import type { AttemptTranscriptAccess } from "../runtime-contract.ts";
 
 export interface CoordinationPersistence {
   process: ProcessStateStore;
   taskCommands: TaskCommandStore;
   taskProjections: TaskProjectionStore;
+  conversationProjections: ConversationProjectionModule;
+  conversationCommands: ConversationCommandModule;
   automation: AutomationStateStore;
   taskArchive: TaskArchiveStore;
   notifications: NotificationStore;
   close(): void;
 }
 
-export function openCoordinationPersistence(path: string): CoordinationPersistence {
+export function openCoordinationPersistence(
+  path: string,
+  transcriptAccess?: AttemptTranscriptAccess,
+): CoordinationPersistence {
   const database = CoordinationDatabase.open(path);
   const taskProjections = new TaskProjectionStore(database);
   const idempotentCommands = new IdempotentCommandExecutor(database);
@@ -29,6 +37,16 @@ export function openCoordinationPersistence(path: string): CoordinationPersisten
     database.connection,
     activityJournal,
     notifications,
+  );
+  const conversationProjections = new ConversationProjectionModule(
+    database,
+    taskProjections,
+    transcriptAccess,
+  );
+  const conversationCommands = new ConversationCommandModule(
+    database,
+    idempotentCommands,
+    activityJournal,
   );
   return {
     process: new ProcessStateStore(database),
@@ -41,9 +59,12 @@ export function openCoordinationPersistence(path: string): CoordinationPersisten
       attentionRecorder,
     ),
     taskProjections,
+    conversationProjections,
+    conversationCommands,
     automation: new AutomationStateStore(
       database,
       taskProjections,
+      conversationProjections,
       idempotentCommands,
       activityJournal,
       attentionRecorder,

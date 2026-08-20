@@ -1,0 +1,21 @@
+/** Agent-runtime dispatch, lifecycle, transcript, and attempt facts. */
+export type {
+  ActivationStartupFailureView,
+  AgentExecutionProfile,
+  AgentRunAgent,
+  AgentRunLifecycle,
+  AgentRunOutcome,
+  AgentRunRequest,
+  AgentRuntime,
+  AttemptContextView,
+  AttemptOutcomeView,
+  AttemptTokenUsage,
+  AttemptTranscriptAccess,
+  AttemptTranscriptItem,
+  AttemptTranscriptQueryResult,
+  AttemptView,
+  RuntimeStartupBoundary,
+  RuntimeStartupDiagnostic,
+  RuntimeDispatchOptions,
+  StartApplicationOptions,
+} from "./coordination-contract.ts";

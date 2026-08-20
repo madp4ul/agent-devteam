@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-import type { TaskActivityView } from "../coordination-contract.ts";
+import type { TaskActivityView } from "../task-contract.ts";
 
 export class ActivityJournal {
   readonly #database: DatabaseSync;

@@ -4,6 +4,8 @@ import type {
   CollaboratorsQueryResult,
   ProcessDiagnostic,
   StartupView,
+} from "../process-contract.ts";
+import type {
   TaskActivityQueryResult,
   ArchivedTaskOverviewsQueryResult,
   TaskAttachmentsQueryResult,
@@ -12,7 +14,7 @@ import type {
   TaskOverviewsQuery,
   TaskOverviewsQueryResult,
   TaskView,
-} from "../coordination-contract.ts";
+} from "../task-contract.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
 import type { AutomationStateStore } from "./automation-state-store.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";

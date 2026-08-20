@@ -7,72 +7,82 @@ import { loadProcessDefinition } from "./internal/process-definition.ts";
 import { TaskDiscovery } from "./internal/task-discovery.ts";
 import { GitTaskWorkspaceManager, validateTaskWorkspaceConsistency } from "./internal/git-task-workspace.ts";
 import type {
-  AddTaskCommentCommand,
-  AddTaskCommentResult,
   ActiveRunView,
   ActivationRecoveryCommand,
   ActivationRecoveryResult,
   AutomationView,
-  AttemptTranscriptAccess,
-  AttemptTranscriptQueryResult,
-  AgentConversationQueryResult,
-  BoardMutationResult,
-  BoardSummariesQueryResult,
-  BoardsQueryResult,
-  CollaboratorsQueryResult,
   ContinuePermissionBlockedActivationCommand,
-  ContinueAgentConversationCommand,
-  ContinueAgentConversationResult,
   ContinueInterruptedTaskCommand,
   ContinueInterruptedTaskResult,
   DismissActivationCommand,
   DismissActivationResult,
   DismissStaleActivationCommand,
   DismissStaleActivationResult,
-  CreateTaskCommand,
-  CreateChildTaskCommand,
-  CreateTaskRelationshipCommand,
-  RemoveTaskRelationshipCommand,
-  RemoveTaskRelationshipResult,
-  EditTaskCommand,
-  MoveTaskCommand,
-  MoveTaskResult,
-  InertMoveTaskResult,
-  MarkUserMentionAddressedCommand,
-  MarkUserMentionAddressedResult,
   InterruptTaskCommand,
   InterruptTaskResult,
-  NeedsAttentionQueryResult,
+  PauseAutomationResult,
+  ResumeAutomationResult,
+} from "./automation-contract.ts";
+import type {
+  AgentConversationQueryResult,
+  ContinueAgentConversationCommand,
+  ContinueAgentConversationResult,
+  TaskConversationIndexQueryResult,
+} from "./conversation-contract.ts";
+import type {
   NotificationPolicyView,
   NotificationOccurrenceBatch,
   UpdateNotificationPolicyCommand,
   UpdateNotificationPolicyResult,
+} from "./notification-contract.ts";
+import type {
+  BoardSummariesQueryResult,
+  CollaboratorsQueryResult,
   ProcessDiagnostic,
   ProcessValidationResult,
-  ResumeAutomationResult,
-  PauseAutomationResult,
-  StartApplicationOptions,
   StartupView,
-  TaskActivityQueryResult,
-  TaskAttachmentsQueryResult,
-  TaskConversationIndexQueryResult,
-  TaskInspectionQueryResult,
-  TaskOverviewView,
-  TaskView,
-  UserTaskInspectionQueryResult,
-  TaskOverviewsQuery,
-  TaskOverviewsQueryResult,
-  TaskQueryResult,
-  TaskWorkspaceGitStateQueryResult,
-  TaskRelationshipMutationResult,
-  ArchiveTaskCommand,
-  ArchiveTaskResult,
+} from "./process-contract.ts";
+import type {
+  AttemptTranscriptAccess,
+  AttemptTranscriptQueryResult,
+  StartApplicationOptions,
+} from "./runtime-contract.ts";
+import type {
+  AddTaskCommentCommand,
+  AddTaskCommentResult,
   ArchiveCompletedTasksCommand,
   ArchiveCompletedTasksResult,
   ArchivedTaskOverviewsQueryResult,
+  ArchiveTaskCommand,
+  ArchiveTaskResult,
+  BoardMutationResult,
+  BoardsQueryResult,
+  CreateChildTaskCommand,
+  CreateTaskCommand,
+  CreateTaskRelationshipCommand,
+  EditTaskCommand,
+  InertMoveTaskResult,
+  MarkUserMentionAddressedCommand,
+  MarkUserMentionAddressedResult,
+  MoveTaskCommand,
+  MoveTaskResult,
+  NeedsAttentionQueryResult,
+  RemoveTaskRelationshipCommand,
+  RemoveTaskRelationshipResult,
+  TaskActivityQueryResult,
+  TaskAttachmentsQueryResult,
+  TaskInspectionQueryResult,
+  TaskOverviewView,
+  TaskOverviewsQuery,
+  TaskOverviewsQueryResult,
+  TaskQueryResult,
+  TaskRelationshipMutationResult,
+  TaskView,
+  TaskWorkspaceGitStateQueryResult,
   UnarchiveTaskCommand,
   UnarchiveTaskResult,
-} from "./coordination-contract.ts";
+  UserTaskInspectionQueryResult,
+} from "./task-contract.ts";
 import type { UserBoardProjection } from "./user-board-contract.ts";
 import type {
   UserRelatedTaskView,
@@ -88,7 +98,6 @@ export class CoordinationApplication {
   readonly #startup: StartupView;
   readonly #automation: AutomationCoordinator;
   readonly #discovery: TaskDiscovery;
-  readonly #transcriptAccess: AttemptTranscriptAccess | undefined;
   readonly #workspaceManager: GitTaskWorkspaceManager | undefined;
   readonly #pendingInterruptCommands = new Map<
     string,
@@ -100,14 +109,12 @@ export class CoordinationApplication {
     startup: StartupView,
     automation: AutomationCoordinator,
     discovery: TaskDiscovery,
-    transcriptAccess?: AttemptTranscriptAccess,
     workspaceManager?: GitTaskWorkspaceManager,
   ) {
     this.#persistence = persistence;
     this.#startup = startup;
     this.#automation = automation;
     this.#discovery = discovery;
-    this.#transcriptAccess = transcriptAccess;
     this.#workspaceManager = workspaceManager;
   }
 
@@ -122,7 +129,7 @@ export class CoordinationApplication {
     const validation = await loadProcessDefinition(options.processDefinitionPath);
     let persistence: CoordinationPersistence;
     try {
-      persistence = openCoordinationPersistence(options.databasePath);
+      persistence = openCoordinationPersistence(options.databasePath, options.transcriptAccess);
     } catch (error) {
       return CoordinationApplication.configurationError([
         operationalDiagnostic(
@@ -151,7 +158,6 @@ export class CoordinationApplication {
           startup,
         }),
         new TaskDiscovery(process, taskProjections, automation, startup),
-        options.transcriptAccess,
       );
     }
 
@@ -198,7 +204,6 @@ export class CoordinationApplication {
             startup,
           }),
           new TaskDiscovery(process, taskProjections, automation, startup),
-          options.transcriptAccess,
         );
       }
     }
@@ -251,7 +256,6 @@ export class CoordinationApplication {
           : { transcriptAccess: options.transcriptAccess }),
       }),
       new TaskDiscovery(process, taskProjections, automation, startup, collaborators),
-      options.transcriptAccess,
       workspaceManager,
     );
   }
@@ -260,7 +264,7 @@ export class CoordinationApplication {
     diagnostics: ProcessDiagnostic[],
     transcriptAccess?: AttemptTranscriptAccess,
   ): CoordinationApplication {
-    const persistence = openCoordinationPersistence(":memory:");
+    const persistence = openCoordinationPersistence(":memory:", transcriptAccess);
     const { process, taskProjections, automation } = persistence;
     const startup: StartupView = {
       mode: "configuration-error",
@@ -277,7 +281,6 @@ export class CoordinationApplication {
         startup,
       }),
       new TaskDiscovery(process, taskProjections, automation, startup),
-      transcriptAccess,
     );
   }
 
@@ -563,30 +566,7 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const attempt = this.#persistence.taskProjections.readAttemptTranscriptReference(attemptId);
-    if (attempt === undefined) return { available: false, reason: "not-found" };
-    if (this.#persistence.taskProjections.isAttemptArchived(attemptId)) {
-      return { available: false, reason: "unavailable" };
-    }
-    const persisted = this.#persistence.taskProjections.readPersistedAttemptTranscript(attemptId);
-    if (persisted !== undefined && attempt.threadId !== null) {
-      return { available: true, threadId: attempt.threadId, ...persisted };
-    }
-    if (attempt.threadId === null || this.#transcriptAccess === undefined) {
-      return { available: false, reason: "unavailable" };
-    }
-    const items = await this.#transcriptAccess.read(attemptId);
-    const usage = this.#transcriptAccess.readUsage === undefined
-      ? null
-      : await this.#transcriptAccess.readUsage(attemptId);
-    return items === null
-      ? { available: false, reason: "unavailable" }
-      : {
-          available: true,
-          threadId: attempt.threadId,
-          items,
-          ...(usage === null ? {} : { usage }),
-        };
+    return this.#persistence.conversationProjections.readAttemptTranscript(attemptId);
   }
 
   async queryAgentConversation(
@@ -600,24 +580,9 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const conversation = this.#persistence.taskProjections.readAgentConversation(taskId, conversationId);
+    const conversation = await this.#persistence.conversationProjections.readConversation(taskId, conversationId);
     if (conversation === undefined) return { available: false, reason: "not-found" };
-    const runs = await Promise.all(
-      this.#persistence.taskProjections.readConversationRuns(conversationId).map(async (run) => {
-        const transcript = await this.queryAttemptTranscript(run.attempt.id);
-        return {
-          ...run,
-          transcript: transcript.available
-            ? {
-                available: true as const,
-                items: transcript.items,
-                ...(transcript.usage === undefined ? {} : { usage: transcript.usage }),
-              }
-            : { available: false as const },
-        };
-      }),
-    );
-    return { available: true, conversation: { ...conversation, runs } };
+    return { available: true, conversation };
   }
 
   queryTaskConversationIndex(taskId: string): TaskConversationIndexQueryResult {
@@ -628,12 +593,13 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    if (!this.#persistence.taskProjections.taskExists(taskId)) {
+    const conversations = this.#persistence.conversationProjections.readTaskIndex(taskId);
+    if (conversations === undefined) {
       return { available: false, reason: "not-found" };
     }
     return {
       available: true,
-      conversations: this.#persistence.taskProjections.readTaskConversationIndex(taskId),
+      conversations,
     };
   }
 
@@ -641,7 +607,7 @@ export class CoordinationApplication {
     if (this.#startup.mode === "configuration-error") {
       return { accepted: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
     }
-    const result = this.#persistence.taskCommands.continueAgentConversation(command);
+    const result = this.#persistence.conversationCommands.continue(command);
     if (result.accepted) this.#automation.kick();
     return result;
   }

@@ -1,19 +1,20 @@
 import type {
   ActiveRunView,
-  AgentRunAgent,
-  AgentRunOutcome,
-  Actor,
   AutomationClock,
   AutomationView,
-  AttemptTranscriptAccess,
   InterruptTaskResult,
   PauseAutomationResult,
-  ProcessBoardView,
   ResumeAutomationResult,
+} from "../automation-contract.ts";
+import type { ProcessBoardView, StartupView } from "../process-contract.ts";
+import type {
+  AgentRunAgent,
+  AgentRunOutcome,
+  AttemptTranscriptAccess,
   RuntimeStartupDiagnostic,
   RuntimeDispatchOptions,
-  StartupView,
-} from "../coordination-contract.ts";
+} from "../runtime-contract.ts";
+import type { Actor } from "../task-contract.ts";
 import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-workspace.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
 import type { AutomationStateStore, RunnableActivation } from "./automation-state-store.ts";

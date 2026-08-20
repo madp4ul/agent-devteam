@@ -2,7 +2,7 @@ import type {
   BoardSummaryView,
   ProcessBoardView,
   ProcessDefinitionImpact,
-} from "../coordination-contract.ts";
+} from "../process-contract.ts";
 import { taskCreationAllowed } from "./task-creation-policy.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type {

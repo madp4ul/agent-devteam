@@ -1,22 +1,22 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import type { ActivationView } from "../automation-contract.ts";
 import type {
-  ActivationView,
-  AgentConversationIndexEntry,
-  AgentConversationView,
   AttemptTranscriptItem,
   AttemptTokenUsage,
-  Actor,
   AttemptView,
-  NeedsAttentionTaskView,
   RuntimeStartupBoundary,
+} from "../runtime-contract.ts";
+import type {
+  Actor,
+  NeedsAttentionTaskView,
   TaskAttachmentView,
   TaskAttentionView,
   TaskActivityView,
   TaskOverviewView,
   TaskRelationshipView,
   TaskView,
-} from "../coordination-contract.ts";
+} from "../task-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 
 export interface StoredTaskOverview {
@@ -24,25 +24,6 @@ export interface StoredTaskOverview {
   columnEntrySequence: number;
   task: TaskOverviewView;
 }
-
-interface ConversationOwnerAndContinuationRow {
-  owning_agent_id: string;
-  owning_agent_name_snapshot: string;
-  current_agent_name: string | null;
-  agent_applied: number | null;
-  current_thread_id: string | null;
-  archived_at: string | null;
-}
-
-interface ConversationMessageRow {
-  id: string;
-  conversation_id: string;
-  body: string;
-  actor_id: string;
-  occurred_at: string;
-}
-
-const conversationMessageColumns = "id, conversation_id, body, actor_id, occurred_at";
 
 export class TaskProjectionStore {
   readonly #database: DatabaseSync;
@@ -115,7 +96,7 @@ export class TaskProjectionStore {
             : { messageBody: event.conversation_message_body }),
         },
       })),
-      activations: this.readActivations(taskId),
+      activations: this.readTaskActivations(taskId),
     };
   }
 
@@ -433,162 +414,6 @@ export class TaskProjectionStore {
         };
   }
 
-  readAgentConversation(taskId: string, conversationId: string): Omit<AgentConversationView, "runs"> | undefined {
-    const row = this.#database.prepare(
-      `SELECT conversation.id, conversation.task_id, conversation.owning_agent_id,
-              conversation.owning_agent_name_snapshot, conversation.originating_activation_id,
-              conversation.current_thread_id, conversation.created_at, conversation.latest_activity_at,
-              task.archived_at, agent.name AS current_agent_name, agent.applied AS agent_applied
-       FROM agent_conversations conversation
-       JOIN tasks task ON task.id = conversation.task_id
-       LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
-       WHERE conversation.id = ? AND conversation.task_id = ?`,
-    ).get(conversationId, taskId) as {
-      id: string;
-      task_id: string;
-      owning_agent_id: string;
-      owning_agent_name_snapshot: string;
-      originating_activation_id: string;
-      current_thread_id: string | null;
-      created_at: string;
-      latest_activity_at: string;
-      archived_at: string | null;
-      current_agent_name: string | null;
-      agent_applied: number | null;
-    } | undefined;
-    if (row === undefined) return undefined;
-    const originatingActivation = this.readActivations(row.task_id)
-      .find((activation) => activation.id === row.originating_activation_id);
-    if (originatingActivation === undefined) return undefined;
-    return {
-      id: row.id,
-      taskId: row.task_id,
-      originatingActivationId: row.originating_activation_id,
-      originatingActivation,
-      ...this.conversationOwnerAndContinuation(row),
-      currentThreadId: row.current_thread_id,
-      createdAt: row.created_at,
-      latestActivityAt: row.latest_activity_at,
-      messages: this.readConversationMessages(row.id),
-    };
-  }
-
-  private readConversationMessages(conversationId: string): AgentConversationView["messages"] {
-    const rows = this.#database.prepare(
-      `SELECT ${conversationMessageColumns}
-       FROM agent_conversation_messages
-       WHERE conversation_id = ?
-       ORDER BY rowid`,
-    ).all(conversationId) as unknown as ConversationMessageRow[];
-    return rows.map(conversationMessageView);
-  }
-
-  taskExists(taskId: string): boolean {
-    return this.#database.prepare("SELECT 1 FROM tasks WHERE id = ?").get(taskId) !== undefined;
-  }
-
-  readTaskConversationIndex(taskId: string): AgentConversationIndexEntry[] {
-    const rows = this.#database.prepare(
-      `SELECT conversation.id, conversation.owning_agent_id,
-              conversation.owning_agent_name_snapshot, conversation.generated_label,
-              conversation.latest_activity_at, conversation.current_thread_id,
-              task.archived_at, agent.name AS current_agent_name, agent.applied AS agent_applied,
-              CASE
-                WHEN EXISTS (
-                  SELECT 1
-                  FROM attention_reasons attention
-                  LEFT JOIN activations direct_activation
-                    ON direct_activation.id = attention.source_event_id
-                  LEFT JOIN task_comments source_comment
-                    ON source_comment.id = attention.source_event_id
-                  LEFT JOIN attempts source_attempt
-                    ON source_attempt.id = source_comment.attempt_id
-                  LEFT JOIN activations comment_activation
-                    ON comment_activation.id = source_attempt.activation_id
-                  WHERE attention.task_id = conversation.task_id
-                    AND attention.resolved_at IS NULL
-                    AND (direct_activation.conversation_id = conversation.id
-                      OR comment_activation.conversation_id = conversation.id)
-                ) THEN 'needs-attention'
-                WHEN EXISTS (
-                  SELECT 1
-                  FROM activations running_activation
-                  JOIN attempts running_attempt
-                    ON running_attempt.activation_id = running_activation.id
-                  WHERE running_activation.conversation_id = conversation.id
-                    AND running_attempt.status = 'running'
-                ) THEN 'running'
-                ELSE NULL
-              END AS status
-       FROM agent_conversations conversation
-       JOIN tasks task ON task.id = conversation.task_id
-       LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
-       WHERE conversation.task_id = ?
-       ORDER BY conversation.latest_activity_sequence DESC, conversation.created_at DESC,
-                conversation.id DESC`,
-    ).all(taskId) as Array<{
-      id: string;
-      owning_agent_id: string;
-      owning_agent_name_snapshot: string;
-      generated_label: string;
-      latest_activity_at: string;
-      current_thread_id: string | null;
-      archived_at: string | null;
-      current_agent_name: string | null;
-      agent_applied: number | null;
-      status: AgentConversationIndexEntry["status"];
-    }>;
-    return rows.map((row) => {
-      return {
-        id: row.id,
-        ...this.conversationOwnerAndContinuation(row),
-        label: row.generated_label,
-        latestActivityAt: row.latest_activity_at,
-        status: row.status,
-      };
-    });
-  }
-
-  private conversationOwnerAndContinuation(
-    row: ConversationOwnerAndContinuationRow,
-  ): Pick<AgentConversationView, "owningAgent" | "continuation"> {
-    const present = row.agent_applied === 1 && row.current_agent_name !== null;
-    return {
-      owningAgent: {
-        id: row.owning_agent_id,
-        name: present ? row.current_agent_name! : row.owning_agent_name_snapshot,
-        historicalName: row.owning_agent_name_snapshot,
-        present,
-      },
-      continuation: row.archived_at !== null
-        ? { available: false, reason: "task-archived" }
-        : !present
-          ? { available: false, reason: "owning-agent-unavailable" }
-          : row.current_thread_id === null
-            ? { available: false, reason: "thread-unavailable" }
-            : { available: true },
-    };
-  }
-
-  readConversationRuns(conversationId: string): Array<{
-    activationId: string;
-    sourceMessageId?: string;
-    attempt: AttemptView;
-  }> {
-    const activations = this.#database.prepare(
-      "SELECT id, reason_type, source_event_id FROM activations WHERE conversation_id = ? ORDER BY sequence",
-    ).all(conversationId) as Array<{
-      id: string;
-      reason_type: ActivationView["reason"]["type"];
-      source_event_id: string;
-    }>;
-    return activations.flatMap(({ id, reason_type, source_event_id }) => this.readAttempts(id).map((attempt) => ({
-      activationId: id,
-      ...(reason_type === "user-follow-up" ? { sourceMessageId: source_event_id } : {}),
-      attempt,
-    })));
-  }
-
   isTaskAutomationSuspended(taskId: string): boolean {
     const row = this.#database
       .prepare("SELECT automation_suspended FROM tasks WHERE id = ?")
@@ -612,7 +437,7 @@ export class TaskProjectionStore {
       .get(taskId) !== undefined;
   }
 
-  readSourceEvent(id: string): TaskActivityView | TaskView["comments"][number] | AgentConversationView["messages"][number] | undefined {
+  readSourceEvent(id: string): TaskActivityView | TaskView["comments"][number] | undefined {
     const row = this.#database
       .prepare(
         `SELECT id, type, actor_kind, actor_id, occurred_at, details_json
@@ -638,11 +463,6 @@ export class TaskProjectionStore {
         details: JSON.parse(row.details_json) as Record<string, string>,
       };
     }
-    const conversationMessage = this.#database.prepare(
-      `SELECT ${conversationMessageColumns}
-       FROM agent_conversation_messages WHERE id = ?`,
-    ).get(id) as ConversationMessageRow | undefined;
-    if (conversationMessage !== undefined) return conversationMessageView(conversationMessage);
     const comment = this.#database
       .prepare(
         `SELECT id, body, actor_kind, actor_id, occurred_at, attempt_id
@@ -726,7 +546,7 @@ export class TaskProjectionStore {
     }));
   }
 
-  private readActivations(taskId: string): ActivationView[] {
+  readTaskActivations(taskId: string): ActivationView[] {
     const taskState = this.#database.prepare(
       `SELECT automation_suspended, suspended_activation_id
        FROM tasks WHERE id = ?`,
@@ -760,7 +580,7 @@ export class TaskProjectionStore {
         stale: number;
       }>;
     return rows.map((row) => {
-      const attempts = this.readAttempts(row.id);
+      const attempts = this.readActivationAttempts(row.id);
       const dismissible = row.status === "queued" && row.resolution === null &&
         row.stale === 0 && (attempts.length === 0 || (
           taskState.automation_suspended === 1 &&
@@ -866,7 +686,7 @@ export class TaskProjectionStore {
         };
   }
 
-  private readAttempts(activationId: string): ActivationView["attempts"] {
+  readActivationAttempts(activationId: string): ActivationView["attempts"] {
     const rows = this.#database
       .prepare(
         `SELECT id, status, workspace_path, started_at, completed_at,
@@ -942,14 +762,4 @@ export class TaskProjectionStore {
       ...(row.attempt_id === null ? {} : { attemptId: row.attempt_id }),
     }));
   }
-}
-
-function conversationMessageView(row: ConversationMessageRow): AgentConversationView["messages"][number] {
-  return {
-    id: row.id,
-    conversationId: row.conversation_id,
-    body: row.body,
-    actor: { kind: "user", id: row.actor_id },
-    occurredAt: row.occurred_at,
-  };
 }

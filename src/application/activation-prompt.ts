@@ -1,9 +1,5 @@
-import type {
-  Actor,
-  AgentRunRequest,
-  TaskActivityView,
-  TaskCommentView,
-} from "./coordination-contract.ts";
+import type { AgentRunRequest } from "./runtime-contract.ts";
+import type { Actor, TaskActivityView, TaskCommentView } from "./task-contract.ts";
 
 const FRAMEWORK_GUIDANCE = `You are one participant in a shared, board-based workflow. The task is the durable record that you, other agents, and the user use to coordinate work.
 
