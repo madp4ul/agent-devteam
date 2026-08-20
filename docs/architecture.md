@@ -14,7 +14,8 @@ linked below for detailed contracts and operations.
 
 ```mermaid
 graph LR
-    User["User"] -->|localhost| Host["Host application"]
+    User["User"] --> Browser["Browser adapter"]
+    Browser -->|localhost HTTP| Host["Host application"]
     Process["Process definition"] --> Host
     Host --> Core["Coordination core"]
     Core -->|reads and writes| State["Coordination database"]
@@ -43,8 +44,10 @@ loads the process definition, starts the coordination core, serves the React
 browser application, and exposes local HTTP endpoints.
 
 The browser is a presentation adapter. It provides boards, task details,
-history, transcripts, automation controls, and accessible task movement. It
-does not own workflow or automation policy.
+history, transcripts, automation controls, and accessible task movement. The
+browser and host share the request and response contracts for that local
+transport, while the host maps decoding and status codes. Neither side owns
+workflow or automation policy.
 
 ### Coordination core
 
@@ -57,31 +60,24 @@ Complete user-facing board and task-detail read projections are assembled
 inside this boundary before the web adapter serializes them. The adapter does
 not reconstruct those authoritative views by coordinating lower-level queries.
 
-The core records a command's state change, activity provenance, projection
-updates, and idempotent response together. This is the central architectural
-choice: the UI and agents collaborate through one authoritative model rather
-than through separate state that must later be reconciled.
+Each command workflow owns its SQLite transaction and records the state change,
+activity provenance, projection updates, notifications, and idempotent response
+that apply to that workflow together. Focused internal modules participate on
+the same database connection; they do not open independent transactions or
+become additional state owners. This is the central architectural choice: the
+UI and agents collaborate through one authoritative model rather than through
+separate state that must later be reconciled.
 
 ### Durable state
 
 SQLite stores the live coordination model: boards, tasks, comments,
 relationships, activity, activations, agent conversations, attempts, attention,
-and automation state. Conversations retain task, owner, originating activation,
-and current-thread identity; their run evidence stays in the existing
-attempt-scoped transcript store. Read projections aggregate that evidence for
-the browser without becoming a second source of truth or duplicating it. Each
-conversation record persists a generated originating-request label and durable
-activity order; a task-scoped compact projection exposes that indexing metadata
-so task details can navigate recent history without loading transcript evidence.
-User follow-ups pass through a focused internal conversation command module.
-One application transaction records the authored message,
-`conversation.continued` activity, `user-follow-up` activation, conversation
-activity order, and idempotent response while enforcing ownership and
-continuation availability.
-Archival retains the conversation, activation, and coordination-activity lineage
-but removes its attempt transcripts and authored follow-up bodies. It also removes
-cached continuation-command responses that duplicate those bodies, so archived
-history cannot recover detailed conversation content through an idempotency replay.
+notifications, and automation state. User-facing projections aggregate those
+facts without becoming another source of truth or duplicating attempt-owned run
+evidence. Conversations retain their task, owner, activation, thread, and
+activity lineage across retries and replacement threads. Continuation is one
+authoritative command, and archival preserves the lineage while removing
+detailed transcript, authored-message, and replay content.
 
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
@@ -96,20 +92,13 @@ and proceeds only after the user resumes it.
 
 For each run, the Codex adapter starts or resumes a thread in the task's Git
 workspace. A per-attempt MCP adapter lets that agent inspect relevant project
-coordination state and mutate only its current task. Every activation owns a
-durable task-scoped agent conversation; retries remain in that conversation,
+coordination state and mutate only its current task. Every activation belongs to
+a durable task-scoped agent conversation; retries remain in that conversation,
 while each attempt's messages and tool activity remain separately attributable
-run evidence.
-For a `user-follow-up` activation, runnable selection still uses the ordinary
-task activation order and safety gates, but dispatch resolves the conversation's
-current thread as the resume target. It uses the conversation's immutable owning
-agent, current applied instructions, verified existing task workspace, and a new
-attempt-scoped MCP authorization; the runtime releases that authorization through
-the normal attempt lifecycle.
-If Codex cannot resume that thread, the runtime marks the attempt's continuity as
-replaced while adopting the replacement thread as the conversation's next resume
-target. Conversation projections retain and display that marker so the replacement
-is not presented as preserved model history.
+run evidence. Follow-up activations resume the conversation's current thread
+through the same ordering and safety gates. When the runtime must replace a
+thread, it records that loss of continuity and adopts the replacement as the
+conversation's next resume target.
 
 ### Git task workspaces
 
@@ -179,6 +168,9 @@ coordination database.
 - **One authority:** all coordination commands and queries pass through the
   application boundary; UI, MCP, and runtime adapters do not write SQLite
   directly.
+- **Transaction locality:** the workflow making an authoritative decision owns
+  its SQLite transaction; shared internal mechanics participate in that
+  transaction without becoming another authority.
 - **Durable provenance:** stable process identities, activation reasons,
   activity, and attempt history are retained rather than inferred later.
 - **Explicit workflow:** agent completion does not imply board movement, and
