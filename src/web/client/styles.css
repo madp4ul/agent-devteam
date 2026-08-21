@@ -424,12 +424,12 @@ textarea { resize: vertical; line-height: 1.5; }
 .timeline-section { padding: clamp(1.2rem, 3vw, 2rem); }
 .timeline { position: relative; margin: 1.5rem 0 0; padding: 0; list-style: none; }
 .timeline::before { position: absolute; top: .5rem; bottom: .5rem; left: 1rem; width: 1px; content: ""; background: var(--line); }
-.timeline-entry { position: relative; display: grid; grid-template-columns: 2rem 1fr; gap: 1rem; margin-bottom: 1rem; }
+.timeline-entry { position: relative; display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: 1rem; margin-bottom: 1rem; }
 .timeline-marker { z-index: 1; display: grid; width: 2rem; height: 2rem; place-items: center; border: 3px solid var(--paper); border-radius: 50%; color: white; background: var(--forest); font-size: .7rem; }
 .comment-entry .timeline-marker { color: #5d430f; background: var(--amber); }
 .event-entry .timeline-marker { background: #718078; }
 .movement-entry .timeline-marker { background: #547c9b; }
-.timeline-entry article { border: 1px solid var(--line); border-radius: .65rem; padding: 1rem; }
+.timeline-entry article { min-width: 0; border: 1px solid var(--line); border-radius: .65rem; padding: 1rem; }
 .relationship-task-name { font-weight: 800; }
 .comment-entry article { background: #fff9e8; }
 .movement-entry article { background: #f3f7fa; }
@@ -453,7 +453,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .attempt-outcome { margin-top: 1rem; }
 .attempt-outcome h3 { margin: 0; font-size: .84rem; letter-spacing: 0; text-transform: none; }
 .attempt-history { margin: 1rem -1rem 0; padding: 0; list-style: none; }
-.attempt-history-item { padding: .85rem 1rem; }
+.attempt-history-item { min-width: 0; padding: .85rem 1rem; }
 .attempt-history-item.nested-comment { margin: 0; background: #fff9e8; }
 .attempt-history-item.nested-movement { margin: 0; background: #f3f7fa; }
 .attempt-history-item .entry-meta strong { font-size: .84rem; }
@@ -464,8 +464,9 @@ textarea { resize: vertical; line-height: 1.5; }
 .attempt-metadata { display: grid; gap: .35rem; min-width: 0; }
 .attempt-footer > button { flex: 0 0 auto; padding: .4rem .65rem; font-size: .75rem; }
 .attempt-footer a { color: var(--forest); font-weight: 750; }
-.authored-prose { max-height: 6em; overflow: hidden; margin-bottom: .2rem; overflow-wrap: anywhere; }
+.authored-prose { min-width: 0; max-height: 6em; overflow: hidden; margin-bottom: .2rem; overflow-wrap: anywhere; }
 .authored-prose.expanded { max-height: none; overflow: visible; }
+.markdown-content { min-width: 0; max-width: 100%; }
 .markdown-content > :first-child { margin-top: .55rem; }
 .markdown-content > :last-child { margin-bottom: .2rem; }
 .description > :first-child { margin-top: 1rem; }
@@ -480,8 +481,8 @@ textarea { resize: vertical; line-height: 1.5; }
 .markdown-content ul, .markdown-content ol { margin: .55rem 0; padding-left: 1.5rem; }
 .markdown-content li + li { margin-top: .2rem; }
 .markdown-content code { border-radius: .25rem; color: var(--code-text); background: var(--code-surface); padding: .08rem .3rem; font-size: .88em; }
-.markdown-content pre { max-width: 100%; overflow-x: auto; border-radius: .5rem; background: var(--code-surface); padding: .75rem; }
-.markdown-content pre code { background: transparent; padding: 0; white-space: pre; }
+.markdown-content pre { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; overflow-wrap: anywhere; border-radius: .5rem; background: var(--code-surface); padding: .75rem; white-space: pre-wrap; word-break: break-word; }
+.markdown-content pre code { background: transparent; padding: 0; white-space: inherit; overflow-wrap: inherit; word-break: inherit; }
 .markdown-content blockquote { margin: .7rem 0; border-left: 3px solid var(--border); padding-left: .85rem; color: var(--muted); }
 .markdown-copy-button { display: grid; flex: 0 0 auto; width: 1.7rem; height: 1.7rem; place-items: center; border: 1px solid transparent; border-radius: .4rem; color: var(--muted); background: transparent; padding: 0; }
 .markdown-copy-button:hover:not(:disabled), .markdown-copy-button:focus-visible, .markdown-copy-button.copied { border-color: var(--border); color: var(--text); background: var(--surface-raised); }

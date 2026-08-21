@@ -6,7 +6,7 @@ requiring horizontal scrolling as the primary behavior.
 
 **Blocked by:** None
 
-**Status:** open
+**Status:** claimed
 
 - [ ] Reproduce the page-level overflow with a fenced Markdown code block that
   contains a very long line, including an unbroken token, in each applicable
@@ -32,4 +32,3 @@ code blocks to authored Markdown surfaces. This report concerns those rendered
 Markdown blocks and deliberately prefers readable wrapping over local
 horizontal scrolling, so it is a separate regression rather than a reopening
 of issue 58.
-

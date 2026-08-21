@@ -1,6 +1,83 @@
 import { expect, test } from "./browser-fixture.ts";
 import { cleanWorkspaceGitScenario, runningConversationScenario } from "./browser-fixture.ts";
 
+test("rendered Markdown code stays within every authored task surface", async ({ page }) => {
+  const unbrokenToken = `https://example.invalid/${"unbroken".repeat(24)}`;
+  const codeBlock = [
+    "```text",
+    "  const ordinaryLine = \"This intentionally long code line remains readable while preserving its indentation and authored newline.\";",
+    `  ${unbrokenToken}`,
+    "  final line",
+    "```",
+  ].join("\n");
+
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.description = `Description code\n\n${codeBlock}`;
+    detail.task.comments[0].body = `Comment code\n\n${codeBlock}`;
+    const activation = detail.task.activations.find((candidate: { attempts: unknown[] }) => candidate.attempts.length > 0);
+    activation.attempts[0].outcome.summary = `Outcome code\n\n${codeBlock}`;
+    detail.task.activity.push({
+      id: "long-code-conversation-message",
+      type: "conversation.continued",
+      actor: { kind: "user", id: "local-user" },
+      occurredAt: "2026-08-15T12:00:00.000Z",
+      details: {
+        conversationId: "browser-conversation",
+        messageId: "long-code-message",
+        activationId: "long-code-activation",
+        messageBody: `Conversation message code\n\n${codeBlock}`,
+      },
+    });
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: /Show \d+ more lines?/ }).all().then(async (buttons) => {
+    for (const button of buttons) await button.click();
+  });
+
+  const descriptionSurface = page.getByRole("region", { name: "Description" });
+  const commentSurface = page.locator(".comment-entry, .nested-comment").filter({ hasText: "Comment code" });
+  const outcomeSurface = page.getByRole("region", { name: "Outcome" }).filter({ hasText: "Outcome code" });
+  const conversationMessageSurface = page.locator(".event-entry").filter({ hasText: "Conversation message code" });
+  const surfaces = [descriptionSurface, commentSurface, outcomeSurface, conversationMessageSurface];
+
+  for (const appearance of ["dark", "light"] as const) {
+    await page.evaluate((theme) => {
+      localStorage.setItem("coordination-theme", theme);
+      document.documentElement.dataset.theme = theme;
+    }, appearance);
+    for (const width of [1280, 420]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect.poll(() => page.evaluate(() =>
+        document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+      for (const surface of surfaces) {
+        const code = surface.locator("pre code");
+        await expect(code).toContainText(unbrokenToken);
+        expect(await surface.locator("pre").evaluate((element) => ({
+          contained: element.scrollWidth <= element.clientWidth,
+          wraps: element.getBoundingClientRect().height > Number.parseFloat(getComputedStyle(element).fontSize) * 1.2 * 4,
+        }))).toEqual({ contained: true, wraps: true });
+      }
+    }
+  }
+
+  const copyCases = [
+    { surface: descriptionSurface, label: "Copy description Markdown", prefix: "Description code" },
+    { surface: commentSurface, label: "Copy comment Markdown", prefix: "Comment code" },
+    { surface: outcomeSurface, label: "Copy outcome Markdown", prefix: "Outcome code" },
+    { surface: conversationMessageSurface, label: "Copy message Markdown", prefix: "Conversation message code" },
+  ];
+  for (const copyCase of copyCases) {
+    await copyCase.surface.getByRole("button", { name: copyCase.label }).click();
+    await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n")))
+      .toBe(`${copyCase.prefix}\n\n${codeBlock}`);
+  }
+});
+
 test("details keep contextual controls, one timeline, and readable transcript evidence", async ({ page }) => {
   await page.goto("/tasks/T-0001");
   const topbar = page.locator(".detail-topbar");
