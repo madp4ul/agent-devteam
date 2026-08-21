@@ -11,6 +11,7 @@ import { AttentionRecorder } from "./attention-recorder.ts";
 import { ConversationProjectionModule } from "./conversation-projection-module.ts";
 import { ConversationCommandModule } from "./conversation-command-module.ts";
 import { ConversationContextDeliveryModule } from "./conversation-context-delivery-module.ts";
+import { ActivationCreationModule } from "./activation-creation-module.ts";
 import type { AttemptTranscriptAccess } from "../runtime-contract.ts";
 
 export interface CoordinationPersistence {
@@ -35,6 +36,7 @@ export function openCoordinationPersistence(
   const idempotentCommands = new IdempotentCommandExecutor(database);
   const notifications = new NotificationStore(database);
   const activityJournal = new ActivityJournal(database.connection);
+  const activationCreation = new ActivationCreationModule(database, activityJournal);
   const attentionRecorder = new AttentionRecorder(
     database.connection,
     activityJournal,
@@ -49,6 +51,7 @@ export function openCoordinationPersistence(
     database,
     idempotentCommands,
     activityJournal,
+    activationCreation,
   );
   return {
     process: new ProcessStateStore(database),
@@ -59,6 +62,7 @@ export function openCoordinationPersistence(
       notifications,
       activityJournal,
       attentionRecorder,
+      activationCreation,
     ),
     taskProjections,
     conversationProjections,

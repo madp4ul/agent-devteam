@@ -41,6 +41,7 @@ import { taskCreationAllowed } from "./task-creation-policy.ts";
 import type { NotificationStore } from "./notification-store.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
 import type { AttentionRecorder } from "./attention-recorder.ts";
+import type { ActivationCreationModule } from "./activation-creation-module.ts";
 
 export class TaskCommandStore {
   readonly #database: DatabaseSync;
@@ -49,6 +50,7 @@ export class TaskCommandStore {
   readonly #notifications: NotificationStore;
   readonly #activityJournal: ActivityJournal;
   readonly #attentionRecorder: AttentionRecorder;
+  readonly #activationCreation: ActivationCreationModule;
 
   constructor(
     database: CoordinationDatabase,
@@ -57,6 +59,7 @@ export class TaskCommandStore {
     notifications: NotificationStore,
     activityJournal: ActivityJournal,
     attentionRecorder: AttentionRecorder,
+    activationCreation: ActivationCreationModule,
   ) {
     this.#database = database.connection;
     this.#projections = projections;
@@ -64,6 +67,7 @@ export class TaskCommandStore {
     this.#notifications = notifications;
     this.#activityJournal = activityJournal;
     this.#attentionRecorder = attentionRecorder;
+    this.#activationCreation = activationCreation;
   }
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
@@ -938,25 +942,13 @@ export class TaskCommandStore {
       .get(currentAttemptId, destination.watching_agent_id) !== undefined;
     if (mentionedAgentIsClaimingResponsibility) return;
     const occurredAt = new Date().toISOString();
-    const activationId = this.queueActivation(
+    this.#activationCreation.createOrdinary({
       taskId,
-      destination.watching_agent_id,
-      "column-entry",
+      targetAgentId: destination.watching_agent_id,
+      reasonType: "column-entry",
       sourceEventId,
       occurredAt,
-    );
-    this.#activityJournal.append(
-      taskId,
-      "activation.created",
-      { kind: "framework", id: "coordination" },
-      {
-        activationId,
-        targetAgentId: destination.watching_agent_id,
-        reasonType: "column-entry",
-        sourceEventId,
-      },
-      occurredAt,
-    );
+    });
   }
 
   private createBlockersClearedActivation(taskId: string, sourceEventId: string): void {
@@ -988,25 +980,13 @@ export class TaskCommandStore {
       .get(taskId, task.watching_agent_id) !== undefined;
     if (queuedColumnEntryAlreadyOwnsResponsibility) return;
     const occurredAt = new Date().toISOString();
-    const activationId = this.queueActivation(
+    this.#activationCreation.createOrdinary({
       taskId,
-      task.watching_agent_id,
-      "blockers-cleared",
+      targetAgentId: task.watching_agent_id,
+      reasonType: "blockers-cleared",
       sourceEventId,
       occurredAt,
-    );
-    this.#activityJournal.append(
-      taskId,
-      "activation.created",
-      { kind: "framework", id: "coordination" },
-      {
-        activationId,
-        targetAgentId: task.watching_agent_id,
-        reasonType: "blockers-cleared",
-        sourceEventId,
-      },
-      occurredAt,
-    );
+    });
   }
 
   private readMentionTargets(body: string): { agentIds: string[]; user: boolean } {
@@ -1054,118 +1034,14 @@ export class TaskCommandStore {
     if (mapped === undefined) return;
     const occurredAt = new Date().toISOString();
     for (const targetAgentId of mentionedAgents) {
-      const activationId = this.queueActivation(
+      this.#activationCreation.createOrdinary({
         taskId,
         targetAgentId,
-        "agent-mention",
-        commentId,
+        reasonType: "agent-mention",
+        sourceEventId: commentId,
         occurredAt,
-      );
-      this.#activityJournal.append(
-        taskId,
-        "activation.created",
-        { kind: "framework", id: "coordination" },
-        { activationId, targetAgentId, reasonType: "agent-mention", sourceEventId: commentId },
-        occurredAt,
-      );
+      });
     }
-  }
-
-  private queueActivation(
-    taskId: string,
-    targetAgentId: string,
-    reasonType: ActivationView["reason"]["type"],
-    sourceEventId: string,
-    occurredAt: string,
-  ): string {
-    const profile = this.#database
-      .prepare("SELECT name, model, reasoning_effort FROM agents WHERE id = ? AND applied = 1")
-      .get(targetAgentId) as {
-        name: string;
-        model: string | null;
-        reasoning_effort: ActivationView["reasoningEffort"];
-      };
-    const activationId = randomUUID();
-    const currentConversation = this.#database
-      .prepare(
-        `SELECT id FROM agent_conversations
-         WHERE task_id = ? AND owning_agent_id = ? AND retired_at IS NULL`,
-      )
-      .get(taskId, targetAgentId) as { id: string } | undefined;
-    const conversationId = currentConversation?.id ?? randomUUID();
-    this.#database
-      .prepare(
-        `INSERT INTO activations
-          (id, task_id, target_agent_id, reason_type, source_event_id, status, created_at,
-           model, reasoning_effort, definition_version)
-         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?,
-           (SELECT definition_version FROM runtime WHERE singleton = 1))`,
-      )
-      .run(
-        activationId,
-        taskId,
-        targetAgentId,
-        reasonType,
-        sourceEventId,
-        occurredAt,
-        profile.model,
-        profile.reasoning_effort,
-      );
-    if (currentConversation === undefined) {
-      const generatedLabel = this.generatedConversationLabel(taskId, reasonType, sourceEventId);
-      const retiredConversation = this.#database.prepare(
-        `SELECT id, retirement_reason FROM agent_conversations
-         WHERE task_id = ? AND owning_agent_id = ? AND retired_at IS NOT NULL
-         ORDER BY retired_at DESC, rowid DESC LIMIT 1`,
-      ).get(taskId, targetAgentId) as { id: string; retirement_reason: string } | undefined;
-      this.#database
-        .prepare(
-          `INSERT INTO agent_conversations
-            (id, task_id, owning_agent_id, owning_agent_name_snapshot, generated_label,
-             originating_activation_id, created_at, latest_activity_at, latest_activity_sequence,
-             replaces_conversation_id, replacement_reason)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?,
-             (SELECT COALESCE(MAX(sequence), 0) + 1 FROM activity_ledger), ?, ?)`,
-        )
-        .run(
-          conversationId,
-          taskId,
-          targetAgentId,
-          profile.name,
-          generatedLabel,
-          activationId,
-          occurredAt,
-          occurredAt,
-          retiredConversation?.id ?? null,
-          retiredConversation?.retirement_reason ?? null,
-        );
-    } else {
-      this.#database.prepare(
-        `UPDATE agent_conversations
-         SET latest_activity_at = ?,
-             latest_activity_sequence = (SELECT COALESCE(MAX(sequence), 0) + 1 FROM activity_ledger)
-         WHERE id = ?`,
-      ).run(occurredAt, conversationId);
-    }
-    this.#database
-      .prepare("UPDATE activations SET conversation_id = ? WHERE id = ?")
-      .run(conversationId, activationId);
-    return activationId;
-  }
-
-  private generatedConversationLabel(
-    taskId: string,
-    reasonType: ActivationView["reason"]["type"],
-    sourceEventId: string,
-  ): string {
-    const task = this.#database.prepare("SELECT title FROM tasks WHERE id = ?")
-      .get(taskId) as { title: string };
-    const sourceComment = reasonType === "agent-mention"
-      ? this.#database.prepare("SELECT body FROM task_comments WHERE id = ? AND task_id = ?")
-          .get(sourceEventId, taskId) as { body: string } | undefined
-      : undefined;
-    const preview = (sourceComment?.body ?? task.title).replace(/\s+/g, " ").trim();
-    return preview.length <= 80 ? preview : `${preview.slice(0, 79).trimEnd()}…`;
   }
 
   private createUserMentionAttention(

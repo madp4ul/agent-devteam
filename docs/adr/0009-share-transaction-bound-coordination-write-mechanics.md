@@ -3,9 +3,9 @@
 Status: accepted
 
 Use shared internal modules for durable activity, attention evidence, eligible
-notification recording, and idempotent command responses. Supply those modules
-with the coordination database connection while leaving each workflow as the
-owner of its SQLite transaction and domain decisions.
+notification recording, idempotent command responses, and activation creation.
+Supply those modules with the coordination database connection while leaving
+each workflow as the owner of its SQLite transaction and domain decisions.
 
 The shared modules hide repeated storage mechanics and invariant ordering. They
 do not become independent state owners, open their own transactions, or expose
@@ -22,3 +22,6 @@ database transaction open.
   the caller's authoritative transaction.
 - Idempotent command identity is structured for callers while its compatible
   durable string representation remains owned by the persistence module.
+- Activation creation owns execution-profile and process-version snapshots,
+  conversation assignment, replacement lineage, and ordinary creation activity.
+  Task and conversation workflows still decide why an activation should exist.

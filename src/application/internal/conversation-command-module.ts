@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-import type { ActivationView } from "../automation-contract.ts";
 import type {
   ContinueAgentConversationCommand,
   ContinueAgentConversationResult,
@@ -11,20 +10,24 @@ import type {
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
+import type { ActivationCreationModule } from "./activation-creation-module.ts";
 
 export class ConversationCommandModule {
   readonly #database: DatabaseSync;
   readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
+  readonly #activationCreation: ActivationCreationModule;
 
   constructor(
     database: CoordinationDatabase,
     idempotentCommands: IdempotentCommandExecutor,
     activityJournal: ActivityJournal,
+    activationCreation: ActivationCreationModule,
   ) {
     this.#database = database.connection;
     this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
+    this.#activationCreation = activationCreation;
   }
 
   continue(command: ContinueAgentConversationCommand): ContinueAgentConversationResult {
@@ -36,8 +39,7 @@ export class ConversationCommandModule {
       if (command.body.trim().length === 0) return { accepted: false, reason: "empty-message" };
       const conversation = this.#database.prepare(
         `SELECT conversation.owning_agent_id, conversation.current_thread_id,
-                task.archived_at, agent.applied AS agent_applied,
-                agent.model, agent.reasoning_effort
+                task.archived_at, agent.applied AS agent_applied
          FROM agent_conversations conversation
          JOIN tasks task ON task.id = conversation.task_id
          LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
@@ -47,8 +49,6 @@ export class ConversationCommandModule {
         current_thread_id: string | null;
         archived_at: string | null;
         agent_applied: number | null;
-        model: string | null;
-        reasoning_effort: ActivationView["reasoningEffort"];
       } | undefined;
       if (conversation === undefined) return { accepted: false, reason: "not-found" };
       if (conversation.archived_at !== null) return { accepted: false, reason: "task-archived" };
@@ -69,24 +69,13 @@ export class ConversationCommandModule {
          VALUES (?, ?, ?, ?, 'user', ?, ?)`,
       ).run(message.id, message.conversationId, command.taskId, message.body, command.actor.id, occurredAt);
 
-      const activationId = randomUUID();
-      this.#database.prepare(
-        `INSERT INTO activations
-          (id, task_id, target_agent_id, reason_type, source_event_id, status, created_at,
-           model, reasoning_effort, continuation_message, definition_version, conversation_id)
-         VALUES (?, ?, ?, 'user-follow-up', ?, 'queued', ?, ?, ?, ?,
-           (SELECT definition_version FROM runtime WHERE singleton = 1), ?)`,
-      ).run(
-        activationId,
-        command.taskId,
-        conversation.owning_agent_id,
-        message.id,
+      const activationId = this.#activationCreation.createFollowUp({
+        taskId: command.taskId,
+        conversationId: command.conversationId,
+        sourceEventId: message.id,
+        continuationMessage: command.body,
         occurredAt,
-        conversation.model,
-        conversation.reasoning_effort,
-        command.body,
-        command.conversationId,
-      );
+      });
       this.#activityJournal.append(command.taskId, "conversation.continued", command.actor, {
         conversationId: command.conversationId,
         messageId: message.id,
