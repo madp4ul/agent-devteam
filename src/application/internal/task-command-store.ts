@@ -1086,8 +1086,13 @@ export class TaskCommandStore {
         reasoning_effort: ActivationView["reasoningEffort"];
       };
     const activationId = randomUUID();
-    const conversationId = randomUUID();
-    const generatedLabel = this.generatedConversationLabel(taskId, reasonType, sourceEventId);
+    const currentConversation = this.#database
+      .prepare(
+        `SELECT id FROM agent_conversations
+         WHERE task_id = ? AND owning_agent_id = ?`,
+      )
+      .get(taskId, targetAgentId) as { id: string } | undefined;
+    const conversationId = currentConversation?.id ?? randomUUID();
     this.#database
       .prepare(
         `INSERT INTO activations
@@ -1106,24 +1111,34 @@ export class TaskCommandStore {
         profile.model,
         profile.reasoning_effort,
       );
-    this.#database
-      .prepare(
-        `INSERT INTO agent_conversations
-          (id, task_id, owning_agent_id, owning_agent_name_snapshot, generated_label,
-           originating_activation_id, created_at, latest_activity_at, latest_activity_sequence)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?,
-           (SELECT COALESCE(MAX(sequence), 0) + 1 FROM activity_ledger))`,
-      )
-      .run(
-        conversationId,
-        taskId,
-        targetAgentId,
-        profile.name,
-        generatedLabel,
-        activationId,
-        occurredAt,
-        occurredAt,
-      );
+    if (currentConversation === undefined) {
+      const generatedLabel = this.generatedConversationLabel(taskId, reasonType, sourceEventId);
+      this.#database
+        .prepare(
+          `INSERT INTO agent_conversations
+            (id, task_id, owning_agent_id, owning_agent_name_snapshot, generated_label,
+             originating_activation_id, created_at, latest_activity_at, latest_activity_sequence)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+             (SELECT COALESCE(MAX(sequence), 0) + 1 FROM activity_ledger))`,
+        )
+        .run(
+          conversationId,
+          taskId,
+          targetAgentId,
+          profile.name,
+          generatedLabel,
+          activationId,
+          occurredAt,
+          occurredAt,
+        );
+    } else {
+      this.#database.prepare(
+        `UPDATE agent_conversations
+         SET latest_activity_at = ?,
+             latest_activity_sequence = (SELECT COALESCE(MAX(sequence), 0) + 1 FROM activity_ledger)
+         WHERE id = ?`,
+      ).run(occurredAt, conversationId);
+    }
     this.#database
       .prepare("UPDATE activations SET conversation_id = ? WHERE id = ?")
       .run(conversationId, activationId);

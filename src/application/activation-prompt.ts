@@ -1,7 +1,7 @@
 import type { AgentRunRequest } from "./runtime-contract.ts";
 import type { Actor, TaskActivityView, TaskCommentView } from "./task-contract.ts";
 
-const FRAMEWORK_GUIDANCE = `You are one participant in a shared, board-based workflow. The task is the durable record that you, other agents, and the user use to coordinate work.
+export const FRAMEWORK_GUIDANCE = `You are one participant in a shared, board-based workflow. The task is the durable record that you, other agents, and the user use to coordinate work.
 
 ## The board and this activation
 
@@ -36,10 +36,23 @@ Use the task-scoped coordination tools to inspect and mutate only the current ta
 
 A successful Codex response has no implicit board effect. The task remains exactly where you leave it, so perform every required comment, move, mention, attention request, or permission-block report explicitly.`;
 
+const ACTIVATION_BOOTSTRAP = `This is a new, distinct activation in an existing agent conversation, not another attempt of the preceding activation. Handle only the activation identified below and preserve its separate run provenance.
+
+The current activation, task structure, process, board, owning role, and workspace state are authoritative over conflicting inherited conversation history. Reassess them before acting and do not repeat effects already present. Unchanged unbounded task text is intentionally omitted. Use the attempt-scoped operating-context coordination tool whenever inherited framework, process, board, role, or participant instructions appear incomplete, summarized, obsolete, or contradictory.`;
+
 export function composeActivationPrompt(request: AgentRunRequest): string {
-  if (request.attempt.thread === "resumed" && request.attempt.fullCompositionReason === undefined) {
+  if (
+    request.attempt.thread === "resumed" &&
+    request.attempt.number > 1 &&
+    request.attempt.fullCompositionReason === undefined
+  ) {
     return composeAttemptContinuation(request);
   }
+  if (
+    request.attempt.thread === "resumed" &&
+    request.activationContext.kind === "resumed" &&
+    request.attempt.fullCompositionReason === undefined
+  ) return composeResumedActivationPrompt(request);
   return composeFullPrompt(request);
 }
 
@@ -89,6 +102,50 @@ ${renderTask(request)}
 # Activation to handle
 
 ${renderActivation(request)}${renderAttemptContinuationSection(request)}`;
+}
+
+function composeResumedActivationPrompt(request: AgentRunRequest): string {
+  const description = request.activationContext.description === undefined
+    ? "Unchanged since this conversation last received it."
+    : request.activationContext.description;
+  const comments = request.activationContext.comments
+    .map((comment) => renderComment(comment, request))
+    .join("\n\n") || "None";
+  const activity = request.activationContext.activity
+    .map((entry) => renderActivity(entry, request))
+    .join("\n") || "None";
+  const relationships = request.task.relationships.length === 0
+    ? "None"
+    : request.task.relationships.map((relationship) =>
+      `${relationship.type}: ${relationship.sourceTaskId} → ${relationship.targetTaskId} (${relationship.id})`
+    ).join("\n");
+  return `# New activation in the current conversation
+
+${ACTIVATION_BOOTSTRAP}
+
+Activation: ${request.activationId}
+Task: ${request.task.id} — ${request.task.title}
+Current board and column: ${request.board.name} (${request.board.id}) / ${request.task.columnId}
+Current task revision: ${request.task.revision}
+Owning agent and role: ${request.agent.name} (\`@${request.agent.id}\`) — ${request.agent.role}
+Workspace: ${request.workspace.path}
+Process definition: ${request.process.name} (${request.process.definitionVersion})
+
+Current relationships:
+${relationships}
+
+Task description change:
+${description}
+
+New authored comments since the preceding activation composition:
+${comments}
+
+New immutable task activity since the preceding activation composition:
+${activity}
+
+# Activation to handle
+
+${renderActivation(request)}`;
 }
 
 function composeAttemptContinuation(request: AgentRunRequest): string {
@@ -185,6 +242,14 @@ function activityAfterSource(request: AgentRunRequest): TaskActivityView[] {
 function renderActivation(request: AgentRunRequest): string {
   const source = request.sourceEvent;
   if (request.reason.type === "agent-mention" && isComment(source)) {
+    if (request.activationContext.sourceDelivery !== "activation-only") {
+      const location = request.activationContext.sourceDelivery === "current-context"
+        ? "rendered once in the task context above"
+        : "already delivered earlier in this conversation";
+      return `You are running because ${renderActor(source.actor, request)} mentioned you in comment ${source.id}. A mention is a targeted request and did not transfer primary workflow responsibility.
+
+React to the complete source comment ${location}. If later activity has already satisfied it, do not repeat the work or create another handoff.`;
+    }
     return `You are running because ${renderActor(source.actor, request)} mentioned you in comment ${source.id}. A mention is a targeted request and did not transfer primary workflow responsibility.
 
 React to the expectation expressed in this source comment in the context of later task activity. If later activity has already satisfied it, do not repeat the work or create another handoff.
@@ -219,29 +284,45 @@ ${renderSourceActivity("Source column-entry event", source, request)}`;
     }
     const destination = request.board.columns.find((column) => column.id === destinationId);
     const destinationLabel = `${destination?.name ?? destinationId} (${destinationId})`;
+    const deliveredReference = request.activationContext.kind === "resumed"
+      ? deliveredSourceReference(source.id, request)
+      : undefined;
     if (source.type === "task.created") {
       return `You are running because the task was created in ${destinationLabel}, which assigned primary workflow responsibility to this agent.
 
 Evaluate that original creation expectation against the task's current state and later activity.
 
-${renderSourceActivity("Source task creation", source, request)}`;
+${deliveredReference ?? renderSourceActivity("Source task creation", source, request)}`;
     }
     return `You are running because the task entered ${destinationLabel}, which assigned primary workflow responsibility to this agent.
 
 Evaluate that original column-entry expectation against the task's current state and later activity.
 
-${renderSourceActivity("Source task movement", source, request)}`;
+${deliveredReference ?? renderSourceActivity("Source task movement", source, request)}`;
   }
   if (request.reason.type === "blockers-cleared" && isActivity(source)) {
+    const deliveredReference = request.activationContext.kind === "resumed"
+      ? deliveredSourceReference(source.id, request)
+      : undefined;
     return `You are running because the task's final unresolved blocker was cleared while its current column was watched by this agent.
 
 Evaluate the released responsibility against the task's current state and later activity.
 
-${renderSourceActivity("Source blocker clearance", source, request)}`;
+${deliveredReference ?? renderSourceActivity("Source blocker clearance", source, request)}`;
   }
   return `Activation reason: ${request.reason.type}
 Source event: ${request.reason.sourceEventId}
 ${isAuthoredMessage(source) ? renderComment(source, request) : renderSourceActivity("Source event", source, request)}`;
+}
+
+function deliveredSourceReference(sourceId: string, request: AgentRunRequest): string | undefined {
+  if (request.activationContext.sourceDelivery === "current-context") {
+    return `Source event ${sourceId} is rendered once in the new task activity above.`;
+  }
+  if (request.activationContext.sourceDelivery === "conversation-history") {
+    return `Source event ${sourceId} was already delivered earlier in this conversation.`;
+  }
+  return undefined;
 }
 
 function renderAttemptContinuationSection(request: AgentRunRequest): string {

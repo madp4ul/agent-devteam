@@ -205,6 +205,20 @@ export function request(activationId: string, taskId: string): AgentRunRequest {
       startingRef: "main",
       commit: "abc123",
     },
+    activationContext: {
+      kind: "initial",
+      description: `A complete task description. ${"context ".repeat(2_000)}FULL-DESCRIPTION-END`,
+      comments: [
+        {
+          id: "comment-1",
+          body: "Earlier authored comment.",
+          actor: { kind: "user", id: "local-user" },
+          occurredAt: "2026-08-02T11:00:00.000Z",
+        },
+      ],
+      activity: [],
+      sourceDelivery: "activation-only",
+    },
     attempt: {
       number: 1,
       precedingOutcome: null,

@@ -25,6 +25,185 @@ import {
   PausedRetryClock,
 } from "../support/handoff-fixture.ts";
 
+test("conversation lineage stays isolated by both task and stable agent identity", async (t) => {
+  const fixture = await createHandoffFixture();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => application.close());
+  const first = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "First isolated task",
+    description: "Keep this task's model lineage private.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-first-isolated-conversation",
+  });
+  const second = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Second isolated task",
+    description: "Use a different task lineage for the same agent.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-second-isolated-conversation",
+  });
+  assert.equal(first.accepted, true);
+  assert.equal(second.accepted, true);
+  if (!first.accepted || !second.accepted) return;
+  const consulted = application.addTaskComment({
+    taskId: first.task.id,
+    body: "@reviewer inspect this task independently.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "consult-isolated-reviewer",
+  });
+  assert.equal(consulted.accepted, true);
+  if (!consulted.accepted) return;
+
+  const firstImplementer = consulted.task.activations[0]?.conversationId;
+  const firstReviewer = consulted.task.activations[1]?.conversationId;
+  const secondImplementer = second.task.activations[0]?.conversationId;
+  assert.ok(firstImplementer);
+  assert.ok(firstReviewer);
+  assert.ok(secondImplementer);
+  assert.notEqual(firstImplementer, firstReviewer);
+  assert.notEqual(firstImplementer, secondImplementer);
+});
+
+test("a source already delivered in initial history is not delivered again to its queued activation", async (t) => {
+  const fixture = await createHandoffFixture();
+  const runtime = new ControlledAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Deliver a queued source once",
+    description: "The initial activation can already see the later queued mention source.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-pre-delivered-source-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const sourceBody = "@implementer handle this queued source after the initial activation.";
+  const mentioned = application.addTaskComment({
+    taskId: created.task.id,
+    body: sourceBody,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "queue-pre-delivered-source",
+  });
+  assert.equal(mentioned.accepted, true);
+  if (!mentioned.accepted) return;
+
+  await application.resumeAutomation();
+  const initial = await runtime.waitForRequest(1);
+  assert.deepEqual(initial.activationContext.comments.map(({ body }) => body), [sourceBody]);
+  runtime.complete({ status: "completed", summary: "Initial activation complete.", threadId: "source-thread" });
+  const resumed = await runtime.waitForRequest(2);
+  assert.equal(resumed.resumeThreadId, "source-thread");
+  assert.equal(resumed.activationContext.sourceDelivery, "conversation-history");
+  assert.deepEqual(resumed.activationContext.comments, []);
+  runtime.complete({ status: "completed", summary: "Queued mention complete.", threadId: "source-thread" });
+  await application.waitForAutomationIdle();
+});
+
+test("ordinary activations reuse the task-and-agent conversation and deliver only new task context", async (t) => {
+  const fixture = await createHandoffFixture();
+  const runtime = new ControlledAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Continue one implementation lineage",
+    description: "Initial complete task description.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-continuity-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const initialComment = application.addTaskComment({
+    taskId: created.task.id,
+    body: "Initial authored background without a mention.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "initial-continuity-background",
+  });
+  assert.equal(initialComment.accepted, true);
+
+  await application.resumeAutomation();
+  const initial = await runtime.waitForRequest(1);
+  assert.equal(initial.activationContext.kind, "initial");
+  assert.equal(initial.activationContext.description, "Initial complete task description.");
+  assert.deepEqual(initial.activationContext.comments.map(({ body }) => body), [
+    "Initial authored background without a mention.",
+  ]);
+  runtime.complete({ status: "completed", summary: "Initial work complete.", threadId: "continuity-thread" });
+  await application.waitForAutomationIdle();
+  application.pauseAutomation();
+
+  const current = application.queryTask(created.task.id);
+  assert.equal(current.available, true);
+  if (!current.available) return;
+  const edited = application.editTask({
+    taskId: created.task.id,
+    title: current.task.title,
+    description: "Changed task description delivered once.",
+    expectedRevision: current.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "edit-continuity-description",
+  });
+  assert.equal(edited.accepted, true);
+  const intervening = application.addTaskComment({
+    taskId: created.task.id,
+    body: "Intervening authored context.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "intervening-continuity-comment",
+  });
+  assert.equal(intervening.accepted, true);
+  const mentioned = application.addTaskComment({
+    taskId: created.task.id,
+    body: "@implementer handle this exact resumed request in full.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "mention-continuity-owner",
+  });
+  assert.equal(mentioned.accepted, true);
+  if (!mentioned.accepted) return;
+  assert.equal(
+    mentioned.task.activations[1]?.conversationId,
+    mentioned.task.activations[0]?.conversationId,
+  );
+
+  await application.resumeAutomation();
+  const resumed = await runtime.waitForRequest(2);
+  assert.equal(resumed.resumeThreadId, "continuity-thread");
+  assert.equal(resumed.attempt.number, 1);
+  assert.equal(resumed.activationContext.kind, "resumed");
+  assert.equal(resumed.activationContext.description, "Changed task description delivered once.");
+  assert.deepEqual(resumed.activationContext.comments.map(({ body }) => body), [
+    "Intervening authored context.",
+    "@implementer handle this exact resumed request in full.",
+  ]);
+  assert.equal(resumed.activationContext.sourceDelivery, "current-context");
+  runtime.complete({ status: "completed", summary: "Resumed work complete.", threadId: "continuity-thread" });
+  await application.waitForAutomationIdle();
+});
+
 test("continuing a conversation persists one authored message and activation idempotently", async (t) => {
   const fixture = await createHandoffFixture();
   const runtime = new ControlledAgentRuntime();
@@ -273,12 +452,12 @@ test("task conversation index stays compact, recent, distinguishable, and histor
   const secondConversationId = secondComment.task.activations[1]?.conversationId;
   assert.ok(firstConversationId);
   assert.ok(secondConversationId);
+  assert.equal(secondConversationId, firstConversationId);
 
   const initial = application.queryTaskConversationIndex(created.task.id);
   assert.equal(initial.available, true);
   if (!initial.available) return;
   assert.deepEqual(initial.conversations.map(({ id, label }) => ({ id, label })), [
-    { id: secondConversationId, label: secondRequest },
     { id: firstConversationId, label: "Index agent conversations" },
   ]);
   assert.deepEqual(Object.keys(initial.conversations[0]!).sort(), [
@@ -657,4 +836,3 @@ test("conversation index status follows running work and unresolved attention", 
   assert.equal(attention.available, true);
   if (attention.available) assert.equal(attention.conversations[0]?.status, "needs-attention");
 });
-

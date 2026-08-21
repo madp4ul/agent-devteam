@@ -262,6 +262,10 @@ without choosing the implementation yet.
   — Use the resolved resumed-thread identity when persisting completed or
   interrupted follow-ups so the transcript shows only the new attempt's usage
   delta.
+- [Keep Comment Replies in Timeline Context](./issues/72-keep-comment-replies-in-context.md)
+  — Decide whether an inline, viewport-sticky, or pinned-context composer best
+  lets users answer one or several timeline comments without losing their
+  source, draft, or scroll position.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.

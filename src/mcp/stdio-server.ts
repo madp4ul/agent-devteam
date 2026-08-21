@@ -110,6 +110,16 @@ server.registerTool(
 );
 
 server.registerTool(
+  "inspect_operating_context",
+  {
+    description:
+      "Recover the complete current framework, process, board, owning-role, and participant instructions for this attempt.",
+    inputSchema: {},
+  },
+  async () => callAgentApi("GET", "/agent-api/operating-context"),
+);
+
+server.registerTool(
   "add_comment",
   {
     description: "Add an authored agent comment to the current task idempotently.",

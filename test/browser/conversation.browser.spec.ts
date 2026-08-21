@@ -110,6 +110,40 @@ test("a conversation discloses when Codex replaced an unusable resumed thread", 
   );
 });
 
+test("one conversation presents distinct run boundaries for several ordinary activations", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    const firstRun = result.conversation.runs[0];
+    firstRun.attempt.status = "completed";
+    firstRun.attempt.completedAt = "2026-08-09T12:01:00.000Z";
+    firstRun.attempt.outcome = { status: "completed", summary: "First activation complete." };
+    result.conversation.runs.push({
+      activationId: "browser-ordinary-activation-2",
+      attempt: {
+        ...firstRun.attempt,
+        id: "browser-ordinary-attempt-2",
+        startedAt: "2026-08-09T12:03:00.000Z",
+        completedAt: "2026-08-09T12:04:00.000Z",
+        outcome: { status: "completed", summary: "Second activation complete." },
+      },
+      transcript: {
+        available: true,
+        items: [{ kind: "message", role: "agent", text: "Handled the later ordinary activation." }],
+      },
+    });
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  await expect(dialog.locator(".conversation-run")).toHaveCount(2);
+  await expect(dialog.getByRole("heading", { name: "Run 1 · completed" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Run 2 · completed" })).toBeVisible();
+  await expect(dialog).toContainText("Handled the later ordinary activation.");
+});
+
 
 test("compact conversation rows stay last in the supporting column and open by keyboard", async ({ page, request }) => {
   const detail = await (await request.get("/api/tasks/T-0001")).json() as {

@@ -500,6 +500,41 @@ export class AutomationStateStore {
     return result?.activationId;
   }
 
+  readRunningAttemptScope(attemptId: string): {
+    taskId: string;
+    agent: AgentRunAgent;
+    boardId: string;
+  } | undefined {
+    const row = this.#database.prepare(
+      `SELECT activation.task_id, activation.target_agent_id,
+              task.board_id, agent.name, agent.role, agent.summary, agent.instructions_content
+       FROM attempts attempt
+       JOIN activations activation ON activation.id = attempt.activation_id
+       JOIN tasks task ON task.id = activation.task_id
+       JOIN agents agent ON agent.id = activation.target_agent_id AND agent.applied = 1
+       WHERE attempt.id = ? AND attempt.status = 'running' AND activation.status = 'running'`,
+    ).get(attemptId) as {
+      task_id: string;
+      target_agent_id: string;
+      board_id: string;
+      name: string;
+      role: string;
+      summary: string;
+      instructions_content: string;
+    } | undefined;
+    return row === undefined ? undefined : {
+      taskId: row.task_id,
+      boardId: row.board_id,
+      agent: {
+        id: row.target_agent_id,
+        name: row.name,
+        role: row.role,
+        summary: row.summary,
+        instructions: row.instructions_content,
+      },
+    };
+  }
+
   readInterruptedCommand(idempotencyKey: string): { taskId: string } | undefined {
     return this.#idempotentCommands.replay({ kind: "interrupt-task", idempotencyKey });
   }

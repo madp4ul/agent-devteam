@@ -19,6 +19,7 @@ import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-works
 import type { ProcessStateStore } from "./process-state-store.ts";
 import type { AutomationStateStore, RunnableActivation } from "./automation-state-store.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
+import type { ConversationContextDeliveryModule } from "./conversation-context-delivery-module.ts";
 
 export interface AutomationProcessContext {
   name: string;
@@ -32,6 +33,7 @@ export interface AutomationCoordinatorOptions {
   processStore: ProcessStateStore;
   taskProjections: TaskProjectionStore;
   automationStore: AutomationStateStore;
+  conversationContextDelivery: ConversationContextDeliveryModule;
   startup: StartupView;
   runtimeDispatch?: RuntimeDispatchOptions;
   startingRef?: string;
@@ -56,6 +58,7 @@ export class AutomationCoordinator {
   readonly #processStore: ProcessStateStore;
   readonly #taskProjections: TaskProjectionStore;
   readonly #stateStore: AutomationStateStore;
+  readonly #conversationContextDelivery: ConversationContextDeliveryModule;
   readonly #startup: StartupView;
   readonly #runtimeDispatch:
     | {
@@ -79,6 +82,7 @@ export class AutomationCoordinator {
     this.#processStore = options.processStore;
     this.#taskProjections = options.taskProjections;
     this.#stateStore = options.automationStore;
+    this.#conversationContextDelivery = options.conversationContextDelivery;
     this.#startup = options.startup;
     this.#automation = options.startup.automation;
     this.#runtimeDispatch =
@@ -341,6 +345,10 @@ export class AutomationCoordinator {
     if (process === undefined) throw new Error("Runnable activation has no process context");
     const board = process.boards.find((candidate) => candidate.id === currentTask.boardId);
     if (board === undefined) throw new Error("Runnable task has no applied board context");
+    const activationContext = this.#conversationContextDelivery.composeAndRecordActivationContext(
+      runnable.activation.id,
+      currentTask,
+    );
     onDispatchStarted();
     let outcomePromise: Promise<AgentRunOutcome>;
     try {
@@ -360,6 +368,7 @@ export class AutomationCoordinator {
           sourceEvent: runnable.sourceEvent,
           task: currentTask,
           workspace,
+          activationContext,
           ...(resumeThreadId === null || resumeThreadId === undefined ? {} : { resumeThreadId }),
           attempt: {
             number: attempt.number,

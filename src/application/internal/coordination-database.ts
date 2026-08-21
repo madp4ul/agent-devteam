@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 14;
+const currentSchemaVersion = 15;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -159,7 +159,14 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       current_thread_id TEXT,
       created_at TEXT NOT NULL,
       latest_activity_at TEXT NOT NULL,
-      latest_activity_sequence INTEGER NOT NULL
+      latest_activity_sequence INTEGER NOT NULL,
+      delivered_description TEXT,
+      delivered_comment_sequence INTEGER NOT NULL DEFAULT 0,
+      delivered_activity_sequence INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS activation_contexts (
+      activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
+      context_json TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS agent_conversation_messages (
       id TEXT PRIMARY KEY,
@@ -296,6 +303,8 @@ function initializeCurrentSchema(database: DatabaseSync): void {
     CREATE UNIQUE INDEX IF NOT EXISTS one_running_activation_per_task
       ON activations(task_id)
       WHERE status = 'running';
+    CREATE UNIQUE INDEX IF NOT EXISTS one_agent_conversation_per_task_agent
+      ON agent_conversations(task_id, owning_agent_id);
     CREATE UNIQUE INDEX IF NOT EXISTS one_relationship_of_each_type
       ON task_relationships(type, source_task_id, target_task_id);
     CREATE TRIGGER IF NOT EXISTS activations_start_in_task_order
@@ -331,6 +340,7 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     "activity_ledger",
     "activations",
     "agent_conversations",
+    "activation_contexts",
     "agent_conversation_messages",
     "task_workspaces",
     "task_starting_refs",
@@ -404,6 +414,9 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     conversationColumns.has("current_thread_id") &&
     conversationColumns.has("latest_activity_at") &&
     conversationColumns.has("latest_activity_sequence") &&
+    conversationColumns.has("delivered_description") &&
+    conversationColumns.has("delivered_comment_sequence") &&
+    conversationColumns.has("delivered_activity_sequence") &&
     attemptColumns.has("outcome_kind") &&
     attemptColumns.has("thread_continuity") &&
     transcriptColumns.has("usage_json") &&

@@ -97,8 +97,17 @@ export interface AgentRunRequest {
   sourceEvent: TaskActivityView | TaskCommentView | AgentConversationMessageView;
   task: TaskView;
   workspace: TaskWorkspaceView;
+  activationContext: ActivationContextView;
   resumeThreadId?: string;
   attempt: AttemptContextView;
+}
+
+export interface ActivationContextView {
+  kind: "initial" | "resumed";
+  description?: string;
+  comments: TaskCommentView[];
+  activity: TaskActivityView[];
+  sourceDelivery: "current-context" | "conversation-history" | "activation-only";
 }
 
 export interface AgentRunOutcome {
@@ -134,6 +143,20 @@ export interface AttemptTranscriptAccess {
 export interface AgentRunLifecycle {
   started(threadId?: string): void;
 }
+
+export interface OperatingContextView {
+  attemptId: string;
+  taskId: string;
+  frameworkInstructions: string;
+  process: { name: string; guidance: string; definitionVersion: string };
+  board: ProcessBoardView;
+  owningAgent: AgentRunAgent;
+  participants: Array<Pick<AgentRunAgent, "id" | "name" | "role" | "summary">>;
+}
+
+export type OperatingContextQueryResult =
+  | { available: true; context: OperatingContextView }
+  | { available: false; reason: "invalid-attempt-scope" | "configuration-error"; diagnostics?: ProcessDiagnostic[] };
 
 export type AttemptTranscriptQueryResult =
   | { available: true; threadId: string; items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage }

@@ -257,3 +257,68 @@ test("ordinary resumed attempts receive compact context while process-rebased re
   assert.match(rebased, /# Process coordination/);
   assert.match(rebased, /Process instructions were rebased onto the current definition/);
 });
+
+test("a distinct activation in a resumed conversation receives an authoritative delta bootstrap", () => {
+  const resumed = request("activation-next", "T-0038");
+  resumed.resumeThreadId = "thread-existing";
+  resumed.reason = { type: "agent-mention", sourceEventId: "comment-next" };
+  resumed.sourceEvent = {
+    id: "comment-next",
+    body: "@implementer handle the complete new request.",
+    actor: { kind: "user", id: "local-user" },
+    occurredAt: "2026-08-12T09:00:00.000Z",
+  };
+  resumed.activationContext = {
+    kind: "resumed",
+    comments: [resumed.sourceEvent],
+    activity: [],
+    sourceDelivery: "current-context",
+  };
+  resumed.attempt = {
+    number: 1,
+    precedingOutcome: null,
+    thread: "resumed",
+    continuationMessage: null,
+  };
+
+  const prompt = composeActivationPrompt(resumed);
+
+  assert.match(prompt, /^# New activation in the current conversation/);
+  assert.match(prompt, /new, distinct activation.*not another attempt/s);
+  assert.match(prompt, /current activation, task structure, process, board, owning role, and workspace state are authoritative/i);
+  assert.match(prompt, /operating-context coordination tool/);
+  assert.match(prompt, /Task description change:\nUnchanged since this conversation last received it\./);
+  assert.match(prompt, /Current task revision: 3/);
+  assert.doesNotMatch(prompt, /FULL-DESCRIPTION-END/);
+  assert.equal(prompt.match(/@implementer handle the complete new request\./g)?.length, 1);
+  assert.match(prompt, /complete source comment rendered once in the task context above/);
+  assert.doesNotMatch(prompt, /^# Attempt continuation/m);
+
+  resumed.activationContext = {
+    kind: "resumed",
+    comments: [],
+    activity: [],
+    sourceDelivery: "conversation-history",
+  };
+  const previouslyDelivered = composeActivationPrompt(resumed);
+  assert.match(previouslyDelivered, /complete source comment already delivered earlier in this conversation/);
+  assert.doesNotMatch(previouslyDelivered, /@implementer handle the complete new request\./);
+
+  resumed.reason = { type: "blockers-cleared", sourceEventId: "relationship-cleared" };
+  resumed.sourceEvent = {
+    id: "relationship-cleared",
+    type: "relationship.satisfied",
+    actor: { kind: "framework", id: "coordination" },
+    occurredAt: "2026-08-12T09:05:00.000Z",
+    details: { relationshipId: "dependency-2" },
+  };
+  resumed.activationContext = {
+    kind: "resumed",
+    comments: [],
+    activity: [resumed.sourceEvent],
+    sourceDelivery: "current-context",
+  };
+  const blockerPrompt = composeActivationPrompt(resumed);
+  assert.equal(blockerPrompt.match(/dependency-2/g)?.length, 1);
+  assert.match(blockerPrompt, /Source event relationship-cleared is rendered once/);
+});

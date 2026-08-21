@@ -73,6 +73,7 @@ type AgentCoordinationCapabilities = Pick<CoordinationApplication,
   | "queryTaskActivity"
   | "queryTaskAttachments"
   | "queryCollaborators"
+  | "queryOperatingContext"
   | "addTaskComment"
   | "resolveInertTaskMove"
   | "moveTask"
@@ -680,6 +681,12 @@ async function handleAgentApi(
     const result = application.queryTaskInspection(scope.taskId);
     if (!result.available) sendAgentQuery(response, result);
     else sendJson(response, 200, result.task);
+    return;
+  }
+  if (method === "GET" && url.pathname === "/agent-api/operating-context") {
+    const result = application.queryOperatingContext(scope);
+    if (!result.available) sendJson(response, 403, result);
+    else sendJson(response, 200, result.context);
     return;
   }
   if (method === "POST" && url.pathname === "/agent-api/current-task/comments") {

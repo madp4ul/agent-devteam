@@ -197,6 +197,7 @@ test("a queued mention remains distinct when final-blocker clearance needs a new
     unblocked.task.activations.map((activation) => activation.reason.type),
     ["column-entry", "agent-mention", "blockers-cleared"],
   );
+  assert.equal(new Set(unblocked.task.activations.map(({ conversationId }) => conversationId)).size, 1);
 });
 
 test("a running column-entry activation does not replace final-blocker clearance", async (t) => {

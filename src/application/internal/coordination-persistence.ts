@@ -10,6 +10,7 @@ import { ActivityJournal } from "./activity-journal.ts";
 import { AttentionRecorder } from "./attention-recorder.ts";
 import { ConversationProjectionModule } from "./conversation-projection-module.ts";
 import { ConversationCommandModule } from "./conversation-command-module.ts";
+import { ConversationContextDeliveryModule } from "./conversation-context-delivery-module.ts";
 import type { AttemptTranscriptAccess } from "../runtime-contract.ts";
 
 export interface CoordinationPersistence {
@@ -18,6 +19,7 @@ export interface CoordinationPersistence {
   taskProjections: TaskProjectionStore;
   conversationProjections: ConversationProjectionModule;
   conversationCommands: ConversationCommandModule;
+  conversationContextDelivery: ConversationContextDeliveryModule;
   automation: AutomationStateStore;
   taskArchive: TaskArchiveStore;
   notifications: NotificationStore;
@@ -61,6 +63,7 @@ export function openCoordinationPersistence(
     taskProjections,
     conversationProjections,
     conversationCommands,
+    conversationContextDelivery: new ConversationContextDeliveryModule(database),
     automation: new AutomationStateStore(
       database,
       taskProjections,

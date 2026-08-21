@@ -75,7 +75,10 @@ relationships, activity, activations, agent conversations, attempts, attention,
 notifications, and automation state. User-facing projections aggregate those
 facts without becoming another source of truth or duplicating attempt-owned run
 evidence. Conversations retain their task, owner, activation, thread, and
-activity lineage across retries and replacement threads. Continuation is one
+activity lineage across retries and replacement threads. Each current
+task-and-agent conversation also retains authoritative delivery progress for
+task descriptions, comments, and activity so later activations receive new
+task context once across restart. Continuation is one
 authoritative command, and archival preserves the lineage while removing
 detailed transcript, authored-message, and replay content.
 
@@ -93,12 +96,17 @@ and proceeds only after the user resumes it.
 For each run, the Codex adapter starts or resumes a thread in the task's Git
 workspace. A per-attempt MCP adapter lets that agent inspect relevant project
 coordination state and mutate only its current task. Every activation belongs to
-a durable task-scoped agent conversation; retries remain in that conversation,
-while each attempt's messages and tool activity remain separately attributable
-run evidence. Follow-up activations resume the conversation's current thread
-through the same ordering and safety gates. When the runtime must replace a
-thread, it records that loss of continuity and adopts the replacement as the
-conversation's next resume target.
+a durable task-scoped agent conversation. Ordinary activation reasons select
+the current conversation for the stable task-and-agent pair, while explicit
+user follow-ups select their addressed conversation. Activations and retries
+remain distinct inside that lineage, and each attempt's messages and tool
+activity remain separately attributable run evidence. A first activation gets
+the complete current task composition; each later distinct activation gets a
+fresh authoritative bootstrap plus task context not previously delivered to
+that conversation. The attempt-scoped MCP adapter can recover the complete
+current operating context without accepting task or agent scope from the model.
+When the runtime must replace a thread, it records that loss of continuity and
+adopts the replacement as the conversation's next resume target.
 
 ### Git task workspaces
 
@@ -145,8 +153,11 @@ an agent's task workspace.
    immutable activity, and any resulting activation atomically.
 3. When automation is running, it claims the next eligible activation for a
    task and prepares or verifies that task's Git workspace.
-4. Codex receives the activation reason plus the current task, process, role,
-   collaborator, attempt, and workspace context.
+4. Codex receives the activation reason plus current structural and workspace
+   context. A conversation's first activation receives the complete task and
+   operating composition; a later activation receives its authoritative
+   bootstrap and only newly delivered task text and activity. Retries retain
+   their activation's composed context and separate attempt facts.
 5. The agent works in the task workspace and coordinates through its scoped MCP
    tools. Tool commands return to the same coordination core used by the user.
 6. The framework records the attempt outcome and transcript. A successful run

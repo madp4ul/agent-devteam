@@ -3,6 +3,8 @@ import {
   type CoordinationPersistence,
 } from "./internal/coordination-persistence.ts";
 import { AutomationCoordinator } from "./internal/automation-coordinator.ts";
+import type { AutomationProcessContext } from "./internal/automation-coordinator.ts";
+import { FRAMEWORK_GUIDANCE } from "./activation-prompt.ts";
 import { loadProcessDefinition } from "./internal/process-definition.ts";
 import { TaskDiscovery } from "./internal/task-discovery.ts";
 import { GitTaskWorkspaceManager, validateTaskWorkspaceConsistency } from "./internal/git-task-workspace.ts";
@@ -45,6 +47,7 @@ import type {
 import type {
   AttemptTranscriptAccess,
   AttemptTranscriptQueryResult,
+  OperatingContextQueryResult,
   StartApplicationOptions,
 } from "./runtime-contract.ts";
 import type {
@@ -95,6 +98,7 @@ export class CoordinationApplication {
   readonly #automation: AutomationCoordinator;
   readonly #discovery: TaskDiscovery;
   readonly #workspaceManager: GitTaskWorkspaceManager | undefined;
+  readonly #processContext: AutomationProcessContext | undefined;
   readonly #pendingInterruptCommands = new Map<
     string,
     Extract<InterruptTaskResult, { accepted: true }>
@@ -106,12 +110,14 @@ export class CoordinationApplication {
     automation: AutomationCoordinator,
     discovery: TaskDiscovery,
     workspaceManager?: GitTaskWorkspaceManager,
+    processContext?: AutomationProcessContext,
   ) {
     this.#persistence = persistence;
     this.#startup = startup;
     this.#automation = automation;
     this.#discovery = discovery;
     this.#workspaceManager = workspaceManager;
+    this.#processContext = processContext;
   }
 
   static async validateProcessDefinition(path: string): Promise<ProcessValidationResult> {
@@ -137,7 +143,7 @@ export class CoordinationApplication {
         ),
       ], options.transcriptAccess);
     }
-    const { process, taskCommands, taskProjections, automation } = persistence;
+    const { process, taskCommands, taskProjections, automation, conversationContextDelivery } = persistence;
     if (!validation.valid) {
       const startup: StartupView = {
         mode: "configuration-error",
@@ -151,6 +157,7 @@ export class CoordinationApplication {
           processStore: process,
           taskProjections,
           automationStore: automation,
+          conversationContextDelivery,
           startup,
         }),
         new TaskDiscovery(process, taskProjections, automation, startup),
@@ -197,6 +204,7 @@ export class CoordinationApplication {
             processStore: process,
             taskProjections,
             automationStore: automation,
+            conversationContextDelivery,
             startup,
           }),
           new TaskDiscovery(process, taskProjections, automation, startup),
@@ -219,6 +227,18 @@ export class CoordinationApplication {
       name,
       summary,
     }));
+    const processContext: AutomationProcessContext = {
+      name: definition.name,
+      guidance: definition.coordinationGuidance,
+      definitionVersion: version,
+      boards,
+      collaborators: definition.agents.map(({ id, name, role, summary }) => ({
+        id,
+        name,
+        role,
+        summary,
+      })),
+    };
     return new CoordinationApplication(
       persistence,
       startup,
@@ -226,23 +246,13 @@ export class CoordinationApplication {
         processStore: process,
         taskProjections,
         automationStore: automation,
+        conversationContextDelivery,
         startup,
         ...(options.runtimeDispatch === undefined
           ? {}
           : { runtimeDispatch: options.runtimeDispatch }),
         startingRef: definition.defaultTaskWorkspaceStartingRef,
-        processContext: {
-          name: definition.name,
-          guidance: definition.coordinationGuidance,
-          definitionVersion: version,
-          boards,
-          collaborators: definition.agents.map(({ id, name, role, summary }) => ({
-            id,
-            name,
-            role,
-            summary,
-          })),
-        },
+        processContext,
         ...(options.runtimeDiagnostic === undefined
           ? {}
           : { runtimeDiagnostic: options.runtimeDiagnostic }),
@@ -253,6 +263,7 @@ export class CoordinationApplication {
       }),
       new TaskDiscovery(process, taskProjections, automation, startup, collaborators),
       workspaceManager,
+      processContext,
     );
   }
 
@@ -261,7 +272,7 @@ export class CoordinationApplication {
     transcriptAccess?: AttemptTranscriptAccess,
   ): CoordinationApplication {
     const persistence = openCoordinationPersistence(":memory:", transcriptAccess);
-    const { process, taskProjections, automation } = persistence;
+    const { process, taskProjections, automation, conversationContextDelivery } = persistence;
     const startup: StartupView = {
       mode: "configuration-error",
       diagnostics,
@@ -274,6 +285,7 @@ export class CoordinationApplication {
         processStore: process,
         taskProjections,
         automationStore: automation,
+        conversationContextDelivery,
         startup,
       }),
       new TaskDiscovery(process, taskProjections, automation, startup),
@@ -610,6 +622,45 @@ export class CoordinationApplication {
 
   queryCollaborators(): CollaboratorsQueryResult {
     return this.#discovery.queryCollaborators();
+  }
+
+  queryOperatingContext(scope: {
+    attemptId?: string;
+    taskId: string;
+    agentId: string;
+  }): OperatingContextQueryResult {
+    if (this.#startup.mode === "configuration-error" || this.#processContext === undefined) {
+      return {
+        available: false,
+        reason: "configuration-error",
+        ...(this.#startup.mode === "configuration-error" ? { diagnostics: this.#startup.diagnostics } : {}),
+      };
+    }
+    if (scope.attemptId === undefined) return { available: false, reason: "invalid-attempt-scope" };
+    const current = this.#persistence.automation.readRunningAttemptScope(scope.attemptId);
+    if (
+      current === undefined ||
+      current.taskId !== scope.taskId ||
+      current.agent.id !== scope.agentId
+    ) return { available: false, reason: "invalid-attempt-scope" };
+    const board = this.#processContext.boards.find(({ id }) => id === current.boardId);
+    if (board === undefined) return { available: false, reason: "invalid-attempt-scope" };
+    return {
+      available: true,
+      context: {
+        attemptId: scope.attemptId,
+        taskId: current.taskId,
+        frameworkInstructions: FRAMEWORK_GUIDANCE,
+        process: {
+          name: this.#processContext.name,
+          guidance: this.#processContext.guidance,
+          definitionVersion: this.#processContext.definitionVersion,
+        },
+        board,
+        owningAgent: current.agent,
+        participants: this.#processContext.collaborators,
+      },
+    };
   }
 
   queryNeedsAttention(): NeedsAttentionQueryResult {

@@ -118,6 +118,7 @@ boards:
       "list_task_attachments",
       "list_collaborators",
       "inspect_current_task",
+      "inspect_operating_context",
       "add_comment",
       "move_current_task",
       "create_child_task",
@@ -144,6 +145,7 @@ boards:
         "list_task_attachments",
         "list_collaborators",
         "inspect_current_task",
+        "inspect_operating_context",
       ].map((name) => [
         name,
         Object.keys(toolByName.get(name)?.inputSchema.properties ?? {}),
@@ -157,6 +159,7 @@ boards:
       list_task_attachments: ["taskId"],
       list_collaborators: [],
       inspect_current_task: [],
+      inspect_operating_context: [],
     },
   );
   assert.deepEqual(
@@ -203,6 +206,15 @@ boards:
     ),
     false,
   );
+  const unavailableOperatingContext = await client.callTool({
+    name: "inspect_operating_context",
+    arguments: {},
+  });
+  assert.equal(unavailableOperatingContext.isError, true);
+  assert.deepEqual(JSON.parse(textContent(unavailableOperatingContext.content)), {
+    available: false,
+    reason: "invalid-attempt-scope",
+  });
   const permissionReport = await client.callTool({
     name: "report_permission_block",
     arguments: { summary: "A required protected action needs user approval." },
@@ -628,6 +640,38 @@ boards:
   await client.connect(transport);
   t.after(() => client.close());
 
+  const operatingContext = await client.callTool({
+    name: "inspect_operating_context",
+    arguments: {},
+  });
+  assert.notEqual(operatingContext.isError, true);
+  const operatingPayload = JSON.parse(textContent(operatingContext.content)) as {
+    attemptId: string;
+    taskId: string;
+    frameworkInstructions: string;
+    process: { guidance: string };
+    board: { id: string; guidance: string };
+    owningAgent: { id: string; instructions: string };
+    participants: Array<{ id: string }>;
+  };
+  assert.equal(operatingPayload.attemptId, request.attemptId);
+  assert.equal(operatingPayload.taskId, request.task.id);
+  assert.match(operatingPayload.frameworkInstructions, /durable record/);
+  assert.equal(
+    operatingPayload.process.guidance,
+    "Let mentioned specialists claim responsibility explicitly.",
+  );
+  assert.equal(operatingPayload.board.id, "delivery");
+  assert.equal(operatingPayload.board.guidance, "Keep movement explicit.");
+  assert.deepEqual(operatingPayload.owningAgent, {
+    id: "implementer",
+    name: "Implementation Agent",
+    role: "Implements changes",
+    summary: "Builds the current task.",
+    instructions: "Implement mentioned work.\n",
+  });
+  assert.deepEqual(operatingPayload.participants.map(({ id }) => id), ["implementer"]);
+
   const result = await client.callTool({
     name: "move_current_task",
     arguments: {
@@ -810,6 +854,13 @@ function assembledRequest(
     sourceEvent,
     task,
     workspace: { path: directory, startingRef: "main", commit: "controlled" },
+    activationContext: {
+      kind: "initial",
+      description: task.description,
+      comments: task.comments,
+      activity: task.activity,
+      sourceDelivery: "current-context",
+    },
     attempt: { number: 1, precedingOutcome: null, thread: "fresh", continuationMessage: null },
   };
 }
