@@ -21,6 +21,14 @@ interface ConversationOwnerAndContinuationRow {
   archived_at: string | null;
 }
 
+interface ConversationRetirementRow {
+  conversation_retired_at: string | null;
+  retirement_reason: string | null;
+  retirement_actor_id: string | null;
+  task_archived_at: string | null;
+  unfinished_work: number;
+}
+
 interface ConversationMessageRow {
   id: string;
   conversation_id: string;
@@ -55,6 +63,13 @@ export class ConversationProjectionModule {
               conversation.owning_agent_name_snapshot, conversation.generated_label,
               conversation.latest_activity_at, conversation.current_thread_id,
               task.archived_at, agent.name AS current_agent_name, agent.applied AS agent_applied,
+              conversation.retired_at AS conversation_retired_at,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM activations unfinished
+                WHERE unfinished.task_id = conversation.task_id
+                  AND unfinished.target_agent_id = conversation.owning_agent_id
+                  AND unfinished.status <> 'completed'
+              ) THEN 1 ELSE 0 END AS unfinished_work,
               CASE
                 WHEN EXISTS (
                   SELECT 1
@@ -98,6 +113,8 @@ export class ConversationProjectionModule {
       archived_at: string | null;
       current_agent_name: string | null;
       agent_applied: number | null;
+      conversation_retired_at: string | null;
+      unfinished_work: number;
       status: AgentConversationIndexEntry["status"];
     }>;
     return rows.map((row) => ({
@@ -106,6 +123,7 @@ export class ConversationProjectionModule {
       label: row.generated_label,
       latestActivityAt: row.latest_activity_at,
       status: row.status,
+      retired: row.conversation_retired_at !== null,
     }));
   }
 
@@ -114,7 +132,16 @@ export class ConversationProjectionModule {
       `SELECT conversation.id, conversation.task_id, conversation.owning_agent_id,
               conversation.owning_agent_name_snapshot, conversation.originating_activation_id,
               conversation.current_thread_id, conversation.created_at, conversation.latest_activity_at,
-              task.archived_at, agent.name AS current_agent_name, agent.applied AS agent_applied
+              conversation.retired_at AS conversation_retired_at,
+              conversation.retirement_reason, conversation.retirement_actor_id,
+              conversation.replaces_conversation_id, conversation.replacement_reason,
+              task.archived_at AS task_archived_at, agent.name AS current_agent_name, agent.applied AS agent_applied,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM activations unfinished
+                WHERE unfinished.task_id = conversation.task_id
+                  AND unfinished.target_agent_id = conversation.owning_agent_id
+                  AND unfinished.status <> 'completed'
+              ) THEN 1 ELSE 0 END AS unfinished_work
        FROM agent_conversations conversation
        JOIN tasks task ON task.id = conversation.task_id
        LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
@@ -128,7 +155,13 @@ export class ConversationProjectionModule {
       current_thread_id: string | null;
       created_at: string;
       latest_activity_at: string;
-      archived_at: string | null;
+      conversation_retired_at: string | null;
+      retirement_reason: string | null;
+      retirement_actor_id: string | null;
+      replaces_conversation_id: string | null;
+      replacement_reason: string | null;
+      task_archived_at: string | null;
+      unfinished_work: number;
       current_agent_name: string | null;
       agent_applied: number | null;
     } | undefined;
@@ -154,10 +187,20 @@ export class ConversationProjectionModule {
       taskId: row.task_id,
       originatingActivationId: row.originating_activation_id,
       originatingActivation,
-      ...this.#ownerAndContinuation(row),
+      ...this.#ownerAndContinuation({ ...row, archived_at: row.task_archived_at }),
       currentThreadId: row.current_thread_id,
       createdAt: row.created_at,
       latestActivityAt: row.latest_activity_at,
+      retirement: row.conversation_retired_at === null
+        ? null
+        : {
+            reason: row.retirement_reason!,
+            actor: { kind: "user", id: row.retirement_actor_id! },
+            occurredAt: row.conversation_retired_at,
+          },
+      replacesConversationId: row.replaces_conversation_id,
+      replacementReason: row.replacement_reason,
+      retirementAvailability: this.#retirementAvailability(row),
       messages: this.#readMessages(row.id),
       runs,
     };
@@ -248,6 +291,13 @@ export class ConversationProjectionModule {
             ? { available: false, reason: "thread-unavailable" }
             : { available: true },
     };
+  }
+
+  #retirementAvailability(row: ConversationRetirementRow): AgentConversationView["retirementAvailability"] {
+    if (row.conversation_retired_at !== null) return { available: false, reason: "already-retired" };
+    if (row.task_archived_at !== null) return { available: false, reason: "task-archived" };
+    if (row.unfinished_work === 1) return { available: false, reason: "activation-work-pending" };
+    return { available: true };
   }
 }
 

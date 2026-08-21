@@ -108,6 +108,7 @@ export interface ActivationContextView {
   comments: TaskCommentView[];
   activity: TaskActivityView[];
   sourceDelivery: "current-context" | "conversation-history" | "activation-only";
+  replacementReason?: string;
 }
 
 export interface AgentRunOutcome {

@@ -1089,7 +1089,7 @@ export class TaskCommandStore {
     const currentConversation = this.#database
       .prepare(
         `SELECT id FROM agent_conversations
-         WHERE task_id = ? AND owning_agent_id = ?`,
+         WHERE task_id = ? AND owning_agent_id = ? AND retired_at IS NULL`,
       )
       .get(taskId, targetAgentId) as { id: string } | undefined;
     const conversationId = currentConversation?.id ?? randomUUID();
@@ -1113,13 +1113,19 @@ export class TaskCommandStore {
       );
     if (currentConversation === undefined) {
       const generatedLabel = this.generatedConversationLabel(taskId, reasonType, sourceEventId);
+      const retiredConversation = this.#database.prepare(
+        `SELECT id, retirement_reason FROM agent_conversations
+         WHERE task_id = ? AND owning_agent_id = ? AND retired_at IS NOT NULL
+         ORDER BY retired_at DESC, rowid DESC LIMIT 1`,
+      ).get(taskId, targetAgentId) as { id: string; retirement_reason: string } | undefined;
       this.#database
         .prepare(
           `INSERT INTO agent_conversations
             (id, task_id, owning_agent_id, owning_agent_name_snapshot, generated_label,
-             originating_activation_id, created_at, latest_activity_at, latest_activity_sequence)
+             originating_activation_id, created_at, latest_activity_at, latest_activity_sequence,
+             replaces_conversation_id, replacement_reason)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?,
-             (SELECT COALESCE(MAX(sequence), 0) + 1 FROM activity_ledger))`,
+             (SELECT COALESCE(MAX(sequence), 0) + 1 FROM activity_ledger), ?, ?)`,
         )
         .run(
           conversationId,
@@ -1130,6 +1136,8 @@ export class TaskCommandStore {
           activationId,
           occurredAt,
           occurredAt,
+          retiredConversation?.id ?? null,
+          retiredConversation?.retirement_reason ?? null,
         );
     } else {
       this.#database.prepare(

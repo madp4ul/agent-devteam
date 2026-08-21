@@ -42,6 +42,7 @@ export function TaskConversationsPanel({
               >
                 <strong>{conversation.owningAgent.name}</strong>
                 <span className="conversation-index-meta">
+                  {conversation.retired ? <span className="conversation-retired-label">Retired</span> : null}
                   {status === null ? null : (
                     <span
                       className={`conversation-status-dot ${status.className}`}

@@ -44,6 +44,10 @@ export interface ContinueAgentConversationRequest extends IdempotentBrowserReque
   body: string;
 }
 
+export interface RetireAgentConversationRequest extends IdempotentBrowserRequest {
+  reason: string;
+}
+
 export interface ArchiveTaskRequest extends IdempotentBrowserRequest {
   discardWorkspaceChanges?: true;
 }
@@ -93,6 +97,7 @@ export type {
   AgentConversationQueryResult,
   AgentConversationView,
   ContinueAgentConversationResult,
+  RetireAgentConversationResult,
 } from "./conversation-contract.ts";
 export type {
   ActivationStartupFailureView,

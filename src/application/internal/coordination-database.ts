@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 15;
+const currentSchemaVersion = 16;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -119,6 +119,7 @@ function initializeCurrentSchema(database: DatabaseSync): void {
           'automation.suspended',
           'automation.resumed',
           'conversation.continued',
+          'conversation.retired',
           'task.archived',
           'task.unarchived'
         )
@@ -163,6 +164,11 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       delivered_description TEXT,
       delivered_comment_sequence INTEGER NOT NULL DEFAULT 0,
       delivered_activity_sequence INTEGER NOT NULL DEFAULT 0
+      ,retired_at TEXT
+      ,retirement_reason TEXT
+      ,retirement_actor_id TEXT
+      ,replaces_conversation_id TEXT REFERENCES agent_conversations(id)
+      ,replacement_reason TEXT
     );
     CREATE TABLE IF NOT EXISTS activation_contexts (
       activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
@@ -303,8 +309,9 @@ function initializeCurrentSchema(database: DatabaseSync): void {
     CREATE UNIQUE INDEX IF NOT EXISTS one_running_activation_per_task
       ON activations(task_id)
       WHERE status = 'running';
-    CREATE UNIQUE INDEX IF NOT EXISTS one_agent_conversation_per_task_agent
-      ON agent_conversations(task_id, owning_agent_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS one_current_agent_conversation_per_task_agent
+      ON agent_conversations(task_id, owning_agent_id)
+      WHERE retired_at IS NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS one_relationship_of_each_type
       ON task_relationships(type, source_task_id, target_task_id);
     CREATE TRIGGER IF NOT EXISTS activations_start_in_task_order
@@ -417,6 +424,11 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     conversationColumns.has("delivered_description") &&
     conversationColumns.has("delivered_comment_sequence") &&
     conversationColumns.has("delivered_activity_sequence") &&
+    conversationColumns.has("retired_at") &&
+    conversationColumns.has("retirement_reason") &&
+    conversationColumns.has("retirement_actor_id") &&
+    conversationColumns.has("replaces_conversation_id") &&
+    conversationColumns.has("replacement_reason") &&
     attemptColumns.has("outcome_kind") &&
     attemptColumns.has("thread_continuity") &&
     transcriptColumns.has("usage_json") &&
@@ -424,6 +436,7 @@ function currentSchemaIsComplete(database: DatabaseSync): boolean {
     commentColumns.has("attempt_id") &&
     activityTable?.sql.includes("task.archived") === true &&
     activityTable.sql.includes("conversation.continued") === true &&
+    activityTable.sql.includes("conversation.retired") === true &&
     activityTable.sql.includes("activation.dismissed") === true &&
     activityTable.sql.includes("relationship.removed") === true;
 }

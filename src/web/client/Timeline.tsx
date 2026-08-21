@@ -447,10 +447,13 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
   const conversationId = activity.type === "conversation.continued" ? activity.details.conversationId : undefined;
   const activationId = activity.type === "conversation.continued" ? activity.details.activationId : undefined;
   const messageId = activity.type === "conversation.continued" ? activity.details.messageId : undefined;
+  const label = activity.type === "conversation.retired"
+    ? `Conversation retired · ${nameForAgent(activity.details.targetAgentId ?? "the agent", context.agents)}`
+    : (relationship?.label ?? activityLabel(activity.type));
   const contents = (
     <>
       <div className="entry-meta">
-        <strong>{relationship?.label ?? activityLabel(activity.type)}</strong>
+        <strong>{label}</strong>
         <span className="entry-meta-actions">
           <RelativeTime value={activity.occurredAt} />
           {activity.type === "conversation.continued" && activity.details.messageBody !== undefined ? (
@@ -458,16 +461,17 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
           ) : null}
         </span>
       </div>
-      {activity.type === "conversation.continued" && activity.details.messageBody !== undefined ? (
+      {(activity.type === "conversation.continued" && activity.details.messageBody !== undefined) ||
+        (activity.type === "conversation.retired" && activity.details.reason !== undefined) ? (
         <TextPreview
           id={`activity-${activity.id}`}
-          text={activity.details.messageBody}
+          text={activity.type === "conversation.retired" ? activity.details.reason! : activity.details.messageBody!}
           expanded={expanded}
           onExpanded={onExpanded}
         />
       ) : (
         <p>{relationship === undefined
-          ? activityDescription(activity, context.columns)
+          ? activityDescription(activity, context.columns, context.agents)
           : relationshipDescription(relationship)}</p>
       )}
       {nested ? null : (
@@ -677,12 +681,13 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "automation.suspended": "Task automation suspended",
     "automation.resumed": "Task automation continued",
     "conversation.continued": "Conversation continued",
+    "conversation.retired": "Conversation retired",
     "task.archived": "Task archived",
     "task.unarchived": "Task unarchived",
   }[type];
 }
 
-function activityDescription(activity: TaskActivityView, columns: TimelineColumn[]): string {
+function activityDescription(activity: TaskActivityView, columns: TimelineColumn[], agents: TimelineAgent[]): string {
   if (activity.type === "task.moved") {
     return `${columnName(activity.details.fromColumnId, columns)} → ${columnName(activity.details.toColumnId, columns)}`;
   }
@@ -698,6 +703,9 @@ function activityDescription(activity: TaskActivityView, columns: TimelineColumn
   if (activity.type === "automation.resumed") return "The interrupted activation was continued.";
   if (activity.type === "task.archived") return "Removed from the active board while retaining coordination history.";
   if (activity.type === "task.unarchived") return "Returned to the active board in its retained workflow position.";
+  if (activity.type === "conversation.retired") {
+    return `Retired ${nameForAgent(activity.details.targetAgentId ?? "the agent", agents)}'s current conversation.`;
+  }
   return activityLabel(activity.type);
 }
 

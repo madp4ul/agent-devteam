@@ -26,6 +26,7 @@ export interface TaskActivityView {
     | "automation.suspended"
     | "automation.resumed"
     | "conversation.continued"
+    | "conversation.retired"
     | "task.archived"
     | "task.unarchived";
   actor: Actor | { kind: "framework"; id: "coordination" };

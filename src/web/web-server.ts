@@ -16,6 +16,7 @@ import type {
   ArchiveCompletedTasksRequest,
   ArchiveTaskRequest,
   ContinueAgentConversationRequest,
+  RetireAgentConversationRequest,
   ContinueInterruptedTaskRequest,
   CreateChildTaskRequest,
   CreateTaskRelationshipRequest,
@@ -46,6 +47,7 @@ type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
   | "queryAttemptTranscript"
   | "queryAgentConversation"
   | "continueAgentConversation"
+  | "retireAgentConversation"
   | "archiveTask"
   | "unarchiveTask"
   | "queryTaskInspectionForUser"
@@ -246,6 +248,7 @@ async function handleBrowserApi(
   }
   const transcriptMatch = /^\/api\/attempts\/([^/]+)\/transcript$/.exec(url.pathname);
   const conversationMatch = /^\/api\/tasks\/([^/]+)\/conversations\/([^/]+)$/.exec(url.pathname);
+  const retireConversationMatch = /^\/api\/tasks\/([^/]+)\/conversations\/([^/]+)\/retire$/.exec(url.pathname);
   const dismissStaleMatch = /^\/api\/activations\/([^/]+)\/dismiss-stale$/.exec(url.pathname);
   const dismissActivationMatch = /^\/api\/activations\/([^/]+)\/dismiss$/.exec(url.pathname);
   if (method === "POST" && dismissStaleMatch?.[1] !== undefined) {
@@ -290,6 +293,25 @@ async function handleBrowserApi(
       : result.reason === "not-found"
         ? 404
         : 409;
+    sendJson(response, status, result);
+    return;
+  }
+  if (method === "POST" && retireConversationMatch?.[1] !== undefined && retireConversationMatch[2] !== undefined) {
+    const body = await readJsonBody<RetireAgentConversationRequest>(request);
+    const result = application.retireAgentConversation({
+      taskId: decodeURIComponent(retireConversationMatch[1]),
+      conversationId: decodeURIComponent(retireConversationMatch[2]),
+      reason: stringField(body, "reason"),
+      actor: { kind: "user", id: "local-user" },
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    const status = result.accepted
+      ? 200
+      : result.reason === "not-found"
+        ? 404
+        : result.reason === "empty-reason"
+          ? 400
+          : 409;
     sendJson(response, status, result);
     return;
   }

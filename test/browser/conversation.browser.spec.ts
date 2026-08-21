@@ -302,7 +302,7 @@ test("conversation dialog contains focus, closes with Escape, and restores its o
   await expect(close).toBeFocused();
   await dialog.getByRole("textbox", { name: "Follow-up message" }).focus();
   await page.keyboard.press("Tab");
-  await expect(dialog.getByRole("button", { name: "Copy thread ID" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Retire conversation" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(opener).toBeFocused();
@@ -721,4 +721,66 @@ test("an assembled conversation follow-up runs and remains attributable in the t
   await expect(refreshed).toContainText(followUpBody);
   await expect(refreshed).toContainText("Run 2 · completed", { timeout: 15_000 });
   await expect(refreshed).toContainText("Assembled follow-up verified.");
+});
+
+test("a settled conversation can be retired by keyboard and remains visible in dialog, list, and timeline", async ({ page, request }) => {
+  const reason = "The inherited implementation approach assumes an obsolete constraint.";
+  const before = await (await request.get("/api/tasks/T-0001")).json() as {
+    task: { relationships: Array<{ id: string }>; activations: Array<{ id: string; status: string }> };
+  };
+  for (const relationship of before.task.relationships) {
+    expect((await request.delete(`/api/tasks/T-0001/relationships/${relationship.id}`, {
+      data: { idempotencyKey: `remove-before-retirement-${relationship.id}` },
+    })).status()).toBe(200);
+  }
+  const unblocked = await (await request.get("/api/tasks/T-0001")).json() as typeof before;
+  for (const activation of unblocked.task.activations.filter(({ status }) => status === "queued")) {
+    expect((await request.post(`/api/activations/${activation.id}/dismiss`, {
+      data: { idempotencyKey: `dismiss-before-retirement-${activation.id}` },
+    })).status()).toBe(200);
+  }
+
+  await page.goto("/tasks/T-0001");
+  const conversations = page.getByRole("region", { name: "Conversations" });
+  const row = conversations.getByTitle("Inspect existing coordination", { exact: true });
+  await row.click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const retire = dialog.getByRole("button", { name: "Retire conversation" });
+  await expect(retire).toBeEnabled();
+  await retire.click();
+  const reasonBox = dialog.getByRole("textbox", { name: "Reason for retirement" });
+  await expect(reasonBox).toBeFocused();
+  await reasonBox.fill(reason);
+  await reasonBox.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Confirm retirement" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(dialog.getByRole("note")).toContainText(reason);
+  await expect(dialog).toContainText("This conversation is retired");
+  await expect(dialog.getByRole("textbox", { name: "Follow-up message" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "Close conversation" }).click();
+
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Conversations" }).getByText("Retired", { exact: true })).toBeVisible();
+  const retirementEvent = page.getByRole("region", { name: "Task timeline" })
+    .locator(".event-entry").filter({ hasText: "Conversation retired" });
+  await expect(retirementEvent).toContainText("Implementation Agent");
+  await expect(retirementEvent).toContainText(reason);
+
+  for (const theme of ["dark", "light"] as const) {
+    await page.evaluate((selectedTheme) => {
+      document.documentElement.dataset.theme = selectedTheme;
+    }, theme);
+    await expect(page.getByRole("region", { name: "Conversations" }).getByText("Retired", { exact: true })).toBeVisible();
+  }
+
+  const replacementSource = "@implementer replace the retired approach with current constraints.";
+  expect((await request.post("/api/tasks/T-0001/comments", {
+    data: { body: replacementSource, idempotencyKey: "browser-create-replacement-conversation" },
+  })).status()).toBe(201);
+  await page.reload();
+  await page.getByRole("region", { name: "Conversations" }).getByTitle(replacementSource, { exact: false }).click();
+  const replacementDialog = page.getByRole("dialog", { name: "Agent conversation" });
+  await expect(replacementDialog.getByRole("note")).toContainText("Replacement context");
+  await expect(replacementDialog.getByRole("note")).toContainText(reason);
 });

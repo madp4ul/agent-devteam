@@ -5,6 +5,7 @@ import type {
   ArchiveCompletedTasksRequest,
   ArchiveTaskRequest,
   ContinueAgentConversationRequest,
+  RetireAgentConversationRequest,
   ContinueInterruptedTaskRequest,
   CreateChildTaskRequest,
   CreateTaskRelationshipRequest,
@@ -17,6 +18,7 @@ import type {
   AttemptTranscriptQueryResult,
   AgentConversationQueryResult,
   ContinueAgentConversationResult,
+  RetireAgentConversationResult,
   ActivationRecoveryAction,
   ArchiveCompletedTasksResult,
   TaskWorkspaceGitStateView,
@@ -327,6 +329,21 @@ export async function continueAgentConversation(
     {
       method: "POST",
       body: serializeBrowserRequest<ContinueAgentConversationRequest>({ body, idempotencyKey }),
+    },
+  );
+}
+
+export async function retireAgentConversation(
+  taskId: string,
+  conversationId: string,
+  reason: string,
+  idempotencyKey: string,
+): Promise<RetireAgentConversationResult> {
+  return request(
+    `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}/retire`,
+    {
+      method: "POST",
+      body: serializeBrowserRequest<RetireAgentConversationRequest>({ reason, idempotencyKey }),
     },
   );
 }

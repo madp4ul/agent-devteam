@@ -78,6 +78,10 @@ export function runningConversationScenario(items: Array<Record<string, unknown>
       currentThreadId: "thread-browser-123",
       createdAt: "2026-08-09T12:00:00.000Z",
       latestActivityAt: "2026-08-09T12:05:00.000Z",
+      retirement: null,
+      replacesConversationId: null,
+      replacementReason: null,
+      retirementAvailability: { available: false, reason: "activation-work-pending" },
       continuation: { available: true },
       messages: [],
       runs: [{

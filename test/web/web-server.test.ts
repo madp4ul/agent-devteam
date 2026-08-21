@@ -206,6 +206,54 @@ test("browser conversation continuation accepts and replays one authored follow-
   assert.deepEqual(conversation.conversation.messages.map(({ body: messageBody }) => messageBody), [body.body]);
 });
 
+test("browser conversation retirement validates, accepts, and replays the user reason", async (t) => {
+  const fixture = await createFixture("browser-conversation-retirement");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Retire through the browser adapter",
+    description: "Keep retirement atomic at the HTTP boundary.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "browser-retirement-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const activation = created.task.activations[0];
+  assert.ok(activation?.conversationId);
+  const database = new DatabaseSync(fixture.databasePath);
+  database.prepare("UPDATE activations SET status = 'completed' WHERE id = ?").run(activation.id);
+  database.close();
+  const server = await startWebServer(application, {
+    host: "127.0.0.1",
+    port: 0,
+    assetDirectory: fixture.assetDirectory,
+  });
+  t.after(() => server.close());
+  const url = `${server.baseUrl}/api/tasks/${created.task.id}/conversations/${activation.conversationId}/retire`;
+
+  const invalid = await postJson(url, { reason: "", idempotencyKey: "empty-browser-retirement" });
+  assert.equal(invalid.response.status, 400);
+  const body = {
+    reason: "The conversation assumes an obsolete browser contract.",
+    idempotencyKey: "browser-retirement",
+  };
+  const accepted = await postJson(url, body);
+  const replayed = await postJson(url, body);
+  assert.equal(accepted.response.status, 200);
+  assert.deepEqual(replayed.body, accepted.body);
+  const detail = await fetch(
+    `${server.baseUrl}/api/tasks/${created.task.id}/conversations/${activation.conversationId}`,
+  );
+  assert.equal(detail.status, 200);
+  assert.equal(((await detail.json()) as { conversation: { retirement: { reason: string } } })
+    .conversation.retirement.reason, body.reason);
+});
+
 test("browser attention projection is grouped and user mentions resolve through their explicit action", async (t) => {
   const fixture = await createFixture("browser-attention");
   const application = await CoordinationApplication.start({

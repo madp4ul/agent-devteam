@@ -298,6 +298,140 @@ test("continuing a conversation persists one authored message and activation ide
   }
 });
 
+test("retiring a settled conversation preserves it and the next ordinary activation creates its replacement", async (t) => {
+  const fixture = await createHandoffFixture();
+  const runtime = new ControlledAgentRuntime();
+  let application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Replace a stale implementation lineage",
+    description: "Start the next ordinary activation with complete current context.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-retirement-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const conversationId = created.task.activations[0]?.conversationId;
+  assert.ok(conversationId);
+
+  assert.deepEqual(application.retireAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    reason: "The inherited approach is anchored on an obsolete constraint.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reject-unfinished-retirement",
+  }), { accepted: false, reason: "activation-work-pending" });
+
+  await application.resumeAutomation();
+  await runtime.waitForRequest(1);
+  runtime.complete({ status: "completed", summary: "Initial work settled.", threadId: "retired-thread" });
+  await application.waitForAutomationIdle();
+  application.pauseAutomation();
+
+  const command = {
+    taskId: created.task.id,
+    conversationId,
+    reason: "The inherited approach is anchored on an obsolete constraint.",
+    actor: { kind: "user" as const, id: "paul" },
+    idempotencyKey: "retire-settled-conversation",
+  };
+  const retired = application.retireAgentConversation(command);
+  assert.equal(retired.accepted, true);
+  assert.deepEqual(application.retireAgentConversation(command), retired);
+  if (!retired.accepted) return;
+  assert.equal(retired.retirement.reason, command.reason);
+
+  const historicalFollowUp = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Explain the earlier decision.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-retired-conversation",
+  });
+  assert.equal(historicalFollowUp.accepted, true);
+
+  const mentioned = application.addTaskComment({
+    taskId: created.task.id,
+    body: "@implementer use a fresh approach for this ordinary request.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "activate-replacement-conversation",
+  });
+  assert.equal(mentioned.accepted, true);
+  if (!mentioned.accepted) return;
+  const replacementId = mentioned.task.activations.at(-1)?.conversationId;
+  assert.ok(replacementId);
+  assert.notEqual(replacementId, conversationId);
+
+  await application.resumeAutomation();
+  const retiredContinuation = await runtime.waitForRequest(2);
+  assert.equal(retiredContinuation.resumeThreadId, "retired-thread");
+  assert.equal(retiredContinuation.activationId, historicalFollowUp.accepted ? historicalFollowUp.activationId : "");
+  runtime.complete({ status: "completed", summary: "Historical explanation supplied.", threadId: "retired-thread" });
+  const replacementRequest = await runtime.waitForRequest(3);
+  assert.equal(replacementRequest.activationContext.kind, "initial");
+  assert.equal(replacementRequest.activationContext.description, created.task.description);
+  assert.equal(replacementRequest.activationContext.replacementReason, command.reason);
+  assert.equal(replacementRequest.resumeThreadId, undefined);
+  runtime.complete({ status: "completed", summary: "Replacement approach complete.", threadId: "replacement-thread" });
+  await application.waitForAutomationIdle();
+  application.pauseAutomation();
+
+  const index = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(index.available, true);
+  if (index.available) {
+    assert.equal(index.conversations.find(({ id }) => id === conversationId)?.retired, true);
+    assert.equal(index.conversations.find(({ id }) => id === replacementId)?.retired, false);
+  }
+  const oldDetail = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(oldDetail.available, true);
+  if (oldDetail.available) assert.deepEqual(oldDetail.conversation.retirement, retired.retirement);
+
+  const laterHistoricalFollowUp = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Clarify the historical approach after its replacement.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-retired-conversation-after-replacement",
+  });
+  assert.equal(laterHistoricalFollowUp.accepted, true);
+  const reordered = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(reordered.available, true);
+  if (reordered.available) {
+    assert.equal(reordered.conversations[0]?.id, conversationId);
+    assert.equal(reordered.conversations[0]?.retired, true);
+  }
+  const stillCurrent = application.addTaskComment({
+    taskId: created.task.id,
+    body: "@implementer keep this ordinary work in the replacement lineage.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reuse-replacement-after-retired-follow-up",
+  });
+  assert.equal(stillCurrent.accepted, true);
+  if (stillCurrent.accepted) assert.equal(stillCurrent.task.activations.at(-1)?.conversationId, replacementId);
+
+  application.close();
+  application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  const replacement = await application.queryAgentConversation(created.task.id, replacementId);
+  assert.equal(replacement.available, true);
+  if (replacement.available) {
+    assert.equal(replacement.conversation.replacesConversationId, conversationId);
+    assert.equal(replacement.conversation.replacementReason, command.reason);
+  }
+});
+
 test("a follow-up resumes the owning agent's thread and existing task workspace in activation order", async (t) => {
   const fixture = await createHandoffFixture();
   const runtime = new ControlledAgentRuntime();
@@ -466,6 +600,7 @@ test("task conversation index stays compact, recent, distinguishable, and histor
     "label",
     "latestActivityAt",
     "owningAgent",
+    "retired",
     "status",
   ]);
   assert.deepEqual(application.continueAgentConversation({

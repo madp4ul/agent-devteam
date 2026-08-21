@@ -4,7 +4,7 @@ import type {
   AgentConversationView,
   AttemptTokenUsage,
 } from "../../application/browser-transport-contract.ts";
-import { continueAgentConversation, readAgentConversation } from "./api.ts";
+import { continueAgentConversation, readAgentConversation, retireAgentConversation } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
@@ -40,11 +40,16 @@ export function AgentConversationDialog({
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string>();
+  const [retirementOpen, setRetirementOpen] = useState(false);
+  const [retirementReason, setRetirementReason] = useState("");
+  const [retirementSubmitting, setRetirementSubmitting] = useState(false);
+  const [retirementError, setRetirementError] = useState<string>();
   const [refreshVersion, setRefreshVersion] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const pendingScrollPosition = useRef<number | "bottom" | null>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
+  const retirementIdempotencyKey = useRef(crypto.randomUUID());
   const pendingActivationId = useRef<string | undefined>(selectedPendingActivationId);
   const selectedContextPositioned = useRef(false);
 
@@ -137,6 +142,36 @@ export function AgentConversationDialog({
   };
   const history = conversation === undefined ? [] : conversationHistory(conversation);
   const activeRunPresent = conversation?.runs.some(({ attempt }) => attempt.status === "running") ?? false;
+  const submitRetirement = async (): Promise<void> => {
+    if (conversation === undefined || retirementReason.trim().length === 0 || retirementSubmitting) return;
+    setRetirementSubmitting(true);
+    setRetirementError(undefined);
+    try {
+      const result = await retireAgentConversation(
+        taskId,
+        conversation.id,
+        retirementReason,
+        retirementIdempotencyKey.current,
+      );
+      if (!result.accepted) throw new Error(`Retirement unavailable: ${result.reason}`);
+      setConversation((current) => current === undefined
+        ? current
+        : {
+            ...current,
+            retirement: result.retirement,
+            retirementAvailability: { available: false, reason: "already-retired" },
+            latestActivityAt: result.retirement.occurredAt,
+          });
+      setRetirementOpen(false);
+      setRetirementReason("");
+      retirementIdempotencyKey.current = crypto.randomUUID();
+      setRefreshVersion((version) => version + 1);
+    } catch (caught) {
+      setRetirementError(errorMessage(caught));
+    } finally {
+      setRetirementSubmitting(false);
+    }
+  };
 
   return (
     <Modal
@@ -154,6 +189,7 @@ export function AgentConversationDialog({
             ) : (
               <div className="conversation-title-row">
                 <h2>{conversation.owningAgent.name}</h2>
+                {conversation.retirement === null ? null : <span className="conversation-retired-label">Retired</span>}
                 <p className="conversation-origin-summary">
                   <span>Origin</span> · {activationReasonLabel(conversation.originatingActivation.reason.type)}
                 </p>
@@ -161,6 +197,17 @@ export function AgentConversationDialog({
             )}
           </div>
           <div className="transcript-header-actions">
+            {conversation === undefined ? null : (
+              <button
+                type="button"
+                className="conversation-retire-action"
+                disabled={!conversation.retirementAvailability.available}
+                aria-describedby="conversation-retirement-availability"
+                onClick={() => setRetirementOpen(true)}
+              >
+                Retire conversation
+              </button>
+            )}
             {conversation?.currentThreadId == null
               ? null
               : <CopyThreadIdButton threadId={conversation.currentThreadId} />}
@@ -176,10 +223,21 @@ export function AgentConversationDialog({
             </p>
           ) : conversation === undefined ? (
             <p className="unavailable">Loading conversation…</p>
-          ) : conversation.runs.length === 0 ? (
+          ) : history.length === 0 ? (
             <p className="unavailable">This conversation has not started a run yet.</p>
           ) : (<>
-            {history.map((entry) => entry.kind === "message" ? (
+            {history.map((entry) => entry.kind === "replacement" ? (
+              <section key="replacement" className="conversation-retirement-marker" role="note">
+                <p className="eyebrow">Replacement context</p>
+                <p>{entry.reason}</p>
+              </section>
+            ) : entry.kind === "retirement" ? (
+              <section key="retirement" className="conversation-retirement-marker" role="note">
+                <p className="eyebrow">Conversation retired</p>
+                <p>{entry.retirement.reason}</p>
+                <small>{entry.retirement.actor.id}</small>
+              </section>
+            ) : entry.kind === "message" ? (
               <section
                 key={`message-${entry.message.id}`}
                 className={`conversation-user-turn${entry.awaitingRun ? " awaiting-run" : ""}${
@@ -262,6 +320,41 @@ export function AgentConversationDialog({
             ))}
           </>)}
           {conversation === undefined ? null : (
+            <>
+            <p id="conversation-retirement-availability" className="conversation-retirement-availability">
+              {retirementAvailabilityMessage(conversation)}
+            </p>
+            {retirementOpen ? (
+              <form
+                className="conversation-retirement-form"
+                aria-label="Retire conversation"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitRetirement();
+                }}
+              >
+                <p>
+                  Ordinary activations will stop reusing this conversation. The next ordinary activation will create a replacement; this history remains readable and explicitly continuable.
+                </p>
+                <label htmlFor={`conversation-retirement-reason-${conversation.id}`}>Reason for retirement</label>
+                <textarea
+                  id={`conversation-retirement-reason-${conversation.id}`}
+                  rows={3}
+                  value={retirementReason}
+                  disabled={retirementSubmitting}
+                  onChange={(event) => setRetirementReason(event.target.value)}
+                  autoFocus
+                  required
+                />
+                {retirementError === undefined ? null : <p className="unavailable" role="alert">{retirementError}</p>}
+                <div className="conversation-composer-actions">
+                  <button type="button" className="secondary" disabled={retirementSubmitting} onClick={() => setRetirementOpen(false)}>Cancel</button>
+                  <button type="submit" disabled={retirementReason.trim().length === 0 || retirementSubmitting}>
+                    {retirementSubmitting ? "Retiring…" : "Confirm retirement"}
+                  </button>
+                </div>
+              </form>
+            ) : null}
             <form
               className="conversation-composer"
               aria-label="Continue conversation"
@@ -288,6 +381,7 @@ export function AgentConversationDialog({
                 </button>
               </div>
             </form>
+            </>
           )}
         </div>
     </Modal>
@@ -296,7 +390,9 @@ export function AgentConversationDialog({
 
 type ConversationHistoryEntry =
   | { kind: "message"; message: AgentConversationView["messages"][number]; awaitingRun: boolean }
-  | { kind: "run"; run: AgentConversationView["runs"][number]; runIndex: number };
+  | { kind: "run"; run: AgentConversationView["runs"][number]; runIndex: number }
+  | { kind: "retirement"; retirement: NonNullable<AgentConversationView["retirement"]> }
+  | { kind: "replacement"; reason: string; occurredAt: string };
 
 function conversationHistory(conversation: AgentConversationView): ConversationHistoryEntry[] {
   const messages = new Map(conversation.messages.map((message) => [message.id, message]));
@@ -312,7 +408,29 @@ function conversationHistory(conversation: AgentConversationView): ConversationH
   history.push(...[...messages.values()]
     .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
     .map((message) => ({ kind: "message" as const, message, awaitingRun: true })));
-  return history;
+  if (conversation.retirement !== null) history.push({ kind: "retirement", retirement: conversation.retirement });
+  if (conversation.replacementReason !== null) {
+    history.push({ kind: "replacement", reason: conversation.replacementReason, occurredAt: conversation.createdAt });
+  }
+  return history.sort((left, right) => historyEntryTime(left).localeCompare(historyEntryTime(right)));
+}
+
+function historyEntryTime(entry: ConversationHistoryEntry): string {
+  if (entry.kind === "message") return entry.message.occurredAt;
+  if (entry.kind === "run") return entry.run.attempt.startedAt;
+  if (entry.kind === "retirement") return entry.retirement.occurredAt;
+  return entry.occurredAt;
+}
+
+function retirementAvailabilityMessage(conversation: AgentConversationView): string {
+  if (conversation.retirementAvailability.available) {
+    return "Retirement is available because this conversation has no unfinished activation work.";
+  }
+  switch (conversation.retirementAvailability.reason) {
+    case "already-retired": return "This conversation is retired. Ordinary activations will not return to it.";
+    case "task-archived": return "Archived task conversations cannot be retired.";
+    case "activation-work-pending": return "Finish, dismiss, interrupt, or recover this agent's unfinished work before retiring the conversation.";
+  }
 }
 
 function continuationUnavailableMessage(

@@ -22,6 +22,12 @@ export interface AgentConversationView {
   currentThreadId: string | null;
   createdAt: string;
   latestActivityAt: string;
+  retirement: AgentConversationRetirementView | null;
+  replacesConversationId: string | null;
+  replacementReason: string | null;
+  retirementAvailability:
+    | { available: true }
+    | { available: false; reason: "already-retired" | "task-archived" | "activation-work-pending" };
   continuation:
     | { available: true }
     | { available: false; reason: "task-archived" | "owning-agent-unavailable" | "thread-unavailable" };
@@ -46,6 +52,13 @@ export interface AgentConversationIndexEntry {
   latestActivityAt: string;
   status: "running" | "needs-attention" | null;
   continuation: AgentConversationView["continuation"];
+  retired: boolean;
+}
+
+export interface AgentConversationRetirementView {
+  reason: string;
+  actor: Actor & { kind: "user" };
+  occurredAt: string;
 }
 
 export interface AgentConversationMessageView {
@@ -72,4 +85,17 @@ export interface ContinueAgentConversationCommand {
 export type ContinueAgentConversationResult =
   | { accepted: true; message: AgentConversationMessageView; activationId: string }
   | { accepted: false; reason: "not-found" | "empty-message" | "task-archived" | "owning-agent-unavailable" | "thread-unavailable" }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
+
+export interface RetireAgentConversationCommand {
+  taskId: string;
+  conversationId: string;
+  reason: string;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
+export type RetireAgentConversationResult =
+  | { accepted: true; retirement: AgentConversationRetirementView }
+  | { accepted: false; reason: "not-found" | "empty-reason" | "not-current-conversation" | "task-archived" | "activation-work-pending" }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };

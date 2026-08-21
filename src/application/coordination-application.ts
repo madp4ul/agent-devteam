@@ -29,6 +29,8 @@ import type {
   AgentConversationQueryResult,
   ContinueAgentConversationCommand,
   ContinueAgentConversationResult,
+  RetireAgentConversationCommand,
+  RetireAgentConversationResult,
   TaskConversationIndexQueryResult,
 } from "./conversation-contract.ts";
 import type {
@@ -618,6 +620,13 @@ export class CoordinationApplication {
     const result = this.#persistence.conversationCommands.continue(command);
     if (result.accepted) this.#automation.kick();
     return result;
+  }
+
+  retireAgentConversation(command: RetireAgentConversationCommand): RetireAgentConversationResult {
+    if (this.#startup.mode === "configuration-error") {
+      return { accepted: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
+    }
+    return this.#persistence.conversationCommands.retire(command);
   }
 
   queryCollaborators(): CollaboratorsQueryResult {

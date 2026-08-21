@@ -33,6 +33,10 @@ export type IdempotentCommandIdentity = (
       kind: "continue-agent-conversation";
       scope: readonly [taskId: string, conversationId: string];
     }
+  | {
+      kind: "retire-agent-conversation";
+      scope: readonly [taskId: string, conversationId: string];
+    }
 ) & { idempotencyKey: string };
 
 export interface IdempotentCommandScope {

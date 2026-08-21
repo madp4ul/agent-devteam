@@ -25,6 +25,7 @@ export class ConversationContextDeliveryModule {
                 conversation.delivered_description,
                 conversation.delivered_comment_sequence,
                 conversation.delivered_activity_sequence,
+                conversation.replacement_reason,
                 activation.source_event_id
          FROM activations activation
          JOIN agent_conversations conversation ON conversation.id = activation.conversation_id
@@ -35,6 +36,7 @@ export class ConversationContextDeliveryModule {
         delivered_description: string | null;
         delivered_comment_sequence: number;
         delivered_activity_sequence: number;
+        replacement_reason: string | null;
         source_event_id: string;
       } | undefined;
       if (conversation === undefined) {
@@ -84,6 +86,9 @@ export class ConversationContextDeliveryModule {
           : sourceDeliveredPreviously
             ? "conversation-history"
             : "activation-only",
+        ...(initial && conversation.replacement_reason !== null
+          ? { replacementReason: conversation.replacement_reason }
+          : {}),
       };
       this.#database.prepare(
         "INSERT INTO activation_contexts (activation_id, context_json) VALUES (?, ?)",

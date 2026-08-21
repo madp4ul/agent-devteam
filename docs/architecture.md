@@ -81,6 +81,10 @@ task descriptions, comments, and activity so later activations receive new
 task context once across restart. Continuation is one
 authoritative command, and archival preserves the lineage while removing
 detailed transcript, authored-message, and replay content.
+Settled current conversations can be retired atomically with an attributable
+reason. Retired lineages remain durable and explicitly continuable, while the
+next ordinary activation creates the pair's replacement and receives that
+reason once with its complete initial task composition.
 
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
@@ -98,7 +102,9 @@ workspace. A per-attempt MCP adapter lets that agent inspect relevant project
 coordination state and mutate only its current task. Every activation belongs to
 a durable task-scoped agent conversation. Ordinary activation reasons select
 the current conversation for the stable task-and-agent pair, while explicit
-user follow-ups select their addressed conversation. Activations and retries
+user follow-ups select their addressed conversation, including a retired one.
+Retirement removes only automatic selection; the next ordinary activation
+creates the replacement current conversation. Activations and retries
 remain distinct inside that lineage, and each attempt's messages and tool
 activity remain separately attributable run evidence. A first activation gets
 the complete current task composition; each later distinct activation gets a

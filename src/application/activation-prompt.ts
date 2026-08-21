@@ -95,6 +95,10 @@ ${renderParticipants(request)}
 
 # Current task background
 
+${request.activationContext.replacementReason === undefined
+    ? ""
+    : `This conversation replaces a deliberately retired lineage. The user's retirement explanation is authoritative context for avoiding the discarded approach:\n${request.activationContext.replacementReason}\n\n`}
+
 The following is the shared task record as it existed when this attempt was dispatched. Read it as history and current context, not as a list of requests that all still need answers. The Activation to handle section after it identifies the exact reason for this turn. React to that source in light of comments and activity that happened later.
 
 ${renderTask(request)}
