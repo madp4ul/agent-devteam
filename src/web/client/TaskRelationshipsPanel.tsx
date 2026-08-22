@@ -16,7 +16,6 @@ import {
 } from "./api.ts";
 import { errorMessage } from "./feedback.ts";
 import { Modal } from "./Modal.tsx";
-import type { Navigate } from "./navigation.ts";
 import { TaskCreationDialog } from "./TaskCreationDialog.tsx";
 
 type RelationshipGroup = "Parent tasks" | "Child tasks" | "Depends on" | "Blocking tasks";
@@ -32,12 +31,10 @@ interface RelationshipEntry {
 
 export function TaskRelationshipsPanel({
   detail,
-  navigate,
   onChanged,
   onFeedback,
 }: {
   detail: BrowserTaskDetail;
-  navigate: Navigate;
   onChanged(): Promise<void>;
   onFeedback(feedback: { role: "status" | "alert"; text: string }): void;
 }): ReactNode {
@@ -162,10 +159,8 @@ export function TaskRelationshipsPanel({
                       <div>
                         <a
                           href={`/tasks/${encodeURIComponent(entry.related.id)}`}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            navigate(`/tasks/${encodeURIComponent(entry.related.id)}`);
-                          }}
+                          target="_blank"
+                          rel="noopener noreferrer"
                         >{entry.related.title}</a>
                         <span className="relationship-context">
                           {entry.related.id} · {entry.related.boardName} / {entry.related.column.name}

@@ -692,7 +692,12 @@ function relationshipDescription(presentation: RelationshipPresentation): ReactN
       {presentation.taskId === undefined ? (
         <strong className="relationship-task-name">{presentation.taskName}</strong>
       ) : (
-        <a className="relationship-task-name" href={`/tasks/${encodeURIComponent(presentation.taskId)}`}>
+        <a
+          className="relationship-task-name"
+          href={`/tasks/${encodeURIComponent(presentation.taskId)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           {presentation.taskName}
         </a>
       )}

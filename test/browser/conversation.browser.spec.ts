@@ -317,8 +317,8 @@ test("coordination inspections present authoritative scopes and navigable task r
   await expect(currentTask.getByText("Task", { exact: true })).toBeVisible();
   await expect(currentTask.locator("strong")).toHaveText(["Current delivery task", "Implementation"]);
   const operatingContext = dialog.getByRole("article", { name: "Inspect operating context" });
-  await expect(operatingContext.getByText("Run context", { exact: true })).toBeVisible();
-  await expect(operatingContext).toContainText("attempt-authoritative");
+  await expect(operatingContext.getByText("Run context", { exact: true })).toHaveCount(0);
+  await expect(operatingContext).not.toContainText("attempt-authoritative");
   const collaborators = dialog.getByRole("article", { name: "List collaborators" });
   await expect(collaborators.getByText("Result", { exact: true })).toBeVisible();
   await expect(collaborators.locator("strong")).toHaveText("2 collaborators");

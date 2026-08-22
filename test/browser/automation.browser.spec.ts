@@ -1043,9 +1043,14 @@ test("top-bar automation action transitions and Current runs navigation stay com
   expect(segmentLayout.bottoms.every((bottom) => segmentLayout.barBottom - bottom < 4)).toBe(true);
   expect(segmentLayout.gaps.every((gap) => Math.abs(gap) < 1)).toBe(true);
   await page.getByText("Current runs · 1").click();
-  await page.getByRole("button", { name: /implementer.*T-0002/ }).click();
-  await expect(page).toHaveURL(/\/tasks\/T-0002$/);
-  await page.goto("/");
+  const runLink = page.getByRole("link", { name: /implementer.*T-0002/ });
+  await expect(runLink).toHaveAttribute("target", "_blank");
+  const popupPromise = page.waitForEvent("popup");
+  await runLink.click();
+  const popup = await popupPromise;
+  await expect(popup).toHaveURL(/\/tasks\/T-0002$/);
+  await expect(page).toHaveURL(/\/$/);
+  await popup.close();
   await page.getByRole("button", { name: "Pause" }).click();
   await expect(page.getByRole("button", { name: "Pausing…" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();

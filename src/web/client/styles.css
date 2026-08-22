@@ -187,7 +187,7 @@ p { line-height: 1.55; }
 .live-runs > summary::-webkit-details-marker { display: none; }
 .live-runs > ul, .live-runs > p { position: absolute; right: 0; z-index: 5; min-width: 24rem; margin-top: .75rem; padding: .75rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--paper); color: var(--ink); box-shadow: var(--shadow); list-style: none; }
 .live-runs li + li { margin-top: .5rem; }
-.live-runs li button { width: 100%; text-align: left; }
+.live-runs li > a { display: block; width: 100%; padding: .72rem 1rem; text-align: left; text-decoration: none; }
 .attempt-control { margin-top: 1rem; padding: .85rem; border: 1px solid var(--line); border-radius: .75rem; background: #f5f6f1; }
 .attempt-control label { display: grid; gap: .4rem; margin-bottom: .65rem; }
 main { padding: 2rem clamp(1rem, 4vw, 4rem) 4rem; }

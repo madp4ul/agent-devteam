@@ -263,7 +263,6 @@ export function BoardPage({
           notifications={notifications}
           onChanged={refresh}
           onFeedback={setFeedback}
-          onOpenTask={openTask}
         />
       </header>
       <main>

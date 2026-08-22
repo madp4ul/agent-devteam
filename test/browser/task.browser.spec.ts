@@ -1,6 +1,27 @@
 import { expect, test } from "./browser-fixture.ts";
 import { cleanWorkspaceGitScenario, runningConversationScenario } from "./browser-fixture.ts";
 
+test("cross-task links in authored and framework history open a new tab", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.description += "\n\nReview the [related task](/tasks/T-0002).";
+    await route.fulfill({ response, json: detail });
+  });
+  await page.goto("/tasks/T-0001");
+
+  const links = [
+    page.getByRole("region", { name: "Description" }).getByRole("link", { name: "related task" }),
+    page.getByRole("region", { name: "Relationships" }).getByRole("link", { name: "Drag this task" }),
+    page.getByRole("region", { name: "Task timeline" }).getByRole("link", { name: "Drag this task" }),
+  ];
+  for (const link of links) {
+    await expect(link).toHaveAttribute("href", "/tasks/T-0002");
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", /noopener/);
+  }
+});
+
 test("rendered Markdown code stays within every authored task surface", async ({ page }) => {
   const unbrokenToken = `https://example.invalid/${"unbroken".repeat(24)}`;
   const codeSource = [
@@ -102,6 +123,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   const relationships = page.getByRole("region", { name: "Relationships" });
   await expect(relationships.getByRole("heading", { name: "Depends on" })).toBeVisible();
   await expect(relationships.getByRole("link", { name: "Drag this task" })).toBeVisible();
+  await expect(relationships.getByRole("link", { name: "Drag this task" })).toHaveAttribute("target", "_blank");
   await expect(relationships).toContainText("Blocking");
   const attention = page.getByRole("region", { name: "Needs attention" });
   const agentActivity = page.getByRole("region", { name: "Agent activity" });
@@ -1237,6 +1259,7 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   const relationships = page.getByRole("region", { name: "Relationships" });
   await expect(relationships.getByRole("heading", { name: "Blocking tasks" })).toBeVisible();
   await expect(relationships.getByRole("link", { name: "Inspect existing coordination" })).toHaveAttribute("href", "/tasks/T-0001");
+  await expect(relationships.getByRole("link", { name: "Inspect existing coordination" })).toHaveAttribute("target", "_blank");
   await expect(relationships).toContainText("T-0001 · Product delivery / Implementation");
   await expect(relationships.getByRole("region", { name: "Blocking tasks" }).getByText("Blocking", { exact: true })).toHaveCount(0);
   const relationshipActions = relationships.getByRole("group", { name: "Add relationship" });
@@ -1294,6 +1317,7 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await expect(taskTimeline.getByText("Dependency added", { exact: true })).toBeVisible();
   await expect(taskTimeline.getByText("Now depends on Recover a workspace startup failure.", { exact: true })).toBeVisible();
   await expect(taskTimeline.getByRole("link", { name: "Recover a workspace startup failure" })).toBeVisible();
+  await expect(taskTimeline.getByRole("link", { name: "Recover a workspace startup failure" })).toHaveAttribute("target", "_blank");
   await expect(finder).toBeVisible();
   await expect(options).not.toBeVisible();
   await expect(relationships.getByText("Selected: Recover a workspace startup failure")).toHaveCount(0);
@@ -1320,7 +1344,16 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await expect(taskTimeline.getByText("Child task added", { exact: true })).toBeVisible();
   await expect(taskTimeline.getByText("Investigate a focused child outcome was added as a child task.", { exact: true })).toBeVisible();
   await expect(taskTimeline.getByRole("link", { name: "Investigate a focused child outcome" })).toHaveAttribute("href", /\/tasks\/T-\d{4}/);
-  await relationships.getByRole("link", { name: "Investigate a focused child outcome" }).click();
+  const childLink = relationships.getByRole("link", { name: "Investigate a focused child outcome" });
+  const childHref = await childLink.getAttribute("href");
+  expect(childHref).toMatch(/^\/tasks\/T-\d{4}$/);
+  const childPopupPromise = page.waitForEvent("popup");
+  await childLink.click();
+  const childPopup = await childPopupPromise;
+  await expect(childPopup).toHaveURL(new RegExp(`${childHref}$`));
+  await expect(page).toHaveURL(/\/tasks\/T-0002$/);
+  await childPopup.close();
+  await page.goto(childHref!);
   const childRelationships = page.getByRole("region", { name: "Relationships" });
   const childTimeline = page.getByRole("region", { name: "Task timeline" });
   await expect(childRelationships.getByRole("heading", { name: "Parent tasks" })).toBeVisible();
@@ -1328,7 +1361,13 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await expect(childRelationships.getByText("Blocking", { exact: true })).toHaveCount(0);
   await expect(childTimeline.getByText("Parent task added", { exact: true })).toBeVisible();
   await expect(childTimeline.getByText("Drag this task was added as the parent task.", { exact: true })).toBeVisible();
-  await childRelationships.getByRole("link", { name: "Drag this task" }).click();
+  const parentLink = childRelationships.getByRole("link", { name: "Drag this task" });
+  const parentPopupPromise = page.waitForEvent("popup");
+  await parentLink.click();
+  const parentPopup = await parentPopupPromise;
+  await expect(parentPopup).toHaveURL(/\/tasks\/T-0002$/);
+  await parentPopup.close();
+  await page.goto("/tasks/T-0002");
 
   const removeButton = relationships.getByRole("button", { name: "Remove dependency with Recover a workspace startup failure" });
   const removeIcon = removeButton.locator("svg");

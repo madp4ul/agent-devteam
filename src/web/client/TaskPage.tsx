@@ -169,7 +169,6 @@ export function TaskPage({
             (detail.startup.processImpact?.staleActivations.length ?? 0) === 0}
           onChanged={refresh}
           onFeedback={setFeedback}
-          onOpenTask={(activeTaskId) => navigate(`/tasks/${encodeURIComponent(activeTaskId)}`)}
         />
       </header>
       <main className="task-detail">
@@ -313,7 +312,6 @@ export function TaskPage({
             <div data-task-section="relationships">
             <TaskRelationshipsPanel
               detail={detail}
-              navigate={navigate}
               onChanged={refresh}
               onFeedback={setFeedback}
             />

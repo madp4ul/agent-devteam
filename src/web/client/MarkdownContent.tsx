@@ -37,11 +37,11 @@ function markdownComponents(participants: Map<string, string> | undefined): Comp
     em: ({ children }) => <em>{content(children)}</em>,
     blockquote: ({ children }) => <blockquote>{content(children)}</blockquote>,
     a: ({ children, href }) => {
-      const external = href !== undefined && /^https?:\/\//i.test(href);
+      const newTab = href !== undefined && (/^https?:\/\//i.test(href) || /^\/tasks\/[^/]+\/?(?:[?#].*)?$/i.test(href));
       return (
         <a
           href={href}
-          {...(external ? { target: "_blank", rel: "noreferrer noopener" } : {})}
+          {...(newTab ? { target: "_blank", rel: "noreferrer noopener" } : {})}
         >{content(children)}</a>
       );
     },

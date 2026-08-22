@@ -14,7 +14,6 @@ export function AutomationControls({
   notifications,
   onChanged,
   onFeedback,
-  onOpenTask,
 }: {
   automation: AutomationView;
   activeRuns: ActiveRunView[];
@@ -22,7 +21,6 @@ export function AutomationControls({
   notifications: DesktopNotificationControl;
   onChanged(): Promise<void>;
   onFeedback(feedback: Feedback): void;
-  onOpenTask(taskId: string, boardId: string): void;
 }): ReactNode {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const reportFailure = (error: unknown): void => onFeedback({ role: "alert", text: errorMessage(error) });
@@ -47,10 +45,15 @@ export function AutomationControls({
         {activeRuns.length === 0 ? <p>No active agents.</p> : (
           <ul>{activeRuns.map((run) => (
             <li key={run.attemptId}>
-              <button className="secondary" onClick={() => onOpenTask(run.taskId, run.boardId)}>
+              <a
+                className="secondary"
+                href={`/tasks/${encodeURIComponent(run.taskId)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 {run.agentId} · {run.taskId} · {run.boardName} / {run.columnName} · {run.status} ·{" "}
                 <ElapsedTime startedAt={run.startedAt} />
-              </button>
+              </a>
             </li>
           ))}</ul>
         )}

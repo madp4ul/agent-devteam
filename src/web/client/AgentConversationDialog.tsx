@@ -720,7 +720,6 @@ function coordinationInspectionActivityPresentation(inspection: CoordinationInsp
       return {
         action: "Inspect operating context",
         facts: [
-          { kind: "value", label: "Run context", value: inspection.attemptId },
           { kind: "task", label: "Task", task: { ...optionalLiteral("id", inspection.taskId) } },
           ...(inspection.processName === undefined ? [] : [{ kind: "value" as const, label: "Process", value: inspection.processName }]),
           ...(board === undefined ? [] : [{ kind: "value" as const, label: "Board", value: board }]),
