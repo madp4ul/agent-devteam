@@ -61,6 +61,38 @@ export interface CoordinationTaskIdentity {
   title?: string;
 }
 
+export const coordinationToolNames = [
+  "summarize_boards",
+  "list_tasks",
+  "list_archived_tasks",
+  "inspect_task",
+  "list_task_activity",
+  "list_task_attachments",
+  "list_collaborators",
+  "inspect_current_task",
+  "inspect_operating_context",
+  "add_comment",
+  "move_current_task",
+  "create_child_task",
+  "add_dependency",
+  "report_permission_block",
+] as const;
+
+export type CoordinationToolName = typeof coordinationToolNames[number];
+
+export type CoordinationTranscriptStatus = "running" | "succeeded" | "failed" | "rejected";
+
+export type CoordinationTranscriptDiagnostic =
+  | { kind: "rejection"; message: string }
+  | { kind: "failure"; message: string };
+
+export interface CoordinationTranscriptEvidence {
+  rawStatus?: string;
+  arguments?: unknown;
+  result?: unknown;
+  error?: unknown;
+}
+
 export type CoordinationTranscriptPresentation =
   | {
       kind: "coordination-task-move";
@@ -69,7 +101,7 @@ export type CoordinationTranscriptPresentation =
     }
   | {
       kind: "coordination-comment";
-      body: string;
+      body?: string;
       commentId?: string;
     }
   | {
@@ -84,7 +116,7 @@ export type CoordinationTranscriptPresentation =
     }
   | {
       kind: "coordination-permission-block";
-      reason: string;
+      reason?: string;
     }
   | {
       kind: "coordination-inspection";
@@ -149,10 +181,19 @@ export type AttemptTranscriptItem =
       status: "running" | "succeeded" | "failed" | "rejected";
       rawStatus?: string;
       summary?: string;
-      presentation?: CoordinationTranscriptPresentation;
       arguments?: unknown;
       result?: unknown;
       error?: unknown;
+    }
+  | {
+      id?: string;
+      kind: "coordination";
+      tool: CoordinationToolName;
+      status: CoordinationTranscriptStatus;
+      summary?: string;
+      presentation: CoordinationTranscriptPresentation;
+      diagnostic?: CoordinationTranscriptDiagnostic;
+      evidence: CoordinationTranscriptEvidence;
     }
   | {
       id?: string;

@@ -1,31 +1,75 @@
-import type { CoordinationTranscriptPresentation } from "../application/runtime-contract.ts";
+import {
+  coordinationToolNames,
+  type AttemptTranscriptItem,
+  type CoordinationToolName,
+  type CoordinationTranscriptDiagnostic,
+  type CoordinationTranscriptPresentation,
+  type CoordinationTranscriptStatus,
+} from "../application/runtime-contract.ts";
 
-export type CoordinationToolSemanticStatus = "rejected";
+type CoordinationTranscriptItem = Extract<AttemptTranscriptItem, { kind: "coordination" }>;
 
-export function coordinationToolPresentation(
+const coordinationTools = new Set<string>(coordinationToolNames);
+
+export function coordinationTranscriptItem(
   item: { type: string; [key: string]: unknown },
+  rawStatus: string,
   run: { attemptId: string; taskId: string },
-): CoordinationTranscriptPresentation | undefined {
-  if (item.type !== "mcp_tool_call" || item.server !== "coordination") {
+): CoordinationTranscriptItem | undefined {
+  if (
+    item.type !== "mcp_tool_call" ||
+    item.server !== "coordination" ||
+    typeof item.tool !== "string" ||
+    !coordinationTools.has(item.tool)
+  ) {
     return undefined;
   }
+  const tool = item.tool as CoordinationToolName;
   const arguments_ = recordValue(item.arguments);
-  if (item.tool === "add_comment") {
+  const result = coordinationResult(item.result);
+  const status = semanticStatus(tool, rawStatus, result);
+  const projection = coordinationProjection(tool, arguments_, result, status, run);
+  const diagnostic = coordinationDiagnostic(status, result, item.error, rawStatus);
+  return {
+    ...optionalString("id", item.id),
+    kind: "coordination",
+    tool,
+    status,
+    ...(projection.summary === undefined ? {} : { summary: projection.summary }),
+    presentation: projection.presentation,
+    ...(diagnostic === undefined ? {} : { diagnostic }),
+    evidence: {
+      ...optionalString("rawStatus", item.status),
+      ...(item.arguments === undefined ? {} : { arguments: item.arguments }),
+      ...(item.result === undefined ? {} : { result: item.result }),
+      ...(item.error === undefined ? {} : { error: item.error }),
+    },
+  };
+}
+
+function coordinationProjection(
+  tool: CoordinationToolName,
+  arguments_: Record<string, unknown> | undefined,
+  result: Record<string, unknown> | undefined,
+  status: CoordinationTranscriptStatus,
+  run: { attemptId: string; taskId: string },
+): { presentation: CoordinationTranscriptPresentation; summary?: string } {
+  const transition = recordValue(result?.transition);
+  const rejection = status === "rejected" ? rejectionMessage(result) : undefined;
+  const taskId = stringValue(transition?.taskId) ?? stringValue(result?.taskId) ?? run.taskId;
+  if (tool === "add_comment") {
     const body = stringValue(arguments_?.body);
-    if (body === undefined) return undefined;
-    const result = coordinationResult(item.result);
-    return {
+    return projected({
       kind: "coordination-comment",
-      body,
+      ...optionalString("body", body),
       ...optionalString("commentId", result?.commentId),
-    };
+    }, withRejection(`${taskId}: comment`, rejection));
   }
-  if (item.tool === "inspect_operating_context") {
-    const result = coordinationResult(item.result);
+  if (tool === "inspect_operating_context") {
     const process = recordValue(result?.process);
     const board = recordValue(result?.board);
     const owningAgent = recordValue(result?.owningAgent);
-    return {
+    return projected({
       kind: "coordination-inspection",
       scope: "operating-context",
       attemptId: stringValue(result?.attemptId) ?? run.attemptId,
@@ -34,79 +78,85 @@ export function coordinationToolPresentation(
       ...optionalString("boardId", board?.id),
       ...optionalString("boardName", board?.name),
       ...optionalString("owningAgentName", owningAgent?.name),
-    };
+    });
   }
-  const result = coordinationResult(item.result);
-  if (item.tool === "summarize_boards") {
-    return {
+  if (tool === "summarize_boards") {
+    return projected({
       kind: "coordination-inspection",
       scope: "board-summaries",
       boards: namedEntities(result?.boards),
-    };
+    }, "Board summaries");
   }
-  if (item.tool === "list_tasks") {
+  if (tool === "list_tasks") {
     const requestedBoard = stringValue(arguments_?.boardId);
     const requestedColumns = stringValues(arguments_?.columnIds).map((id) => ({ id }));
-    return {
+    const boardId = requestedBoard ?? "requested board";
+    const columns = requestedColumns.map(({ id }) => id).slice(0, 5).join(", ");
+    return projected({
       kind: "coordination-inspection",
       scope: "tasks",
       ...(requestedBoard === undefined ? {} : { board: { id: requestedBoard } }),
       columns: requestedColumns,
-    };
+    }, `${boardId}: tasks in ${columns.length === 0 ? "requested columns" : columns}`);
   }
-  if (item.tool === "list_archived_tasks") {
+  if (tool === "list_archived_tasks") {
     const tasks = Array.isArray(result?.tasks) ? result.tasks : undefined;
-    return {
+    return projected({
       kind: "coordination-inspection",
       scope: "archived-tasks",
       ...(tasks === undefined ? {} : { taskCount: tasks.length }),
-    };
+    });
   }
-  if (item.tool === "inspect_task" || item.tool === "list_task_activity" || item.tool === "list_task_attachments") {
+  if (tool === "inspect_task" || tool === "list_task_activity" || tool === "list_task_attachments") {
     const task = recordValue(result?.task);
-    const scope = item.tool === "inspect_task"
+    const scope = tool === "inspect_task"
       ? "task"
-      : item.tool === "list_task_activity" ? "task-activity" : "task-attachments";
-    return {
+      : tool === "list_task_activity" ? "task-activity" : "task-attachments";
+    return projected({
       kind: "coordination-inspection",
       scope,
       ...optionalString("taskId", task?.id ?? arguments_?.taskId),
       ...optionalString("taskTitle", task?.title),
-    };
+    }, `${stringValue(arguments_?.taskId) ?? taskId}: ${tool.replaceAll("_", " ")}`);
   }
-  if (item.tool === "list_collaborators") {
+  if (tool === "list_collaborators") {
     const collaborators = Array.isArray(result?.collaborators) ? result.collaborators : undefined;
-    return {
+    return projected({
       kind: "coordination-inspection",
       scope: "collaborators",
       ...(collaborators === undefined ? {} : { collaboratorCount: collaborators.length }),
-    };
+    }, "Collaborator directory");
   }
-  if (item.tool === "inspect_current_task") {
+  if (tool === "inspect_current_task") {
     const column = recordValue(result?.column);
-    return {
+    return projected({
       kind: "coordination-inspection",
       scope: "current-task",
       ...optionalString("taskTitle", result?.title),
       ...optionalString("boardId", result?.boardId),
       ...optionalString("columnId", column?.id),
       ...optionalString("columnName", column?.name),
-    };
+    }, `${taskId}: current task inspection`);
   }
-  if (item.tool === "create_child_task") {
+  if (tool === "create_child_task") {
     const task = taskIdentity(result?.task);
-    return {
+    const childId = stringValue(recordValue(result?.task)?.id);
+    const columnId = stringValue(arguments_?.columnId);
+    return projected({
       kind: "coordination-child-task",
       task: {
         ...optionalString("id", task?.id),
         ...optionalString("title", task?.title ?? arguments_?.title),
       },
       ...optionalString("columnId", recordValue(result?.task)?.columnId ?? arguments_?.columnId),
-    };
+    }, withRejection(
+      `${taskId}: child ${childId ?? boundedText(arguments_?.title) ?? "task"}${columnId === undefined ? "" : ` in ${columnId}`}`,
+      rejection,
+    ));
   }
-  if (item.tool === "add_dependency") {
+  if (tool === "add_dependency") {
     const relationship = recordValue(result?.relationship);
-    return {
+    return projected({
       kind: "coordination-dependency",
       sourceTask: {
         id: stringValue(relationship?.sourceTaskId) ?? run.taskId,
@@ -114,95 +164,94 @@ export function coordinationToolPresentation(
       targetTask: {
         ...optionalString("id", relationship?.targetTaskId ?? arguments_?.targetTaskId),
       },
-    };
+    }, withRejection(
+      `${taskId}: dependency on ${stringValue(arguments_?.targetTaskId) ?? "requested task"}`,
+      rejection,
+    ));
   }
-  if (item.tool === "report_permission_block") {
+  if (tool === "report_permission_block") {
     const reason = stringValue(arguments_?.summary);
-    return reason === undefined ? undefined : { kind: "coordination-permission-block", reason };
+    return projected(
+      { kind: "coordination-permission-block", ...optionalString("reason", reason) },
+      withRejection(`${taskId}: permission block`, rejection),
+    );
   }
-  if (item.tool !== "move_current_task") return undefined;
-  const transition = recordValue(coordinationResult(item.result)?.transition);
   const fromColumnId = stringValue(transition?.fromColumnId);
   const toColumnId = stringValue(transition?.toColumnId) ?? stringValue(arguments_?.destinationColumnId);
-  return {
+  return projected({
     kind: "coordination-task-move",
     ...(fromColumnId === undefined ? {} : { fromColumnId }),
     ...(toColumnId === undefined ? {} : { toColumnId }),
-  };
+  }, withRejection(
+    fromColumnId !== undefined && toColumnId !== undefined
+      ? `${taskId}: ${fromColumnId} → ${toColumnId}`
+      : `${taskId}: move to ${toColumnId ?? "requested column"}`,
+    rejection,
+  ));
 }
 
-export function coordinationToolSemanticStatus(
-  item: { type: string; [key: string]: unknown },
-  status: string,
-): CoordinationToolSemanticStatus | undefined {
-  if (item.type !== "mcp_tool_call" || item.server !== "coordination" || status !== "completed") {
-    return undefined;
-  }
-  return coordinationResult(item.result)?.accepted === false ? "rejected" : undefined;
-}
-
-export function summarizeCoordinationTool(
-  item: { type: string; [key: string]: unknown },
-  status: string,
-  currentTaskId: string,
-): string | undefined {
-  if (item.type !== "mcp_tool_call" || item.server !== "coordination" || typeof item.tool !== "string") {
-    return undefined;
-  }
-  const arguments_ = recordValue(item.arguments);
-  const result = coordinationResult(item.result);
-  const context = recordValue(result?.transition);
-  const rejection = rejectionReason(status, result);
-  const taskId = stringValue(context?.taskId) ?? stringValue(result?.taskId) ?? currentTaskId;
-  if (item.tool === "move_current_task") {
-    const from = stringValue(context?.fromColumnId);
-    const to = stringValue(context?.toColumnId) ?? stringValue(arguments_?.destinationColumnId);
-    return withRejection(
-      from !== undefined && to !== undefined
-        ? `${taskId}: ${from} → ${to}`
-        : `${taskId}: move to ${to ?? "requested column"}`,
-      rejection,
-    );
-  }
-  if (item.tool === "add_comment") return withRejection(`${taskId}: comment`, rejection);
-  if (item.tool === "inspect_current_task") return `${taskId}: current task inspection`;
-  if (item.tool === "create_child_task") {
-    const childId = stringValue(recordValue(result?.task)?.id);
-    const columnId = stringValue(arguments_?.columnId);
-    return withRejection(
-      `${taskId}: child ${childId ?? boundedText(arguments_?.title) ?? "task"}${columnId === undefined ? "" : ` in ${columnId}`}`,
-      rejection,
-    );
-  }
-  if (item.tool === "add_dependency") {
-    return withRejection(
-      `${taskId}: dependency on ${stringValue(arguments_?.targetTaskId) ?? "requested task"}`,
-      rejection,
-    );
-  }
-  if (item.tool === "report_permission_block") return withRejection(`${taskId}: permission block`, rejection);
-  if (item.tool === "inspect_task" || item.tool === "list_task_activity" || item.tool === "list_task_attachments") {
-    return `${stringValue(arguments_?.taskId) ?? taskId}: ${item.tool.replaceAll("_", " ")}`;
-  }
-  if (item.tool === "list_tasks") {
-    const boardId = stringValue(arguments_?.boardId) ?? "requested board";
-    const columns = Array.isArray(arguments_?.columnIds)
-      ? arguments_.columnIds.filter((value): value is string => typeof value === "string").slice(0, 5).join(", ")
-      : "requested columns";
-    return `${boardId}: tasks in ${columns}`;
-  }
-  if (item.tool === "summarize_boards") return "Board summaries";
-  if (item.tool === "list_collaborators") return "Collaborator directory";
-  return undefined;
+function projected(
+  presentation: CoordinationTranscriptPresentation,
+  summary?: string,
+): { presentation: CoordinationTranscriptPresentation; summary?: string } {
+  return { presentation, ...(summary === undefined ? {} : { summary }) };
 }
 
 function withRejection(summary: string, rejection: string | undefined): string {
   return rejection === undefined ? summary : `${summary} · Rejected: ${rejection}`;
 }
 
-function rejectionReason(status: string, result: Record<string, unknown> | undefined): string | undefined {
-  if (status !== "completed" || result?.accepted !== false) return undefined;
-  return stringValue(result.reason) ?? "The framework rejected the request.";
+function semanticStatus(
+  tool: CoordinationToolName,
+  rawStatus: string,
+  result: Record<string, unknown> | undefined,
+): CoordinationTranscriptStatus {
+  if (rawStatus === "running") return "running";
+  if (rawStatus !== "completed") return "failed";
+  if (result?.accepted === false) return "rejected";
+  return requiresAuthoritativeAcceptance(tool) && result?.accepted !== true ? "failed" : "succeeded";
+}
+
+function requiresAuthoritativeAcceptance(tool: CoordinationToolName): boolean {
+  return tool === "add_comment" ||
+    tool === "move_current_task" ||
+    tool === "create_child_task" ||
+    tool === "add_dependency" ||
+    tool === "report_permission_block";
+}
+
+function coordinationDiagnostic(
+  status: CoordinationTranscriptStatus,
+  result: Record<string, unknown> | undefined,
+  error: unknown,
+  rawStatus: string,
+): CoordinationTranscriptDiagnostic | undefined {
+  if (status === "rejected") return { kind: "rejection", message: humanizeIdentifier(rejectionMessage(result)) };
+  if (status !== "failed") return undefined;
+  if (rawStatus === "completed") {
+    return { kind: "failure", message: "The coordination call completed without an authoritative outcome." };
+  }
+  const errorRecord = recordValue(error);
+  return {
+    kind: "failure",
+    message: normalizedCoordinationFailure(stringValue(errorRecord?.message) ?? stringValue(error)),
+  };
+}
+
+function rejectionMessage(result: Record<string, unknown> | undefined): string {
+  return stringValue(result?.reason) ?? "The framework rejected the request.";
+}
+
+function normalizedCoordinationFailure(diagnostic: string | undefined): string {
+  if (diagnostic === undefined || /^coordination call failed\.?$/iu.test(diagnostic.trim())) {
+    return "The coordination call did not complete.";
+  }
+  return diagnostic.trim().replace(/^failed:\s*/iu, "").replace(/\s+failed\.?$/iu, " did not complete.");
+}
+
+function humanizeIdentifier(value: string): string {
+  const text = value.replaceAll(/([a-z0-9])([A-Z])/gu, "$1 $2").replaceAll(/[-_]+/gu, " ");
+  return text.length === 0 ? value : `${text[0]!.toUpperCase()}${text.slice(1)}`;
 }
 
 function coordinationResult(value: unknown): Record<string, unknown> | undefined {

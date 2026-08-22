@@ -1,4 +1,4 @@
-import { expect, test as base } from "@playwright/test";
+import { expect, test as base, type Locator, type Page, type Route } from "@playwright/test";
 
 import { startBrowserFixture } from "./fixture-server.ts";
 
@@ -101,4 +101,56 @@ export function runningConversationScenario(items: Array<Record<string, unknown>
       }],
     },
   };
+}
+
+export async function fulfillConversationTranscript(
+  route: Route,
+  items: Array<Record<string, unknown>>,
+  options: { append?: boolean } = {},
+): Promise<void> {
+  const response = await route.fetch();
+  const result = await response.json();
+  const transcriptItems = result.conversation.runs[0].transcript.items as Array<Record<string, unknown>>;
+  if (options.append) transcriptItems.push(...items);
+  else result.conversation.runs[0].transcript.items = items;
+  await route.fulfill({ response, json: result });
+}
+
+export async function openAppearance(page: Page): Promise<Locator> {
+  await page.getByRole("button", { name: /Settings/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("button", { name: "Appearance" }).click();
+  return dialog.getByRole("combobox", { name: "Appearance" });
+}
+
+export async function setAppearance(page: Page, theme: "light" | "dark"): Promise<void> {
+  await (await openAppearance(page)).selectOption(theme);
+  await page.keyboard.press("Escape");
+}
+
+export async function contrastRatio(locator: Locator): Promise<number> {
+  return locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const parse = (color: string): [number, number, number] => {
+      const channels = color.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+      if (channels?.length !== 3) throw new Error(`Unsupported computed color: ${color}`);
+      return channels as [number, number, number];
+    };
+    const luminance = (color: string): number => {
+      const channels = parse(color).map((channel) => {
+        const normalized = channel / 255;
+        return normalized <= 0.04045
+          ? normalized / 12.92
+          : ((normalized + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+    };
+    const foreground = luminance(style.color);
+    const background = luminance(style.backgroundColor === "rgba(0, 0, 0, 0)"
+      ? getComputedStyle(element.parentElement ?? document.documentElement).backgroundColor
+      : style.backgroundColor);
+    const lighter = Math.max(foreground, background);
+    const darker = Math.min(foreground, background);
+    return (lighter + 0.05) / (darker + 0.05);
+  });
 }

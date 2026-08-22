@@ -10,9 +10,7 @@ import type {
   AttemptTokenUsage,
 } from "../application/runtime-contract.ts";
 import {
-  coordinationToolPresentation,
-  coordinationToolSemanticStatus,
-  summarizeCoordinationTool,
+  coordinationTranscriptItem,
 } from "./coordination-tool-transcript.ts";
 import { composeActivationPrompt } from "../application/activation-prompt.ts";
 
@@ -381,18 +379,15 @@ function toolTranscriptItem(
     };
   }
   if (item.type === "mcp_tool_call" && typeof item.server === "string" && typeof item.tool === "string") {
-    const summary = summarizeCoordinationTool(item, status, run.taskId);
-    const presentation = coordinationToolPresentation(item, run);
+    const coordinationItem = coordinationTranscriptItem(item, status, run);
+    if (coordinationItem !== undefined) return coordinationItem;
     return {
       ...(typeof item.id === "string" ? { id: item.id } : {}),
       kind: "mcp",
       server: item.server,
       tool: item.tool,
-      status: coordinationToolSemanticStatus(item, status) ??
-        (status === "running" ? "running" : status === "completed" ? "succeeded" : "failed"),
+      status: status === "running" ? "running" : status === "completed" ? "succeeded" : "failed",
       ...(typeof item.status === "string" ? { rawStatus: item.status } : {}),
-      ...(summary === undefined ? {} : { summary }),
-      ...(presentation === undefined ? {} : { presentation }),
       ...(item.arguments === undefined ? {} : { arguments: item.arguments }),
       ...(item.result === undefined ? {} : { result: item.result }),
       ...(item.error === undefined ? {} : { error: item.error }),

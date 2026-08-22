@@ -532,12 +532,12 @@ boards:
     threadId: "controlled-assembled-thread",
   });
   const moveTranscriptItem = (await runtime.read("controlled-assembled-attempt"))
-    ?.find((item) => item.kind === "mcp" && item.tool === "move_current_task");
-  assert.equal(moveTranscriptItem?.kind === "mcp" ? moveTranscriptItem.server : undefined, "coordination");
-  assert.equal(moveTranscriptItem?.kind === "mcp" ? moveTranscriptItem.status : undefined, "succeeded");
-  assert.equal(moveTranscriptItem?.kind === "mcp" ? moveTranscriptItem.rawStatus : undefined, "completed");
-  assert.equal(moveTranscriptItem?.kind === "mcp" ? moveTranscriptItem.arguments : undefined, undefined);
-  assert.ok(moveTranscriptItem?.kind === "mcp" && moveTranscriptItem.result !== undefined);
+    ?.find((item) => item.kind === "coordination" && item.tool === "move_current_task");
+  assert.equal(moveTranscriptItem?.kind, "coordination");
+  assert.equal(moveTranscriptItem?.status, "succeeded");
+  assert.equal(moveTranscriptItem?.evidence.rawStatus, "completed");
+  assert.equal(moveTranscriptItem?.evidence.arguments, undefined);
+  assert.ok(moveTranscriptItem?.evidence.result !== undefined);
   const runtimeUpdated = application.queryTask(runtimeTask.task.id);
   assert.equal(runtimeUpdated.available, true);
   if (!runtimeUpdated.available) return;

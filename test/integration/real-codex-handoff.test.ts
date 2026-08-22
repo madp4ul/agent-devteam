@@ -111,12 +111,12 @@ test(
     assert.equal(gitStatus?.status, "completed");
     assert.deepEqual(
       implementationTranscript
-        ?.filter(isMcpCall)
-        .map((item) => ({ server: item.server, tool: item.tool, status: item.status, rawStatus: item.rawStatus })),
+        ?.filter(isCoordinationCall)
+        .map((item) => ({ tool: item.tool, status: item.status, rawStatus: item.evidence.rawStatus })),
       [
-        { server: "coordination", tool: "inspect_current_task", status: "succeeded", rawStatus: "completed" },
-        { server: "coordination", tool: "add_comment", status: "succeeded", rawStatus: "completed" },
-        { server: "coordination", tool: "move_current_task", status: "succeeded", rawStatus: "completed" },
+        { tool: "inspect_current_task", status: "succeeded", rawStatus: "completed" },
+        { tool: "add_comment", status: "succeeded", rawStatus: "completed" },
+        { tool: "move_current_task", status: "succeeded", rawStatus: "completed" },
       ],
     );
     const reviewTranscript = await runtime.read(
@@ -124,9 +124,9 @@ test(
     );
     assert.deepEqual(
       reviewTranscript
-        ?.filter(isMcpCall)
-        .map((item) => ({ server: item.server, tool: item.tool, status: item.status, rawStatus: item.rawStatus })),
-      [{ server: "coordination", tool: "inspect_current_task", status: "succeeded", rawStatus: "completed" }],
+        ?.filter(isCoordinationCall)
+        .map((item) => ({ tool: item.tool, status: item.status, rawStatus: item.evidence.rawStatus })),
+      [{ tool: "inspect_current_task", status: "succeeded", rawStatus: "completed" }],
     );
   },
 );
@@ -245,10 +245,10 @@ test(
   },
 );
 
-function isMcpCall(
+function isCoordinationCall(
   item: AttemptTranscriptItem,
-): item is Extract<AttemptTranscriptItem, { kind: "mcp" }> {
-  return item.kind === "mcp";
+): item is Extract<AttemptTranscriptItem, { kind: "coordination" }> {
+  return item.kind === "coordination";
 }
 
 function isCommand(

@@ -62,14 +62,13 @@ test("a failed required coordination call makes the attempt fail with actionable
   assert.deepEqual(await runtime.read("attempt-activation-coordination-failure"), [
     {
       id: "tool-call-1",
-      kind: "mcp",
-      server: "coordination",
+      kind: "coordination",
       tool: "inspect_current_task",
       status: "failed",
-      rawStatus: "failed",
       summary: "T-0006: current task inspection",
       presentation: { kind: "coordination-inspection", scope: "current-task" },
-      error: { message: "user cancelled MCP tool call" },
+      diagnostic: { kind: "failure", message: "user cancelled MCP tool call" },
+      evidence: { rawStatus: "failed", error: { message: "user cancelled MCP tool call" } },
     },
     { kind: "message", role: "agent", text: "I could not inspect the task." },
     {
@@ -193,11 +192,9 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
   assert.deepEqual(await runtime.read(liveRequest.attemptId), [
     {
       id: "tool-live",
-      kind: "mcp",
-      server: "coordination",
+      kind: "coordination",
       tool: "list_tasks",
       status: "running",
-      rawStatus: "in_progress",
       summary: "delivery: tasks in implementation",
       presentation: {
         kind: "coordination-inspection",
@@ -205,7 +202,10 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
         board: { id: "delivery" },
         columns: [{ id: "implementation" }],
       },
-      arguments: { boardId: "delivery", columnIds: ["implementation"] },
+      evidence: {
+        rawStatus: "in_progress",
+        arguments: { boardId: "delivery", columnIds: ["implementation"] },
+      },
     },
   ]);
 
@@ -214,11 +214,9 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
   assert.deepEqual(await runtime.read(liveRequest.attemptId), [
     {
       id: "tool-live",
-      kind: "mcp",
-      server: "coordination",
+      kind: "coordination",
       tool: "list_tasks",
       status: "succeeded",
-      rawStatus: "completed",
       summary: "delivery: tasks in implementation",
       presentation: {
         kind: "coordination-inspection",
@@ -226,8 +224,11 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
         board: { id: "delivery" },
         columns: [{ id: "implementation" }],
       },
-      arguments: { boardId: "delivery", columnIds: ["implementation"] },
-      result: { content: [{ type: "text", text: JSON.stringify({ tasks: [] }) }] },
+      evidence: {
+        rawStatus: "completed",
+        arguments: { boardId: "delivery", columnIds: ["implementation"] },
+        result: { content: [{ type: "text", text: JSON.stringify({ tasks: [] }) }] },
+      },
     },
   ]);
 });
@@ -414,26 +415,27 @@ test("a completed coordination move retains evidence and adds semantic presentat
 
   assert.deepEqual(await runtime.read(moveRequest.attemptId), [{
     id: "move-tool",
-    kind: "mcp",
-    server: "coordination",
+    kind: "coordination",
     tool: "move_current_task",
     status: "succeeded",
-    rawStatus: "completed",
     summary: "T-0008: implementation → review",
     presentation: {
       kind: "coordination-task-move",
       fromColumnId: "implementation",
       toColumnId: "review",
     },
-    arguments: { destinationColumnId: "review", expectedRevision: 4 },
-    result: {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          accepted: true,
-          transition: { taskId: "T-0008", fromColumnId: "implementation", toColumnId: "review" },
-        }),
-      }],
+    evidence: {
+      rawStatus: "completed",
+      arguments: { destinationColumnId: "review", expectedRevision: 4 },
+      result: {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            accepted: true,
+            transition: { taskId: "T-0008", fromColumnId: "implementation", toColumnId: "review" },
+          }),
+        }],
+      },
     },
   }]);
 });
@@ -484,7 +486,7 @@ test("a running coordination move updates one row from requested arguments to au
   const outcome = runtime.run(moveRequest, { started() {} });
   await moveIsRunning;
   const running = await runtime.read(moveRequest.attemptId);
-  assert.deepEqual(running?.[0]?.kind === "mcp" ? running[0].presentation : undefined, {
+  assert.deepEqual(running?.[0]?.kind === "coordination" ? running[0].presentation : undefined, {
     kind: "coordination-task-move",
     toColumnId: "requested-review",
   });
@@ -493,7 +495,7 @@ test("a running coordination move updates one row from requested arguments to au
   await outcome;
   const completed = await runtime.read(moveRequest.attemptId);
   assert.equal(completed?.length, 1);
-  assert.deepEqual(completed?.[0]?.kind === "mcp" ? completed[0].presentation : undefined, {
+  assert.deepEqual(completed?.[0]?.kind === "coordination" ? completed[0].presentation : undefined, {
     kind: "coordination-task-move",
     fromColumnId: "implementation",
     toColumnId: "code-review",
@@ -534,8 +536,8 @@ test("a coordination comment exposes its authored Markdown as a semantic present
   const transcript = await runtime.read(commentRequest.attemptId);
   assert.ok(transcript);
   const [comment] = transcript;
-  assert.equal(comment?.kind, "mcp");
-  assert.deepEqual(comment?.presentation, {
+  assert.equal(comment?.kind, "coordination");
+  assert.deepEqual(comment?.kind === "coordination" ? comment.presentation : undefined, {
     kind: "coordination-comment",
     body,
     commentId: "comment-7",
@@ -573,7 +575,7 @@ test("permission-block reporting retains the authored reason as semantic present
   await runtime.run(permissionRequest, { started() {} });
 
   const transcript = await runtime.read(permissionRequest.attemptId);
-  assert.deepEqual(transcript?.[0]?.kind === "mcp" ? transcript[0].presentation : undefined, {
+  assert.deepEqual(transcript?.[0]?.kind === "coordination" ? transcript[0].presentation : undefined, {
     kind: "coordination-permission-block",
     reason: "Writing the release file requires user approval.",
   });
@@ -612,19 +614,21 @@ test("a technical coordination action failure keeps its semantic request facts a
   const transcript = await runtime.read(failedRequest.attemptId);
   assert.deepEqual(transcript?.[0], {
     id: "failed-child-tool",
-    kind: "mcp",
-    server: "coordination",
+    kind: "coordination",
     tool: "create_child_task",
     status: "failed",
-    rawStatus: "failed",
     summary: "T-0008: child Review API in code-review",
     presentation: {
       kind: "coordination-child-task",
       task: { title: "Review API" },
       columnId: "code-review",
     },
-    arguments: { title: "Review API", columnId: "code-review" },
-    error: { message: "Connection closed" },
+    diagnostic: { kind: "failure", message: "Connection closed" },
+    evidence: {
+      rawStatus: "failed",
+      arguments: { title: "Review API", columnId: "code-review" },
+      error: { message: "Connection closed" },
+    },
   });
 });
 
@@ -683,7 +687,7 @@ test("child-task and dependency actions retain linked task identities as semanti
 
   const transcript = await runtime.read(linkedActionRequest.attemptId);
   assert.ok(transcript);
-  assert.deepEqual(transcript.flatMap((item) => item.kind === "mcp" ? [item.presentation] : []), [
+  assert.deepEqual(transcript.flatMap((item) => item.kind === "coordination" ? [item.presentation] : []), [
     {
       kind: "coordination-child-task",
       task: { id: "T-0099", title: "Review API" },
@@ -761,8 +765,8 @@ test("operating-context inspection retains the authoritative run scope as semant
   const transcript = await runtime.read(contextRequest.attemptId);
   assert.ok(transcript);
   const [inspection] = transcript;
-  assert.equal(inspection?.kind, "mcp");
-  assert.deepEqual(inspection?.kind === "mcp" ? inspection.presentation : undefined, {
+  assert.equal(inspection?.kind, "coordination");
+  assert.deepEqual(inspection?.kind === "coordination" ? inspection.presentation : undefined, {
     kind: "coordination-inspection",
     scope: "operating-context",
     attemptId: "attempt-authoritative",
@@ -772,7 +776,7 @@ test("operating-context inspection retains the authoritative run scope as semant
     boardName: "Delivery",
     owningAgentName: "Code Reviewer",
   });
-  for (const item of transcript.slice(1).filter((candidate) => candidate.kind === "mcp")) {
+  for (const item of transcript.slice(1).filter((candidate) => candidate.kind === "coordination")) {
     assert.deepEqual(item.presentation, {
       kind: "coordination-inspection",
       scope: "operating-context",
@@ -874,7 +878,7 @@ test("every read-only coordination contract retains its semantic inspection scop
   const transcript = await runtime.read(inspectionRequest.attemptId);
   assert.ok(transcript);
   const presentations = Object.fromEntries(transcript.flatMap((item) =>
-    item.kind === "mcp" && item.id !== undefined ? [[item.id, item.presentation]] : []));
+    item.kind === "coordination" && item.id !== undefined ? [[item.id, item.presentation]] : []));
   assert.deepEqual(presentations, {
     "board-summaries": {
       kind: "coordination-inspection",
@@ -958,32 +962,35 @@ test("coordination MCP capture preserves domain rejection without rewriting raw 
   assert.deepEqual(await runtime.read(outcomeRequest.attemptId), [
     {
       id: "inspect-tool",
-      kind: "mcp",
-      server: "coordination",
+      kind: "coordination",
       tool: "inspect_task",
       status: "succeeded",
-      rawStatus: "completed",
       summary: "T-0042: inspect task",
       presentation: { kind: "coordination-inspection", scope: "task", taskId: "T-0042" },
-      arguments: { taskId: "T-0042" },
-      result: { content: [{ type: "text", text: JSON.stringify({ id: "T-0042" }) }] },
+      evidence: {
+        rawStatus: "completed",
+        arguments: { taskId: "T-0042" },
+        result: { content: [{ type: "text", text: JSON.stringify({ id: "T-0042" }) }] },
+      },
     },
     {
       id: "dependency-tool",
-      kind: "mcp",
-      server: "coordination",
+      kind: "coordination",
       tool: "add_dependency",
       status: "rejected",
-      rawStatus: "completed",
       summary: "T-0040: dependency on T-0041 · Rejected: duplicate-relationship",
       presentation: {
         kind: "coordination-dependency",
         sourceTask: { id: "T-0040" },
         targetTask: { id: "T-0041" },
       },
-      arguments: { targetTaskId: "T-0041" },
-      result: {
-        content: [{ type: "text", text: JSON.stringify({ accepted: false, reason: "duplicate-relationship" }) }],
+      diagnostic: { kind: "rejection", message: "Duplicate relationship" },
+      evidence: {
+        rawStatus: "completed",
+        arguments: { targetTaskId: "T-0041" },
+        result: {
+          content: [{ type: "text", text: JSON.stringify({ accepted: false, reason: "duplicate-relationship" }) }],
+        },
       },
     },
   ]);
