@@ -274,9 +274,9 @@ without choosing the implementation yet.
   conversation-header, and task-detail conversation surfaces; priceable active
   runs add a pending spinner without inventing live usage.
 - [Isolate Token Usage for User Follow-Ups](./issues/71-isolate-follow-up-token-usage.md)
-  — Use the resolved resumed-thread identity when persisting completed or
-  interrupted follow-ups so the transcript shows only the new attempt's usage
-  delta.
+  — Closed without implementation after the replacement agent-conversation
+  design removed per-run token usage and temporarily removed the combined
+  conversation token display.
 - [Keep Comment Replies in Timeline Context](./issues/72-keep-comment-replies-in-context.md)
   — Keep the single Add comment composer available at the viewport bottom while
   reading the timeline, preserve one draft and its source position across Reply

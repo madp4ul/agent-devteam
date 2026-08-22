@@ -6,7 +6,7 @@ the thread's cumulative usage.
 
 **Blocked by:** None
 
-**Status:** open
+**Status:** resolved
 
 - [ ] Use the same resolved resume-thread identity for runtime dispatch and
   token-usage isolation.
@@ -78,3 +78,10 @@ projection rendered by `src/web/client/AgentConversationDialog.tsx`.
   `interruptAttempt`; tests should assert externally visible semantics rather
   than the private argument alone.
 
+## Answer
+
+Closed without implementation. The subsequent agent-conversation presentation
+work removes token usage from individual runs and temporarily removes the
+combined conversation token display as well. The incorrect per-follow-up value
+therefore no longer has a user-facing surface to correct, and implementing or
+testing that obsolete presentation would conflict with the replacement design.

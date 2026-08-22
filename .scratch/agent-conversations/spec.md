@@ -33,8 +33,12 @@ follow-up messages and the inspectable evidence from every run that has
 participated in that lineage.
 
 The existing transcript overlay becomes a conversation view. It shows the
-conversation history and, while continuation is available, provides a compact
-message composer at the bottom. Submitting a follow-up creates a durable
+conversation history as one calm chronological exchange without visible run
+containers or repeated run metadata. User messages and concise activation
+causes are right-aligned, agent prose is left-aligned and wide, and all
+non-message tool evidence shares one muted visual family. While continuation
+is available, a compact message composer remains sticky at the bottom.
+Submitting a follow-up creates a durable
 user-follow-up activation targeted at the conversation's owning agent. The
 activation enters the task's normal activation order, starts a distinct run,
 resumes the conversation's current Codex thread in the task workspace, and
@@ -69,14 +73,14 @@ second live-operations dashboard.
 17. As a user, I want every follow-up attempt to receive fresh task- and agent-scoped coordination authorization, so that a completed run's revoked credentials are never reused.
 18. As a user, I want a follow-up agent to retain access to the coordination tools appropriate to its new attempt, so that it can inspect, comment on, and move the task when its role requires that action.
 19. As a user, I want the conversation view to show the combined inspectable history of all participating runs, so that I can read the discussion in one place.
-20. As a user, I want run boundaries to remain visible within a conversation, so that I can relate messages and tool activity to their corresponding timeline run.
+20. As a user, I want the conversation to read continuously without visible run boundaries, so that repeated activations do not fragment one ongoing exchange.
 21. As a user, I want running conversation content to refresh without losing my reading position, so that continuation remains usable while the agent works.
 22. As a user, I want the conversation view to follow new content only when I am already near its bottom, so that live updates do not pull me away from older evidence.
-23. As a user, I want the message composer at the bottom of the conversation, so that asking the next question feels like a normal chat interaction.
-24. As a user, I want the composer disabled while that conversation cannot safely continue, so that the interface does not accept work it cannot execute.
-25. As a user, I want a clear explanation when continuation is unavailable, so that a disabled composer is understandable.
+23. As a user, I want the message composer to remain sticky at the bottom of the visible conversation, so that I can ask a follow-up while reading older content.
+24. As a user, I want the composer to remain usable while earlier work is running or queued, so that another follow-up can enter the ordinary activation order.
+25. As a user, I want the composer omitted when continuation is unavailable, so that an unusable control does not occupy conversation space.
 26. As a user, I want the existing View Transcript action renamed to View Conversation, so that the interface describes the continuable object accurately.
-27. As a user, I want any historical run's View Conversation action to open the conversation containing that run, so that timeline evidence remains a useful entry point.
+27. As a user, I want any historical run's View Conversation action to open the conversation at the visible cause of its activation, so that timeline evidence reaches the relevant conversational turn without recreating a run highlight.
 28. As a user, I want the opened conversation to identify its owning agent, so that I know who will receive a follow-up.
 29. As a user, I want a compact Conversations section on the task detail page, so that I can find task conversations without scanning a long timeline.
 30. As a user, I want that section at the bottom of the right column, so that it supplements rather than displaces primary task information and controls.
@@ -103,6 +107,24 @@ second live-operations dashboard.
 51. As a user, I want stale or duplicate follow-up submissions handled idempotently, so that network retries cannot create duplicate activations or messages.
 52. As a user, I want conversation access to remain task-scoped, so that a conversation cannot be continued from the wrong task or workspace.
 53. As a user, I want every open conversation to refresh within two seconds, while known active work may refresh more frequently, so that newly started turns and completed answers appear promptly without a manual reload.
+54. As a user, I want authored messages and activation causes right-aligned and narrower than agent output, so that role is clear without repeated speaker decoration.
+55. As a user, I want agent prose left-aligned and able to use the full reading width, so that detailed explanations and code remain readable.
+56. As a user, I want ordinary messages to omit repeated speaker labels, so that alignment carries the distinction without visual noise.
+57. As a user, I want each ordinary activation represented by its concise cause, so that I can see what started that conversational turn without seeing the framework-composed prompt.
+58. As a user, I want an authored follow-up to serve as its own activation cause, so that the conversation does not duplicate my message.
+59. As a user, I want commands, generic runtime tools, and coordination MCP calls to share one muted outlined treatment, so that transport details do not determine visual importance.
+60. As a user, I want rich coordination evidence to retain its useful content and existing disclosure behavior, so that a calmer presentation does not remove inspectability.
+61. As a user, I want warnings and failures to use a restrained red outline, so that exceptional evidence remains noticeable without dominating the conversation.
+62. As a user, I want only one quiet transient status line while work is queued or running, so that live state remains understandable without run headings or completed status rows.
+63. As a user, I want conversation-level retirement and continuity-loss events shown as full-width system notes, so that lineage changes remain clear without looking like messages or run boundaries.
+64. As a user, I want the accumulated monetary estimate to remain in the fixed header, so that conversation cost stays available without fragmenting the scrollable history.
+65. As a user, I want per-run input, output, cost, duration, and status summaries removed from the conversation, so that accounting metadata does not interrupt reading.
+66. As a user, I want any future token indicator to represent authoritative current context-window occupancy, so that it answers whether the conversation is approaching its model limit.
+67. As a user, I want no token indicator when the runtime cannot provide authoritative context occupancy, so that cumulative usage is not misrepresented as current context size.
+68. As a user, I want the Send follow-up action embedded inside the textarea footprint, so that it does not consume an otherwise empty action row.
+69. As a user, I want to resize the follow-up textarea manually within a bounded height, so that long drafts remain workable without crowding out the conversation.
+70. As a user, I want a gutter beside the conversation scrollbar, so that the scrollbar never overlaps messages, evidence, or controls.
+71. As a user on a narrow viewport, I want conversation elements to use the available width, so that desktop alignment does not make text cramped.
 
 ## Implementation Decisions
 
@@ -169,9 +191,17 @@ second live-operations dashboard.
   the conversation projection by ordering its authored messages, attempts,
   and retained transcript items rather than duplicating all evidence into a
   second transcript store.
-- Conversation history exposes visible run boundaries with agent, status,
-  timing, and available attempt usage. Tool calls remain associated with the
-  attempt that executed them.
+- Conversation history projects one flat chronological presentation stream
+  without visible run boundaries. It retains attempt attribution internally so
+  the timeline, diagnostics, recovery, and durable evidence can still identify
+  the run that produced each item.
+- Each ordinary activation contributes one concise visible cause containing a
+  human-readable reason and directly authored source content where applicable.
+  A user follow-up is already its activation's visible cause, and retries reuse
+  the same cause rather than creating duplicate turns.
+- The framework-composed prompt remains internal. Process instructions, task
+  snapshots, authoritative bootstraps, and retry context are not conversation
+  messages.
 - The initial framework-composed activation prompt is not exposed as though it
   were a short authored chat message. The conversation begins with a concise
   representation of its originating activation followed by the captured run
@@ -208,19 +238,47 @@ second live-operations dashboard.
 
 - Rename the current transcript overlay and its entry actions from transcript
   terminology to conversation terminology.
-- Convert the overlay into a conversation view that can render several run
-  segments and places a compact multiline composer after the history.
+- Render the conversation as a continuous chronological stream. Remove run
+  containers, headings, separators, labels, completed states, durations,
+  per-run usage, per-run cost, and selected-run highlighting from the view.
+- Present authored user messages and quietly labeled activation causes as
+  right-aligned elements at roughly 70–75% maximum desktop width. Present agent
+  prose directly on the conversation background, left-aligned and able to use
+  the full reading width. Remove repeated `You` and agent speaker labels while
+  retaining the existing copy controls.
+- At narrow widths, allow all conversation elements to use the available width;
+  tune the exact desktop ratio during visual implementation.
+- Present shell commands, generic runtime tools, and coordination MCP calls as
+  one muted secondary evidence family with a subtle outline and no colored left
+  rail. Preserve their existing summaries, rich coordination content, and
+  disclosure behavior. Warnings and failures use only a restrained red outline.
+- Show one quiet transient status line at the end while activation work is
+  queued or running. Do not retain settled status lines.
+- Render retirement and continuity loss as compact full-width chronological
+  system notes. Retirement is neutral; continuity loss uses the restrained
+  warning treatment. A retired conversation may be explicitly continued after
+  its retirement note.
+- Make timeline View Conversation actions scroll to and focus the visible cause
+  of the selected activation. Attempts and retries for one activation target
+  the same cause without highlighting a run group.
+- Keep the accumulated cost estimate in the fixed header unchanged.
+- Place a compact multiline composer at the bottom of the conversation. Keep it
+  sticky while history scrolls, embed the submit action inside the textarea
+  footprint following the Add comment pattern, and preserve manual vertical
+  resizing within a bounded maximum height. Automatic growth is not required.
+- Reserve enough scroll clearance for the sticky composer and a dedicated
+  right gutter for the vertical scrollbar, so neither overlaps content.
 - Submitting clears the composer only after the follow-up command succeeds.
   Pending and rejected submissions retain ordinary disabled/error feedback and
   reuse an idempotency key for safe retry.
-- The composer is unavailable when the task is archived, the owning agent is
-  absent, a required conversation/thread reference is unavailable, or another
-  existing safety rule prevents accepting the command. Rare missing-agent
-  handling may remain simple: history is readable, the row appears disabled
-  for continuation, and an explanation is available in the conversation.
+- Omit the composer when the task is archived, the owning agent is absent, a
+  required conversation/thread reference is unavailable, or another existing
+  rule prevents continuation. Keep it usable while earlier activations are
+  running or queued so follow-ups retain their existing ordering behavior.
 - Timeline actions on every participating attempt open the containing
-  conversation. The UI may focus or identify the originating run but does not
-  require a separate attempt-only transcript modal.
+  conversation at that activation's visible cause. They do not expose a
+  separate attempt-only transcript modal or reconstruct run grouping inside the
+  conversation.
 - Add a Conversations panel at the bottom of the task detail page's right
   column. Rows use link/button semantics across their full clickable area,
   show the agent and short label, and remain compact enough for many entries.
@@ -246,12 +304,17 @@ second live-operations dashboard.
   persistence to update the conversation and expose a continuity-break marker.
   The framework must not claim that unavailable Codex history was retained.
 - Token savings are not an acceptance criterion. Continuity reduces repeated
-  user explanation, but resumed history may grow and usage remains measured
-  through existing attempt-level reporting.
-- Do not estimate live token usage. The installed SDK reports authoritative
-  usage only with `turn.completed`, so the conversation keeps its existing
-  completion-based usage summary unless the runtime later exposes trustworthy
-  intermediate usage snapshots.
+  user explanation, but resumed history may grow.
+- The installed SDK's completion usage is cumulative thread processing, not
+  current context-window occupancy. Repeated input may be counted across model
+  calls, while compaction may reduce current occupancy without decreasing the
+  cumulative number. Remove the attempt token summaries from the conversation
+  and do not substitute cumulative usage or an estimate.
+- An eventual conversation token indicator must use an authoritative
+  runtime-provided measure of context already occupied before another
+  activation appends content. If the supported runtime exposes no such measure,
+  the initial redesign shows no token indicator. The accumulated monetary cost
+  estimate remains in the fixed header.
 
 ## Testing Decisions
 
@@ -261,6 +324,12 @@ second live-operations dashboard.
 - The primary seam is the coordination application's command-and-query
   boundary. It is the highest existing seam shared by browser APIs, durable
   state, scheduling, projections, and runtime dispatch.
+- Application query coverage asserts the flat chronological presentation
+  stream through that seam: originating and later activation causes, authored
+  follow-ups without duplicate activation elements, retries sharing one cause,
+  ordered attempt evidence, lineage notes, and transient queued/running state.
+  It verifies that underlying attempt attribution remains available to the
+  timeline without exposing run groups to the browser presentation.
 - Application-level scenarios submit a follow-up command and assert the
   authored source message, `user-follow-up` activation, immutable owning agent,
   unchanged task column, activation ordering, distinct attempt, conversation
@@ -296,6 +365,17 @@ second live-operations dashboard.
   agent, keyboard operation, missing-agent read-only access, composer error
   behavior, responsive placement, and preservation of reading position during
   live updates.
+- Focused conversation browser coverage proves that run headings, separators,
+  repeated speaker labels, and per-run metrics are absent; activation and user
+  causes align right; agent prose aligns left and uses the wider measure; every
+  tool category shares the muted outlined hierarchy; warnings remain subtly
+  distinct; and existing rich evidence and disclosure behavior remain intact.
+- Browser geometry coverage verifies the sticky embedded-action composer,
+  bounded manual resizing, final-content clearance, scrollbar gutter, desktop
+  asymmetry, narrow-width expansion, and both light and dark appearances.
+- Timeline browser coverage verifies that each View Conversation action focuses
+  its activation's visible cause, including the new originating activation
+  element, later ordinary activations, user follow-ups, and retries.
 - Browser polling coverage proves an open conversation receives changed
   evidence within the two-second idle freshness bound while retaining its
   established scroll-position behavior.
@@ -329,8 +409,12 @@ second live-operations dashboard.
   suspension, blocker, pause, retry, or stale-activation rules.
 - Guaranteeing lower token usage, reconstructing unavailable Codex history, or
   retaining archived detailed transcripts beyond the existing policy.
-- Estimated or token-by-token live usage before Codex reports completed-turn
-  usage.
+- Estimated context-window occupancy or presenting cumulative thread usage as
+  though it were current context size.
+- Changing the existing conversation-level monetary cost estimate.
+- Automatic follow-up textarea growth and hover-only message copy controls.
+- A throwaway visual prototype; styling is tuned against the real browser
+  implementation and its acceptance coverage.
 - Elaborate recovery for the rare case in which the owning agent has been
   removed from the process.
 
@@ -341,7 +425,7 @@ second live-operations dashboard.
   task communication, workflow events, activations, and run outcomes.
 - The conversation view is the authoritative reading surface for the
   conversation lineage, but attempt evidence remains attributable to the
-  individual run that produced it.
+  individual run that produced it outside the conversation's visual hierarchy.
 - A user follow-up resembles a targeted agent mention in that it requests a
   specific agent without transferring primary responsibility. It differs by
   targeting an existing conversation lineage and by storing its authored input
