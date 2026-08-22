@@ -152,8 +152,9 @@ conversation stream and in corresponding task activity history entries.
   order. Retain existing output bounding and truncation protections.
 - Preserve enough structured transcript evidence to render commands and MCP
   calls without rebuilding presentation from a lossy summary string.
-- Present MCP headings as a humanized server name, separator, and humanized
-  tool name. Preserve exact identifiers in the disclosed raw details.
+- Present unknown MCP headings as a humanized server name, separator, and
+  humanized tool name. Preserve their exact identifiers in disclosed raw
+  details.
 - For non-framework MCP tools, show no default body unless a later explicit,
   stable semantic renderer is added. The disclosure presents structured
   arguments and results in a bounded literal format.
@@ -166,6 +167,14 @@ conversation stream and in corresponding task activity history entries.
   repeat their heading or status. Prefer authoritative result facts over
   requested arguments, falling back to arguments only while a call is running
   or when the result omits the fact.
+- Framework cards put the complete non-authored action description in one
+  header and omit a body that would only restate it. Current-task tools omit
+  the current task ID; tools requiring an explicit task, board, column, or
+  related-task identifier include that requested scope in the header.
+- Known framework MCP tools show only their semantic presentation and status;
+  they do not expose server identifiers, tool identifiers, raw transport
+  status, arguments, or results in a diagnostic disclosure. Compatibility with
+  historical transcript shapes is not required.
 - Reuse the task activity history's rendered-line preview behavior for comment
   bodies rather than introducing character-count truncation.
 - Make the comment-to-history action close the conversation dialog, reveal the

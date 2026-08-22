@@ -111,15 +111,12 @@ test(
     assert.equal(gitStatus?.status, "completed");
     assert.deepEqual(
       implementationTranscript
-        ?.filter(isToolNamed("mcp_tool_call"))
-        .map((item) => ({ summary: item.summary, status: item.status })),
+        ?.filter(isMcpCall)
+        .map((item) => ({ server: item.server, tool: item.tool, status: item.status, rawStatus: item.rawStatus })),
       [
-        { summary: `${created.task.id}: current task inspected`, status: "completed" },
-        { summary: `${created.task.id}: comment confirmed`, status: "completed" },
-        {
-          summary: `${created.task.id}: implementation → review (confirmed)`,
-          status: "completed",
-        },
+        { server: "coordination", tool: "inspect_current_task", status: "succeeded", rawStatus: "completed" },
+        { server: "coordination", tool: "add_comment", status: "succeeded", rawStatus: "completed" },
+        { server: "coordination", tool: "move_current_task", status: "succeeded", rawStatus: "completed" },
       ],
     );
     const reviewTranscript = await runtime.read(
@@ -127,9 +124,9 @@ test(
     );
     assert.deepEqual(
       reviewTranscript
-        ?.filter(isToolNamed("mcp_tool_call"))
-        .map((item) => ({ summary: item.summary, status: item.status })),
-      [{ summary: `${created.task.id}: current task inspected`, status: "completed" }],
+        ?.filter(isMcpCall)
+        .map((item) => ({ server: item.server, tool: item.tool, status: item.status, rawStatus: item.rawStatus })),
+      [{ server: "coordination", tool: "inspect_current_task", status: "succeeded", rawStatus: "completed" }],
     );
   },
 );
@@ -248,11 +245,10 @@ test(
   },
 );
 
-function isToolNamed(name: string) {
-  return (
-    item: AttemptTranscriptItem,
-  ): item is Extract<AttemptTranscriptItem, { kind: "tool" }> =>
-    item.kind === "tool" && item.name === name;
+function isMcpCall(
+  item: AttemptTranscriptItem,
+): item is Extract<AttemptTranscriptItem, { kind: "mcp" }> {
+  return item.kind === "mcp";
 }
 
 function isCommand(

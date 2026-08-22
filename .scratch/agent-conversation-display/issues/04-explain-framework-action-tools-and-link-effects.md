@@ -27,7 +27,7 @@ unsuccessful even when its MCP transport completed.
 - [ ] Running actions fall back to requested arguments when authoritative results do not yet exist and update in place to confirmed result facts.
 - [ ] Technical failure remains distinguishable from domain rejection and exposes its diagnostic.
 - [ ] Successful actions use the shared success marker without `completed`, `confirmed`, or `succeeded` suffixes.
-- [ ] Every tailored action retains one disclosure containing exact identifiers, arguments, result, and diagnostic evidence.
+- [ ] Every known framework action omits the generic raw MCP disclosure and shows only its semantic domain presentation and status.
 - [ ] Runtime-adapter coverage exercises comment, move, child-task, dependency, and permission-block calls across running, accepted, rejected, and failed outcomes where applicable.
 - [ ] Browser coverage verifies Markdown and copying, rendered-line disclosure, semantic status, live updates, task links, exact timeline navigation and focus, keyboard operation, containment, and dark/light appearance.
 - [ ] Existing task activity history ordering, attempt attribution, conversation navigation, and selected-source behavior remain green.

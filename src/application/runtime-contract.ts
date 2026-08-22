@@ -56,6 +56,17 @@ export interface RuntimeStartupDiagnostic extends ActivationStartupFailureView {
   activationId: string;
 }
 
+export type CoordinationTranscriptPresentation =
+  | {
+      kind: "coordination-task-move";
+      fromColumnId?: string;
+      toColumnId?: string;
+    }
+  | {
+      kind: "coordination-comment";
+      body: string;
+    };
+
 export type AttemptTranscriptItem =
   | { id?: string; kind: "message"; role: "agent"; text: string }
   | {
@@ -64,6 +75,19 @@ export type AttemptTranscriptItem =
       command: string;
       status: string;
       output?: string;
+    }
+  | {
+      id?: string;
+      kind: "mcp";
+      server: string;
+      tool: string;
+      status: "running" | "succeeded" | "failed" | "rejected";
+      rawStatus?: string;
+      summary?: string;
+      presentation?: CoordinationTranscriptPresentation;
+      arguments?: unknown;
+      result?: unknown;
+      error?: unknown;
     }
   | {
       id?: string;

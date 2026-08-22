@@ -9,7 +9,11 @@ import type {
   AttemptTranscriptItem,
   AttemptTokenUsage,
 } from "../application/runtime-contract.ts";
-import { summarizeCoordinationTool } from "./coordination-tool-transcript.ts";
+import {
+  coordinationToolPresentation,
+  coordinationToolSemanticStatus,
+  summarizeCoordinationTool,
+} from "./coordination-tool-transcript.ts";
 import { composeActivationPrompt } from "../application/activation-prompt.ts";
 
 export { composeActivationPrompt } from "../application/activation-prompt.ts";
@@ -373,7 +377,25 @@ function toolTranscriptItem(
       ...(rawOutput === undefined ? {} : { output: truncateOutput(rawOutput) }),
     };
   }
-  const summary = summarizeCoordinationTool(item, status, currentTaskId) ?? readableToolSummary(item);
+  if (item.type === "mcp_tool_call" && typeof item.server === "string" && typeof item.tool === "string") {
+    const summary = summarizeCoordinationTool(item, status, currentTaskId);
+    const presentation = coordinationToolPresentation(item);
+    return {
+      ...(typeof item.id === "string" ? { id: item.id } : {}),
+      kind: "mcp",
+      server: item.server,
+      tool: item.tool,
+      status: coordinationToolSemanticStatus(item, status) ??
+        (status === "running" ? "running" : status === "completed" ? "succeeded" : "failed"),
+      ...(typeof item.status === "string" ? { rawStatus: item.status } : {}),
+      ...(summary === undefined ? {} : { summary }),
+      ...(presentation === undefined ? {} : { presentation }),
+      ...(item.arguments === undefined ? {} : { arguments: item.arguments }),
+      ...(item.result === undefined ? {} : { result: item.result }),
+      ...(item.error === undefined ? {} : { error: item.error }),
+    };
+  }
+  const summary = readableToolSummary(item);
   return {
     ...(typeof item.id === "string" ? { id: item.id } : {}),
     kind: "tool",

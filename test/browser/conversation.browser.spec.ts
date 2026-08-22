@@ -74,6 +74,20 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   expect(compactHeights.userMessage).toBeLessThan(90);
   expect(compactHeights.collapsedCommand).toBeLessThan(60);
 
+  const codexMessageLayout = await dialog.locator(".transcript-item.message").evaluate((element) => {
+    const card = element.getBoundingClientRect();
+    const content = element.querySelector(".markdown-content")!.getBoundingClientRect();
+    const copy = element.querySelector(".markdown-copy-button")!.getBoundingClientRect();
+    return {
+      contentTopInset: content.top - card.top,
+      copyTopInset: copy.top - card.top,
+      copyRightInset: card.right - copy.right,
+    };
+  });
+  expect(codexMessageLayout.contentTopInset).toBeLessThan(18);
+  expect(codexMessageLayout.copyTopInset).toBeLessThan(12);
+  expect(codexMessageLayout.copyRightInset).toBeGreaterThanOrEqual(8);
+
   const compactRow = await commands.nth(2).evaluate((element) => {
     const row = element.querySelector("summary")!.getBoundingClientRect();
     const icon = element.querySelector(".command-disclosure-icon")!.getBoundingClientRect();
@@ -102,6 +116,239 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   });
   expect(Math.abs(centers.slotX - centers.iconX)).toBeLessThanOrEqual(0.5);
   expect(Math.abs(centers.slotY - centers.iconY)).toBeLessThanOrEqual(0.5);
+});
+
+test("generic MCP calls identify the capability and disclose bounded literal evidence", async ({ page }) => {
+  const longPath = `C:/workspace/${"nested-segment/".repeat(40)}evidence.json`;
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.conversation.runs[0].transcript.items = [
+      {
+        id: "mcp-success",
+        kind: "mcp",
+        server: "source_control_server",
+        tool: "create_pull_request",
+        status: "succeeded",
+        rawStatus: "completed",
+        arguments: { title: "Do **not** render this", path: longPath },
+        result: { content: [{ type: "text", text: "{\"number\":42}" }] },
+      },
+      {
+        id: "mcp-running",
+        kind: "mcp",
+        server: "browserTools",
+        tool: "takeScreenshot",
+        status: "running",
+        rawStatus: "in_progress",
+      },
+      {
+        id: "mcp-failed",
+        kind: "mcp",
+        server: "filesystem",
+        tool: "read_file",
+        status: "failed",
+        rawStatus: "failed",
+        error: { message: "Access denied for **secret**.txt", code: "EACCES" },
+      },
+      {
+        id: "mcp-rejected",
+        kind: "mcp",
+        server: "coordination",
+        tool: "add_dependency",
+        status: "rejected",
+        rawStatus: "completed",
+        arguments: { targetTaskId: "T-0041" },
+        result: { content: [{ type: "text", text: "{\"accepted\":false,\"reason\":\"duplicate-relationship\"}" }] },
+        summary: "T-0040: dependency on T-0041 · Rejected: duplicate-relationship",
+      },
+    ];
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const calls = dialog.locator(".transcript-mcp");
+  const coordination = dialog.getByRole("article", { name: "Add dependency" });
+
+  await expect(calls).toHaveCount(3);
+  await expect(calls.nth(0).getByText("Source control server · Create pull request", { exact: true })).toBeVisible();
+  await expect(calls.nth(1).getByText("Browser tools · Take screenshot", { exact: true })).toBeVisible();
+  await expect(calls.nth(2).getByText("Filesystem · Read file", { exact: true })).toBeVisible();
+  await expect(calls.nth(0).getByRole("img", { name: "MCP call succeeded" })).toBeVisible();
+  await expect(calls.nth(1).getByRole("img", { name: "MCP call running" })).toBeVisible();
+  await expect(calls.nth(2).getByRole("img", { name: "MCP call failed" })).toBeVisible();
+  await expect(coordination.getByRole("img", { name: "Coordination action rejected" })).toBeVisible();
+  await expect(calls.nth(2).getByRole("img", { name: "MCP call failed" })).toHaveClass(/failed/);
+  await expect(coordination.getByRole("img", { name: "Coordination action rejected" })).toHaveClass(/rejected/);
+  expect(await calls.nth(2).locator(".tool-status path").evaluateAll((paths) => paths.map((path) => path.getAttribute("d"))))
+    .not.toEqual(await coordination.locator(".tool-status path").evaluateAll((paths) => paths.map((path) => path.getAttribute("d"))));
+  await expect(calls.nth(2).getByRole("img", { name: "MCP call succeeded" })).toHaveCount(0);
+  await expect(coordination.getByRole("img", { name: "Coordination action succeeded" })).toHaveCount(0);
+  await expect(calls.nth(0).locator("summary")).not.toContainText("completed");
+  await expect(calls.nth(2).locator("summary")).not.toContainText("Access denied");
+
+  await calls.nth(0).locator("summary").focus();
+  await expect(calls.nth(0).locator("summary")).toBeFocused();
+  await expect(calls.nth(0).locator("summary")).toHaveCSS("outline-style", "solid");
+  await calls.nth(0).locator("summary").press("Enter");
+  await expect(calls.nth(0)).toContainText("source_control_server");
+  await expect(calls.nth(0)).toContainText("create_pull_request");
+  await expect(calls.nth(0)).toContainText('"title": "Do **not** render this"');
+  await expect(calls.nth(0)).toContainText('"text": "{\\"number\\":42}"');
+  await expect(calls.nth(0).locator("strong")).toHaveCount(0);
+
+  await calls.nth(1).locator("summary").click();
+  await expect(calls.nth(1).getByText("Arguments", { exact: true })).toHaveCount(0);
+  await expect(calls.nth(1).getByText("Result", { exact: true })).toHaveCount(0);
+  await expect(calls.nth(1).getByText("Failure", { exact: true })).toHaveCount(0);
+
+  await calls.nth(2).locator("summary").click();
+  await expect(calls.nth(2)).toContainText('"message": "Access denied for **secret**.txt"');
+  await expect(calls.nth(2).locator("strong")).toHaveCount(0);
+  await expect(coordination).toContainText("Rejected: duplicate-relationship");
+  await expect(coordination.locator("details")).toHaveCount(0);
+  await expect(coordination).not.toContainText(/Server identifier|Tool identifier|Raw status|Arguments|Result|completed|succeeded/);
+
+  const containment = await calls.nth(0).evaluate((element) => ({
+    rowOverflow: element.scrollWidth > element.clientWidth,
+    dialogOverflow: element.closest("[role=dialog]")!.scrollWidth > element.closest("[role=dialog]")!.clientWidth,
+    evidenceScrolls: [...element.querySelectorAll("pre")].some((pre) => pre.scrollWidth > pre.clientWidth),
+  }));
+  expect(containment.rowOverflow).toBe(false);
+  expect(containment.dialogOverflow).toBe(false);
+  expect(containment.evidenceScrolls).toBe(true);
+});
+
+test("a known coordination move presents only its domain transition", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.conversation.runs[0].transcript.items = [{
+      id: "coordination-move",
+      kind: "mcp",
+      server: "coordination",
+      tool: "move_current_task",
+      status: "succeeded",
+      rawStatus: "completed",
+      summary: "T-0001: implementation → code-review",
+      arguments: { destinationColumnId: "code-review", expectedRevision: 4 },
+      result: { accepted: true, transition: { taskId: "T-0001", fromColumnId: "implementation", toColumnId: "code-review" } },
+    }];
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const move = dialog.getByRole("article", { name: "Move current task from Implementation to Code review" });
+
+  await expect(move).toContainText("Move current task from Implementation to Code review");
+  await expect(move.locator(".coordination-column-name")).toHaveText(["Implementation", "Code review"]);
+  const moveWeights = await move.evaluate((element) => ({
+    action: Number.parseInt(getComputedStyle(element.querySelector(".coordination-activity-title")!).fontWeight, 10),
+    columns: [...element.querySelectorAll(".coordination-column-name")].map((column) =>
+      Number.parseInt(getComputedStyle(column).fontWeight, 10)),
+  }));
+  expect(moveWeights.columns.every((weight) => weight > moveWeights.action)).toBe(true);
+  await expect(move.getByRole("img", { name: "Coordination action succeeded" })).toBeVisible();
+  await expect(move.locator("details")).toHaveCount(0);
+  await expect(move).not.toContainText(/Server identifier|Tool identifier|Raw status|Arguments|Result|T-0001|completed/);
+});
+
+test("coordination headers include only identifiers explicitly required by each tool", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.conversation.runs[0].transcript.items = [
+      { kind: "mcp", server: "coordination", tool: "inspect_current_task", status: "succeeded", summary: "T-0001: current task inspection" },
+      { kind: "mcp", server: "coordination", tool: "inspect_operating_context", status: "succeeded" },
+      { kind: "mcp", server: "coordination", tool: "list_collaborators", status: "succeeded", summary: "Collaborator directory" },
+      { kind: "mcp", server: "coordination", tool: "summarize_boards", status: "succeeded", summary: "Board summaries" },
+      { kind: "mcp", server: "coordination", tool: "list_archived_tasks", status: "succeeded" },
+      { kind: "mcp", server: "coordination", tool: "inspect_task", status: "succeeded", arguments: { taskId: "T-0042" }, summary: "T-0042: inspect task" },
+      { kind: "mcp", server: "coordination", tool: "list_task_activity", status: "succeeded", arguments: { taskId: "T-0042" }, summary: "T-0042: list task activity" },
+      { kind: "mcp", server: "coordination", tool: "list_task_attachments", status: "succeeded", arguments: { taskId: "T-0042" }, summary: "T-0042: list task attachments" },
+      { kind: "mcp", server: "coordination", tool: "list_tasks", status: "succeeded", arguments: { boardId: "delivery", columnIds: ["implementation", "code-review"] }, summary: "delivery: tasks in implementation, code-review" },
+      { kind: "mcp", server: "coordination", tool: "add_dependency", status: "succeeded", arguments: { targetTaskId: "T-0088" }, summary: "T-0001: dependency on T-0088" },
+      { kind: "mcp", server: "coordination", tool: "create_child_task", status: "succeeded", arguments: { title: "Review API", columnId: "code-review" }, result: { content: [{ type: "text", text: "{\"task\":{\"id\":\"T-0099\",\"title\":\"Review API\",\"columnId\":\"code-review\"}}" }] } },
+      { kind: "mcp", server: "coordination", tool: "report_permission_block", status: "succeeded", arguments: { summary: "Repository write access was denied." }, summary: "T-0001: permission block" },
+    ];
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  for (const header of [
+    "Inspect current task",
+    "Inspect operating context",
+    "List collaborators",
+    "Summarize boards",
+    "List archived tasks",
+    "Inspect task T-0042",
+    "List task activity for T-0042",
+    "List task attachments for T-0042",
+    "List tasks in delivery · Implementation, Code review",
+    "Add dependency on T-0088",
+    "Create child task T-0099 · Review API in Code review",
+    "Report permission block",
+  ]) {
+    await expect(dialog.getByRole("article", { name: header })).toContainText(header);
+  }
+  await expect(dialog.locator(".coordination-activity-summary")).toHaveCount(1);
+  await expect(dialog.getByRole("article", { name: "Report permission block" })).toContainText("Repository write access was denied.");
+  await expect(dialog).not.toContainText("T-0001: current task inspection");
+});
+
+test("a coordination comment renders its Markdown with the timeline disclosure", async ({ page }) => {
+  const body = [
+    "This is the **important comment**.",
+    "",
+    "It explains the implementation decision.",
+    "",
+    "- First consequence",
+    "- Second consequence",
+    "- Third consequence",
+    "- Fourth consequence",
+    "- Fifth consequence",
+  ].join("\n");
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.conversation.runs[0].transcript.items = [{
+      id: "coordination-comment",
+      kind: "mcp",
+      server: "coordination",
+      tool: "add_comment",
+      status: "succeeded",
+      rawStatus: "completed",
+      summary: "T-0001: comment",
+      arguments: { body, expectedRevision: 5 },
+      result: { accepted: true, commentId: "comment-7" },
+    }];
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const comment = page.getByRole("dialog", { name: "Agent conversation" })
+    .getByRole("article", { name: "Comment added" });
+
+  await expect(comment.locator("strong", { hasText: "important comment" })).toBeVisible();
+  await expect(comment.getByRole("img", { name: "Coordination action succeeded" })).toBeVisible();
+  await expect(comment.locator("details")).toHaveCount(0);
+  await expect(comment).not.toContainText(/Server identifier|Tool identifier|Raw status|Arguments|Result|T-0001|comment-7|completed/);
+  const disclosure = comment.getByRole("button", { name: /Show \d+ more lines/ });
+  await expect(disclosure).toBeVisible();
+  await disclosure.click();
+  await expect(comment.getByRole("button", { name: "Show less" })).toBeVisible();
+
+  await comment.getByRole("button", { name: "Copy comment Markdown" }).click();
+  await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n")))
+    .toBe(body);
 });
 
 test("wide transcript content wraps without overflowing the dialog or page", async ({ page }) => {
@@ -544,6 +791,73 @@ test("an open conversation replaces one running tool entry with its terminal evi
   await page.goto("/tasks/T-0001");
   await page.getByRole("button", { name: "View conversation" }).click();
   await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText("All live checks passed.");
+});
+
+test("polling replaces one live MCP row without closing its disclosure or moving the reader", async ({ page }) => {
+  await page.clock.install();
+  let reads = 0;
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const attempt = detail.task.activations[0]?.attempts[0];
+    if (attempt !== undefined) {
+      attempt.status = "running";
+      attempt.completedAt = null;
+      attempt.outcome = null;
+    }
+    await route.fulfill({ response, json: detail });
+  });
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    reads += 1;
+    const retainedMessages = Array.from({ length: 30 }, (_, index) => ({
+      id: `mcp-retained-message-${index}`,
+      kind: "message",
+      role: "agent",
+      text: `MCP retained transcript message ${index + 1}.`,
+    }));
+    const call = reads === 1
+      ? {
+          id: "live-browser-mcp",
+          kind: "mcp",
+          server: "source_control_server",
+          tool: "create_pull_request",
+          status: "running",
+          rawStatus: "in_progress",
+          arguments: { title: "Live evidence" },
+        }
+      : {
+          id: "live-browser-mcp",
+          kind: "mcp",
+          server: "source_control_server",
+          tool: "create_pull_request",
+          status: "succeeded",
+          rawStatus: "completed",
+          arguments: { title: "Live evidence" },
+          result: { number: 42 },
+        };
+    await route.fulfill({ status: 200, json: runningConversationScenario([call, ...retainedMessages]) });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const call = dialog.locator(".transcript-mcp");
+  await expect(call.getByRole("img", { name: "MCP call running" })).toBeVisible();
+  await call.locator("summary").click();
+  const transcriptContent = dialog.locator(".transcript-content");
+  const readingPosition = await transcriptContent.evaluate((element) => {
+    element.scrollTop = 120;
+    return element.scrollTop;
+  });
+  expect(readingPosition).toBeGreaterThan(0);
+
+  await page.clock.fastForward(2_000);
+  await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
+  await expect(call).toHaveCount(1);
+  await expect(call.getByRole("img", { name: "MCP call succeeded" })).toBeVisible();
+  await expect(call.locator("details")).toHaveAttribute("open", "");
+  await expect(call).toContainText('"number": 42');
+  expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
 });
 
 

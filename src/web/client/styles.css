@@ -557,8 +557,9 @@ textarea { resize: vertical; line-height: 1.5; }
 .conversation-message.user-message { border-right: 4px solid var(--movement-accent); }
 .conversation-message p { margin: 0; }
 .conversation-message-heading { display: flex; min-height: 1.7rem; align-items: center; justify-content: space-between; gap: .5rem; }
-.transcript-item.message .conversation-message-heading { justify-content: flex-end; margin-bottom: -.15rem; }
+.transcript-item.message .conversation-message-heading { position: absolute; z-index: 1; top: .4rem; right: .55rem; min-height: 0; margin: 0; }
 .conversation-message .markdown-content, .transcript-item.message .markdown-content { min-width: 0; overflow-wrap: anywhere; }
+.transcript-item.message .markdown-content { padding-right: 2rem; }
 .conversation-message .markdown-content > :first-child, .transcript-item.message .markdown-content > :first-child { margin-top: 0; }
 .conversation-message .markdown-content > :last-child, .transcript-item.message .markdown-content > :last-child { margin-bottom: 0; }
 .conversation-turn-pending { display: flex; min-width: 0; align-items: center; gap: .6rem; border: 1px dashed var(--border); border-radius: .65rem; color: var(--text-emphasis); background: var(--surface-subtle); padding: .6rem .75rem; }
@@ -578,28 +579,38 @@ textarea { resize: vertical; line-height: 1.5; }
 .conversation-run-duration strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 .transcript-item { min-width: 0; border: 1px solid var(--line); border-radius: .65rem; background: white; padding: .65rem .75rem; overflow-wrap: anywhere; }
 .transcript-item > p:not(.eyebrow) { white-space: pre-wrap; }
-.transcript-item.message { border-left: 4px solid var(--forest); }
+.transcript-item.message { position: relative; border-left: 4px solid var(--forest); }
 .transcript-item.tool { border-left: 4px solid #547c9b; }
 .transcript-item.diagnostic { border-left: 4px solid var(--coral); }
-.transcript-command { min-width: 0; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); padding: .38rem .6rem; overflow-wrap: anywhere; }
-.command-status { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border-radius: 50%; background: var(--surface); }
-.command-status svg { display: block; width: 1rem; height: 1rem; fill: none; stroke: currentcolor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
-.command-status.succeeded { color: var(--success-text); }
-.command-status.running { color: var(--running-text); }
-.command-status.failed { color: var(--failure-text); }
-.command-status.running svg { animation: command-status-spin .9s linear infinite; }
-.command-details { min-width: 0; }
-.command-details summary { display: grid; grid-template-columns: .9rem minmax(0, 1fr) 1.5rem; align-items: center; gap: .45rem; background: var(--surface); cursor: pointer; list-style: none; }
-.command-details summary::marker { content: ""; }
-.command-details summary::-webkit-details-marker { display: none; }
+.transcript-coordination { min-width: 0; border: 1px solid var(--line); border-left: 4px solid var(--movement-accent); border-radius: .6rem; background: var(--surface-raised); padding: .65rem .75rem; overflow-wrap: anywhere; }
+.coordination-activity-heading { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .75rem; background: inherit; }
+.coordination-activity-heading > strong, .coordination-activity-title { color: var(--text); font-size: .84rem; }
+.coordination-activity-title { background: inherit; font-weight: 450; }
+.coordination-column-name { color: var(--text); font-weight: 800; }
+.coordination-activity-summary { margin: .35rem 0 0; color: var(--text); font-weight: 650; }
+.coordination-activity-actions { display: inline-flex; align-items: center; gap: .45rem; }
+.coordination-comment .authored-text { margin-top: .4rem; }
+.transcript-tool { min-width: 0; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); padding: .38rem .6rem; overflow-wrap: anywhere; }
+.tool-status { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border-radius: 50%; background: var(--surface); }
+.tool-status svg { display: block; width: 1rem; height: 1rem; fill: none; stroke: currentcolor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.tool-status.succeeded { color: var(--success-text); }
+.tool-status.running { color: var(--running-text); }
+.tool-status.rejected { color: var(--warning-text); }
+.tool-status.failed { color: var(--failure-text); }
+.tool-status.running svg { animation: command-status-spin .9s linear infinite; }
+.transcript-tool-details { min-width: 0; }
+.transcript-tool-details summary { display: grid; grid-template-columns: .9rem minmax(0, 1fr) 1.5rem; align-items: center; gap: .45rem; background: var(--surface); cursor: pointer; list-style: none; }
+.transcript-tool-details summary::marker { content: ""; }
+.transcript-tool-details summary::-webkit-details-marker { display: none; }
 .command-disclosure-icon { display: block; width: .8rem; height: .8rem; fill: none; stroke: var(--muted); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; transition: transform .16s ease; }
-.command-details[open] > summary .command-disclosure-icon { transform: rotate(90deg); }
-.command-title { color: var(--text-emphasis); font-size: .78rem; font-weight: 700; }
-.command-details summary:hover .command-disclosure-icon, .command-details summary:focus-visible .command-disclosure-icon { stroke: var(--action); }
-.command-details summary:focus { outline: 2px solid var(--focus); outline-offset: 2px; }
-.command-evidence { min-width: 0; padding-top: .5rem; }
-.command-evidence p { margin: .45rem 0 .2rem; color: var(--muted); font-size: .7rem; font-weight: 700; text-transform: uppercase; }
-.command-evidence pre { width: 100%; max-width: 100%; max-height: 18rem; overflow: auto; border-radius: .45rem; color: var(--code-text); background: var(--code-surface); padding: .7rem; white-space: pre; }
+.transcript-tool-details[open] > summary .command-disclosure-icon { transform: rotate(90deg); }
+.transcript-tool-title { min-width: 0; color: var(--text-emphasis); font-size: .78rem; font-weight: 700; overflow-wrap: anywhere; }
+.transcript-tool-details summary:hover .command-disclosure-icon, .transcript-tool-details summary:focus-visible .command-disclosure-icon { stroke: var(--action); }
+.transcript-tool-details summary:focus { outline: 2px solid var(--focus); outline-offset: 2px; }
+.transcript-tool-evidence { min-width: 0; padding-top: .5rem; }
+.transcript-tool-evidence p { margin: .45rem 0 .2rem; color: var(--muted); font-size: .7rem; font-weight: 700; text-transform: uppercase; }
+.transcript-tool-evidence pre { width: 100%; max-width: 100%; max-height: 18rem; overflow: auto; border-radius: .45rem; color: var(--code-text); background: var(--code-surface); padding: .7rem; white-space: pre; }
+.mcp-summary { margin: .35rem 2rem 0 1.35rem; color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; }
 .tool-output { min-width: 0; margin-top: .8rem; }
 .tool-output summary { width: fit-content; color: var(--forest); font-weight: 700; cursor: pointer; }
 .tool-output pre { width: 100%; max-width: 100%; max-height: 18rem; overflow: auto; border-radius: .5rem; color: #d9eee3; background: #17211d; padding: 1rem; white-space: pre; overflow-wrap: normal; }
@@ -612,7 +623,7 @@ textarea { resize: vertical; line-height: 1.5; }
 @keyframes command-status-spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .command-status.running svg { animation: none; }
+  .tool-status.running svg { animation: none; }
   .command-disclosure-icon { transition: none; }
 }
 

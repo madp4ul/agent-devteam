@@ -62,11 +62,13 @@ test("a failed required coordination call makes the attempt fail with actionable
   assert.deepEqual(await runtime.read("attempt-activation-coordination-failure"), [
     {
       id: "tool-call-1",
-      kind: "tool",
-      name: "mcp_tool_call",
+      kind: "mcp",
+      server: "coordination",
+      tool: "inspect_current_task",
       status: "failed",
-      summary: "T-0006: current task inspection failed",
-      output: "user cancelled MCP tool call",
+      rawStatus: "failed",
+      summary: "T-0006: current task inspection",
+      error: { message: "user cancelled MCP tool call" },
     },
     { kind: "message", role: "agent", text: "I could not inspect the task." },
     {
@@ -122,6 +124,48 @@ test("transcript capture keeps useful tool activity and truncates large command 
   });
 });
 
+test("transcript capture retains exact generic MCP call evidence", async () => {
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-generic-mcp" },
+            {
+              type: "item.completed",
+              item: {
+                id: "mcp-generic-1",
+                type: "mcp_tool_call",
+                server: "source_control_server",
+                tool: "create_pull_request",
+                status: "completed",
+                arguments: { title: "Retain **literal** evidence", labels: ["display", "mcp"] },
+                result: { content: [{ type: "text", text: "{\"number\":42}" }] },
+              },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+  const genericRequest = request("activation-generic-mcp", "T-0006");
+
+  await runtime.run(genericRequest, { started() {} });
+
+  assert.deepEqual(await runtime.read(genericRequest.attemptId), [{
+    id: "mcp-generic-1",
+    kind: "mcp",
+    server: "source_control_server",
+    tool: "create_pull_request",
+    status: "succeeded",
+    rawStatus: "completed",
+    arguments: { title: "Retain **literal** evidence", labels: ["display", "mcp"] },
+    result: { content: [{ type: "text", text: "{\"number\":42}" }] },
+  }]);
+});
+
 test("a running attempt exposes stable tool progression before the Codex turn finishes", async () => {
   let releaseTool!: () => void;
   const toolMayFinish = new Promise<void>((resolve) => {
@@ -148,10 +192,13 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
   assert.deepEqual(await runtime.read(liveRequest.attemptId), [
     {
       id: "tool-live",
-      kind: "tool",
-      name: "mcp_tool_call",
+      kind: "mcp",
+      server: "coordination",
+      tool: "list_tasks",
       status: "running",
-      summary: "delivery: tasks in implementation (requested)",
+      rawStatus: "in_progress",
+      summary: "delivery: tasks in implementation",
+      arguments: { boardId: "delivery", columnIds: ["implementation"] },
     },
   ]);
 
@@ -160,12 +207,88 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
   assert.deepEqual(await runtime.read(liveRequest.attemptId), [
     {
       id: "tool-live",
-      kind: "tool",
-      name: "mcp_tool_call",
-      status: "completed",
-      summary: "delivery: tasks in implementation (succeeded)",
+      kind: "mcp",
+      server: "coordination",
+      tool: "list_tasks",
+      status: "succeeded",
+      rawStatus: "completed",
+      summary: "delivery: tasks in implementation",
+      arguments: { boardId: "delivery", columnIds: ["implementation"] },
+      result: { content: [{ type: "text", text: JSON.stringify({ tasks: [] }) }] },
     },
   ]);
+});
+
+test("a live MCP failure replaces its running row with final diagnostic evidence", async () => {
+  let releaseTool!: () => void;
+  const toolMayFail = new Promise<void>((resolve) => {
+    releaseTool = resolve;
+  });
+  let toolStarted!: () => void;
+  const toolIsRunning = new Promise<void>((resolve) => {
+    toolStarted = resolve;
+  });
+  async function* failedToolEvents(): AsyncGenerator<CodexEventLike> {
+    yield { type: "thread.started", thread_id: "thread-live-failed-mcp" };
+    yield {
+      type: "item.started",
+      item: {
+        id: "mcp-live-failure",
+        type: "mcp_tool_call",
+        server: "filesystem",
+        tool: "read_file",
+        status: "in_progress",
+        arguments: { path: "C:/protected/evidence.txt" },
+      },
+    };
+    toolStarted();
+    await toolMayFail;
+    yield {
+      type: "item.completed",
+      item: {
+        id: "mcp-live-failure",
+        type: "mcp_tool_call",
+        server: "filesystem",
+        tool: "read_file",
+        status: "failed",
+        arguments: { path: "C:/protected/evidence.txt" },
+        error: { message: "Access denied", code: "EACCES" },
+      },
+    };
+    yield { type: "turn.completed" };
+  }
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({ runStreamed: async () => ({ events: failedToolEvents() }) }),
+    }),
+  });
+  const liveRequest = request("activation-live-failed-mcp", "T-0007");
+
+  const outcome = runtime.run(liveRequest, { started() {} });
+  await toolIsRunning;
+  assert.deepEqual(await runtime.read(liveRequest.attemptId), [{
+    id: "mcp-live-failure",
+    kind: "mcp",
+    server: "filesystem",
+    tool: "read_file",
+    status: "running",
+    rawStatus: "in_progress",
+    arguments: { path: "C:/protected/evidence.txt" },
+  }]);
+
+  releaseTool();
+  await outcome;
+  assert.deepEqual(await runtime.read(liveRequest.attemptId), [{
+    id: "mcp-live-failure",
+    kind: "mcp",
+    server: "filesystem",
+    tool: "read_file",
+    status: "failed",
+    rawStatus: "failed",
+    arguments: { path: "C:/protected/evidence.txt" },
+    error: { message: "Access denied", code: "EACCES" },
+  }]);
 });
 
 test("a running command keeps one stable row as updated evidence becomes failed output", async () => {
@@ -234,7 +357,7 @@ test("a running command keeps one stable row as updated evidence becomes failed 
   }]);
 });
 
-test("a completed coordination move summarizes the authoritative task transition", async () => {
+test("a completed coordination move retains evidence and adds semantic presentation data", async () => {
   const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
@@ -278,14 +401,72 @@ test("a completed coordination move summarizes the authoritative task transition
 
   assert.deepEqual(await runtime.read(moveRequest.attemptId), [{
     id: "move-tool",
-    kind: "tool",
-    name: "mcp_tool_call",
-    status: "completed",
-    summary: "T-0008: implementation → review (confirmed)",
+    kind: "mcp",
+    server: "coordination",
+    tool: "move_current_task",
+    status: "succeeded",
+    rawStatus: "completed",
+    summary: "T-0008: implementation → review",
+    presentation: {
+      kind: "coordination-task-move",
+      fromColumnId: "implementation",
+      toColumnId: "review",
+    },
+    arguments: { destinationColumnId: "review", expectedRevision: 4 },
+    result: {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          accepted: true,
+          transition: { taskId: "T-0008", fromColumnId: "implementation", toColumnId: "review" },
+        }),
+      }],
+    },
   }]);
 });
 
-test("coordination summaries distinguish successful reads from rejected commands", async () => {
+test("a coordination comment exposes its authored Markdown as a semantic presentation", async () => {
+  const body = "First line with **context**.\n\nSecond paragraph.\n\n- one\n- two\n- three";
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-comment-presentation" },
+            {
+              type: "item.completed",
+              item: {
+                id: "comment-tool",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "add_comment",
+                status: "completed",
+                arguments: { body, expectedRevision: 5 },
+                result: { content: [{ type: "text", text: JSON.stringify({ accepted: true, commentId: "comment-7" }) }] },
+              },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+  const commentRequest = request("activation-comment-presentation", "T-0008");
+
+  await runtime.run(commentRequest, { started() {} });
+
+  const transcript = await runtime.read(commentRequest.attemptId);
+  assert.ok(transcript);
+  const [comment] = transcript;
+  assert.equal(comment?.kind, "mcp");
+  assert.deepEqual(comment?.presentation, {
+    kind: "coordination-comment",
+    body,
+  });
+});
+
+test("coordination MCP capture preserves domain rejection without rewriting raw evidence", async () => {
   const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
@@ -332,12 +513,32 @@ test("coordination summaries distinguish successful reads from rejected commands
 
   await runtime.run(outcomeRequest, { started() {} });
 
-  const transcript = await runtime.read(outcomeRequest.attemptId);
-  assert.equal(transcript?.[0]?.kind === "tool" ? transcript[0].summary : undefined, "T-0042: inspect task (succeeded)");
-  assert.equal(
-    transcript?.[1]?.kind === "tool" ? transcript[1].summary : undefined,
-    "T-0040: dependency on T-0041 (rejected: duplicate-relationship)",
-  );
+  assert.deepEqual(await runtime.read(outcomeRequest.attemptId), [
+    {
+      id: "inspect-tool",
+      kind: "mcp",
+      server: "coordination",
+      tool: "inspect_task",
+      status: "succeeded",
+      rawStatus: "completed",
+      summary: "T-0042: inspect task",
+      arguments: { taskId: "T-0042" },
+      result: { content: [{ type: "text", text: JSON.stringify({ id: "T-0042" }) }] },
+    },
+    {
+      id: "dependency-tool",
+      kind: "mcp",
+      server: "coordination",
+      tool: "add_dependency",
+      status: "rejected",
+      rawStatus: "completed",
+      summary: "T-0040: dependency on T-0041 · Rejected: duplicate-relationship",
+      arguments: { targetTaskId: "T-0041" },
+      result: {
+        content: [{ type: "text", text: JSON.stringify({ accepted: false, reason: "duplicate-relationship" }) }],
+      },
+    },
+  ]);
 });
 
 test("a completed agent message is inspectable before the Codex turn finishes", async () => {

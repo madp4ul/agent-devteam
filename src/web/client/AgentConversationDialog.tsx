@@ -4,9 +4,10 @@ import type {
   AgentConversationView,
   AttemptTokenUsage,
 } from "../../application/browser-transport-contract.ts";
+import type { AttemptTranscriptItem } from "../../application/runtime-contract.ts";
 import { continueAgentConversation, readAgentConversation, retireAgentConversation } from "./api.ts";
+import { ActivityStatusMark } from "./ActivityStatusMark.tsx";
 import { CloseIconButton } from "./CloseIconButton.tsx";
-import { CommandStatusMark } from "./CommandStatusMark.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
@@ -14,6 +15,7 @@ import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { MarkdownContent } from "./MarkdownContent.tsx";
 import { Modal } from "./Modal.tsx";
 import { MoreActionsIconButton } from "./MoreActionsIconButton.tsx";
+import { TextPreview } from "./TextPreview.tsx";
 
 const ACTIVE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 1_000;
 const IDLE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 2_000;
@@ -315,22 +317,54 @@ export function AgentConversationDialog({
                     <MarkdownContent source={item.text} />
                   </article>
                 ) : item.kind === "command" ? (
-                  <article key={item.id ?? `${entry.run.attempt.id}-${index}`} className="transcript-command">
-                    <details className="command-details">
-                      <summary>
-                        <svg className="command-disclosure-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                          <path d="m5 3.5 5 4.5-5 4.5" />
-                        </svg>
-                        <span className="command-title">Command</span>
-                        <CommandStatusMark status={item.status} />
-                      </summary>
-                      <div className="command-evidence">
-                        <p>Invocation</p>
-                        <pre>{item.command}</pre>
-                        {item.output === undefined ? null : <><p>Output</p><pre>{item.output}</pre></>}
-                      </div>
-                    </details>
-                  </article>
+                  <TranscriptToolDisclosure
+                    key={item.id ?? `${entry.run.attempt.id}-${index}`}
+                    articleClassName="transcript-command"
+                    detailsClassName="command-details"
+                    titleClassName="command-title"
+                    evidenceClassName="command-evidence"
+                    title="Command"
+                    status={item.status}
+                    statusSubject="Command"
+                    statusClassName="command-status"
+                    evidence={[
+                      { label: "Invocation", value: item.command },
+                      ...(item.output === undefined ? [] : [{ label: "Output", value: item.output }]),
+                    ]}
+                  />
+                ) : item.kind === "mcp" && item.server === "coordination" && item.tool === "add_comment" && coordinationCommentBody(item) !== undefined ? (
+                  <CoordinationComment
+                    key={item.id ?? `${entry.run.attempt.id}-${index}`}
+                    id={item.id ?? `${entry.run.attempt.id}-${index}`}
+                    status={item.status}
+                    body={coordinationCommentBody(item)!}
+                  />
+                ) : item.kind === "mcp" && item.server === "coordination" ? (
+                  <CoordinationActivity
+                    key={item.id ?? `${entry.run.attempt.id}-${index}`}
+                    item={item}
+                  />
+                ) : item.kind === "mcp" ? (
+                  <TranscriptToolDisclosure
+                    key={item.id ?? `${entry.run.attempt.id}-${index}`}
+                    articleClassName="transcript-mcp"
+                    detailsClassName="mcp-details"
+                    titleClassName="mcp-title"
+                    evidenceClassName="mcp-evidence"
+                    title={`${humanizeIdentifier(item.server)} · ${humanizeIdentifier(item.tool)}`}
+                    status={item.status}
+                    statusSubject="MCP call"
+                    statusClassName="mcp-status"
+                    evidence={[
+                      { label: "Server identifier", value: item.server },
+                      { label: "Tool identifier", value: item.tool },
+                      ...(item.rawStatus === undefined ? [] : [{ label: "Raw status", value: item.rawStatus }]),
+                      ...(item.arguments === undefined ? [] : [{ label: "Arguments", value: structuredLiteral(item.arguments) }]),
+                      ...(item.result === undefined ? [] : [{ label: "Result", value: structuredLiteral(item.result) }]),
+                      ...(item.error === undefined ? [] : [{ label: "Failure", value: structuredLiteral(item.error) }]),
+                    ]}
+                    {...(item.summary === undefined ? {} : { summary: item.summary })}
+                  />
                 ) : (
                   <article key={item.id ?? `${entry.run.attempt.id}-${index}`} className={`transcript-item ${item.kind}`}>
                     <p className="eyebrow">{item.kind === "tool" ? `Tool · ${item.name}` : "Diagnostic"}</p>
@@ -437,6 +471,232 @@ type ConversationHistoryEntry =
   | { kind: "run"; run: AgentConversationView["runs"][number]; runIndex: number }
   | { kind: "retirement"; retirement: NonNullable<AgentConversationView["retirement"]> }
   | { kind: "replacement"; reason: string; occurredAt: string };
+
+function coordinationCommentBody(item: {
+  presentation?: { kind: string; body?: string };
+  arguments?: unknown;
+}): string | undefined {
+  if (item.presentation?.kind === "coordination-comment") return item.presentation.body;
+  if (typeof item.arguments !== "object" || item.arguments === null || Array.isArray(item.arguments)) return undefined;
+  const body = (item.arguments as Record<string, unknown>).body;
+  return typeof body === "string" && body.length > 0 ? body : undefined;
+}
+
+function CoordinationComment({ id, status, body }: { id: string; status: string; body: string }): ReactNode {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <article className="transcript-coordination coordination-comment" aria-label="Comment added">
+      <header className="coordination-activity-heading">
+        <strong>Comment added</strong>
+        <span className="coordination-activity-actions">
+          <CopyMarkdownButton source={body} label="Copy comment Markdown" />
+          <ActivityStatusMark status={status} subject="Coordination action" className="coordination-status" />
+        </span>
+      </header>
+      <TextPreview
+        id={`coordination-comment-${id}`}
+        text={body}
+        expanded={expanded}
+        onExpanded={setExpanded}
+      />
+    </article>
+  );
+}
+
+type CoordinationTranscriptItem = Extract<AttemptTranscriptItem, { kind: "mcp" }>;
+
+function CoordinationActivity({ item }: { item: CoordinationTranscriptItem }): ReactNode {
+  const presentation = coordinationActivityPresentation(item);
+  return (
+    <article className="transcript-coordination coordination-activity" aria-label={presentation.header}>
+      <header className="coordination-activity-heading">
+        {presentation.move === undefined ? (
+          <strong>{presentation.header}</strong>
+        ) : (
+          <span className="coordination-activity-title">
+            Move current task {presentation.move.from === undefined ? null : (
+              <>from <strong className="coordination-column-name">{presentation.move.from}</strong> </>
+            )}to <strong className="coordination-column-name">{presentation.move.to}</strong>
+            {presentation.exceptional === undefined ? null : <> · {presentation.exceptional}</>}
+          </span>
+        )}
+        <ActivityStatusMark status={item.status} subject="Coordination action" className="coordination-status" />
+      </header>
+      {presentation.body === undefined ? null : <p className="coordination-activity-summary">{presentation.body}</p>}
+    </article>
+  );
+}
+
+function coordinationActivityPresentation(item: CoordinationTranscriptItem): {
+  header: string;
+  body?: string;
+  move?: { from?: string; to: string };
+  exceptional?: string;
+} {
+  const arguments_ = literalRecord(item.arguments);
+  const result = coordinationResultRecord(item.result);
+  let header: string;
+  let body: string | undefined;
+  let move: { from?: string; to: string } | undefined;
+  switch (item.tool) {
+    case "inspect_current_task": header = "Inspect current task"; break;
+    case "inspect_operating_context": header = "Inspect operating context"; break;
+    case "list_collaborators": header = "List collaborators"; break;
+    case "summarize_boards": header = "Summarize boards"; break;
+    case "list_archived_tasks": header = "List archived tasks"; break;
+    case "inspect_task": header = `Inspect task ${literalString(arguments_?.taskId) ?? "requested task"}`; break;
+    case "list_task_activity": header = `List task activity for ${literalString(arguments_?.taskId) ?? "requested task"}`; break;
+    case "list_task_attachments": header = `List task attachments for ${literalString(arguments_?.taskId) ?? "requested task"}`; break;
+    case "list_tasks": {
+      const boardId = literalString(arguments_?.boardId) ?? "requested board";
+      const columns = Array.isArray(arguments_?.columnIds)
+        ? arguments_.columnIds.filter((value): value is string => typeof value === "string").map(humanizeIdentifier).join(", ")
+        : "requested columns";
+      header = `List tasks in ${boardId} · ${columns}`;
+      break;
+    }
+    case "move_current_task": {
+      const transition = literalRecord(result?.transition);
+      const from = item.presentation?.kind === "coordination-task-move"
+        ? item.presentation.fromColumnId
+        : literalString(transition?.fromColumnId);
+      const to = item.presentation?.kind === "coordination-task-move"
+        ? item.presentation.toColumnId
+        : literalString(transition?.toColumnId) ?? literalString(arguments_?.destinationColumnId);
+      header = from === undefined
+        ? `Move current task to ${to === undefined ? "requested column" : humanizeIdentifier(to)}`
+        : `Move current task from ${humanizeIdentifier(from)} to ${to === undefined ? "requested column" : humanizeIdentifier(to)}`;
+      move = {
+        ...(from === undefined ? {} : { from: humanizeIdentifier(from) }),
+        to: to === undefined ? "Requested column" : humanizeIdentifier(to),
+      };
+      break;
+    }
+    case "create_child_task": {
+      const task = literalRecord(result?.task);
+      const childId = literalString(task?.id);
+      const title = literalString(task?.title) ?? literalString(arguments_?.title);
+      const column = literalString(task?.columnId) ?? literalString(arguments_?.columnId);
+      header = `Create child task${childId === undefined ? "" : ` ${childId}`}${title === undefined ? "" : ` · ${title}`}${column === undefined ? "" : ` in ${humanizeIdentifier(column)}`}`;
+      break;
+    }
+    case "add_dependency": header = `Add dependency on ${literalString(arguments_?.targetTaskId) ?? "requested task"}`; break;
+    case "report_permission_block":
+      header = "Report permission block";
+      body = literalString(arguments_?.summary);
+      break;
+    default: header = humanizeIdentifier(item.tool);
+  }
+  const exceptional = coordinationExceptionalText(item, result);
+  return {
+    header: exceptional === undefined ? header : `${header} · ${exceptional}`,
+    ...(body === undefined ? {} : { body }),
+    ...(move === undefined ? {} : { move }),
+    ...(exceptional === undefined ? {} : { exceptional }),
+  };
+}
+
+function coordinationExceptionalText(
+  item: CoordinationTranscriptItem,
+  result: Record<string, unknown> | undefined,
+): string | undefined {
+  if (item.status === "rejected") return `Rejected: ${literalString(result?.reason) ?? "request rejected"}`;
+  if (item.status !== "failed") return undefined;
+  const error = literalRecord(item.error);
+  return `Failed: ${literalString(error?.message) ?? literalString(item.error) ?? "coordination call failed"}`;
+}
+
+function coordinationResultRecord(value: unknown): Record<string, unknown> | undefined {
+  const direct = literalRecord(value);
+  if (direct === undefined) return parseLiteralRecord(value);
+  if (direct.transition !== undefined || direct.accepted !== undefined || direct.task !== undefined) return direct;
+  if (!Array.isArray(direct.content)) return direct;
+  for (const entry of direct.content) {
+    const parsed = parseLiteralRecord(literalString(literalRecord(entry)?.text));
+    if (parsed !== undefined) return parsed;
+  }
+  return direct;
+}
+
+function parseLiteralRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    return literalRecord(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function literalRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function literalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function TranscriptToolDisclosure({
+  articleClassName,
+  detailsClassName,
+  titleClassName,
+  evidenceClassName,
+  title,
+  status,
+  statusSubject,
+  statusClassName,
+  evidence,
+  summary,
+}: {
+  articleClassName: string;
+  detailsClassName: string;
+  titleClassName: string;
+  evidenceClassName: string;
+  title: string;
+  status: string;
+  statusSubject: string;
+  statusClassName: string;
+  evidence: Array<{ label: string; value: string }>;
+  summary?: string;
+}): ReactNode {
+  return (
+    <article className={`transcript-tool ${articleClassName}`}>
+      <details className={`transcript-tool-details ${detailsClassName}`}>
+        <summary>
+          <svg className="command-disclosure-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="m5 3.5 5 4.5-5 4.5" />
+          </svg>
+          <span className={`transcript-tool-title ${titleClassName}`}>{title}</span>
+          <ActivityStatusMark status={status} subject={statusSubject} className={statusClassName} />
+        </summary>
+        <div className={`transcript-tool-evidence ${evidenceClassName}`}>
+          {evidence.map((entry) => (
+            <div key={entry.label} className="transcript-evidence-entry">
+              <p>{entry.label}</p>
+              <pre>{entry.value}</pre>
+            </div>
+          ))}
+        </div>
+      </details>
+      {summary === undefined ? null : <p className="mcp-summary">{summary}</p>}
+    </article>
+  );
+}
+
+function humanizeIdentifier(identifier: string): string {
+  const words = identifier
+    .replace(/([a-z\d])([A-Z])/gu, "$1 $2")
+    .replace(/[_.-]+/gu, " ")
+    .trim()
+    .toLocaleLowerCase();
+  return words.length === 0 ? identifier : `${words[0]!.toLocaleUpperCase()}${words.slice(1)}`;
+}
+
+function structuredLiteral(value: unknown): string {
+  const formatted = JSON.stringify(value, null, 2);
+  return formatted === undefined ? String(value) : formatted;
+}
 
 function conversationHistory(conversation: AgentConversationView): ConversationHistoryEntry[] {
   const messages = new Map(conversation.messages.map((message) => [message.id, message]));

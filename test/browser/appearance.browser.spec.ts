@@ -299,13 +299,31 @@ test("conversation follow-up composer remains readable and operable in both appe
   }
 });
 
-test("conversation message and command stream remains readable in both appearances", async ({ page }) => {
+test("conversation message, command, and MCP stream remains readable in both appearances", async ({ page }) => {
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
     const result = await response.json();
     result.conversation.runs[0].transcript.items.push(
       { id: "appearance-command-running", kind: "command", command: "pnpm typecheck", status: "running" },
       { id: "appearance-command-failed", kind: "command", command: "pnpm lint", status: "failed", output: "Lint failed." },
+      {
+        id: "appearance-mcp",
+        kind: "mcp",
+        server: "source_control_server",
+        tool: "create_pull_request",
+        status: "succeeded",
+        rawStatus: "completed",
+        arguments: { title: "Appearance evidence" },
+      },
+      {
+        id: "appearance-mcp-rejected",
+        kind: "mcp",
+        server: "coordination",
+        tool: "add_dependency",
+        status: "rejected",
+        rawStatus: "completed",
+        summary: "T-0001: dependency on T-0002 · Rejected: duplicate-relationship",
+      },
     );
     await route.fulfill({ response, json: result });
   });
@@ -316,16 +334,22 @@ test("conversation message and command stream remains readable in both appearanc
     const dialog = page.getByRole("dialog", { name: "Agent conversation" });
     const message = dialog.locator(".transcript-item.message").first();
     const command = dialog.locator(".transcript-command").first();
+    const mcp = dialog.locator(".transcript-mcp").first();
+    const coordination = dialog.getByRole("article", { name: "Add dependency" });
     const statuses = [
       command.getByRole("img", { name: "Command succeeded" }),
       dialog.getByRole("img", { name: "Command running" }),
       dialog.getByRole("img", { name: "Command failed" }),
+      mcp.getByRole("img", { name: "MCP call succeeded" }),
+      coordination.getByRole("img", { name: "Coordination action rejected" }),
     ];
     const disclosure = command.locator("summary");
     const disclosureIcon = command.locator(".command-disclosure-icon");
 
     expect(await contrastRatio(message)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(command.locator(".command-title"))).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(mcp.locator(".mcp-title"))).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(coordination.locator(".coordination-activity-heading strong"))).toBeGreaterThanOrEqual(4.5);
     for (const status of statuses) expect(await contrastRatio(status)).toBeGreaterThanOrEqual(3);
     await disclosure.hover();
     await expect(disclosureIcon).toHaveCSS("stroke", theme === "dark" ? "rgb(114, 214, 159)" : "rgb(23, 78, 58)");
@@ -335,6 +359,11 @@ test("conversation message and command stream remains readable in both appearanc
     await expect(disclosure).toHaveCSS("outline-width", "2px");
     await disclosure.click();
     await expect(command.locator("pre").first()).toHaveCSS(
+      "background-color",
+      theme === "dark" ? "rgb(10, 16, 13)" : "rgb(23, 33, 29)",
+    );
+    await mcp.locator("summary").click();
+    await expect(mcp.locator("pre").first()).toHaveCSS(
       "background-color",
       theme === "dark" ? "rgb(10, 16, 13)" : "rgb(23, 33, 29)",
     );
