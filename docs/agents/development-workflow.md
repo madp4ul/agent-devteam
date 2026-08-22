@@ -38,14 +38,17 @@ The user owns the Git history:
   gives an explicit one-time instruction to do so.
 - Agent-created changes should be left unstaged for user review.
 - A staged change means the user has reviewed and accepted that exact content.
-  Treat staged content as an immutable baseline.
+  Treat staged content as an immutable baseline, not as a signal to stop working
+  on that file.
 - Never reset, restore, overwrite, or otherwise disturb staged content.
 - Before editing a file that has staged changes, inspect staged and unstaged
   diffs separately. A staged snapshot remains immutable, but the working-tree
-  copy of that file may receive additional edits; those edits must remain as a
-  separate unstaged layer. If the requested edit would overlap a staged hunk,
-  tell the user before proceeding so they can confirm that layered review is
-  intended. Never unstage or replace the already reviewed snapshot.
+  copy of that file may receive additional edits, including edits in the same
+  hunk; those edits must remain as a separate unstaged layer. Continue normal
+  in-scope work without asking merely because the file or hunk is staged. Ask
+  only when the requested work cannot preserve the accepted content without
+  changing the index or removing/replacing that reviewed baseline. Never
+  unstage or replace the already reviewed snapshot.
 - Report staged and unstaged changes separately when handing work back.
 
 Git may reject repository commands because the workspace owner differs from

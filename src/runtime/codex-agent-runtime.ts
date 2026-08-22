@@ -362,12 +362,18 @@ function toolTranscriptItem(
         ? "completed"
         : "running";
   const command = typeof item.command === "string" ? item.command : undefined;
-  const exitCode = typeof item.exit_code === "number" ? item.exit_code : undefined;
-  const summary = command === undefined
-    ? summarizeCoordinationTool(item, status, currentTaskId) ?? readableToolSummary(item)
-    : `${command}${exitCode === undefined ? "" : ` (exit ${exitCode})`}`;
   const rawOutput = [item.aggregated_output, item.output, item.result, errorMessage(item.error)]
     .find((value) => typeof value === "string") as string | undefined;
+  if (command !== undefined) {
+    return {
+      ...(typeof item.id === "string" ? { id: item.id } : {}),
+      kind: "command",
+      command,
+      status,
+      ...(rawOutput === undefined ? {} : { output: truncateOutput(rawOutput) }),
+    };
+  }
+  const summary = summarizeCoordinationTool(item, status, currentTaskId) ?? readableToolSummary(item);
   return {
     ...(typeof item.id === "string" ? { id: item.id } : {}),
     kind: "tool",

@@ -87,6 +87,7 @@ test("transcript capture keeps useful tool activity and truncates large command 
             {
               type: "item.completed",
               item: {
+                id: "command-tools",
                 type: "command_execution",
                 command: "pnpm test",
                 status: "completed",
@@ -109,10 +110,10 @@ test("transcript capture keeps useful tool activity and truncates large command 
   const transcript = await runtime.read("attempt-activation-tools");
   assert.equal(transcript?.length, 2);
   assert.deepEqual(transcript?.[0], {
-    kind: "tool",
-    name: "command_execution",
+    id: "command-tools",
+    kind: "command",
+    command: "pnpm test",
     status: "completed",
-    summary: "pnpm test (exit 0)",
     output: `useful start\n${"x".repeat(3_987)}\n… output truncated`,
   });
   assert.deepEqual(transcript?.[1], {
@@ -165,6 +166,72 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
       summary: "delivery: tasks in implementation (succeeded)",
     },
   ]);
+});
+
+test("a running command keeps one stable row as updated evidence becomes failed output", async () => {
+  let releaseCommand!: () => void;
+  const commandMayFinish = new Promise<void>((resolve) => {
+    releaseCommand = resolve;
+  });
+  let commandUpdated!: () => void;
+  const commandIsUpdated = new Promise<void>((resolve) => {
+    commandUpdated = resolve;
+  });
+  async function* commandEvents(): AsyncGenerator<CodexEventLike> {
+    yield { type: "thread.started", thread_id: "thread-live-command" };
+    yield {
+      type: "item.started",
+      item: { id: "command-live", type: "command_execution", command: "pnpm test", status: "in_progress" },
+    };
+    yield {
+      type: "item.updated",
+      item: {
+        id: "command-live",
+        type: "command_execution",
+        command: "pnpm test",
+        status: "in_progress",
+        aggregated_output: "Focused tests are running.",
+      },
+    };
+    commandUpdated();
+    await commandMayFinish;
+    yield {
+      type: "item.completed",
+      item: {
+        id: "command-live",
+        type: "command_execution",
+        command: "pnpm test",
+        status: "failed",
+        aggregated_output: "Focused tests failed.",
+      },
+    };
+    yield { type: "turn.completed" };
+  }
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({ startThread: () => ({ runStreamed: async () => ({ events: commandEvents() }) }) }),
+  });
+  const liveRequest = request("activation-live-command", "T-0007");
+
+  const outcome = runtime.run(liveRequest, { started() {} });
+  await commandIsUpdated;
+  assert.deepEqual(await runtime.read(liveRequest.attemptId), [{
+    id: "command-live",
+    kind: "command",
+    command: "pnpm test",
+    status: "running",
+    output: "Focused tests are running.",
+  }]);
+
+  releaseCommand();
+  await outcome;
+  assert.deepEqual(await runtime.read(liveRequest.attemptId), [{
+    id: "command-live",
+    kind: "command",
+    command: "pnpm test",
+    status: "failed",
+    output: "Focused tests failed.",
+  }]);
 });
 
 test("a completed coordination move summarizes the authoritative task transition", async () => {
@@ -411,4 +478,3 @@ test("continued attempts sharing one Codex thread retain isolated transcripts", 
     assert.equal(key in (resumedClientOptions?.config ?? {}), false);
   }
 });
-

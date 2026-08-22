@@ -60,6 +60,13 @@ export type AttemptTranscriptItem =
   | { id?: string; kind: "message"; role: "agent"; text: string }
   | {
       id?: string;
+      kind: "command";
+      command: string;
+      status: string;
+      output?: string;
+    }
+  | {
+      id?: string;
       kind: "tool";
       name: string;
       status: string;

@@ -264,6 +264,49 @@ test("conversation follow-up composer remains readable and operable in both appe
   }
 });
 
+test("conversation message and command stream remains readable in both appearances", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.conversation.runs[0].transcript.items.push(
+      { id: "appearance-command-running", kind: "command", command: "pnpm typecheck", status: "running" },
+      { id: "appearance-command-failed", kind: "command", command: "pnpm lint", status: "failed", output: "Lint failed." },
+    );
+    await route.fulfill({ response, json: result });
+  });
+  for (const theme of ["dark", "light"] as const) {
+    await page.goto("/tasks/T-0001");
+    await setAppearance(page, theme);
+    await page.getByRole("button", { name: "View conversation" }).click();
+    const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+    const message = dialog.locator(".transcript-item.message").first();
+    const command = dialog.locator(".transcript-command").first();
+    const statuses = [
+      command.getByRole("img", { name: "Command succeeded" }),
+      dialog.getByRole("img", { name: "Command running" }),
+      dialog.getByRole("img", { name: "Command failed" }),
+    ];
+    const disclosure = command.locator("summary");
+    const disclosureIcon = command.locator(".command-disclosure-icon");
+
+    expect(await contrastRatio(message)).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(command.locator(".command-title"))).toBeGreaterThanOrEqual(4.5);
+    for (const status of statuses) expect(await contrastRatio(status)).toBeGreaterThanOrEqual(3);
+    await disclosure.hover();
+    await expect(disclosureIcon).toHaveCSS("stroke", theme === "dark" ? "rgb(114, 214, 159)" : "rgb(23, 78, 58)");
+    await disclosure.focus();
+    await expect(disclosure).toBeFocused();
+    await expect(disclosure).toHaveCSS("outline-style", "solid");
+    await expect(disclosure).toHaveCSS("outline-width", "2px");
+    await disclosure.click();
+    await expect(command.locator("pre").first()).toHaveCSS(
+      "background-color",
+      theme === "dark" ? "rgb(10, 16, 13)" : "rgb(23, 33, 29)",
+    );
+    await dialog.getByRole("button", { name: "Close conversation" }).click();
+  }
+});
+
 test("queued activation dismissal matches secondary round controls in both themes", async ({ page }) => {
   await page.route("**/api/tasks/T-0002", async (route) => {
     const response = await route.fetch();

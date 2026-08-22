@@ -1,6 +1,109 @@
 import { expect, test } from "./browser-fixture.ts";
 import { cleanWorkspaceGitScenario, runningConversationScenario } from "./browser-fixture.ts";
 
+test("conversation messages render Markdown and commands remain quiet but inspectable", async ({ page }) => {
+  const codexMarkdown = "Reviewed **two risks**.\n\n- Preserve source\n- Keep [evidence](https://example.com/evidence)";
+  const userMarkdown = "Please run `pnpm test` before the **handoff**.";
+  const command = "pnpm test -- --filter conversation";
+
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    const run = result.conversation.runs[0];
+    run.sourceMessageId = "conversation-display-follow-up";
+    run.transcript.items = [
+      { id: "message-markdown", kind: "message", role: "agent", text: codexMarkdown },
+      { id: "command-success", kind: "command", command, status: "completed", output: "All tests passed." },
+      { id: "command-running", kind: "command", command: "pnpm typecheck", status: "running" },
+      { id: "command-failed", kind: "command", command: "pnpm lint", status: "failed", output: "Lint failed." },
+    ];
+    result.conversation.messages = [{
+      id: "conversation-display-follow-up",
+      conversationId: result.conversation.id,
+      body: userMarkdown,
+      occurredAt: run.attempt.startedAt,
+      activationId: run.activationId,
+    }];
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+
+  await expect(dialog.locator("strong", { hasText: "two risks" })).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "evidence" })).toHaveAttribute("href", "https://example.com/evidence");
+  await expect(dialog.getByText("pnpm test", { exact: true })).toBeVisible();
+  await expect(dialog.locator("strong", { hasText: "handoff" })).toBeVisible();
+  await expect(dialog).not.toContainText("Codex message");
+  await expect(dialog.locator(".conversation-message, .conversation-run")).toHaveCount(2);
+  expect(await dialog.locator(".conversation-message, .conversation-run").evaluateAll((entries) =>
+    entries.map((entry) => entry.classList.contains("conversation-message") ? "message" : "run"),
+  )).toEqual(["message", "run"]);
+  expect(await dialog.locator(".conversation-run > .transcript-item, .conversation-run > .transcript-command")
+    .evaluateAll((entries) => entries.map((entry) => entry.classList.contains("message") ? "message" : "command")))
+    .toEqual(["message", "command", "command", "command"]);
+
+  await dialog.getByRole("button", { name: "Copy Codex message Markdown" }).click();
+  await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n")))
+    .toBe(codexMarkdown);
+  await dialog.getByRole("button", { name: "Copy your message Markdown" }).click();
+  await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n")))
+    .toBe(userMarkdown);
+
+  const commands = dialog.locator(".transcript-command");
+  await expect(commands).toHaveCount(3);
+  await expect(commands.nth(0).getByRole("img", { name: "Command succeeded" })).toBeVisible();
+  await expect(commands.nth(1).getByRole("img", { name: "Command running" })).toBeVisible();
+  await expect(commands.nth(2).getByRole("img", { name: "Command failed" })).toBeVisible();
+  await expect(commands.nth(0).locator(".command-disclosure-icon")).toBeVisible();
+  await expect(commands.nth(0).getByText(command, { exact: true })).not.toBeVisible();
+  await expect(commands.nth(0).locator(".command-disclosure-icon")).toHaveCSS("transform", "none");
+  await commands.nth(0).locator("summary").click();
+  await expect(commands.nth(0).locator(".command-disclosure-icon")).not.toHaveCSS("transform", "none");
+  await expect(commands.nth(0)).toContainText(command);
+  await expect(commands.nth(0)).toContainText("All tests passed.");
+  await commands.nth(1).locator("summary").click();
+  await expect(commands.nth(1)).toContainText("pnpm typecheck");
+
+  const compactHeights = await dialog.evaluate(() => ({
+    userMessage: document.querySelector(".conversation-message.user-message")!.getBoundingClientRect().height,
+    collapsedCommand: document.querySelectorAll(".transcript-command")[2]!.getBoundingClientRect().height,
+  }));
+  expect(compactHeights.userMessage).toBeLessThan(90);
+  expect(compactHeights.collapsedCommand).toBeLessThan(60);
+
+  const compactRow = await commands.nth(2).evaluate((element) => {
+    const row = element.querySelector("summary")!.getBoundingClientRect();
+    const icon = element.querySelector(".command-disclosure-icon")!.getBoundingClientRect();
+    const title = element.querySelector(".command-title")!.getBoundingClientRect();
+    return {
+      leftInset: title.left - element.getBoundingClientRect().left,
+      iconCenterY: icon.top + icon.height / 2,
+      titleCenterY: title.top + title.height / 2,
+      rowCenterY: row.top + row.height / 2,
+    };
+  });
+  expect(compactRow.leftInset).toBeGreaterThanOrEqual(8);
+  expect(Math.abs(compactRow.iconCenterY - compactRow.rowCenterY)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(compactRow.titleCenterY - compactRow.rowCenterY)).toBeLessThanOrEqual(0.5);
+  await expect(commands.nth(2)).toHaveCSS("border-radius", "7.2px");
+
+  const centers = await commands.nth(0).evaluate((element) => {
+    const slot = element.querySelector(".command-status")!.getBoundingClientRect();
+    const icon = element.querySelector(".command-status svg")!.getBoundingClientRect();
+    return {
+      slotX: slot.x + slot.width / 2,
+      slotY: slot.y + slot.height / 2,
+      iconX: icon.x + icon.width / 2,
+      iconY: icon.y + icon.height / 2,
+    };
+  });
+  expect(Math.abs(centers.slotX - centers.iconX)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(centers.slotY - centers.iconY)).toBeLessThanOrEqual(0.5);
+});
+
 test("wide transcript content wraps without overflowing the dialog or page", async ({ page }) => {
   const unbroken = "C:/workspace/" + "deeply-nested-segment/".repeat(18) + "artifact.json";
   const prose = "Transcript prose remains readable within the available width even when it contains " +
@@ -15,10 +118,9 @@ test("wide transcript content wraps without overflowing the dialog or page", asy
     result.conversation.runs[0].transcript.items = [
       { kind: "message", role: "agent", text: prose },
       {
-        kind: "tool",
-        name: "command_execution",
+        kind: "command",
+        command: structuredOutput,
         status: "completed",
-        summary: structuredOutput,
         output: preformattedOutput,
       },
       { kind: "diagnostic", text: unbroken },
@@ -34,7 +136,7 @@ test("wide transcript content wraps without overflowing the dialog or page", asy
 
   const containment = await dialog.evaluate((element) => {
     const content = element.querySelector<HTMLElement>(".transcript-content");
-    const records = [...element.querySelectorAll<HTMLElement>(".transcript-item")];
+    const records = [...element.querySelectorAll<HTMLElement>(".transcript-item, .transcript-command")];
     return {
       viewportWidth: document.documentElement.clientWidth,
       pageScrollWidth: document.documentElement.scrollWidth,
@@ -50,12 +152,12 @@ test("wide transcript content wraps without overflowing the dialog or page", asy
   expect(containment.contentOverflow).toBe(false);
   expect(containment.recordOverflow).toBe(false);
 
-  const toolOutput = dialog.locator(".tool-output");
-  await toolOutput.getByText("View command output").click();
-  const pre = toolOutput.locator("pre");
+  const commandDetails = dialog.locator(".command-details");
+  await commandDetails.locator("summary").click();
+  const pre = commandDetails.locator("pre").nth(1);
   await expect(pre).toHaveText(preformattedOutput);
   expect(await pre.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
-  expect(await toolOutput.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(false);
+  expect(await commandDetails.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(false);
   expect(await dialog.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(false);
 });
 
@@ -397,18 +499,16 @@ test("an open conversation replaces one running tool entry with its terminal evi
       status: 200,
       json: runningConversationScenario(reads === 1
           ? [{
-              id: "live-browser-tool",
-              kind: "tool",
-              name: "command_execution",
+              id: "live-browser-command",
+              kind: "command",
+              command: "pnpm test",
               status: "running",
-              summary: "pnpm test",
             }, ...retainedMessages]
           : [{
-              id: "live-browser-tool",
-              kind: "tool",
-              name: "command_execution",
+              id: "live-browser-command",
+              kind: "command",
+              command: "pnpm test",
               status: "completed",
-              summary: "pnpm test (exit 0)",
               output: "All live checks passed.",
             }, ...retainedMessages]),
     });
@@ -417,7 +517,10 @@ test("an open conversation replaces one running tool entry with its terminal evi
   await page.goto("/tasks/T-0001");
   await page.getByRole("button", { name: "View conversation" }).click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
-  await expect(dialog).toContainText("pnpm test · running");
+  const liveCommand = dialog.locator(".transcript-command").first();
+  await expect(liveCommand.getByRole("img", { name: "Command running" })).toBeVisible();
+  await liveCommand.locator("summary").click();
+  await expect(liveCommand.locator("details")).toHaveAttribute("open", "");
   expect(reads).toBe(1);
   const transcriptContent = dialog.locator(".transcript-content");
   const readingPosition = await transcriptContent.evaluate((element) => {
@@ -427,9 +530,10 @@ test("an open conversation replaces one running tool entry with its terminal evi
   expect(readingPosition).toBeGreaterThan(0);
   await page.clock.fastForward(2_000);
   await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
-  await expect(dialog).toContainText("pnpm test (exit 0) · completed");
+  await expect(liveCommand.getByRole("img", { name: "Command succeeded" })).toBeVisible();
+  await expect(liveCommand.locator("details")).toHaveAttribute("open", "");
   await expect(dialog).toContainText("All live checks passed.");
-  await expect(dialog.locator(".transcript-item")).toHaveCount(31);
+  await expect(dialog.locator(".transcript-item, .transcript-command")).toHaveCount(31);
   expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
 
   await dialog.getByRole("button", { name: "Close conversation" }).click();
@@ -706,7 +810,7 @@ test("an assembled conversation follow-up runs and remains attributable in the t
   const runningConversation = page.getByRole("dialog", { name: "Agent conversation" });
   await expect(runningConversation).toContainText("Run 2 · running");
   await expect(runningConversation).toContainText("Checking the assembled follow-up now.");
-  await expect(runningConversation).toContainText("Verify conversation boundaries · running");
+  await expect(runningConversation.getByRole("img", { name: "Command running" })).toBeVisible();
   await runningConversation.getByRole("button", { name: "Close conversation" }).click();
   await expect(timeline).toContainText("Follow-up resumed thread-browser-123", { timeout: 15_000 });
   const followUpAttempt = timeline.locator(".attempt-entry").filter({ hasText: "Follow-up resumed thread-browser-123" });

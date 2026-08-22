@@ -6,9 +6,12 @@ import type {
 } from "../../application/browser-transport-contract.ts";
 import { continueAgentConversation, readAgentConversation, retireAgentConversation } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
+import { CommandStatusMark } from "./CommandStatusMark.tsx";
+import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
+import { MarkdownContent } from "./MarkdownContent.tsx";
 import { Modal } from "./Modal.tsx";
 
 const ACTIVE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 1_000;
@@ -246,8 +249,11 @@ export function AgentConversationDialog({
                 data-conversation-message={entry.message.id}
               >
                 <article className="conversation-message user-message">
-                  <p className="eyebrow">You</p>
-                  <p>{entry.message.body}</p>
+                  <header className="conversation-message-heading">
+                    <p className="eyebrow">You</p>
+                    <CopyMarkdownButton source={entry.message.body} label="Copy your message Markdown" />
+                  </header>
+                  <MarkdownContent source={entry.message.body} />
                 </article>
                 {entry.awaitingRun ? (
                   <div className="conversation-turn-pending" role="status" aria-label="Follow-up queued">
@@ -293,28 +299,48 @@ export function AgentConversationDialog({
               ) : entry.run.transcript.items.length === 0 ? (
                 <p className="unavailable">Codex produced no inspectable conversation items for this run.</p>
               ) : entry.run.transcript.items.map((item, index) => (
-                <article key={item.id ?? `${entry.run.attempt.id}-${index}`} className={`transcript-item ${item.kind}`}>
-                  <p className="eyebrow">
-                    {item.kind === "message"
-                      ? "Codex message"
-                      : item.kind === "tool"
-                        ? `Tool · ${item.name}`
-                        : "Diagnostic"}
-                  </p>
-                  {item.kind === "message" || item.kind === "diagnostic" ? (
-                    <p>{item.text}</p>
-                  ) : (
-                    <>
-                      <p><strong>{item.summary}</strong> · {item.status}</p>
-                      {item.output === undefined ? null : (
-                        <details className="tool-output">
-                          <summary>View command output</summary>
-                          <pre>{item.output}</pre>
-                        </details>
-                      )}
-                    </>
-                  )}
-                </article>
+                item.kind === "message" ? (
+                  <article key={item.id ?? `${entry.run.attempt.id}-${index}`} className="transcript-item message">
+                    <header className="conversation-message-heading">
+                      <CopyMarkdownButton source={item.text} label="Copy Codex message Markdown" />
+                    </header>
+                    <MarkdownContent source={item.text} />
+                  </article>
+                ) : item.kind === "command" ? (
+                  <article key={item.id ?? `${entry.run.attempt.id}-${index}`} className="transcript-command">
+                    <details className="command-details">
+                      <summary>
+                        <svg className="command-disclosure-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <path d="m5 3.5 5 4.5-5 4.5" />
+                        </svg>
+                        <span className="command-title">Command</span>
+                        <CommandStatusMark status={item.status} />
+                      </summary>
+                      <div className="command-evidence">
+                        <p>Invocation</p>
+                        <pre>{item.command}</pre>
+                        {item.output === undefined ? null : <><p>Output</p><pre>{item.output}</pre></>}
+                      </div>
+                    </details>
+                  </article>
+                ) : (
+                  <article key={item.id ?? `${entry.run.attempt.id}-${index}`} className={`transcript-item ${item.kind}`}>
+                    <p className="eyebrow">{item.kind === "tool" ? `Tool · ${item.name}` : "Diagnostic"}</p>
+                    {item.kind === "diagnostic" ? (
+                      <p>{item.text}</p>
+                    ) : (
+                      <>
+                        <p><strong>{item.summary}</strong> · {item.status}</p>
+                        {item.output === undefined ? null : (
+                          <details className="tool-output">
+                            <summary>View tool output</summary>
+                            <pre>{item.output}</pre>
+                          </details>
+                        )}
+                      </>
+                    )}
+                  </article>
+                )
               ))}
             </section>
             ))}

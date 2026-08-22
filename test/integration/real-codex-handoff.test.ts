@@ -106,8 +106,8 @@ test(
       completed.task.activations[0]?.attempts[0]?.id as string,
     );
     const gitStatus = implementationTranscript
-      ?.filter(isToolNamed("command_execution"))
-      .find((item) => /git status --short/i.test(item.summary));
+      ?.filter(isCommand)
+      .find((item) => /git status --short/i.test(item.command));
     assert.equal(gitStatus?.status, "completed");
     assert.deepEqual(
       implementationTranscript
@@ -253,6 +253,12 @@ function isToolNamed(name: string) {
     item: AttemptTranscriptItem,
   ): item is Extract<AttemptTranscriptItem, { kind: "tool" }> =>
     item.kind === "tool" && item.name === name;
+}
+
+function isCommand(
+  item: AttemptTranscriptItem,
+): item is Extract<AttemptTranscriptItem, { kind: "command" }> {
+  return item.kind === "command";
 }
 
 async function createFixture(): Promise<{

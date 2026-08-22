@@ -173,6 +173,59 @@ WebSocket authorization. A client could theoretically decode a file to PCM and
 pace the chunks, but that is an unsupported reimplementation with no advantage
 over the batch route.
 
+## Manual global dictation workflow
+
+The installed Electron app exposes global dictation on Windows and macOS; its
+platform check excludes Linux. The capability is Electron-only, feature-gated,
+requires microphone access and a usable ChatGPT-authenticated session, and does
+nothing until at least one shortcut is configured. The settings label the two
+bindings **Hold-to-dictate hotkey** and **Toggle dictation hotkey**, described as
+holding anywhere on the desktop to dictate at the cursor, or pressing once to
+start and again to stop. No factory-default binding is present in this build:
+the first-use prompt asks the user to record one, and the hold and toggle
+bindings must be different (`app-initial-izy3qYQi.js`, approximately offsets
+4,324,911, 6,715,640, 10,706,768, and 13,937,409-13,964,960;
+`.vite/build/main-B6Z1yw33.js`, approximately offset 2,353,955).
+
+The practical workflow is:
+
+1. Configure either global shortcut in the app's dictation settings and grant
+   microphone permission. An optional persistent, inactive dictation overlay
+   can remain visible; first-time shortcut setup enables it automatically.
+2. Put the caret in the framework composer, then hold the hold shortcut for the
+   full utterance, or press the toggle shortcut once to start and once to stop.
+   Releasing the hold shortcut stops hold-mode recording. A toggle press does
+   not cancel a hold-mode session.
+3. Wait for transcription/optional cleanup. Outside a focused Codex window the
+   overlay deliberately avoids taking focus, snapshots the clipboard, writes
+   the final transcript plus a trailing space, sends the platform paste action,
+   waits briefly, and restores the prior clipboard only if the temporary value
+   is still present. On Windows the paste action is Ctrl+V. Inside a focused
+   Codex window, the app instead uses its in-app insertion events
+   (`main-B6Z1yw33.js`, approximately offsets 2,333,258 and 2,340,622).
+
+This is final-result dictation, not live text streaming into the target. It is
+best-effort: shortcut registration can conflict with other software; focus can
+move before paste; secure, elevated, non-editable, or Ctrl+V-blocking controls
+may reject insertion; and concurrent clipboard changes can race with delivery.
+Only one app instance can own global dictation. A second owner reports that
+global dictation is already active in another ChatGPT instance.
+
+The app can optionally clean the raw transcript using nearby text and a user
+dictation dictionary; cleanup failure falls back to the raw transcript. Its
+local dictation history retains audio/text to support retry, download, and
+deletion. Static main-process code recovers unfinished recordings as
+interrupted and prunes to the newest 20 completed/non-recording entries while
+preserving any active recording. This local retention is an additional privacy
+consideration for manual use; it is not framework-managed history
+(`main-B6Z1yw33.js`, approximately offset 1,767,720).
+
+Consequently, the lowest-effort no-separate-API-bill experiment is entirely
+manual: focus the framework text box and invoke the Codex/ChatGPT global
+shortcut. It requires no framework code and leaves credentials inside the
+desktop app, but it is a user convenience rather than a supported integration
+contract or automation surface.
+
 ## Fit with this framework and effort
 
 The repository is a host-native Node application serving a React UI over

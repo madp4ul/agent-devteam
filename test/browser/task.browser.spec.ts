@@ -3,11 +3,14 @@ import { cleanWorkspaceGitScenario, runningConversationScenario } from "./browse
 
 test("rendered Markdown code stays within every authored task surface", async ({ page }) => {
   const unbrokenToken = `https://example.invalid/${"unbroken".repeat(24)}`;
-  const codeBlock = [
-    "```text",
+  const codeSource = [
     "  const ordinaryLine = \"This intentionally long code line remains readable while preserving its indentation and authored newline.\";",
     `  ${unbrokenToken}`,
     "  final line",
+  ].join("\n");
+  const codeBlock = [
+    "```text",
+    codeSource,
     "```",
   ].join("\n");
 
@@ -56,7 +59,7 @@ test("rendered Markdown code stays within every authored task surface", async ({
         document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
       for (const surface of surfaces) {
         const code = surface.locator("pre code");
-        await expect(code).toContainText(unbrokenToken);
+        await expect(code).toHaveText(`${codeSource}\n`);
         expect(await surface.locator("pre").evaluate((element) => ({
           contained: element.scrollWidth <= element.clientWidth,
           wraps: element.getBoundingClientRect().height > Number.parseFloat(getComputedStyle(element).fontSize) * 1.2 * 4,
@@ -254,9 +257,10 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(tokenUsage).toHaveText(/Input 600\s*·\s*Output 600/);
   await expect(tokenUsage).not.toContainText(/cached|reasoning|total|used|%/i);
   await expect(tokenUsage).not.toContainText(/cost|currency|\$/i);
-  await expect(dialog).toContainText("pnpm test (exit 0)");
+  await expect(dialog.getByRole("img", { name: "Command succeeded" })).toBeVisible();
   await expect(dialog.getByText("output truncated")).toBeHidden();
-  await dialog.getByText("View command output").click();
+  await dialog.locator(".transcript-command summary").click();
+  await expect(dialog).toContainText("pnpm test");
   await expect(dialog).toContainText("output truncated");
   await expect(copyThreadId).toBeVisible();
   const taskScrollPosition = await page.evaluate(() => {

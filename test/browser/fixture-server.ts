@@ -57,10 +57,9 @@ boards:
 const browserTranscript: AttemptTranscriptItem[] = [
   { kind: "message", role: "agent", text: "I inspected the current task." },
   {
-    kind: "tool",
-    name: "command_execution",
+    kind: "command",
+    command: "pnpm test",
     status: "completed",
-    summary: "pnpm test (exit 0)",
     output: "All focused tests passed.\n... output truncated",
   },
   { kind: "diagnostic", text: "No unresolved runtime diagnostics." },
@@ -86,10 +85,9 @@ application = await CoordinationApplication.start({
             { id: "assembled-live-message", kind: "message", role: "agent", text: "Checking the assembled follow-up now." },
             {
               id: "assembled-live-tool",
-              kind: "tool",
-              name: "command_execution",
+              kind: "command",
+              command: "Verify conversation boundaries",
               status: "running",
-              summary: "Verify conversation boundaries",
             },
           ]);
           // Leave enough observable running time for the browser to poll the
@@ -99,10 +97,9 @@ application = await CoordinationApplication.start({
             { id: "assembled-live-message", kind: "message", role: "agent", text: "Checking the assembled follow-up now." },
             {
               id: "assembled-live-tool",
-              kind: "tool",
-              name: "command_execution",
+              kind: "command",
+              command: "Verify conversation boundaries",
               status: "completed",
-              summary: "Verify conversation boundaries (exit 0)",
               output: "Assembled follow-up verified.",
             },
           ]);
