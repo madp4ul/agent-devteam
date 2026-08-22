@@ -168,6 +168,56 @@ test("dark interactive controls keep readable contrast without turning secondary
   expect(await contrastRatio(commentMarker)).toBeGreaterThanOrEqual(4.5);
 });
 
+test("sticky comment composer uses a readable translucent overlay in both appearances", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.description = "Long appearance context. ".repeat(500);
+    detail.task.comments.push({
+      id: "sticky-appearance-source",
+      body: "Timeline evidence remains readable beside the sticky composer.",
+      actor: { kind: "agent", id: "implementer" },
+      occurredAt: "2026-08-19T12:00:00.000Z",
+    });
+    await route.fulfill({ response, json: detail });
+  });
+
+  for (const theme of ["dark", "light"] as const) {
+    await page.goto("/tasks/T-0001");
+    await setAppearance(page, theme);
+    const composer = page.getByRole("region", { name: "Add comment" });
+    await composer.evaluate((element) => element.scrollIntoView({ block: "end" }));
+    await page.evaluate(() => window.scrollBy(0, 500));
+    const overlayStyle = await composer.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        background: style.backgroundColor,
+        backdropFilter: style.backdropFilter,
+        bottomLeftRadius: style.borderBottomLeftRadius,
+        bottomRightRadius: style.borderBottomRightRadius,
+      };
+    });
+    expect(overlayStyle.background).toContain("/ 0.82");
+    expect(overlayStyle.backdropFilter).toContain("blur(10px)");
+    expect(overlayStyle.bottomLeftRadius).toBe("0px");
+    expect(overlayStyle.bottomRightRadius).toBe("0px");
+    const draft = composer.getByRole("textbox", { name: "Comment" });
+    const [composerBounds, headingBounds, draftBounds] = await Promise.all([
+      composer.boundingBox(),
+      composer.getByRole("heading", { name: "Add comment" }).boundingBox(),
+      draft.boundingBox(),
+    ]);
+    expect(composerBounds).not.toBeNull();
+    expect(headingBounds).not.toBeNull();
+    expect(draftBounds).not.toBeNull();
+    expect(headingBounds!.y - composerBounds!.y).toBeLessThanOrEqual(22);
+    expect(draftBounds!.y - (headingBounds!.y + headingBounds!.height)).toBeGreaterThanOrEqual(8);
+    expect(await contrastRatio(draft)).toBeGreaterThanOrEqual(4.5);
+    await expect(page.locator("#timeline-source-sticky-appearance-source")).toBeVisible();
+  }
+});
+
 test("conversation index remains quiet and readable in dark and light appearances", async ({ page }) => {
   for (const theme of ["dark", "light"] as const) {
     await page.goto("/tasks/T-0001");

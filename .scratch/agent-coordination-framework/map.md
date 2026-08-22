@@ -269,6 +269,9 @@ without choosing the implementation yet.
   — Keep the single Add comment composer available at the viewport bottom while
   reading the timeline, preserve one draft and its source position across Reply
   and submission, and auto-grow the textarea within a context-preserving cap.
+  **Resolved:** The measured composer now sticks beside timeline evidence,
+  grows within a viewport-aware cap, keeps autocomplete and final timeline
+  controls visible, and preserves composition context through Reply and retry.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.

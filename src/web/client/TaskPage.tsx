@@ -49,6 +49,8 @@ export function TaskPage({
   const [editing, setEditing] = useState(false);
   const [commentDraft, setCommentDraft] = useState("");
   const commentInput = useRef<HTMLTextAreaElement>(null);
+  const commentPanel = useRef<HTMLElement>(null);
+  const commentTimelineFlow = useRef<HTMLDivElement>(null);
   const [archivalPending, setArchivalPending] = useState(false);
   const [discardConfirmation, setDiscardConfirmation] = useState(false);
   const [timelineSourceRequest, setTimelineSourceRequest] = useState<{ sourceId: string; sequence: number }>();
@@ -69,6 +71,45 @@ export function TaskPage({
     restoreTimelineViewportAnchor(pendingTimelineAnchor.current);
     pendingTimelineAnchor.current = null;
   }, [detail]);
+  useLayoutEffect(() => {
+    const panel = commentPanel.current;
+    const flow = commentTimelineFlow.current;
+    if (flow === null) return;
+    if (panel === null) {
+      flow.style.removeProperty("--comment-composer-height");
+      return;
+    }
+    const placeholder = panel.parentElement;
+    if (placeholder === null) return;
+    let dockingThresholdHeight = panel.getBoundingClientRect().height;
+    let docked = false;
+    const synchronizeHeight = (): void => synchronizeCommentComposerHeight(panel, flow);
+    const synchronizeDocking = (): void => {
+      const bounds = placeholder.getBoundingClientRect();
+      flow.style.setProperty("--comment-composer-left", `${bounds.left}px`);
+      flow.style.setProperty("--comment-composer-width", `${bounds.width}px`);
+      if (!docked) dockingThresholdHeight = panel.getBoundingClientRect().height;
+      docked = bounds.top + dockingThresholdHeight <= window.innerHeight;
+      panel.classList.toggle("comment-panel-docked", docked);
+    };
+    const synchronizeLayout = (): void => {
+      synchronizeHeight();
+      synchronizeDocking();
+    };
+    synchronizeLayout();
+    const observer = new ResizeObserver(synchronizeHeight);
+    observer.observe(panel, { box: "border-box" });
+    window.addEventListener("scroll", synchronizeDocking, { passive: true });
+    window.addEventListener("resize", synchronizeLayout);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", synchronizeDocking);
+      window.removeEventListener("resize", synchronizeLayout);
+      panel.classList.remove("comment-panel-docked");
+      flow.style.removeProperty("--comment-composer-left");
+      flow.style.removeProperty("--comment-composer-width");
+    };
+  }, [detail === undefined ? "loading" : detail.task.archived ? "archived" : "active", taskId]);
   usePolling(
     refresh,
     1_000,
@@ -118,10 +159,18 @@ export function TaskPage({
       };
   const prepareReply = (agentId: string): void => {
     const mention = `@${agentId}`;
-    setCommentDraft((current) => containsMention(current, agentId)
-      ? current
-      : `${current}${current.length === 0 || /\s$/.test(current) ? "" : " "}${mention} `);
-    window.requestAnimationFrame(() => commentInput.current?.focus());
+    const next = containsMention(commentDraft, agentId)
+      ? commentDraft
+      : `${commentDraft}${commentDraft.length === 0 || /\s$/.test(commentDraft) ? "" : " "}${mention} `;
+    const selectionStart = commentDraft.length === 0 ? next.length : commentInput.current?.selectionStart;
+    const selectionEnd = commentDraft.length === 0 ? next.length : commentInput.current?.selectionEnd;
+    setCommentDraft(next);
+    window.requestAnimationFrame(() => {
+      commentInput.current?.focus({ preventScroll: true });
+      if (selectionStart !== undefined && selectionEnd !== undefined) {
+        commentInput.current?.setSelectionRange(selectionStart, selectionEnd);
+      }
+    });
   };
   const replyToAttentionRequest = async (agentId: string, attentionReasonId?: string): Promise<void> => {
     if (attentionReasonId !== undefined) {
@@ -260,33 +309,36 @@ export function TaskPage({
               />
             </div>
 
-            {task.archived ? null : <div data-task-section="comment"><CommentForm
-              taskId={task.id}
-              collaborators={detail.collaborators}
-              body={commentDraft}
-              inputRef={commentInput}
-              onBodyChanged={setCommentDraft}
-              onCommented={async () => {
-                await refresh();
-                setFeedback({ role: "status", text: `Commented on ${task.id}.` });
-              }}
-            /></div>}
+            <div className="comment-timeline-flow" ref={commentTimelineFlow}>
+              {task.archived ? null : <div data-task-section="comment"><CommentForm
+                taskId={task.id}
+                collaborators={detail.collaborators}
+                body={commentDraft}
+                inputRef={commentInput}
+                panelRef={commentPanel}
+                onBodyChanged={setCommentDraft}
+                onCommented={async () => {
+                  await refresh();
+                  setFeedback({ role: "status", text: `Commented on ${task.id}.` });
+                }}
+              /></div>}
 
-            <div data-task-section="timeline"><TaskTimeline
-              taskId={task.id}
-              comments={task.comments}
-              activity={task.activity}
-              activations={task.activations}
-              agents={detail.collaborators}
-              columns={board.columns}
-              tasks={detail.relationshipTasks}
-              unresolvedAttention={inspection.unresolvedAttention}
-              transcriptsAvailable={!task.archived}
-              onAttentionChanged={refresh}
-              onAttentionError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })}
-              {...(timelineSourceRequest === undefined ? {} : { sourceRequest: timelineSourceRequest })}
-              {...(task.archived ? {} : { onReplyToAgent: replyToAttentionRequest })}
-            /></div>
+              <div data-task-section="timeline"><TaskTimeline
+                taskId={task.id}
+                comments={task.comments}
+                activity={task.activity}
+                activations={task.activations}
+                agents={detail.collaborators}
+                columns={board.columns}
+                tasks={detail.relationshipTasks}
+                unresolvedAttention={inspection.unresolvedAttention}
+                transcriptsAvailable={!task.archived}
+                onAttentionChanged={refresh}
+                onAttentionError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })}
+                {...(timelineSourceRequest === undefined ? {} : { sourceRequest: timelineSourceRequest })}
+                {...(task.archived ? {} : { onReplyToAgent: replyToAttentionRequest })}
+              /></div>
+            </div>
           </div>
 
           <div className="detail-column">
@@ -394,6 +446,7 @@ function CommentForm({
   collaborators,
   body,
   inputRef,
+  panelRef,
   onBodyChanged,
   onCommented,
 }: {
@@ -401,6 +454,7 @@ function CommentForm({
   collaborators: CollaboratorView[];
   body: string;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  panelRef: React.RefObject<HTMLElement | null>;
   onBodyChanged(body: string): void;
   onCommented(): Promise<void>;
 }): ReactNode {
@@ -425,6 +479,14 @@ function CommentForm({
         participant.summary.toLocaleLowerCase().includes(query);
     });
   const selectedSuggestion = Math.min(activeSuggestion, Math.max(0, suggestions.length - 1));
+  useLayoutEffect(() => {
+    const textarea = inputRef.current;
+    if (textarea === null) return;
+    const fitDraft = (): void => fitCommentTextarea(textarea);
+    fitDraft();
+    window.addEventListener("resize", fitDraft);
+    return () => window.removeEventListener("resize", fitDraft);
+  }, [body, inputRef]);
   const updateSelection = (element: HTMLTextAreaElement): void => setSelectionStart(element.selectionStart);
   const insertMention = (participant: MentionParticipant): void => {
     if (mention === undefined) return;
@@ -441,6 +503,13 @@ function CommentForm({
   };
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
+    const viewportAnchor = captureTimelineViewportAnchor();
+    const restoreCompositionContext = (): void => {
+      window.requestAnimationFrame(() => {
+        restoreTimelineViewportAnchor(viewportAnchor);
+        inputRef.current?.focus({ preventScroll: true });
+      });
+    };
     setPending(true);
     setError(undefined);
     try {
@@ -450,13 +519,15 @@ function CommentForm({
       setIdempotencyKey(crypto.randomUUID());
       setPending(false);
       await onCommented();
+      restoreCompositionContext();
     } catch (caught) {
       setError(errorMessage(caught));
       setPending(false);
+      restoreCompositionContext();
     }
   };
   return (
-    <section className="detail-panel comment-panel" aria-labelledby="comment-heading">
+    <section ref={panelRef} className="detail-panel comment-panel" aria-labelledby="comment-heading">
       <h2 id="comment-heading">Add comment</h2>
       <form onSubmit={(event) => void submit(event)}>
         <div className="mention-composer">
@@ -472,6 +543,7 @@ function CommentForm({
             rows={2}
             value={body}
             onChange={(event) => {
+              fitCommentTextarea(event.currentTarget);
               onBodyChanged(event.currentTarget.value);
               setDismissedMention(undefined);
               setActiveSuggestion(0);
@@ -495,30 +567,30 @@ function CommentForm({
               }
             }}
           />
-          {suggestions.length === 0 ? null : (
-            <ul id="mention-participants" className="mention-options" role="listbox" aria-label="Mention participants">
-              {suggestions.map((participant, index) => (
-                <li
-                  key={participant.id}
-                  id={`mention-participant-${participant.id}`}
-                  role="option"
-                  aria-selected={index === selectedSuggestion}
-                  className={index === selectedSuggestion ? "active" : undefined}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => insertMention(participant)}
-                >
-                  <strong>{participant.name}</strong>
-                  <code>{participant.token}</code>
-                  <span>{participant.summary}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <button className="comment-submit" disabled={pending || body.trim().length === 0} type="submit">
+            {pending ? "Posting…" : "Post"}
+          </button>
         </div>
+        {suggestions.length === 0 ? null : (
+          <ul id="mention-participants" className="mention-options" role="listbox" aria-label="Mention participants">
+            {suggestions.map((participant, index) => (
+              <li
+                key={participant.id}
+                id={`mention-participant-${participant.id}`}
+                role="option"
+                aria-selected={index === selectedSuggestion}
+                className={index === selectedSuggestion ? "active" : undefined}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => insertMention(participant)}
+              >
+                <strong>{participant.name}</strong>
+                <code>{participant.token}</code>
+                <span>{participant.summary}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
-        <button disabled={pending || body.trim().length === 0} type="submit">
-          {pending ? "Posting…" : "Post"}
-        </button>
       </form>
     </section>
   );
@@ -604,6 +676,19 @@ function EditDialog({
         </form>
     </Modal>
   );
+}
+
+function synchronizeCommentComposerHeight(panel: HTMLElement, flow: HTMLElement): void {
+  flow.style.setProperty("--comment-composer-height", `${panel.getBoundingClientRect().height}px`);
+}
+
+function fitCommentTextarea(textarea: HTMLTextAreaElement): void {
+  textarea.style.height = "auto";
+  textarea.style.height = `${textarea.scrollHeight}px`;
+  textarea.style.overflowY = textarea.scrollHeight > textarea.clientHeight ? "auto" : "hidden";
+  const panel = textarea.closest<HTMLElement>(".comment-panel");
+  const flow = textarea.closest<HTMLElement>(".comment-timeline-flow");
+  if (panel !== null && flow !== null) synchronizeCommentComposerHeight(panel, flow);
 }
 
 function interruptionReasonDescription(reason: string | undefined): string {

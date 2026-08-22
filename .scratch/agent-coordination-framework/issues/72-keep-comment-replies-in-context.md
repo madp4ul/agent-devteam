@@ -7,7 +7,7 @@ longer drafts without crowding the timeline out of view.
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Problem Statement
 
@@ -181,3 +181,24 @@ No domain-glossary or architecture update is expected: the change adds no
 durable concept, command, state owner, module boundary, or runtime integration.
 No ADR is warranted because the sticky placement and automatic sizing are
 reversible presentation decisions selected from familiar alternatives.
+
+## Answer
+
+The task page now keeps its one Add comment composer in normal flow until the
+whole surface reaches the viewport, then holds it at the safe viewport bottom
+while the timeline scrolls. Measured trailing clearance keeps the final entry
+and its controls visible at minimum, intermediate, and capped draft heights.
+
+The textarea grows and shrinks automatically from two rows to a viewport-aware
+cap, scrolls internally beyond the cap, and no longer exposes manual resizing.
+The translucent composer overlays the start of the adjacent timeline without
+reserving an empty slot, while autocomplete opens above it without shifting the
+draft. Its compact Post action occupies the textarea's lower-right corner
+instead of reserving a separate row. Once the composer reaches its threshold,
+it becomes a bottom-docked surface whose position is independent of its height,
+so expansion and contraction grow upward in one layout while the viewport-bottom
+edge remains stable, including at the end of the page. Reply and submission
+preserve the current timeline record, draft, selection, and focus as applicable;
+failures retain the complete composition state and successful posts clear and
+shrink it. Rendered-browser coverage verifies desktop and narrow geometry,
+multiple replies, autocomplete, retry, keyboard focus, and both appearances.

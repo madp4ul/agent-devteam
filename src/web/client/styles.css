@@ -279,6 +279,7 @@ input, textarea, select { width: 100%; border: 1px solid #cbd2cc; border-radius:
 form { display: grid; gap: 1rem; }
 form label { display: grid; gap: .42rem; color: #435049; font-size: .8rem; font-weight: 800; }
 textarea { resize: vertical; line-height: 1.5; }
+.comment-panel textarea { min-height: calc(3em + 1.56rem + 2px); max-height: min(calc(15em + 1.56rem + 2px), 34dvh); resize: none; }
 .form-actions { display: flex; justify-content: flex-end; gap: .7rem; margin-top: .5rem; }
 .more-actions { position: relative; align-self: center; }
 .more-actions > summary { color: var(--muted); font-size: .8rem; font-weight: 800; cursor: pointer; }
@@ -288,7 +289,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .back-link { display: flex; align-items: center; color: var(--mint); font-weight: 800; text-decoration: none; }
 .task-actions { display: flex; align-items: center; gap: .65rem; }
 .task-actions button { padding: .45rem .7rem; font-size: .78rem; }
-.task-detail { max-width: 76rem; margin: 0 auto; }
+.task-detail { max-width: 76rem; margin: 0 auto; padding-bottom: 0; }
 .task-overview { padding: .35rem 0 0; }
 .task-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 2rem; }
 .task-heading { max-width: 100%; }
@@ -301,6 +302,13 @@ textarea { resize: vertical; line-height: 1.5; }
 .description { margin-bottom: 0; color: #4d5b54; font-size: 1.08rem; }
 .detail-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(18rem, .8fr); align-items: stretch; gap: 1rem; margin-top: 1rem; }
 .detail-primary-column, .detail-column { display: grid; align-content: start; gap: 1rem; min-width: 0; }
+.comment-timeline-flow { display: grid; align-content: start; min-width: 0; --comment-composer-height: 0px; --comment-safe-area-inset-bottom: env(safe-area-inset-bottom); }
+.comment-timeline-flow > [data-task-section="comment"], .comment-timeline-flow > [data-task-section="timeline"] { grid-area: 1 / 1; min-width: 0; }
+.comment-timeline-flow > [data-task-section="comment"] { z-index: 10; height: var(--comment-composer-height); align-self: start; overflow-anchor: none; }
+.comment-timeline-flow > [data-task-section="timeline"] { padding-bottom: calc(var(--comment-composer-height) + 1rem); }
+.comment-timeline-flow .detail-panel.comment-panel { position: relative; border-bottom: 0; border-radius: .85rem .85rem 0 0; background: color-mix(in srgb, var(--surface) 82%, transparent); padding-bottom: calc(1.3rem + var(--comment-safe-area-inset-bottom)); box-shadow: 0 -12px 32px var(--shadow-color); backdrop-filter: blur(10px) saturate(1.08); }
+.comment-timeline-flow .detail-panel.comment-panel.comment-panel-docked { position: fixed; z-index: 10; right: auto; bottom: 0; left: var(--comment-composer-left); width: var(--comment-composer-width); }
+.comment-panel > h2 { position: relative; top: -.5rem; }
 .detail-panel, .move-panel, .timeline-section { border: 1px solid var(--line); border-radius: .85rem; background: var(--paper); padding: 1.3rem; box-shadow: 0 5px 18px rgb(20 34 28 / 4%); }
 .detail-column > [data-task-section="conversations"] { position: sticky; top: var(--detail-sticky-offset); }
 .conversations-panel { padding: 1rem; }
@@ -498,7 +506,9 @@ textarea { resize: vertical; line-height: 1.5; }
 .comment-consequence { display: flex; flex: 1 1 auto; flex-wrap: wrap; gap: .2rem; align-items: baseline; min-width: 0; margin: 0; color: var(--muted); font-size: .74rem; font-weight: 600; }
 .comment-consequence::before { color: #8b948f; content: "↳"; }
 .mention-composer { position: relative; }
-.mention-options { position: absolute; z-index: 12; right: 0; left: 0; max-height: min(18rem, 50vh); margin: .3rem 0 0; border: 1px solid var(--line); border-radius: .6rem; background: var(--paper); padding: .35rem; overflow-y: auto; box-shadow: var(--shadow); list-style: none; }
+.comment-panel .mention-composer textarea { padding-right: 7rem; }
+.comment-submit { position: absolute; right: 1.35rem; bottom: .55rem; min-width: 5rem; padding: .5rem .7rem; }
+.mention-options { position: absolute; z-index: 12; right: 0; bottom: calc(100% + .75rem); left: 0; max-height: min(18rem, calc(100dvh - var(--comment-composer-height) - 2rem)); margin: 0; border: 1px solid var(--line); border-radius: .6rem; background: var(--paper); padding: .35rem; overflow-y: auto; box-shadow: var(--shadow); list-style: none; }
 .mention-options li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .12rem .7rem; border-radius: .4rem; padding: .55rem .65rem; cursor: pointer; }
 .mention-options li.active, .mention-options li:hover { background: var(--surface-hover-strong); }
 .mention-options code { color: var(--muted); }
@@ -665,6 +675,8 @@ html[data-theme] .coordination-comment-footer .quiet-action:focus-visible { outl
   .agent-activity-panel.idle { align-items: flex-start; flex-direction: column; gap: .2rem; }
   .activity-current { align-items: stretch; flex-direction: column; }
   .entry-meta { align-items: flex-start; flex-direction: column; gap: .2rem; }
+  .comment-coordination { align-items: flex-start; flex-direction: column; }
+  .comment-actions { max-width: 100%; justify-content: flex-start; }
 }
 
 /* Shared semantic appearance roles. Component rules above retain the accepted light appearance. */
