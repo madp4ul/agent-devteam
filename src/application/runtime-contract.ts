@@ -56,6 +56,11 @@ export interface RuntimeStartupDiagnostic extends ActivationStartupFailureView {
   activationId: string;
 }
 
+export interface CoordinationTaskIdentity {
+  id?: string;
+  title?: string;
+}
+
 export type CoordinationTranscriptPresentation =
   | {
       kind: "coordination-task-move";
@@ -65,6 +70,61 @@ export type CoordinationTranscriptPresentation =
   | {
       kind: "coordination-comment";
       body: string;
+    }
+  | {
+      kind: "coordination-child-task";
+      task: CoordinationTaskIdentity;
+      columnId?: string;
+    }
+  | {
+      kind: "coordination-dependency";
+      sourceTask: CoordinationTaskIdentity & { id: string };
+      targetTask: CoordinationTaskIdentity;
+    }
+  | {
+      kind: "coordination-inspection";
+      scope: "operating-context";
+      attemptId: string;
+      taskId?: string;
+      processName?: string;
+      boardId?: string;
+      boardName?: string;
+      owningAgentName?: string;
+    }
+  | {
+      kind: "coordination-inspection";
+      scope: "board-summaries";
+      boards: Array<{ id: string; name?: string }>;
+    }
+  | {
+      kind: "coordination-inspection";
+      scope: "tasks";
+      board?: { id: string; name?: string };
+      columns: Array<{ id: string; name?: string }>;
+    }
+  | {
+      kind: "coordination-inspection";
+      scope: "archived-tasks";
+      taskCount?: number;
+    }
+  | {
+      kind: "coordination-inspection";
+      scope: "task" | "task-activity" | "task-attachments";
+      taskId?: string;
+      taskTitle?: string;
+    }
+  | {
+      kind: "coordination-inspection";
+      scope: "collaborators";
+      collaboratorCount?: number;
+    }
+  | {
+      kind: "coordination-inspection";
+      scope: "current-task";
+      taskTitle?: string;
+      boardId?: string;
+      columnId?: string;
+      columnName?: string;
     };
 
 export type AttemptTranscriptItem =

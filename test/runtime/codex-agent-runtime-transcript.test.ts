@@ -68,6 +68,7 @@ test("a failed required coordination call makes the attempt fail with actionable
       status: "failed",
       rawStatus: "failed",
       summary: "T-0006: current task inspection",
+      presentation: { kind: "coordination-inspection", scope: "current-task" },
       error: { message: "user cancelled MCP tool call" },
     },
     { kind: "message", role: "agent", text: "I could not inspect the task." },
@@ -198,6 +199,12 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
       status: "running",
       rawStatus: "in_progress",
       summary: "delivery: tasks in implementation",
+      presentation: {
+        kind: "coordination-inspection",
+        scope: "tasks",
+        board: { id: "delivery" },
+        columns: [{ id: "implementation" }],
+      },
       arguments: { boardId: "delivery", columnIds: ["implementation"] },
     },
   ]);
@@ -213,6 +220,12 @@ test("a running attempt exposes stable tool progression before the Codex turn fi
       status: "succeeded",
       rawStatus: "completed",
       summary: "delivery: tasks in implementation",
+      presentation: {
+        kind: "coordination-inspection",
+        scope: "tasks",
+        board: { id: "delivery" },
+        columns: [{ id: "implementation" }],
+      },
       arguments: { boardId: "delivery", columnIds: ["implementation"] },
       result: { content: [{ type: "text", text: JSON.stringify({ tasks: [] }) }] },
     },
@@ -466,6 +479,286 @@ test("a coordination comment exposes its authored Markdown as a semantic present
   });
 });
 
+test("child-task and dependency actions retain linked task identities as semantic presentations", async () => {
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-linked-task-actions" },
+            {
+              type: "item.completed",
+              item: {
+                id: "child-task-tool",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "create_child_task",
+                status: "completed",
+                arguments: { title: "Review API", columnId: "code-review" },
+                result: { content: [{ type: "text", text: JSON.stringify({
+                  accepted: true,
+                  task: { id: "T-0099", title: "Review API", columnId: "code-review" },
+                }) }] },
+              },
+            },
+            {
+              type: "item.completed",
+              item: {
+                id: "dependency-tool-linked",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "add_dependency",
+                status: "completed",
+                arguments: { targetTaskId: "T-requested" },
+                result: { content: [{ type: "text", text: JSON.stringify({
+                  accepted: true,
+                  relationship: {
+                    id: "R-0001",
+                    type: "dependency",
+                    sourceTaskId: "T-0008",
+                    targetTaskId: "T-0088",
+                  },
+                }) }] },
+              },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+  const linkedActionRequest = request("activation-linked-task-actions", "T-0008");
+
+  await runtime.run(linkedActionRequest, { started() {} });
+
+  const transcript = await runtime.read(linkedActionRequest.attemptId);
+  assert.ok(transcript);
+  assert.deepEqual(transcript.flatMap((item) => item.kind === "mcp" ? [item.presentation] : []), [
+    {
+      kind: "coordination-child-task",
+      task: { id: "T-0099", title: "Review API" },
+      columnId: "code-review",
+    },
+    {
+      kind: "coordination-dependency",
+      sourceTask: { id: "T-0008" },
+      targetTask: { id: "T-0088" },
+    },
+  ]);
+});
+
+test("operating-context inspection retains the authoritative run scope as semantic presentation", async () => {
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-operating-context" },
+            {
+              type: "item.completed",
+              item: {
+                id: "operating-context-tool",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "inspect_operating_context",
+                status: "completed",
+                result: {
+                  content: [{
+                    type: "text",
+                    text: JSON.stringify({
+                      attemptId: "attempt-authoritative",
+                      taskId: "T-0042",
+                      process: { name: "Release train", definitionVersion: "version-2" },
+                      board: { id: "delivery", name: "Delivery" },
+                      owningAgent: { id: "reviewer", name: "Code Reviewer" },
+                    }),
+                  }],
+                },
+              },
+            },
+            {
+              type: "item.started",
+              item: {
+                id: "operating-context-running",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "inspect_operating_context",
+                status: "in_progress",
+              },
+            },
+            {
+              type: "item.completed",
+              item: {
+                id: "operating-context-failed",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "inspect_operating_context",
+                status: "failed",
+                error: { message: "Context unavailable" },
+              },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+  const contextRequest = request("activation-operating-context", "T-0008");
+
+  await runtime.run(contextRequest, { started() {} });
+
+  const transcript = await runtime.read(contextRequest.attemptId);
+  assert.ok(transcript);
+  const [inspection] = transcript;
+  assert.equal(inspection?.kind, "mcp");
+  assert.deepEqual(inspection?.kind === "mcp" ? inspection.presentation : undefined, {
+    kind: "coordination-inspection",
+    scope: "operating-context",
+    attemptId: "attempt-authoritative",
+    taskId: "T-0042",
+    processName: "Release train",
+    boardId: "delivery",
+    boardName: "Delivery",
+    owningAgentName: "Code Reviewer",
+  });
+  for (const item of transcript.slice(1).filter((candidate) => candidate.kind === "mcp")) {
+    assert.deepEqual(item.presentation, {
+      kind: "coordination-inspection",
+      scope: "operating-context",
+      attemptId: contextRequest.attemptId,
+      taskId: "T-0008",
+    });
+  }
+});
+
+test("every read-only coordination contract retains its semantic inspection scope", async () => {
+  const items: Array<{ id: string; tool: string; arguments?: unknown; status: string; result?: unknown; error?: unknown }> = [
+    {
+      id: "board-summaries",
+      tool: "summarize_boards",
+      status: "completed",
+      result: { content: [{ type: "text", text: JSON.stringify({
+        available: true,
+        boards: [{ id: "delivery", name: "Delivery" }, { id: "maintenance", name: "Maintenance" }],
+      }) }] },
+    },
+    {
+      id: "task-list",
+      tool: "list_tasks",
+      status: "completed",
+      arguments: { boardId: "requested-board", columnIds: ["requested-column"] },
+      result: { content: [{ type: "text", text: JSON.stringify({ available: true, tasks: [], nextCursor: null }) }] },
+    },
+    {
+      id: "archived-tasks",
+      tool: "list_archived_tasks",
+      status: "completed",
+      result: { content: [{ type: "text", text: JSON.stringify({ available: true, tasks: [{ id: "T-0003" }] }) }] },
+    },
+    {
+      id: "task-inspection",
+      tool: "inspect_task",
+      status: "completed",
+      arguments: { taskId: "T-requested" },
+      result: { content: [{ type: "text", text: JSON.stringify({
+        available: true,
+        task: { id: "T-0042", title: "Authoritative task" },
+      }) }] },
+    },
+    {
+      id: "task-activity",
+      tool: "list_task_activity",
+      status: "failed",
+      arguments: { taskId: "T-0043" },
+      error: { message: "Activity unavailable" },
+    },
+    {
+      id: "task-attachments",
+      tool: "list_task_attachments",
+      status: "in_progress",
+      arguments: { taskId: "T-0044" },
+    },
+    {
+      id: "collaborators",
+      tool: "list_collaborators",
+      status: "completed",
+      result: { content: [{ type: "text", text: JSON.stringify({ available: true, collaborators: [
+        { id: "implementer", name: "Implementation Agent" },
+        { id: "reviewer", name: "Code Reviewer" },
+      ] }) }] },
+    },
+    {
+      id: "current-task",
+      tool: "inspect_current_task",
+      status: "completed",
+      result: { content: [{ type: "text", text: JSON.stringify({
+        id: "T-0008",
+        title: "Current delivery task",
+        boardId: "delivery",
+        column: { id: "implementation", name: "Implementation" },
+      }) }] },
+    },
+  ];
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-read-contracts" },
+            ...items.map((item) => ({
+              type: item.status === "in_progress" ? "item.started" as const : "item.completed" as const,
+              item: { type: "mcp_tool_call", server: "coordination", ...item },
+            })),
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+  const inspectionRequest = request("activation-read-contracts", "T-0008");
+
+  await runtime.run(inspectionRequest, { started() {} });
+
+  const transcript = await runtime.read(inspectionRequest.attemptId);
+  assert.ok(transcript);
+  const presentations = Object.fromEntries(transcript.flatMap((item) =>
+    item.kind === "mcp" && item.id !== undefined ? [[item.id, item.presentation]] : []));
+  assert.deepEqual(presentations, {
+    "board-summaries": {
+      kind: "coordination-inspection",
+      scope: "board-summaries",
+      boards: [{ id: "delivery", name: "Delivery" }, { id: "maintenance", name: "Maintenance" }],
+    },
+    "task-list": {
+      kind: "coordination-inspection",
+      scope: "tasks",
+      board: { id: "requested-board" },
+      columns: [{ id: "requested-column" }],
+    },
+    "archived-tasks": { kind: "coordination-inspection", scope: "archived-tasks", taskCount: 1 },
+    "task-inspection": {
+      kind: "coordination-inspection",
+      scope: "task",
+      taskId: "T-0042",
+      taskTitle: "Authoritative task",
+    },
+    "task-activity": { kind: "coordination-inspection", scope: "task-activity", taskId: "T-0043" },
+    "task-attachments": { kind: "coordination-inspection", scope: "task-attachments", taskId: "T-0044" },
+    collaborators: { kind: "coordination-inspection", scope: "collaborators", collaboratorCount: 2 },
+    "current-task": {
+      kind: "coordination-inspection",
+      scope: "current-task",
+      taskTitle: "Current delivery task",
+      boardId: "delivery",
+      columnId: "implementation",
+      columnName: "Implementation",
+    },
+  });
+});
+
 test("coordination MCP capture preserves domain rejection without rewriting raw evidence", async () => {
   const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
@@ -522,6 +815,7 @@ test("coordination MCP capture preserves domain rejection without rewriting raw 
       status: "succeeded",
       rawStatus: "completed",
       summary: "T-0042: inspect task",
+      presentation: { kind: "coordination-inspection", scope: "task", taskId: "T-0042" },
       arguments: { taskId: "T-0042" },
       result: { content: [{ type: "text", text: JSON.stringify({ id: "T-0042" }) }] },
     },
@@ -533,6 +827,11 @@ test("coordination MCP capture preserves domain rejection without rewriting raw 
       status: "rejected",
       rawStatus: "completed",
       summary: "T-0040: dependency on T-0041 · Rejected: duplicate-relationship",
+      presentation: {
+        kind: "coordination-dependency",
+        sourceTask: { id: "T-0040" },
+        targetTask: { id: "T-0041" },
+      },
       arguments: { targetTaskId: "T-0041" },
       result: {
         content: [{ type: "text", text: JSON.stringify({ accepted: false, reason: "duplicate-relationship" }) }],

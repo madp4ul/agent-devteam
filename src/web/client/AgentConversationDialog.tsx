@@ -4,7 +4,7 @@ import type {
   AgentConversationView,
   AttemptTokenUsage,
 } from "../../application/browser-transport-contract.ts";
-import type { AttemptTranscriptItem } from "../../application/runtime-contract.ts";
+import type { AttemptTranscriptItem, CoordinationTaskIdentity } from "../../application/runtime-contract.ts";
 import { continueAgentConversation, readAgentConversation, retireAgentConversation } from "./api.ts";
 import { ActivityStatusMark } from "./ActivityStatusMark.tsx";
 import { CloseIconButton } from "./CloseIconButton.tsx";
@@ -508,53 +508,77 @@ type CoordinationTranscriptItem = Extract<AttemptTranscriptItem, { kind: "mcp" }
 function CoordinationActivity({ item }: { item: CoordinationTranscriptItem }): ReactNode {
   const presentation = coordinationActivityPresentation(item);
   return (
-    <article className="transcript-coordination coordination-activity" aria-label={presentation.header}>
+    <article className="transcript-coordination coordination-activity" aria-label={presentation.accessibleLabel}>
       <header className="coordination-activity-heading">
-        {presentation.move === undefined ? (
-          <strong>{presentation.header}</strong>
-        ) : (
-          <span className="coordination-activity-title">
-            Move current task {presentation.move.from === undefined ? null : (
-              <>from <strong className="coordination-column-name">{presentation.move.from}</strong> </>
-            )}to <strong className="coordination-column-name">{presentation.move.to}</strong>
-            {presentation.exceptional === undefined ? null : <> · {presentation.exceptional}</>}
-          </span>
-        )}
+        <span className="coordination-activity-title">{presentation.action}</span>
         <ActivityStatusMark status={item.status} subject="Coordination action" className="coordination-status" />
       </header>
-      {presentation.body === undefined ? null : <p className="coordination-activity-summary">{presentation.body}</p>}
+      {presentation.facts.length === 0 ? null : (
+        <dl className="coordination-activity-facts">
+          {presentation.facts.map((fact, index) => (
+            <div key={`${fact.label}-${index}`} className="coordination-activity-fact">
+              <dt>{fact.label}</dt>
+              <dd>{fact.kind === "task" ? <CoordinationTaskReference task={fact.task} /> : <strong>{fact.value}</strong>}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {presentation.exceptional === undefined ? null : (
+        <p className="coordination-activity-exception">
+          <span>{presentation.exceptional.label}</span>
+          <strong>{presentation.exceptional.text}</strong>
+        </p>
+      )}
     </article>
   );
 }
 
+function CoordinationTaskReference({ task }: { task: CoordinationTaskIdentity }): ReactNode {
+  const contents = <>
+    {task.id === undefined ? null : <span className="coordination-task-id">{task.id}</span>}
+    {task.id === undefined || task.title === undefined ? null : " "}
+    {task.title === undefined ? null : <strong>{task.title}</strong>}
+  </>;
+  return task.id === undefined
+    ? (task.title === undefined ? <strong>Requested task</strong> : contents)
+    : (
+      <a
+        className="coordination-task-reference"
+        href={`/tasks/${encodeURIComponent(task.id)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+      >{contents}</a>
+    );
+}
+
+type CoordinationActivityFact =
+  | { kind: "value"; label: string; value: string }
+  | { kind: "task"; label: string; task: CoordinationTaskIdentity };
+
 function coordinationActivityPresentation(item: CoordinationTranscriptItem): {
-  header: string;
-  body?: string;
-  move?: { from?: string; to: string };
-  exceptional?: string;
+  action: string;
+  accessibleLabel: string;
+  facts: CoordinationActivityFact[];
+  exceptional?: { label: "Rejected" | "Failure"; text: string };
 } {
   const arguments_ = literalRecord(item.arguments);
   const result = coordinationResultRecord(item.result);
-  let header: string;
-  let body: string | undefined;
-  let move: { from?: string; to: string } | undefined;
-  switch (item.tool) {
-    case "inspect_current_task": header = "Inspect current task"; break;
-    case "inspect_operating_context": header = "Inspect operating context"; break;
-    case "list_collaborators": header = "List collaborators"; break;
-    case "summarize_boards": header = "Summarize boards"; break;
-    case "list_archived_tasks": header = "List archived tasks"; break;
-    case "inspect_task": header = `Inspect task ${literalString(arguments_?.taskId) ?? "requested task"}`; break;
-    case "list_task_activity": header = `List task activity for ${literalString(arguments_?.taskId) ?? "requested task"}`; break;
-    case "list_task_attachments": header = `List task attachments for ${literalString(arguments_?.taskId) ?? "requested task"}`; break;
-    case "list_tasks": {
-      const boardId = literalString(arguments_?.boardId) ?? "requested board";
-      const columns = Array.isArray(arguments_?.columnIds)
-        ? arguments_.columnIds.filter((value): value is string => typeof value === "string").map(humanizeIdentifier).join(", ")
-        : "requested columns";
-      header = `List tasks in ${boardId} · ${columns}`;
-      break;
-    }
+  const inspection = item.presentation?.kind === "coordination-inspection" ? item.presentation : undefined;
+  const childTask = item.presentation?.kind === "coordination-child-task" ? item.presentation : undefined;
+  const dependency = item.presentation?.kind === "coordination-dependency" ? item.presentation : undefined;
+  let action: string;
+  let accessibleLabel: string;
+  let facts: CoordinationActivityFact[] = [];
+  if (inspection !== undefined) {
+    ({ action, facts } = coordinationInspectionActivityPresentation(inspection));
+    accessibleLabel = action;
+  } else if (childTask !== undefined) {
+    action = accessibleLabel = "Create child task";
+    facts = childTaskFacts(childTask.task, childTask.columnId);
+  } else if (dependency !== undefined) {
+    action = accessibleLabel = "Add dependency";
+    facts = dependencyFacts(dependency.sourceTask, dependency.targetTask);
+  } else switch (item.tool) {
     case "move_current_task": {
       const transition = literalRecord(result?.transition);
       const from = item.presentation?.kind === "coordination-task-move"
@@ -563,47 +587,187 @@ function coordinationActivityPresentation(item: CoordinationTranscriptItem): {
       const to = item.presentation?.kind === "coordination-task-move"
         ? item.presentation.toColumnId
         : literalString(transition?.toColumnId) ?? literalString(arguments_?.destinationColumnId);
-      header = from === undefined
-        ? `Move current task to ${to === undefined ? "requested column" : humanizeIdentifier(to)}`
-        : `Move current task from ${humanizeIdentifier(from)} to ${to === undefined ? "requested column" : humanizeIdentifier(to)}`;
-      move = {
-        ...(from === undefined ? {} : { from: humanizeIdentifier(from) }),
-        to: to === undefined ? "Requested column" : humanizeIdentifier(to),
-      };
+      action = accessibleLabel = "Move current task";
+      facts = [
+        ...(from === undefined
+          ? []
+          : [{ kind: "value" as const, label: "From", value: humanizeIdentifier(from) }]),
+        { kind: "value", label: "To", value: to === undefined ? "Requested column" : humanizeIdentifier(to) },
+      ];
       break;
     }
     case "create_child_task": {
       const task = literalRecord(result?.task);
-      const childId = literalString(task?.id);
-      const title = literalString(task?.title) ?? literalString(arguments_?.title);
-      const column = literalString(task?.columnId) ?? literalString(arguments_?.columnId);
-      header = `Create child task${childId === undefined ? "" : ` ${childId}`}${title === undefined ? "" : ` · ${title}`}${column === undefined ? "" : ` in ${humanizeIdentifier(column)}`}`;
+      action = accessibleLabel = "Create child task";
+      facts = childTaskFacts(
+        { ...optionalLiteral("id", task?.id), ...optionalLiteral("title", task?.title ?? arguments_?.title) },
+        literalString(task?.columnId) ?? literalString(arguments_?.columnId),
+      );
       break;
     }
-    case "add_dependency": header = `Add dependency on ${literalString(arguments_?.targetTaskId) ?? "requested task"}`; break;
-    case "report_permission_block":
-      header = "Report permission block";
-      body = literalString(arguments_?.summary);
+    case "add_dependency": {
+      const relationship = literalRecord(result?.relationship);
+      action = accessibleLabel = "Add dependency";
+      facts = dependencyFacts(
+        { ...optionalLiteral("id", relationship?.sourceTaskId) },
+        { ...optionalLiteral("id", relationship?.targetTaskId ?? arguments_?.targetTaskId) },
+      );
       break;
-    default: header = humanizeIdentifier(item.tool);
+    }
+    case "report_permission_block": {
+      action = accessibleLabel = "Report permission block";
+      const reason = literalString(arguments_?.summary);
+      facts = reason === undefined ? [] : [{ kind: "value", label: "Reason", value: reason }];
+      break;
+    }
+    default:
+      action = accessibleLabel = humanizeIdentifier(item.tool);
   }
-  const exceptional = coordinationExceptionalText(item, result);
+  const exceptional = coordinationExceptionalPresentation(item, result);
   return {
-    header: exceptional === undefined ? header : `${header} · ${exceptional}`,
-    ...(body === undefined ? {} : { body }),
-    ...(move === undefined ? {} : { move }),
+    action,
+    accessibleLabel,
+    facts,
     ...(exceptional === undefined ? {} : { exceptional }),
   };
 }
 
-function coordinationExceptionalText(
+function childTaskFacts(task: CoordinationTaskIdentity, columnId: string | undefined): CoordinationActivityFact[] {
+  return [
+    { kind: "task", label: "Created task", task },
+    ...(columnId === undefined
+      ? []
+      : [{ kind: "value" as const, label: "Column", value: humanizeIdentifier(columnId) }]),
+  ];
+}
+
+function dependencyFacts(
+  sourceTask: CoordinationTaskIdentity,
+  targetTask: CoordinationTaskIdentity,
+): CoordinationActivityFact[] {
+  return [
+    { kind: "task", label: "Task", task: sourceTask },
+    { kind: "task", label: "Depends on", task: targetTask },
+  ];
+}
+
+type CoordinationInspectionPresentation = Extract<
+  NonNullable<CoordinationTranscriptItem["presentation"]>,
+  { kind: "coordination-inspection" }
+>;
+
+function coordinationInspectionActivityPresentation(inspection: CoordinationInspectionPresentation): {
+  action: string;
+  facts: CoordinationActivityFact[];
+} {
+  switch (inspection.scope) {
+    case "current-task": {
+      const column = inspection.columnName ??
+        (inspection.columnId === undefined ? undefined : humanizeIdentifier(inspection.columnId));
+      return {
+        action: "Inspect current task",
+        facts: [
+          ...(inspection.taskTitle === undefined
+            ? []
+            : [{ kind: "value" as const, label: "Task", value: inspection.taskTitle }]),
+          ...(column === undefined ? [] : [{ kind: "value" as const, label: "Column", value: column }]),
+        ],
+      };
+    }
+    case "operating-context": {
+      const board = inspection.boardName ??
+        (inspection.boardId === undefined ? undefined : humanizeIdentifier(inspection.boardId));
+      return {
+        action: "Inspect operating context",
+        facts: [
+          { kind: "task", label: "Task", task: { ...optionalLiteral("id", inspection.taskId) } },
+          ...(inspection.processName === undefined ? [] : [{ kind: "value" as const, label: "Process", value: inspection.processName }]),
+          ...(board === undefined ? [] : [{ kind: "value" as const, label: "Board", value: board }]),
+          ...(inspection.owningAgentName === undefined ? [] : [{ kind: "value" as const, label: "Agent", value: inspection.owningAgentName }]),
+        ],
+      };
+    }
+    case "collaborators": {
+      const count = inspection.collaboratorCount;
+      return {
+        action: "List collaborators",
+        facts: count === undefined ? [] : [{ kind: "value", label: "Result", value: `${count} ${count === 1 ? "collaborator" : "collaborators"}` }],
+      };
+    }
+    case "board-summaries": {
+      const boards = inspection.boards.map(({ id, name }) => name ?? humanizeIdentifier(id)).join(", ");
+      return {
+        action: "Summarize boards",
+        facts: boards.length === 0 ? [] : [{ kind: "value", label: "Boards", value: boards }],
+      };
+    }
+    case "archived-tasks": {
+      const count = inspection.taskCount;
+      return {
+        action: "List archived tasks",
+        facts: count === undefined ? [] : [{ kind: "value", label: "Result", value: `${count} archived ${count === 1 ? "task" : "tasks"}` }],
+      };
+    }
+    case "tasks": {
+      const board = inspection.board?.name ??
+        (inspection.board?.id === undefined ? "Requested board" : humanizeIdentifier(inspection.board.id));
+      const columns = inspection.columns.map(({ id, name }) => name ?? humanizeIdentifier(id)).join(", ");
+      return {
+        action: "List tasks",
+        facts: [
+          { kind: "value", label: "Board", value: board },
+          { kind: "value", label: "Columns", value: columns.length === 0 ? "Requested columns" : columns },
+        ],
+      };
+    }
+    case "task":
+      return {
+        action: "Inspect task",
+        facts: [{
+          kind: "task",
+          label: "Task",
+          task: { ...optionalLiteral("id", inspection.taskId), ...optionalLiteral("title", inspection.taskTitle) },
+        }],
+      };
+    case "task-activity":
+      return {
+        action: "Read task activity",
+        facts: [{ kind: "task", label: "Task", task: { ...optionalLiteral("id", inspection.taskId) } }],
+      };
+    case "task-attachments":
+      return {
+        action: "Read task attachments",
+        facts: [{ kind: "task", label: "Task", task: { ...optionalLiteral("id", inspection.taskId) } }],
+      };
+  }
+}
+
+function coordinationExceptionalPresentation(
   item: CoordinationTranscriptItem,
   result: Record<string, unknown> | undefined,
-): string | undefined {
-  if (item.status === "rejected") return `Rejected: ${literalString(result?.reason) ?? "request rejected"}`;
+): { label: "Rejected" | "Failure"; text: string } | undefined {
+  if (item.status === "rejected") {
+    const reason = literalString(result?.reason);
+    return { label: "Rejected", text: reason === undefined ? "The request was rejected." : humanizeIdentifier(reason) };
+  }
   if (item.status !== "failed") return undefined;
   const error = literalRecord(item.error);
-  return `Failed: ${literalString(error?.message) ?? literalString(item.error) ?? "coordination call failed"}`;
+  return {
+    label: "Failure",
+    text: normalizedCoordinationFailure(literalString(error?.message) ?? literalString(item.error)),
+  };
+}
+
+function normalizedCoordinationFailure(diagnostic: string | undefined): string {
+  if (diagnostic === undefined || /^coordination call failed\.?$/iu.test(diagnostic.trim())) {
+    return "The coordination call did not complete.";
+  }
+  return diagnostic.trim().replace(/^failed:\s*/iu, "").replace(/\s+failed\.?$/iu, " did not complete.");
+}
+
+function optionalLiteral<Key extends string>(key: Key, value: unknown): { [Property in Key]?: string } {
+  const string = literalString(value);
+  return string === undefined ? {} : { [key]: string } as { [Property in Key]?: string };
 }
 
 function coordinationResultRecord(value: unknown): Record<string, unknown> | undefined {

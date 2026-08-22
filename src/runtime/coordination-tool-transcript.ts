@@ -4,6 +4,7 @@ export type CoordinationToolSemanticStatus = "rejected";
 
 export function coordinationToolPresentation(
   item: { type: string; [key: string]: unknown },
+  run: { attemptId: string; taskId: string },
 ): CoordinationTranscriptPresentation | undefined {
   if (item.type !== "mcp_tool_call" || item.server !== "coordination") {
     return undefined;
@@ -12,6 +13,102 @@ export function coordinationToolPresentation(
   if (item.tool === "add_comment") {
     const body = stringValue(arguments_?.body);
     return body === undefined ? undefined : { kind: "coordination-comment", body };
+  }
+  if (item.tool === "inspect_operating_context") {
+    const result = coordinationResult(item.result);
+    const process = recordValue(result?.process);
+    const board = recordValue(result?.board);
+    const owningAgent = recordValue(result?.owningAgent);
+    return {
+      kind: "coordination-inspection",
+      scope: "operating-context",
+      attemptId: stringValue(result?.attemptId) ?? run.attemptId,
+      taskId: stringValue(result?.taskId) ?? run.taskId,
+      ...optionalString("processName", process?.name),
+      ...optionalString("boardId", board?.id),
+      ...optionalString("boardName", board?.name),
+      ...optionalString("owningAgentName", owningAgent?.name),
+    };
+  }
+  const result = coordinationResult(item.result);
+  if (item.tool === "summarize_boards") {
+    return {
+      kind: "coordination-inspection",
+      scope: "board-summaries",
+      boards: namedEntities(result?.boards),
+    };
+  }
+  if (item.tool === "list_tasks") {
+    const requestedBoard = stringValue(arguments_?.boardId);
+    const requestedColumns = stringValues(arguments_?.columnIds).map((id) => ({ id }));
+    return {
+      kind: "coordination-inspection",
+      scope: "tasks",
+      ...(requestedBoard === undefined ? {} : { board: { id: requestedBoard } }),
+      columns: requestedColumns,
+    };
+  }
+  if (item.tool === "list_archived_tasks") {
+    const tasks = Array.isArray(result?.tasks) ? result.tasks : undefined;
+    return {
+      kind: "coordination-inspection",
+      scope: "archived-tasks",
+      ...(tasks === undefined ? {} : { taskCount: tasks.length }),
+    };
+  }
+  if (item.tool === "inspect_task" || item.tool === "list_task_activity" || item.tool === "list_task_attachments") {
+    const task = recordValue(result?.task);
+    const scope = item.tool === "inspect_task"
+      ? "task"
+      : item.tool === "list_task_activity" ? "task-activity" : "task-attachments";
+    return {
+      kind: "coordination-inspection",
+      scope,
+      ...optionalString("taskId", task?.id ?? arguments_?.taskId),
+      ...optionalString("taskTitle", task?.title),
+    };
+  }
+  if (item.tool === "list_collaborators") {
+    const collaborators = Array.isArray(result?.collaborators) ? result.collaborators : undefined;
+    return {
+      kind: "coordination-inspection",
+      scope: "collaborators",
+      ...(collaborators === undefined ? {} : { collaboratorCount: collaborators.length }),
+    };
+  }
+  if (item.tool === "inspect_current_task") {
+    const column = recordValue(result?.column);
+    return {
+      kind: "coordination-inspection",
+      scope: "current-task",
+      ...optionalString("taskTitle", result?.title),
+      ...optionalString("boardId", result?.boardId),
+      ...optionalString("columnId", column?.id),
+      ...optionalString("columnName", column?.name),
+    };
+  }
+  if (item.tool === "create_child_task") {
+    const task = taskIdentity(result?.task);
+    return {
+      kind: "coordination-child-task",
+      task: {
+        ...optionalString("id", task?.id),
+        ...optionalString("title", task?.title ?? arguments_?.title),
+      },
+      ...optionalString("columnId", recordValue(result?.task)?.columnId ?? arguments_?.columnId),
+    };
+  }
+  if (item.tool === "add_dependency") {
+    const relationship = recordValue(result?.relationship);
+    return {
+      kind: "coordination-dependency",
+      sourceTask: {
+        id: stringValue(relationship?.sourceTaskId) ?? run.taskId,
+      },
+      targetTask: {
+        ...optionalString("id", relationship?.targetTaskId ?? arguments_?.targetTaskId),
+      },
+    };
   }
   if (item.tool !== "move_current_task") return undefined;
   const transition = recordValue(coordinationResult(item.result)?.transition);
@@ -134,6 +231,42 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function optionalString<Key extends string>(key: Key, value: unknown): { [Property in Key]?: string } {
+  const string = stringValue(value);
+  return string === undefined ? {} : { [key]: string } as { [Property in Key]?: string };
+}
+
+function namedEntity(value: unknown): { id: string; name?: string } | undefined {
+  const record = recordValue(value);
+  const id = stringValue(record?.id);
+  if (id === undefined) return undefined;
+  const name = stringValue(record?.name);
+  return { id, ...(name === undefined ? {} : { name }) };
+}
+
+function taskIdentity(value: unknown): { id?: string; title?: string } | undefined {
+  const record = recordValue(value);
+  if (record === undefined) return undefined;
+  const id = stringValue(record.id);
+  const title = stringValue(record.title);
+  return id === undefined && title === undefined
+    ? undefined
+    : { ...optionalString("id", id), ...optionalString("title", title) };
+}
+
+function namedEntities(value: unknown): Array<{ id: string; name?: string }> {
+  return Array.isArray(value)
+    ? value.flatMap((entry) => {
+        const entity = namedEntity(entry);
+        return entity === undefined ? [] : [entity];
+      })
+    : [];
+}
+
+function stringValues(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0) : [];
 }
 
 function boundedText(value: unknown): string | undefined {

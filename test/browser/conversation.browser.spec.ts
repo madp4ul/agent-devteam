@@ -207,7 +207,8 @@ test("generic MCP calls identify the capability and disclose bounded literal evi
   await calls.nth(2).locator("summary").click();
   await expect(calls.nth(2)).toContainText('"message": "Access denied for **secret**.txt"');
   await expect(calls.nth(2).locator("strong")).toHaveCount(0);
-  await expect(coordination).toContainText("Rejected: duplicate-relationship");
+  await expect(coordination.getByText("Rejected", { exact: true })).toBeVisible();
+  await expect(coordination).toContainText("Duplicate relationship");
   await expect(coordination.locator("details")).toHaveCount(0);
   await expect(coordination).not.toContainText(/Server identifier|Tool identifier|Raw status|Arguments|Result|completed|succeeded/);
 
@@ -242,13 +243,15 @@ test("a known coordination move presents only its domain transition", async ({ p
   await page.goto("/tasks/T-0001");
   await page.getByRole("button", { name: "View conversation" }).click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
-  const move = dialog.getByRole("article", { name: "Move current task from Implementation to Code review" });
+  const move = dialog.getByRole("article", { name: "Move current task" });
 
-  await expect(move).toContainText("Move current task from Implementation to Code review");
-  await expect(move.locator(".coordination-column-name")).toHaveText(["Implementation", "Code review"]);
+  await expect(move.locator(".coordination-activity-title")).toHaveText("Move current task");
+  await expect(move.getByText("From", { exact: true })).toBeVisible();
+  await expect(move.getByText("To", { exact: true })).toBeVisible();
+  await expect(move.locator(".coordination-activity-facts strong")).toHaveText(["Implementation", "Code review"]);
   const moveWeights = await move.evaluate((element) => ({
     action: Number.parseInt(getComputedStyle(element.querySelector(".coordination-activity-title")!).fontWeight, 10),
-    columns: [...element.querySelectorAll(".coordination-column-name")].map((column) =>
+    columns: [...element.querySelectorAll(".coordination-activity-facts strong")].map((column) =>
       Number.parseInt(getComputedStyle(column).fontWeight, 10)),
   }));
   expect(moveWeights.columns.every((weight) => weight > moveWeights.action)).toBe(true);
@@ -257,23 +260,52 @@ test("a known coordination move presents only its domain transition", async ({ p
   await expect(move).not.toContainText(/Server identifier|Tool identifier|Raw status|Arguments|Result|T-0001|completed/);
 });
 
-test("coordination headers include only identifiers explicitly required by each tool", async ({ page }) => {
+test("coordination inspections present authoritative scopes and navigable task references", async ({ page }) => {
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
     const result = await response.json();
     result.conversation.runs[0].transcript.items = [
-      { kind: "mcp", server: "coordination", tool: "inspect_current_task", status: "succeeded", summary: "T-0001: current task inspection" },
-      { kind: "mcp", server: "coordination", tool: "inspect_operating_context", status: "succeeded" },
-      { kind: "mcp", server: "coordination", tool: "list_collaborators", status: "succeeded", summary: "Collaborator directory" },
-      { kind: "mcp", server: "coordination", tool: "summarize_boards", status: "succeeded", summary: "Board summaries" },
-      { kind: "mcp", server: "coordination", tool: "list_archived_tasks", status: "succeeded" },
-      { kind: "mcp", server: "coordination", tool: "inspect_task", status: "succeeded", arguments: { taskId: "T-0042" }, summary: "T-0042: inspect task" },
-      { kind: "mcp", server: "coordination", tool: "list_task_activity", status: "succeeded", arguments: { taskId: "T-0042" }, summary: "T-0042: list task activity" },
-      { kind: "mcp", server: "coordination", tool: "list_task_attachments", status: "succeeded", arguments: { taskId: "T-0042" }, summary: "T-0042: list task attachments" },
-      { kind: "mcp", server: "coordination", tool: "list_tasks", status: "succeeded", arguments: { boardId: "delivery", columnIds: ["implementation", "code-review"] }, summary: "delivery: tasks in implementation, code-review" },
-      { kind: "mcp", server: "coordination", tool: "add_dependency", status: "succeeded", arguments: { targetTaskId: "T-0088" }, summary: "T-0001: dependency on T-0088" },
-      { kind: "mcp", server: "coordination", tool: "create_child_task", status: "succeeded", arguments: { title: "Review API", columnId: "code-review" }, result: { content: [{ type: "text", text: "{\"task\":{\"id\":\"T-0099\",\"title\":\"Review API\",\"columnId\":\"code-review\"}}" }] } },
-      { kind: "mcp", server: "coordination", tool: "report_permission_block", status: "succeeded", arguments: { summary: "Repository write access was denied." }, summary: "T-0001: permission block" },
+      {
+        kind: "mcp", server: "coordination", tool: "inspect_current_task", status: "succeeded",
+        summary: "T-0001: current task inspection",
+        presentation: { kind: "coordination-inspection", scope: "current-task", taskTitle: "Current delivery task", columnName: "Implementation" },
+      },
+      {
+        kind: "mcp", server: "coordination", tool: "inspect_operating_context", status: "succeeded",
+        presentation: { kind: "coordination-inspection", scope: "operating-context", attemptId: "attempt-authoritative", taskId: "T-0042", processName: "Release train", boardName: "Delivery", owningAgentName: "Code Reviewer" },
+      },
+      {
+        kind: "mcp", server: "coordination", tool: "list_collaborators", status: "succeeded", summary: "Collaborator directory",
+        presentation: { kind: "coordination-inspection", scope: "collaborators", collaboratorCount: 2 },
+      },
+      {
+        kind: "mcp", server: "coordination", tool: "summarize_boards", status: "succeeded", summary: "Board summaries",
+        presentation: { kind: "coordination-inspection", scope: "board-summaries", boards: [{ id: "delivery", name: "API Delivery" }, { id: "maintenance", name: "Maintenance" }] },
+      },
+      {
+        kind: "mcp", server: "coordination", tool: "list_archived_tasks", status: "succeeded",
+        presentation: { kind: "coordination-inspection", scope: "archived-tasks", taskCount: 3 },
+      },
+      {
+        kind: "mcp", server: "coordination", tool: "inspect_task", status: "succeeded",
+        arguments: { taskId: "T-requested" }, summary: "T-requested: inspect task",
+        presentation: { kind: "coordination-inspection", scope: "task", taskId: "T-0042", taskTitle: "Authoritative task" },
+      },
+      {
+        kind: "mcp", server: "coordination", tool: "list_task_activity", status: "running",
+        arguments: { taskId: "T-0043" }, summary: "T-0043: list task activity",
+        presentation: { kind: "coordination-inspection", scope: "task-activity", taskId: "T-0043" },
+      },
+      {
+        kind: "mcp", server: "coordination", tool: "list_task_attachments", status: "failed",
+        arguments: { taskId: "T-0044" }, error: { message: "Attachment store unavailable" },
+        presentation: { kind: "coordination-inspection", scope: "task-attachments", taskId: "T-0044" },
+      },
+      {
+        kind: "mcp", server: "coordination", tool: "list_tasks", status: "succeeded",
+        arguments: { boardId: "requested-board", columnIds: ["requested-column"] },
+        presentation: { kind: "coordination-inspection", scope: "tasks", board: { id: "requested-board" }, columns: [{ id: "requested-column" }] },
+      },
     ];
     await route.fulfill({ response, json: result });
   });
@@ -281,25 +313,143 @@ test("coordination headers include only identifiers explicitly required by each 
   await page.goto("/tasks/T-0001");
   await page.getByRole("button", { name: "View conversation" }).click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
-  for (const header of [
-    "Inspect current task",
-    "Inspect operating context",
-    "List collaborators",
-    "Summarize boards",
-    "List archived tasks",
-    "Inspect task T-0042",
-    "List task activity for T-0042",
-    "List task attachments for T-0042",
-    "List tasks in delivery · Implementation, Code review",
-    "Add dependency on T-0088",
-    "Create child task T-0099 · Review API in Code review",
-    "Report permission block",
-  ]) {
-    await expect(dialog.getByRole("article", { name: header })).toContainText(header);
-  }
-  await expect(dialog.locator(".coordination-activity-summary")).toHaveCount(1);
-  await expect(dialog.getByRole("article", { name: "Report permission block" })).toContainText("Repository write access was denied.");
-  await expect(dialog).not.toContainText("T-0001: current task inspection");
+  const currentTask = dialog.getByRole("article", { name: "Inspect current task" });
+  await expect(currentTask.getByText("Task", { exact: true })).toBeVisible();
+  await expect(currentTask.locator("strong")).toHaveText(["Current delivery task", "Implementation"]);
+  const operatingContext = dialog.getByRole("article", { name: "Inspect operating context" });
+  await expect(operatingContext.getByText("Run", { exact: true })).toHaveCount(0);
+  await expect(operatingContext).not.toContainText("attempt-authoritative");
+  const collaborators = dialog.getByRole("article", { name: "List collaborators" });
+  await expect(collaborators.getByText("Result", { exact: true })).toBeVisible();
+  await expect(collaborators.locator("strong")).toHaveText("2 collaborators");
+  const boards = dialog.getByRole("article", { name: "Summarize boards" });
+  await expect(boards.getByText("Boards", { exact: true })).toBeVisible();
+  await expect(boards.locator("strong")).toHaveText("API Delivery, Maintenance");
+  const archived = dialog.getByRole("article", { name: "List archived tasks" });
+  await expect(archived.getByText("Result", { exact: true })).toBeVisible();
+  await expect(archived.locator("strong")).toHaveText("3 archived tasks");
+  const inspectedTask = dialog.getByRole("article", { name: "Inspect task" });
+  const inspectedTaskLink = inspectedTask.getByRole("link", { name: "T-0042 Authoritative task" });
+  await expect(inspectedTaskLink).toHaveAttribute("target", "_blank");
+  await expect(inspectedTaskLink).toHaveAttribute("rel", /noopener/);
+  await expect(inspectedTaskLink.locator("strong")).toHaveText("Authoritative task");
+  const activity = dialog.getByRole("article", { name: "Read task activity" });
+  await expect(activity.getByRole("link", { name: "T-0043" })).toHaveAttribute("target", "_blank");
+  const attachments = dialog.getByRole("article", { name: "Read task attachments" });
+  await expect(attachments.getByText("Failure", { exact: true })).toBeVisible();
+  await expect(attachments).toContainText("Attachment store unavailable");
+  const taskList = dialog.getByRole("article", { name: "List tasks" });
+  await expect(taskList.getByText("Board", { exact: true })).toBeVisible();
+  await expect(taskList.getByText("Columns", { exact: true })).toBeVisible();
+  await expect(taskList.locator("strong")).toHaveText(["Requested board", "Requested column"]);
+  await expect(dialog.getByRole("img", { name: "Coordination action running" })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "Coordination action failed" })).toBeVisible();
+  await expect(dialog.locator(".coordination-activity-summary, .transcript-coordination details")).toHaveCount(0);
+  expect((await dialog.locator(".transcript-coordination").allTextContents()).join(" ")).not.toMatch(
+    /T-0001: current task inspection|T-requested|requested-board|requested-column|completed|succeeded| · /,
+  );
+
+  await inspectedTaskLink.focus();
+  await expect(inspectedTaskLink).toBeFocused();
+  await expect(inspectedTaskLink).toHaveCSS("outline-style", "solid");
+  const currentUrl = page.url();
+  const popupPromise = page.waitForEvent("popup");
+  await inspectedTaskLink.press("Enter");
+  const popup = await popupPromise;
+  await expect(popup).toHaveURL(/\/tasks\/T-0042$/);
+  expect(page.url()).toBe(currentUrl);
+  await popup.close();
+});
+
+test("coordination task actions link complete task identities and separate failures from action text", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.conversation.runs[0].transcript.items = [
+      {
+        kind: "mcp", server: "coordination", tool: "create_child_task", status: "succeeded",
+        presentation: { kind: "coordination-child-task", task: { id: "T-0099", title: "Review API" }, columnId: "code-review" },
+      },
+      {
+        kind: "mcp", server: "coordination", tool: "add_dependency", status: "succeeded",
+        presentation: {
+          kind: "coordination-dependency",
+          sourceTask: { id: "T-0001", title: "Current delivery task" },
+          targetTask: { id: "T-0088", title: "Review the API" },
+        },
+      },
+      {
+        kind: "mcp", server: "coordination", tool: "list_tasks", status: "failed",
+        error: { message: "coordination call failed" },
+        presentation: { kind: "coordination-inspection", scope: "tasks", board: { id: "delivery" }, columns: [{ id: "awaiting-user-approval" }] },
+      },
+    ];
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const child = dialog.getByRole("article", { name: "Create child task" });
+  const childLink = child.getByRole("link", { name: "T-0099 Review API" });
+  await expect(childLink).toHaveAttribute("target", "_blank");
+  await expect(childLink.locator("strong")).toHaveText("Review API");
+  await expect(child.getByText("Column", { exact: true })).toBeVisible();
+  await expect(child.locator("strong").last()).toHaveText("Code review");
+  const dependency = dialog.getByRole("article", { name: "Add dependency" });
+  await expect(dependency.getByRole("link", { name: "T-0001 Current delivery task" })).toHaveAttribute("target", "_blank");
+  await expect(dependency.getByRole("link", { name: "T-0088 Review the API" })).toHaveAttribute("target", "_blank");
+  const failedList = dialog.getByRole("article", { name: "List tasks" });
+  await expect(failedList.getByText("Board", { exact: true })).toBeVisible();
+  await expect(failedList.locator(".coordination-activity-facts strong")).toHaveText(["Delivery", "Awaiting user approval"]);
+  const failure = failedList.locator(".coordination-activity-exception");
+  await expect(failure.getByText("Failure", { exact: true })).toBeVisible();
+  await expect(failure).toContainText("The coordination call did not complete.");
+  expect(((await failure.textContent()) ?? "").match(/fail/giu)).toHaveLength(1);
+});
+
+test("long coordination inspection scopes stay contained at a narrow viewport", async ({ page }) => {
+  const longAttemptId = `attempt-${"authoritative-scope-".repeat(18)}`;
+  const longTaskTitle = `Task-${"unbroken-context-".repeat(18)}`;
+  await page.setViewportSize({ width: 360, height: 720 });
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.conversation.runs[0].transcript.items = [{
+      kind: "mcp",
+      server: "coordination",
+      tool: "inspect_operating_context",
+      status: "succeeded",
+      presentation: {
+        kind: "coordination-inspection",
+        scope: "operating-context",
+        attemptId: longAttemptId,
+        taskId: "T-0042",
+        processName: longTaskTitle,
+        boardName: "API Delivery",
+        owningAgentName: "Code Reviewer",
+      },
+    }];
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const pageScrollWidthBeforeDialog = await page.evaluate(() => document.documentElement.scrollWidth);
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const inspection = dialog.locator(".transcript-coordination");
+  await expect(inspection).toContainText(longAttemptId);
+  await expect(inspection).toContainText(longTaskTitle);
+  const containment = await inspection.evaluate((element) => ({
+    rowOverflow: element.scrollWidth > element.clientWidth,
+    dialogOverflow: element.closest("[role=dialog]")!.scrollWidth > element.closest("[role=dialog]")!.clientWidth,
+    pageScrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(containment).toEqual({
+    rowOverflow: false,
+    dialogOverflow: false,
+    pageScrollWidth: pageScrollWidthBeforeDialog,
+  });
 });
 
 test("a coordination comment renders its Markdown with the timeline disclosure", async ({ page }) => {

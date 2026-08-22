@@ -182,7 +182,10 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           event.type === "item.updated" ||
           event.type === "item.completed"
         ) {
-          upsertToolTranscriptItem(transcript, event.item, event.type, request.task.id);
+          upsertToolTranscriptItem(transcript, event.item, event.type, {
+            attemptId: request.attemptId,
+            taskId: request.task.id,
+          });
           this.#remember(request.attemptId, transcript);
           const coordinationCall = coordinationToolCall(event.item);
           if (coordinationCall?.status === "failed") {
@@ -348,7 +351,7 @@ function replacementRequest(request: AgentRunRequest): AgentRunRequest {
 function toolTranscriptItem(
   item: { type: string; [key: string]: unknown },
   eventType: "item.started" | "item.updated" | "item.completed",
-  currentTaskId: string,
+  run: { attemptId: string; taskId: string },
 ): AttemptTranscriptItem {
   if (item.type === "error") {
     const text = typeof item.message === "string"
@@ -378,8 +381,8 @@ function toolTranscriptItem(
     };
   }
   if (item.type === "mcp_tool_call" && typeof item.server === "string" && typeof item.tool === "string") {
-    const summary = summarizeCoordinationTool(item, status, currentTaskId);
-    const presentation = coordinationToolPresentation(item);
+    const summary = summarizeCoordinationTool(item, status, run.taskId);
+    const presentation = coordinationToolPresentation(item, run);
     return {
       ...(typeof item.id === "string" ? { id: item.id } : {}),
       kind: "mcp",
@@ -410,9 +413,9 @@ function upsertToolTranscriptItem(
   transcript: AttemptTranscriptItem[],
   item: { type: string; [key: string]: unknown },
   eventType: "item.started" | "item.updated" | "item.completed",
-  currentTaskId: string,
+  run: { attemptId: string; taskId: string },
 ): void {
-  const next = toolTranscriptItem(item, eventType, currentTaskId);
+  const next = toolTranscriptItem(item, eventType, run);
   const itemId = "id" in next ? next.id : undefined;
   const existingIndex = itemId === undefined
     ? -1

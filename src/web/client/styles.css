@@ -585,9 +585,20 @@ textarea { resize: vertical; line-height: 1.5; }
 .transcript-coordination { min-width: 0; border: 1px solid var(--line); border-left: 4px solid var(--movement-accent); border-radius: .6rem; background: var(--surface-raised); padding: .65rem .75rem; overflow-wrap: anywhere; }
 .coordination-activity-heading { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .75rem; background: inherit; }
 .coordination-activity-heading > strong, .coordination-activity-title { color: var(--text); font-size: .84rem; }
+.coordination-task-reference:focus { outline: 2px solid var(--focus); outline-offset: 2px; }
 .coordination-activity-title { background: inherit; font-weight: 450; }
-.coordination-column-name { color: var(--text); font-weight: 800; }
 .coordination-activity-summary { margin: .35rem 0 0; color: var(--text); font-weight: 650; }
+.coordination-activity-facts { display: flex; min-width: 0; margin: .4rem 0 0; flex-wrap: wrap; gap: .35rem 1rem; }
+.coordination-activity-fact { display: grid; min-width: 0; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: .35rem; }
+.coordination-activity-fact dt, .coordination-activity-exception > span { color: var(--muted); font-size: .68rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.coordination-activity-fact dd { min-width: 0; margin: 0; color: var(--text); font-size: .8rem; }
+.coordination-activity-fact dd > strong, .coordination-task-reference strong { color: var(--text); font-weight: 800; }
+.coordination-task-reference { display: inline; background: var(--surface-raised); overflow-wrap: anywhere; }
+.coordination-task-reference strong { background: inherit; }
+.coordination-task-id { color: var(--muted); font-size: .74rem; font-weight: 600; }
+.coordination-activity-exception { display: flex; min-width: 0; margin: .4rem 0 0; align-items: baseline; gap: .35rem; color: var(--failure-text); font-size: .8rem; }
+.coordination-activity-exception > span { color: currentcolor; }
+.coordination-activity-exception strong { overflow-wrap: anywhere; }
 .coordination-activity-actions { display: inline-flex; align-items: center; gap: .45rem; }
 .coordination-comment .authored-text { margin-top: .4rem; }
 .transcript-tool { min-width: 0; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); padding: .38rem .6rem; overflow-wrap: anywhere; }

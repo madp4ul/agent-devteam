@@ -323,6 +323,24 @@ test("conversation message, command, and MCP stream remains readable in both app
         status: "rejected",
         rawStatus: "completed",
         summary: "T-0001: dependency on T-0002 · Rejected: duplicate-relationship",
+        presentation: {
+          kind: "coordination-dependency",
+          sourceTask: { id: "T-0001" },
+          targetTask: { id: "T-0002" },
+        },
+      },
+      {
+        id: "appearance-coordination-inspection",
+        kind: "mcp",
+        server: "coordination",
+        tool: "inspect_task",
+        status: "succeeded",
+        presentation: {
+          kind: "coordination-inspection",
+          scope: "task",
+          taskId: "T-0002",
+          taskTitle: "Inspect linked evidence",
+        },
       },
     );
     await route.fulfill({ response, json: result });
@@ -336,6 +354,8 @@ test("conversation message, command, and MCP stream remains readable in both app
     const command = dialog.locator(".transcript-command").first();
     const mcp = dialog.locator(".transcript-mcp").first();
     const coordination = dialog.getByRole("article", { name: "Add dependency" });
+    const inspection = dialog.getByRole("article", { name: "Inspect task" });
+    const inspectionLink = inspection.getByRole("link", { name: "T-0002 Inspect linked evidence" });
     const statuses = [
       command.getByRole("img", { name: "Command succeeded" }),
       dialog.getByRole("img", { name: "Command running" }),
@@ -349,7 +369,8 @@ test("conversation message, command, and MCP stream remains readable in both app
     expect(await contrastRatio(message)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(command.locator(".command-title"))).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(mcp.locator(".mcp-title"))).toBeGreaterThanOrEqual(4.5);
-    expect(await contrastRatio(coordination.locator(".coordination-activity-heading strong"))).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(coordination.locator(".coordination-activity-title"))).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(inspectionLink)).toBeGreaterThanOrEqual(4.5);
     for (const status of statuses) expect(await contrastRatio(status)).toBeGreaterThanOrEqual(3);
     await disclosure.hover();
     await expect(disclosureIcon).toHaveCSS("stroke", theme === "dark" ? "rgb(114, 214, 159)" : "rgb(23, 78, 58)");
@@ -367,6 +388,9 @@ test("conversation message, command, and MCP stream remains readable in both app
       "background-color",
       theme === "dark" ? "rgb(10, 16, 13)" : "rgb(23, 33, 29)",
     );
+    await inspectionLink.focus();
+    await expect(inspectionLink).toBeFocused();
+    await expect(inspectionLink).toHaveCSS("outline-style", "solid");
     await dialog.getByRole("button", { name: "Close conversation" }).click();
   }
 });
