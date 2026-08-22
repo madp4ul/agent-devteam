@@ -404,7 +404,7 @@ test("conversation dialog contains focus, closes with Escape, and restores its o
   await expect(close).toBeFocused();
   await dialog.getByRole("textbox", { name: "Follow-up message" }).focus();
   await page.keyboard.press("Tab");
-  await expect(dialog.getByRole("button", { name: "Retire conversation" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "More conversation actions" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(opener).toBeFocused();
@@ -849,18 +849,30 @@ test("a settled conversation can be retired by keyboard and remains visible in d
   const row = conversations.getByTitle("Inspect existing coordination", { exact: true });
   await row.click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
-  const retire = dialog.getByRole("button", { name: "Retire conversation" });
-  await expect(retire).toBeEnabled();
+  const actions = dialog.getByRole("button", { name: "More conversation actions" });
+  await actions.click();
+  const retire = dialog.getByRole("menuitem", { name: "Retire conversation" });
+  await expect(retire).toHaveAttribute("aria-disabled", "false");
   await retire.click();
-  const reasonBox = dialog.getByRole("textbox", { name: "Reason for retirement" });
+  const retirementDialog = page.getByRole("dialog", { name: "Retire conversation?" });
+  const reasonBox = retirementDialog.getByRole("textbox", { name: "Reason for retirement" });
   await expect(reasonBox).toBeFocused();
   await reasonBox.fill(reason);
   await reasonBox.press("Tab");
   await page.keyboard.press("Tab");
-  await expect(dialog.getByRole("button", { name: "Confirm retirement" })).toBeFocused();
+  await expect(retirementDialog.getByRole("button", { name: "Retire conversation" })).toBeFocused();
   await page.keyboard.press("Enter");
+  await expect(retirementDialog).toBeHidden();
   await expect(dialog.getByRole("note")).toContainText(reason);
-  await expect(dialog).toContainText("This conversation is retired");
+  await actions.click();
+  const unavailableRetirement = dialog.getByRole("menuitem", { name: "Retire conversation" });
+  await expect(unavailableRetirement).toHaveAttribute("aria-disabled", "true");
+  await expect(unavailableRetirement).toHaveAttribute(
+    "title",
+    "This conversation is retired. Ordinary activations will not return to it.",
+  );
+  await page.keyboard.press("Escape");
+  await expect(actions).toBeFocused();
   await expect(dialog.getByRole("textbox", { name: "Follow-up message" })).toBeEnabled();
   await dialog.getByRole("button", { name: "Close conversation" }).click();
 

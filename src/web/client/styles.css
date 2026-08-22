@@ -274,6 +274,8 @@ input, textarea, select { width: 100%; border: 1px solid #cbd2cc; border-radius:
 .modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
 .icon-button { display: grid; width: 2.35rem; height: 2.35rem; place-items: center; border-radius: 50%; color: var(--ink); background: #e9ede7; padding: 0; font-size: 1.45rem; }
 .icon-button svg { display: block; width: 1.1rem; height: 1.1rem; fill: none; stroke: currentcolor; stroke-linecap: round; stroke-width: 2; }
+.icon-button.more-actions-icon-button svg { fill: currentcolor; stroke: none; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 form { display: grid; gap: 1rem; }
 form label { display: grid; gap: .42rem; color: #435049; font-size: .8rem; font-weight: 800; }
 textarea { resize: vertical; line-height: 1.5; }
@@ -529,13 +531,20 @@ textarea { resize: vertical; line-height: 1.5; }
 .conversation-origin-summary { margin: 0; color: var(--muted); font-size: .78rem; white-space: nowrap; }
 .conversation-origin-summary span { font-weight: 700; }
 .transcript-header-actions { display: flex; max-width: 100%; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .6rem; }
-.conversation-retire-action { border: 0; color: var(--muted); background: transparent; padding: .35rem .2rem; font-size: .78rem; }
-.conversation-retire-action:hover:not(:disabled) { color: var(--text); background: transparent; text-decoration: underline; }
-.conversation-retirement-availability { margin: 0; color: var(--muted); font-size: .78rem; }
-.conversation-retirement-form, .conversation-retirement-marker { display: grid; gap: .55rem; border: 1px solid var(--line); border-radius: .65rem; padding: .85rem; background: var(--surface-subtle); }
-.conversation-retirement-form p, .conversation-retirement-marker p { margin: 0; }
-.conversation-retirement-form textarea { min-height: 5rem; resize: vertical; }
+.conversation-actions-menu { position: relative; }
+.conversation-actions-options { position: absolute; z-index: 5; top: calc(100% + .4rem); right: 0; display: grid; min-width: 13rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); padding: .35rem; box-shadow: var(--shadow); }
+.conversation-actions-options button { width: 100%; border-radius: .4rem; color: var(--ink); background: transparent; padding: .55rem .65rem; text-align: left; white-space: nowrap; }
+.conversation-actions-options button:hover { background: var(--surface-hover); }
+.conversation-actions-options .conversation-retire-menu-item { color: var(--danger); }
+.conversation-actions-options button[aria-disabled="true"] { color: var(--muted); cursor: not-allowed; opacity: .65; }
+.conversation-actions-options button[aria-disabled="true"]:hover { background: transparent; }
+.conversation-retirement-marker { display: grid; gap: .55rem; border: 1px solid var(--line); border-radius: .65rem; padding: .85rem; background: var(--surface-subtle); }
+.conversation-retirement-marker p { margin: 0; }
 .conversation-retirement-marker small { color: var(--muted); }
+.retirement-confirmation { width: min(34rem, 100%); }
+.retirement-confirmation-copy { display: grid; gap: .55rem; }
+.retirement-confirmation-copy p { margin: 0; color: var(--muted); }
+.retirement-confirmation textarea { min-height: 5rem; resize: vertical; }
 .token-usage { display: flex; align-items: center; gap: .35rem; min-height: 2.35rem; border: 1px solid var(--line); border-radius: .55rem; color: var(--muted); background: var(--paper); padding: .35rem .55rem; font-size: .78rem; white-space: nowrap; }
 .token-usage strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 .transcript-content { display: grid; min-width: 0; gap: .8rem; overflow-y: auto; overscroll-behavior-y: contain; padding-right: .3rem; }
@@ -729,6 +738,10 @@ html[data-theme="dark"] button.markdown-copy-button.copied { border-color: var(-
 html[data-theme] .conversation-index-row { color: var(--text); background: transparent; }
 html[data-theme] .conversation-index-row:hover:not(:disabled) { border-color: var(--border); color: var(--text); background: var(--surface-hover); }
 html[data-theme] .conversation-index-row:focus-visible { outline-color: var(--info-text); }
+html[data-theme] .conversation-actions-options button { color: var(--text); background: transparent; }
+html[data-theme] .conversation-actions-options button:hover { background: var(--surface-hover); }
+html[data-theme] .conversation-actions-options .conversation-retire-menu-item { color: var(--danger); background: transparent; }
+html[data-theme] .conversation-actions-options button[aria-disabled="true"] { color: var(--text-muted); background: transparent; }
 
 @media (max-width: 760px) {
   .theme-control { width: 100%; }

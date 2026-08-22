@@ -187,6 +187,41 @@ test("conversation index remains quiet and readable in dark and light appearance
   }
 });
 
+test("conversation overflow icon is centered and retirement confirmation stays compact in both appearances", async ({ page }) => {
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).first().click();
+  const conversation = page.getByRole("dialog", { name: "Agent conversation" });
+  const actions = conversation.getByRole("button", { name: "More conversation actions" });
+
+  const [buttonBounds, iconBounds] = await Promise.all([
+    actions.boundingBox(),
+    actions.locator("svg").boundingBox(),
+  ]);
+  expect(buttonBounds).not.toBeNull();
+  expect(iconBounds).not.toBeNull();
+  expect(Math.abs((buttonBounds!.x + buttonBounds!.width / 2) - (iconBounds!.x + iconBounds!.width / 2))).toBeLessThan(1);
+  expect(Math.abs((buttonBounds!.y + buttonBounds!.height / 2) - (iconBounds!.y + iconBounds!.height / 2))).toBeLessThan(1);
+
+  for (const theme of ["dark", "light"] as const) {
+    await page.evaluate((selectedTheme) => {
+      document.documentElement.dataset.theme = selectedTheme;
+    }, theme);
+    await actions.click();
+    const retire = conversation.getByRole("menuitem", { name: "Retire conversation" });
+    await expect(retire).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await retire.click();
+    const confirmation = page.getByRole("dialog", { name: "Retire conversation?" });
+    const bounds = await confirmation.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.width).toBeLessThanOrEqual(544);
+    await expect(confirmation.getByRole("button", { name: "Cancel" })).toHaveCSS(
+      "background-color",
+      theme === "dark" ? "rgb(42, 53, 47)" : "rgb(233, 237, 231)",
+    );
+    await confirmation.getByRole("button", { name: "Cancel" }).click();
+  }
+});
+
 test("conversation status dots remain distinct in dark and light appearances", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();

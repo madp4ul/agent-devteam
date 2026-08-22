@@ -232,12 +232,12 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await attemptEntry.getByRole("button", { name: "View conversation" }).click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   await expect(dialog.locator(".conversation-run.selected-run")).toContainText("Run 1 · completed");
-  const copyThreadId = dialog.getByRole("button", { name: "Copy thread ID" });
+  const moreActions = dialog.getByRole("button", { name: "More conversation actions" });
   const closeTranscript = dialog.getByRole("button", { name: "Close conversation" });
   const tokenUsage = dialog.getByRole("region", { name: "Token usage" });
   const [usageBox, copyBox, closeBox] = await Promise.all([
     tokenUsage.boundingBox(),
-    copyThreadId.boundingBox(),
+    moreActions.boundingBox(),
     closeTranscript.boundingBox(),
   ]);
   expect(usageBox).not.toBeNull();
@@ -262,7 +262,12 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await dialog.locator(".transcript-command summary").click();
   await expect(dialog).toContainText("pnpm test");
   await expect(dialog).toContainText("output truncated");
-  await expect(copyThreadId).toBeVisible();
+  await moreActions.click();
+  await dialog.getByRole("menuitem", { name: "Copy thread ID" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("thread-browser-123");
+  await expect(dialog.getByRole("menuitem", { name: "Copied" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(moreActions).toBeFocused();
   const taskScrollPosition = await page.evaluate(() => {
     window.scrollTo(0, 240);
     return window.scrollY;

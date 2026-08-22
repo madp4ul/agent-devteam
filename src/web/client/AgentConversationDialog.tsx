@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import type {
   AgentConversationView,
@@ -13,6 +13,7 @@ import { errorMessage } from "./feedback.ts";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { MarkdownContent } from "./MarkdownContent.tsx";
 import { Modal } from "./Modal.tsx";
+import { MoreActionsIconButton } from "./MoreActionsIconButton.tsx";
 
 const ACTIVE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 1_000;
 const IDLE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 2_000;
@@ -50,6 +51,8 @@ export function AgentConversationDialog({
   const [refreshVersion, setRefreshVersion] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const moreActionsButtonRef = useRef<HTMLButtonElement>(null);
+  const retirementReasonRef = useRef<HTMLTextAreaElement>(null);
   const pendingScrollPosition = useRef<number | "bottom" | null>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   const retirementIdempotencyKey = useRef(crypto.randomUUID());
@@ -175,8 +178,15 @@ export function AgentConversationDialog({
       setRetirementSubmitting(false);
     }
   };
+  const closeRetirement = (): void => {
+    if (retirementSubmitting) return;
+    setRetirementOpen(false);
+    setRetirementError(undefined);
+    window.requestAnimationFrame(() => moreActionsButtonRef.current?.focus());
+  };
 
   return (
+    <>
     <Modal
       labelledBy="conversation-title"
       className="transcript-modal"
@@ -200,20 +210,18 @@ export function AgentConversationDialog({
             )}
           </div>
           <div className="transcript-header-actions">
-            {conversation === undefined ? null : (
-              <button
-                type="button"
-                className="conversation-retire-action"
-                disabled={!conversation.retirementAvailability.available}
-                aria-describedby="conversation-retirement-availability"
-                onClick={() => setRetirementOpen(true)}
-              >
-                Retire conversation
-              </button>
-            )}
-            {conversation?.currentThreadId == null
-              ? null
-              : <CopyThreadIdButton threadId={conversation.currentThreadId} />}
+            {conversation === undefined ? null : <ConversationActionsMenu
+              buttonRef={moreActionsButtonRef}
+              threadId={conversation.currentThreadId}
+              retirementAvailable={conversation.retirementAvailability.available}
+              retirementUnavailableMessage={conversation.retirementAvailability.available
+                ? undefined
+                : retirementAvailabilityMessage(conversation)}
+              onRetire={() => {
+                setRetirementError(undefined);
+                setRetirementOpen(true);
+              }}
+            />}
             <CloseIconButton buttonRef={closeButtonRef} label="Close conversation" onClick={onClose} />
           </div>
         </header>
@@ -346,41 +354,6 @@ export function AgentConversationDialog({
             ))}
           </>)}
           {conversation === undefined ? null : (
-            <>
-            <p id="conversation-retirement-availability" className="conversation-retirement-availability">
-              {retirementAvailabilityMessage(conversation)}
-            </p>
-            {retirementOpen ? (
-              <form
-                className="conversation-retirement-form"
-                aria-label="Retire conversation"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void submitRetirement();
-                }}
-              >
-                <p>
-                  Ordinary activations will stop reusing this conversation. The next ordinary activation will create a replacement; this history remains readable and explicitly continuable.
-                </p>
-                <label htmlFor={`conversation-retirement-reason-${conversation.id}`}>Reason for retirement</label>
-                <textarea
-                  id={`conversation-retirement-reason-${conversation.id}`}
-                  rows={3}
-                  value={retirementReason}
-                  disabled={retirementSubmitting}
-                  onChange={(event) => setRetirementReason(event.target.value)}
-                  autoFocus
-                  required
-                />
-                {retirementError === undefined ? null : <p className="unavailable" role="alert">{retirementError}</p>}
-                <div className="conversation-composer-actions">
-                  <button type="button" className="secondary" disabled={retirementSubmitting} onClick={() => setRetirementOpen(false)}>Cancel</button>
-                  <button type="submit" disabled={retirementReason.trim().length === 0 || retirementSubmitting}>
-                    {retirementSubmitting ? "Retiring…" : "Confirm retirement"}
-                  </button>
-                </div>
-              </form>
-            ) : null}
             <form
               className="conversation-composer"
               aria-label="Continue conversation"
@@ -407,10 +380,55 @@ export function AgentConversationDialog({
                 </button>
               </div>
             </form>
-            </>
           )}
         </div>
     </Modal>
+    {conversation === undefined || !retirementOpen ? null : (
+      <Modal
+        labelledBy="retirement-confirmation-title"
+        className="retirement-confirmation"
+        initialFocusRef={retirementReasonRef}
+        onClose={closeRetirement}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitRetirement();
+          }}
+        >
+          <div className="retirement-confirmation-copy">
+            <h2 id="retirement-confirmation-title">Retire conversation?</h2>
+            <p>
+              Ordinary activations will stop reusing this conversation. Its history will remain readable and explicitly continuable.
+            </p>
+          </div>
+          <label htmlFor={`conversation-retirement-reason-${conversation.id}`}>
+            Reason for retirement
+            <textarea
+              ref={retirementReasonRef}
+              id={`conversation-retirement-reason-${conversation.id}`}
+              rows={3}
+              value={retirementReason}
+              disabled={retirementSubmitting}
+              onChange={(event) => setRetirementReason(event.target.value)}
+              required
+            />
+          </label>
+          {retirementError === undefined ? null : <p className="unavailable" role="alert">{retirementError}</p>}
+          <div className="dialog-actions">
+            <button type="button" className="secondary" disabled={retirementSubmitting} onClick={closeRetirement}>Cancel</button>
+            <button
+              type="submit"
+              className="destructive"
+              disabled={retirementReason.trim().length === 0 || retirementSubmitting}
+            >
+              {retirementSubmitting ? "Retiring…" : "Retire conversation"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    )}
+    </>
   );
 }
 
@@ -490,14 +508,106 @@ function TokenUsageSummary({ usage }: { usage: AttemptTokenUsage }): ReactNode {
   );
 }
 
-function CopyThreadIdButton({ threadId }: { threadId: string }): ReactNode {
+function ConversationActionsMenu({
+  buttonRef,
+  threadId,
+  retirementAvailable,
+  retirementUnavailableMessage,
+  onRetire,
+}: {
+  buttonRef: RefObject<HTMLButtonElement | null>;
+  threadId?: string | null;
+  retirementAvailable: boolean;
+  retirementUnavailableMessage?: string | undefined;
+  onRetire(): void;
+}): ReactNode {
+  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const firstItemRef = useRef<HTMLButtonElement>(null);
+
+  useLayoutEffect(() => {
+    if (open) firstItemRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsidePointer = (event: PointerEvent): void => {
+      if (event.target instanceof Node && !containerRef.current?.contains(event.target)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [buttonRef, open]);
+
   return (
-    <button
-      className="secondary"
-      onClick={() => void navigator.clipboard.writeText(threadId).then(() => setCopied(true))}
-    >
-      {copied ? "Copied" : "Copy thread ID"}
-    </button>
+    <div ref={containerRef} className="conversation-actions-menu">
+      <MoreActionsIconButton
+        buttonRef={buttonRef}
+        expanded={open}
+        label="More conversation actions"
+        onClick={() => setOpen((current) => !current)}
+      />
+      {open ? (
+        <div
+          className="conversation-actions-options"
+          role="menu"
+          aria-label="Conversation actions"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              setOpen(false);
+              buttonRef.current?.focus();
+              return;
+            }
+            if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+            const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+            const nextIndex = event.key === "Home" ? 0
+              : event.key === "End" ? items.length - 1
+              : event.key === "ArrowDown" ? (currentIndex + 1) % items.length
+              : (currentIndex - 1 + items.length) % items.length;
+            items[nextIndex]?.focus();
+          }}
+        >
+          {threadId == null ? null : (
+            <button
+              ref={firstItemRef}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                void navigator.clipboard.writeText(threadId).then(() => setCopied(true));
+              }}
+            >
+              {copied ? "Copied" : "Copy thread ID"}
+            </button>
+          )}
+          <button
+            ref={threadId == null ? firstItemRef : undefined}
+            type="button"
+            role="menuitem"
+            className="conversation-retire-menu-item"
+            aria-disabled={!retirementAvailable}
+            aria-describedby={!retirementAvailable ? "conversation-retirement-unavailable" : undefined}
+            title={retirementUnavailableMessage}
+            onClick={() => {
+              if (!retirementAvailable) return;
+              setOpen(false);
+              onRetire();
+            }}
+          >
+            Retire conversation
+          </button>
+          {retirementAvailable || retirementUnavailableMessage === undefined ? null : (
+            <span id="conversation-retirement-unavailable" className="visually-hidden">
+              {retirementUnavailableMessage}
+            </span>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
