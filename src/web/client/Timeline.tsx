@@ -9,6 +9,7 @@ import type {
   TaskActivityView,
   TaskCommentView,
   TaskRelationshipView,
+  UserTimelineRelatedTaskView,
 } from "../../application/browser-transport-contract.ts";
 import { findParticipantMentions } from "../../application/participant-mentions.ts";
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
@@ -22,7 +23,7 @@ import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-
 
 type TimelineAgent = Pick<CollaboratorView, "id" | "name">;
 type TimelineColumn = Pick<ProcessColumnView, "id" | "name">;
-type TimelineTask = { id: string; title: string };
+type TimelineTask = UserTimelineRelatedTaskView;
 type ConversationSelection = {
   conversationId: string;
   selectedAttemptRunning: boolean;
@@ -642,7 +643,13 @@ function activityDescription(activity: TaskActivityView, columns: TimelineColumn
 type RelationshipActivityEvent = "created" | "removed" | "satisfied";
 type RelationshipActivityRole = "source" | "target";
 type RelationshipPresentationText = { label: string; prefix: string; suffix: string };
-type RelationshipPresentation = RelationshipPresentationText & { taskId?: string; taskName: string };
+type RelationshipPresentation = RelationshipPresentationText & {
+  taskId?: string;
+  taskName: string;
+  available: boolean;
+  completed: boolean;
+  archived: boolean;
+};
 type DirectionalRelationshipKey = `${TaskRelationshipView["type"]}:${RelationshipActivityRole}:${RelationshipActivityEvent}`;
 
 const directionalRelationshipPresentations = {
@@ -672,7 +679,7 @@ function relationshipActivityPresentation(
 
   const relatedTaskId = activity.details.relatedTaskId;
   const relatedTask = tasks.find((task) => task.id === relatedTaskId);
-  const taskName = relatedTask?.title ?? relatedTaskId ?? "the related task";
+  const taskName = relatedTask?.available === true ? relatedTask.title : relatedTaskId ?? "the related task";
   const relationshipType = activity.details.relationshipType;
   const role = activity.details.relationshipRole;
   if (relationshipType !== "dependency" && relationshipType !== "parent-child") return undefined;
@@ -682,6 +689,9 @@ function relationshipActivityPresentation(
     ...directionalRelationshipPresentations[`${relationshipType}:${role}:${event}`],
     ...(relatedTaskId === undefined ? {} : { taskId: relatedTaskId }),
     taskName,
+    available: relatedTask?.available === true,
+    completed: relatedTask?.available === true && relatedTask.completed,
+    archived: relatedTask?.available === true && relatedTask.archived,
   };
 }
 
@@ -689,7 +699,7 @@ function relationshipDescription(presentation: RelationshipPresentation): ReactN
   return (
     <>
       {presentation.prefix}
-      {presentation.taskId === undefined ? (
+      {presentation.taskId === undefined || !presentation.available ? (
         <strong className="relationship-task-name">{presentation.taskName}</strong>
       ) : (
         <a
@@ -701,6 +711,9 @@ function relationshipDescription(presentation: RelationshipPresentation): ReactN
           {presentation.taskName}
         </a>
       )}
+      {!presentation.available && presentation.taskId !== undefined ? " (currently unavailable)" : null}
+      {presentation.completed ? " (completed)" : null}
+      {presentation.archived ? " (archived)" : null}
       {presentation.suffix}
     </>
   );

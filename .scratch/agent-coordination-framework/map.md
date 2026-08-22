@@ -238,6 +238,10 @@ without choosing the implementation yet.
 - [Link Relationship Timeline Events to Related Tasks](./issues/65-link-relationship-events-to-tasks.md)
   — Make child, dependency, and other relationship events navigate directly to
   the related task, including from historical entries.
+  **Resolved:** Timeline relationship history now links every inspectable
+  child, parent, dependency, and blocking target after creation or removal,
+  discloses completed and archived state, and presents unavailable IDs without
+  dead navigation while preserving attempt grouping.
 - [Render Markdown in Task Descriptions and Timeline Comments](./issues/66-render-task-markdown.md)
   — Safely render a defined Markdown subset while preserving mentions,
   authored source, compact previews, and responsive layout.

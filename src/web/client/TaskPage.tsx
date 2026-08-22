@@ -330,7 +330,7 @@ export function TaskPage({
                 activations={task.activations}
                 agents={detail.collaborators}
                 columns={board.columns}
-                tasks={detail.relationshipTasks}
+                tasks={detail.timelineRelationshipTasks}
                 unresolvedAttention={inspection.unresolvedAttention}
                 transcriptsAvailable={!task.archived}
                 onAttentionChanged={refresh}

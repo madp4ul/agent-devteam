@@ -304,9 +304,10 @@ textarea { resize: vertical; line-height: 1.5; }
 .detail-primary-column, .detail-column { display: grid; align-content: start; gap: 1rem; min-width: 0; }
 .comment-timeline-flow { display: grid; align-content: start; min-width: 0; --comment-composer-height: 0px; --comment-safe-area-inset-bottom: env(safe-area-inset-bottom); }
 .comment-timeline-flow > [data-task-section="comment"], .comment-timeline-flow > [data-task-section="timeline"] { grid-area: 1 / 1; min-width: 0; }
-.comment-timeline-flow > [data-task-section="comment"] { z-index: 10; height: var(--comment-composer-height); align-self: start; overflow-anchor: none; }
+.comment-timeline-flow > [data-task-section="comment"] { z-index: 10; height: var(--comment-composer-height); align-self: start; overflow-anchor: none; pointer-events: none; }
 .comment-timeline-flow > [data-task-section="timeline"] { padding-bottom: calc(var(--comment-composer-height) + 1rem); }
-.comment-timeline-flow .detail-panel.comment-panel { position: relative; border-bottom: 0; border-radius: .85rem .85rem 0 0; background: color-mix(in srgb, var(--surface) 82%, transparent); padding-bottom: calc(1.3rem + var(--comment-safe-area-inset-bottom)); box-shadow: 0 -12px 32px var(--shadow-color); backdrop-filter: blur(10px) saturate(1.08); }
+.comment-timeline-flow .detail-panel.comment-panel { position: relative; border-bottom: 0; border-radius: .85rem .85rem 0 0; background: color-mix(in srgb, var(--surface) 82%, transparent); padding-bottom: calc(1.3rem + var(--comment-safe-area-inset-bottom)); box-shadow: 0 -12px 32px var(--shadow-color); backdrop-filter: blur(10px) saturate(1.08); pointer-events: none; }
+.comment-timeline-flow .comment-panel textarea, .comment-timeline-flow .comment-panel button, .comment-timeline-flow .comment-panel .mention-options { pointer-events: auto; }
 .comment-timeline-flow .detail-panel.comment-panel.comment-panel-docked { position: fixed; z-index: 10; right: auto; bottom: 0; left: var(--comment-composer-left); width: var(--comment-composer-width); }
 .comment-panel > h2 { position: relative; top: -.5rem; }
 .detail-panel, .move-panel, .timeline-section { border: 1px solid var(--line); border-radius: .85rem; background: var(--paper); padding: 1.3rem; box-shadow: 0 5px 18px rgb(20 34 28 / 4%); }

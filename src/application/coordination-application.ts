@@ -91,6 +91,7 @@ import type {
 import type { UserBoardProjection } from "./user-board-contract.ts";
 import type {
   UserRelatedTaskView,
+  UserTimelineRelatedTaskView,
   UserTaskDetailQueryResult,
 } from "./user-task-detail-contract.ts";
 
@@ -506,6 +507,7 @@ export class CoordinationApplication {
       ...loaded,
       inspection: inspection.task,
       relationshipTasks: this.readUserRelatedTasks(loaded.task),
+      timelineRelationshipTasks: this.readUserTimelineRelatedTasks(loaded.task),
       activeRun: activeRuns.find((run) => run.taskId === taskId) ?? null,
       activeRuns,
       automation: this.queryAutomation(),
@@ -516,15 +518,9 @@ export class CoordinationApplication {
   }
 
   private readUserRelatedTasks(task: TaskView): UserRelatedTaskView[] {
-    const relatedTaskIds = new Set([
-      ...task.relationships.map((relationship) => relationship.sourceTaskId === task.id
-        ? relationship.targetTaskId
-        : relationship.sourceTaskId),
-      ...task.activity.flatMap((activity) => {
-        const relatedTaskId = activity.details.relatedTaskId;
-        return relatedTaskId === undefined ? [] : [relatedTaskId];
-      }),
-    ]);
+    const relatedTaskIds = new Set(task.relationships.map((relationship) => relationship.sourceTaskId === task.id
+      ? relationship.targetTaskId
+      : relationship.sourceTaskId));
     return [...relatedTaskIds].flatMap((relatedTaskId) => {
       const related = this.queryTask(relatedTaskId);
       const relatedInspection = this.queryTaskInspectionForUser(relatedTaskId);
@@ -538,6 +534,25 @@ export class CoordinationApplication {
         blocking: relatedInspection.task.blocking,
         ...(related.task.archived ? { archived: true as const } : {}),
       }];
+    });
+  }
+
+  private readUserTimelineRelatedTasks(task: TaskView): UserTimelineRelatedTaskView[] {
+    const relatedTaskIds = new Set(task.activity.flatMap((activity) => {
+      const relatedTaskId = activity.details.relatedTaskId;
+      return relatedTaskId === undefined ? [] : [relatedTaskId];
+    }));
+    return [...relatedTaskIds].map((relatedTaskId) => {
+      const related = this.queryTask(relatedTaskId);
+      const inspection = this.queryTaskInspectionForUser(relatedTaskId);
+      if (!related.available || !inspection.available) return { id: relatedTaskId, available: false as const };
+      return {
+        id: relatedTaskId,
+        title: related.task.title,
+        available: true as const,
+        completed: inspection.task.column.id === "completion",
+        archived: related.task.archived === true,
+      };
     });
   }
 

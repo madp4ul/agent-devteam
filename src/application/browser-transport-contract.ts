@@ -70,6 +70,7 @@ export type {
 } from "./user-board-contract.ts";
 export type {
   UserRelatedTaskView,
+  UserTimelineRelatedTaskView,
   UserTaskDetailQueryResult,
   UserTaskDetailView,
 } from "./user-task-detail-contract.ts";

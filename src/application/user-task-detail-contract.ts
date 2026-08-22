@@ -25,6 +25,19 @@ export interface UserRelatedTaskView {
   archived?: true;
 }
 
+export type UserTimelineRelatedTaskView =
+  | {
+      id: string;
+      available: false;
+    }
+  | {
+      id: string;
+      title: string;
+      available: true;
+      completed: boolean;
+      archived: boolean;
+    };
+
 export interface UserTaskDetailView {
   task: TaskView;
   board: BoardView;
@@ -34,6 +47,7 @@ export interface UserTaskDetailView {
   automation: AutomationView;
   collaborators: CollaboratorView[];
   relationshipTasks: UserRelatedTaskView[];
+  timelineRelationshipTasks: UserTimelineRelatedTaskView[];
   startup: StartupView;
   conversations: AgentConversationIndexEntry[];
 }

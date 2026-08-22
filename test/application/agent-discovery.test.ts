@@ -98,12 +98,100 @@ test("the user task-detail projection returns complete browser-ready task contex
     column: { id: "backlog", name: "Backlog" },
     blocking: { blocked: false, blockerTaskIds: [] },
   }]);
+  assert.deepEqual(result.timelineRelationshipTasks, [{
+    id: related.task.id,
+    title: "Related task",
+    available: true,
+    completed: false,
+    archived: false,
+  }]);
   assert.equal(result.conversations.length, 1);
   assert.equal(result.conversations[0]?.owningAgent.id, "implementer");
   assert.deepEqual(application.queryUserTaskDetail("missing-task"), {
     available: false,
     reason: "not-found",
   });
+});
+
+test("the user task-detail projection retains historical timeline targets and reports their honest state", async (t) => {
+  const fixture = await createDiscoveryFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+
+  const primary = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Primary task",
+    description: "Inspect relationship history.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-timeline-primary",
+  });
+  assert.equal(primary.accepted, true);
+  if (!primary.accepted) return;
+
+  const relatedTasks = [
+    ["Completed target", "completed"],
+    ["Archived target", "archived"],
+    ["Unavailable target", "unavailable"],
+  ] as const;
+  const created = relatedTasks.map(([title, key]) => application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title,
+    description: `${title} description.`,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: `create-timeline-${key}`,
+  }));
+  assert.equal(created.every((result) => result.accepted), true);
+  const [completedResult, archivedResult, unavailableResult] = created;
+  if (!completedResult?.accepted || !archivedResult?.accepted || !unavailableResult?.accepted) return;
+  const completed = completedResult.task;
+  const archived = archivedResult.task;
+  const unavailable = unavailableResult.task;
+
+  for (const [index, target] of [completed, archived, unavailable].entries()) {
+    const relationship = application.createTaskRelationship({
+      type: "dependency",
+      sourceTaskId: primary.task.id,
+      targetTaskId: target.id,
+      actor: { kind: "user", id: "paul" },
+      idempotencyKey: `timeline-relationship-${index}`,
+    });
+    assert.equal(relationship.accepted, true);
+    if (!relationship.accepted) return;
+    if (target.id !== completed.id) {
+      assert.equal(application.removeTaskRelationship({
+        taskId: primary.task.id,
+        relationshipId: relationship.relationship.id,
+        actor: { kind: "user", id: "paul" },
+        idempotencyKey: `remove-timeline-relationship-${index}`,
+      }).accepted, true);
+    }
+  }
+  assert.equal(application.moveTask({
+    taskId: completed.id,
+    destinationColumnId: "completion",
+    expectedRevision: completed.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "complete-timeline-target",
+  }).accepted, true);
+
+  const fixtureDatabase = new DatabaseSync(fixture.databasePath);
+  fixtureDatabase.exec("PRAGMA foreign_keys = ON");
+  fixtureDatabase.prepare("UPDATE tasks SET archived_at = ? WHERE id = ?")
+    .run("2026-08-22T10:00:00.000Z", archived.id);
+  fixtureDatabase.prepare("DELETE FROM tasks WHERE id = ?").run(unavailable.id);
+  fixtureDatabase.close();
+
+  const result = application.queryUserTaskDetail(primary.task.id);
+  assert.equal(result.available, true);
+  if (!result.available) return;
+  assert.deepEqual(result.timelineRelationshipTasks, [
+    { id: completed.id, title: "Completed target", available: true, completed: true, archived: false },
+    { id: archived.id, title: "Archived target", available: true, completed: false, archived: true },
+    { id: unavailable.id, available: false },
+  ]);
+  assert.deepEqual(result.relationshipTasks.map(({ id }) => id), [completed.id]);
 });
 
 test("board summaries orient agents without returning task payloads", async (t) => {

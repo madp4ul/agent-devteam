@@ -22,6 +22,94 @@ test("cross-task links in authored and framework history open a new tab", async 
   }
 });
 
+test("relationship history links every direction and reports completed, archived, and unavailable targets", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.timelineRelationshipTasks = [
+      { id: "T-9001", title: "Child target", available: true, completed: false, archived: false },
+      { id: "T-9002", title: "Parent target", available: true, completed: true, archived: false },
+      { id: "T-9003", title: "Dependency target", available: true, completed: false, archived: true },
+      { id: "T-9004", available: false },
+    ];
+    const relationships = [
+      ["parent-child", "source", "T-9001"],
+      ["parent-child", "target", "T-9002"],
+      ["dependency", "source", "T-9003"],
+      ["dependency", "target", "T-9004"],
+    ] as const;
+    for (const [index, [relationshipType, relationshipRole, relatedTaskId]] of relationships.entries()) {
+      for (const [eventIndex, event] of ["created", "removed"].entries()) {
+        detail.task.activity.push({
+          id: `relationship-${index}-${event}`,
+          type: `relationship.${event}`,
+          actor: { kind: "user", id: "paul" },
+          occurredAt: new Date(Date.parse("2026-08-22T10:00:00.000Z") + index * 60_000 + eventIndex * 1_000).toISOString(),
+          details: { relationshipType, relationshipRole, relatedTaskId },
+        });
+      }
+    }
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const timeline = page.getByRole("region", { name: "Task timeline" });
+  for (const label of [
+    "Child task added", "Child task removed",
+    "Parent task added", "Parent task removed",
+    "Dependency added", "Dependency removed",
+    "Blocking dependency added", "Blocking dependency removed",
+  ]) {
+    await expect(timeline.getByText(label, { exact: true }).first()).toBeVisible();
+  }
+  await expect(timeline.getByRole("link", { name: "Child target" })).toHaveCount(2);
+  await expect(timeline.getByRole("link", { name: "Parent target" })).toHaveCount(2);
+  await expect(timeline.getByRole("link", { name: "Dependency target" })).toHaveCount(2);
+  await expect(timeline.getByText("Parent target (completed) was added as the parent task.", { exact: true })).toBeVisible();
+  await expect(timeline.getByText("Now depends on Dependency target (archived).", { exact: true })).toBeVisible();
+  await expect(timeline.getByText("Now blocks T-9004 (currently unavailable).", { exact: true })).toBeVisible();
+  await expect(timeline.getByRole("link", { name: "T-9004" })).toHaveCount(0);
+  await expect(timeline.getByText("T-9004", { exact: true }).first()).toBeVisible();
+});
+
+test("the comment composer does not cover the hit area of the first timeline relationship link", async ({ page }) => {
+  const parentTitle = "Parent task with a timeline link that wraps across more than one visual line";
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.timelineRelationshipTasks.push({
+      id: "T-9005",
+      title: parentTitle,
+      available: true,
+      completed: false,
+      archived: false,
+    });
+    detail.task.activity.push({
+      id: "composer-overlap-parent",
+      type: "relationship.created",
+      actor: { kind: "user", id: "paul" },
+      occurredAt: "2027-08-22T10:00:00.000Z",
+      details: {
+        relationshipType: "parent-child",
+        relationshipRole: "target",
+        relatedTaskId: "T-9005",
+      },
+    });
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const link = page.locator("#timeline-source-composer-overlap-parent").getByRole("link", { name: parentTitle });
+  await link.scrollIntoViewIfNeeded();
+  const hitResults = await link.evaluate((element) => [...element.getClientRects()].flatMap((rect) =>
+    [0.2, 0.8].map((verticalPosition) =>
+      document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height * verticalPosition)?.closest("a") === element,
+    ),
+  ));
+  expect(hitResults.length).toBeGreaterThanOrEqual(2);
+  expect(hitResults.every(Boolean)).toBe(true);
+});
+
 test("rendered Markdown code stays within every authored task surface", async ({ page }) => {
   const unbrokenToken = `https://example.invalid/${"unbroken".repeat(24)}`;
   const codeSource = [
