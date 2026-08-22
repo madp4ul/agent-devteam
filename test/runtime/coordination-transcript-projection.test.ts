@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import {
+  coordinationToolNames,
+  type CoordinationToolName,
+} from "../../src/application/runtime-contract.ts";
 import { coordinationTranscriptItem } from "../../src/runtime/coordination-tool-transcript.ts";
 import { coordinationCall, coordinationResult, transcriptRun } from "../support/coordination-transcript-fixture.ts";
 
@@ -216,31 +220,42 @@ test("a coordination move progresses from requested facts to authoritative facts
 });
 
 test("every known coordination tool has a typed presentation even when evidence is partial or malformed", () => {
-  const mutationTools = new Set([
-    "add_comment",
-    "move_current_task",
-    "create_child_task",
-    "add_dependency",
-    "report_permission_block",
-  ]);
-  const expectedPresentations = new Map<string, { kind: string; scope?: string }>([
-    ["summarize_boards", { kind: "coordination-inspection", scope: "board-summaries" }],
-    ["list_tasks", { kind: "coordination-inspection", scope: "tasks" }],
-    ["list_archived_tasks", { kind: "coordination-inspection", scope: "archived-tasks" }],
-    ["inspect_task", { kind: "coordination-inspection", scope: "task" }],
-    ["list_task_activity", { kind: "coordination-inspection", scope: "task-activity" }],
-    ["list_task_attachments", { kind: "coordination-inspection", scope: "task-attachments" }],
-    ["list_collaborators", { kind: "coordination-inspection", scope: "collaborators" }],
-    ["inspect_current_task", { kind: "coordination-inspection", scope: "current-task" }],
-    ["inspect_operating_context", { kind: "coordination-inspection", scope: "operating-context" }],
-    ["add_comment", { kind: "coordination-comment" }],
-    ["move_current_task", { kind: "coordination-task-move" }],
-    ["create_child_task", { kind: "coordination-child-task" }],
-    ["add_dependency", { kind: "coordination-dependency" }],
-    ["report_permission_block", { kind: "coordination-permission-block" }],
-  ]);
+  const expectedPresentations = {
+    summarize_boards: { kind: "coordination-inspection", scope: "board-summaries" },
+    list_tasks: { kind: "coordination-inspection", scope: "tasks" },
+    list_archived_tasks: { kind: "coordination-inspection", scope: "archived-tasks" },
+    inspect_task: { kind: "coordination-inspection", scope: "task" },
+    list_task_activity: { kind: "coordination-inspection", scope: "task-activity" },
+    list_task_attachments: { kind: "coordination-inspection", scope: "task-attachments" },
+    list_collaborators: { kind: "coordination-inspection", scope: "collaborators" },
+    inspect_current_task: { kind: "coordination-inspection", scope: "current-task" },
+    inspect_operating_context: { kind: "coordination-inspection", scope: "operating-context" },
+    add_comment: { kind: "coordination-comment" },
+    move_current_task: { kind: "coordination-task-move" },
+    create_child_task: { kind: "coordination-child-task" },
+    add_dependency: { kind: "coordination-dependency" },
+    report_permission_block: { kind: "coordination-permission-block" },
+  } as const satisfies Record<CoordinationToolName, { kind: string; scope?: string }>;
+  const expectedIncompleteStatuses = {
+    summarize_boards: "succeeded",
+    list_tasks: "succeeded",
+    list_archived_tasks: "succeeded",
+    inspect_task: "succeeded",
+    list_task_activity: "succeeded",
+    list_task_attachments: "succeeded",
+    list_collaborators: "succeeded",
+    inspect_current_task: "succeeded",
+    inspect_operating_context: "succeeded",
+    add_comment: "failed",
+    move_current_task: "failed",
+    create_child_task: "failed",
+    add_dependency: "failed",
+    report_permission_block: "failed",
+  } as const satisfies Record<CoordinationToolName, "failed" | "succeeded">;
 
-  for (const [tool, expected] of expectedPresentations) {
+  for (const tool of coordinationToolNames) {
+    const expected = expectedPresentations[tool];
+    const expectedStatus = expectedIncompleteStatuses[tool];
     const projected = coordinationTranscriptItem(coordinationCall({
       tool,
       status: "completed",
@@ -250,12 +265,15 @@ test("every known coordination tool has a typed presentation even when evidence 
 
     assert.ok(projected, `${tool} should be recognized`);
     assert.equal(projected.kind, "coordination");
-    assert.equal(projected.status, mutationTools.has(tool) ? "failed" : "succeeded");
-    assert.deepEqual(projected.diagnostic, mutationTools.has(tool)
+    assert.equal(projected.status, expectedStatus);
+    assert.deepEqual(projected.diagnostic, expectedStatus === "failed"
       ? { kind: "failure", message: "The coordination call completed without an authoritative outcome." }
       : undefined);
     assert.equal(projected.presentation.kind, expected.kind);
-    assert.equal("scope" in projected.presentation ? projected.presentation.scope : undefined, expected.scope);
+    assert.equal(
+      "scope" in projected.presentation ? projected.presentation.scope : undefined,
+      "scope" in expected ? expected.scope : undefined,
+    );
     assert.deepEqual(projected.evidence, {
       rawStatus: "completed",
       arguments: "malformed arguments",

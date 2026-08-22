@@ -233,6 +233,10 @@ without choosing the implementation yet.
 - [Evaluate an Initial-Prompt Token Breakdown](./issues/63-evaluate-initial-prompt-token-breakdown.md)
   — Determine whether initial prompt usage can be measured and presented
   separately without misrepresenting SDK token accounting.
+  **Resolved:** Exact component attribution is unavailable, while continued
+  Codex threads already preserve an append-only, session-keyed, cache-friendly
+  prefix; close without speculative UI and use attempt-level cache diagnostics
+  before considering prompt or compaction tuning.
 - [Show Additional Line Counts on Timeline Expansion Controls](./issues/64-show-collapsed-line-counts.md)
   — Tell users how much collapsed timeline prose a Show more action will reveal.
 - [Link Relationship Timeline Events to Related Tasks](./issues/65-link-relationship-events-to-tasks.md)

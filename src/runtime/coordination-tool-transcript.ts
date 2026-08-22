@@ -176,18 +176,21 @@ function coordinationProjection(
       withRejection(`${taskId}: permission block`, rejection),
     );
   }
-  const fromColumnId = stringValue(transition?.fromColumnId);
-  const toColumnId = stringValue(transition?.toColumnId) ?? stringValue(arguments_?.destinationColumnId);
-  return projected({
-    kind: "coordination-task-move",
-    ...(fromColumnId === undefined ? {} : { fromColumnId }),
-    ...(toColumnId === undefined ? {} : { toColumnId }),
-  }, withRejection(
-    fromColumnId !== undefined && toColumnId !== undefined
-      ? `${taskId}: ${fromColumnId} → ${toColumnId}`
-      : `${taskId}: move to ${toColumnId ?? "requested column"}`,
-    rejection,
-  ));
+  if (tool === "move_current_task") {
+    const fromColumnId = stringValue(transition?.fromColumnId);
+    const toColumnId = stringValue(transition?.toColumnId) ?? stringValue(arguments_?.destinationColumnId);
+    return projected({
+      kind: "coordination-task-move",
+      ...(fromColumnId === undefined ? {} : { fromColumnId }),
+      ...(toColumnId === undefined ? {} : { toColumnId }),
+    }, withRejection(
+      fromColumnId !== undefined && toColumnId !== undefined
+        ? `${taskId}: ${fromColumnId} → ${toColumnId}`
+        : `${taskId}: move to ${toColumnId ?? "requested column"}`,
+      rejection,
+    ));
+  }
+  return assertNever(tool);
 }
 
 function projected(
@@ -213,11 +216,30 @@ function semanticStatus(
 }
 
 function requiresAuthoritativeAcceptance(tool: CoordinationToolName): boolean {
-  return tool === "add_comment" ||
-    tool === "move_current_task" ||
-    tool === "create_child_task" ||
-    tool === "add_dependency" ||
-    tool === "report_permission_block";
+  switch (tool) {
+    case "add_comment":
+    case "move_current_task":
+    case "create_child_task":
+    case "add_dependency":
+    case "report_permission_block":
+      return true;
+    case "summarize_boards":
+    case "list_tasks":
+    case "list_archived_tasks":
+    case "inspect_task":
+    case "list_task_activity":
+    case "list_task_attachments":
+    case "list_collaborators":
+    case "inspect_current_task":
+    case "inspect_operating_context":
+      return false;
+    default:
+      return assertNever(tool);
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled coordination tool: ${String(value)}`);
 }
 
 function coordinationDiagnostic(
