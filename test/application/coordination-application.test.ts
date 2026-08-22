@@ -368,6 +368,61 @@ boards:
   );
 });
 
+test("model token pricing validates as complete USD-per-million categories and participates in the fingerprint", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "coordination-model-pricing-"));
+  const definitionPath = join(directory, "process.yaml");
+  await writeFile(join(directory, "reviewer.md"), "Review the requested change.\n");
+  const definition = (pricing: string) => `schemaVersion: 1
+name: Priced process
+defaultTaskWorkspaceStartingRef: main
+coordinationGuidance: Compare agent costs consistently.
+${pricing}agents:
+  - id: reviewer
+    name: Reviewer
+    role: Reviews changes
+    summary: Checks correctness.
+    instructions: ./reviewer.md
+    model: gpt-5.6-sol
+boards:
+  - id: delivery
+    name: Delivery
+    guidance: Review before completion.
+    columns:
+      - id: review
+        name: Review
+        watchingAgent: reviewer
+`;
+  const completePricing = `modelPricing:
+  - model: gpt-5.6-sol
+    usdPerMillionTokens:
+      input: 5
+      cachedInput: 0.5
+      cacheWriteInput: 6.25
+      output: 30
+`;
+
+  await writeFile(definitionPath, definition(completePricing));
+  const priced = await CoordinationApplication.validateProcessDefinition(definitionPath);
+  assert.equal(priced.valid, true);
+  if (!priced.valid) return;
+
+  await writeFile(definitionPath, definition(""));
+  const unpriced = await CoordinationApplication.validateProcessDefinition(definitionPath);
+  assert.equal(unpriced.valid, true);
+  if (!unpriced.valid) return;
+  assert.notEqual(priced.processDefinitionVersion, unpriced.processDefinitionVersion);
+
+  await writeFile(
+    definitionPath,
+    definition(completePricing.replace("      output: 30\n", "")),
+  );
+  const incomplete = await CoordinationApplication.validateProcessDefinition(definitionPath);
+  assert.equal(incomplete.valid, false);
+  if (incomplete.valid) return;
+  assert.equal(incomplete.diagnostics[0]?.invalidValue, undefined);
+  assert.match(incomplete.diagnostics[0]?.rule ?? "", /required property 'output'/u);
+});
+
 test("resume is explicit and every later application startup returns to paused", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "coordination-resume-"));
   const definitionPath = join(directory, "process.yaml");

@@ -4,6 +4,7 @@ import type { ActivationView } from "../automation-contract.ts";
 import type {
   AttemptTranscriptItem,
   AttemptTokenUsage,
+  EstimatedTokenCost,
   AttemptView,
   RuntimeStartupBoundary,
 } from "../runtime-contract.ts";
@@ -399,19 +400,26 @@ export class TaskProjectionStore {
   }
 
   readPersistedAttemptTranscript(attemptId: string):
-    | { items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage }
+    | { items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage; costEstimate?: EstimatedTokenCost }
     | undefined {
     const row = this.#database
       .prepare("SELECT items_json, usage_json FROM attempt_transcripts WHERE attempt_id = ?")
       .get(attemptId) as { items_json: string; usage_json: string | null } | undefined;
-    return row === undefined
-      ? undefined
-      : {
-          items: JSON.parse(row.items_json) as AttemptTranscriptItem[],
-          ...(row.usage_json === null
-            ? {}
-            : { usage: JSON.parse(row.usage_json) as AttemptTokenUsage }),
-        };
+    if (row === undefined) return undefined;
+    if (row.usage_json === null) {
+      return { items: JSON.parse(row.items_json) as AttemptTranscriptItem[] };
+    }
+    const persisted = JSON.parse(row.usage_json) as AttemptTokenUsage & {
+      estimatedCostUsd?: number;
+    };
+    const { estimatedCostUsd, ...usage } = persisted;
+    return {
+      items: JSON.parse(row.items_json) as AttemptTranscriptItem[],
+      usage,
+      ...(estimatedCostUsd === undefined
+        ? {}
+        : { costEstimate: { currency: "USD", amount: estimatedCostUsd } }),
+    };
   }
 
   isTaskAutomationSuspended(taskId: string): boolean {

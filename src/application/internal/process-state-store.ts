@@ -41,6 +41,7 @@ export class ProcessStateStore {
         UPDATE columns SET applied = 0, position = position + 100000;
         UPDATE boards SET applied = 0, position = position + 100000;
         UPDATE agents SET applied = 0;
+        DELETE FROM model_pricing;
         DELETE FROM runtime;
       `);
       connection
@@ -76,6 +77,22 @@ export class ProcessStateStore {
           instructionByAgent.get(agent.id) ?? "",
           agent.model ?? null,
           agent.reasoningEffort ?? null,
+        );
+      }
+
+      const insertPricing = connection.prepare(
+        `INSERT INTO model_pricing
+          (model, input_usd_per_million, cached_input_usd_per_million,
+           cache_write_input_usd_per_million, output_usd_per_million)
+         VALUES (?, ?, ?, ?, ?)`,
+      );
+      for (const pricing of definition.modelPricing ?? []) {
+        insertPricing.run(
+          pricing.model,
+          pricing.usdPerMillionTokens.input,
+          pricing.usdPerMillionTokens.cachedInput,
+          pricing.usdPerMillionTokens.cacheWriteInput,
+          pricing.usdPerMillionTokens.output,
         );
       }
 

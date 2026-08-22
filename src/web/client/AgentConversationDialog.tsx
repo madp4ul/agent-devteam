@@ -4,6 +4,7 @@ import type { AgentConversationView } from "../../application/browser-transport-
 import { continueAgentConversation, readAgentConversation, retireAgentConversation } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import { ConversationHistory } from "./ConversationHistory.tsx";
+import { CostEstimate } from "./CostEstimate.tsx";
 import { errorMessage } from "./feedback.ts";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { Modal } from "./Modal.tsx";
@@ -186,6 +187,13 @@ export function AgentConversationDialog({
             )}
           </div>
           <div className="transcript-header-actions">
+            {conversation === undefined ? null : (
+              <CostEstimate
+                {...(conversation.costEstimate === undefined ? {} : { estimate: conversation.costEstimate })}
+                pending={conversation.costPending}
+                testId="conversation-cost"
+              />
+            )}
             {conversation === undefined ? null : <ConversationActionsMenu
               buttonRef={moreActionsButtonRef}
               threadId={conversation.currentThreadId}

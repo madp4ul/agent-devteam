@@ -213,6 +213,11 @@ export interface AttemptTokenUsage {
   reasoningOutputTokens: number;
 }
 
+export interface EstimatedTokenCost {
+  currency: "USD";
+  amount: number;
+}
+
 export interface AgentRunAgent {
   id: string;
   name: string;
@@ -297,6 +302,6 @@ export type OperatingContextQueryResult =
   | { available: false; reason: "invalid-attempt-scope" | "configuration-error"; diagnostics?: ProcessDiagnostic[] };
 
 export type AttemptTranscriptQueryResult =
-  | { available: true; threadId: string; items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage }
+  | { available: true; threadId: string; items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage; costEstimate?: EstimatedTokenCost }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { available: false; reason: "not-found" | "unavailable" };

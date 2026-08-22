@@ -234,6 +234,7 @@ export class CoordinationApplication {
       name: definition.name,
       guidance: definition.coordinationGuidance,
       definitionVersion: version,
+      modelPricing: definition.modelPricing ?? [],
       boards,
       collaborators: definition.agents.map(({ id, name, role, summary }) => ({
         id,

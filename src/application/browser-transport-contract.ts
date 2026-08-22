@@ -103,6 +103,7 @@ export type {
 export type {
   ActivationStartupFailureView,
   AttemptTokenUsage,
+  EstimatedTokenCost,
   AttemptView,
   AttemptTranscriptQueryResult,
 } from "./runtime-contract.ts";

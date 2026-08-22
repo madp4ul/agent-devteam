@@ -25,6 +25,16 @@ export interface ProcessAgentDefinition {
   reasoningEffort?: ModelReasoningEffort;
 }
 
+export interface ProcessModelPricingDefinition {
+  model: string;
+  usdPerMillionTokens: {
+    input: number;
+    cachedInput: number;
+    cacheWriteInput: number;
+    output: number;
+  };
+}
+
 export interface ProcessColumnDefinition {
   id: string;
   name: string;
@@ -43,6 +53,7 @@ export interface ProcessDefinition {
   name: string;
   defaultTaskWorkspaceStartingRef: string;
   coordinationGuidance: string;
+  modelPricing?: ProcessModelPricingDefinition[];
   agents: ProcessAgentDefinition[];
   boards: ProcessBoardDefinition[];
 }
@@ -189,6 +200,7 @@ function validateIdentitiesAndWatchers(
   const diagnostics: ProcessDiagnostic[] = [];
   const declaredAgentIds = new Set(definition.agents.map((agent) => agent.id));
   collectDuplicateAgentDiagnostics(path, document, lineCounter, definition, diagnostics);
+  collectDuplicatePricingDiagnostics(path, document, lineCounter, definition, diagnostics);
 
   const declaredBoardIds = new Set<string>();
   definition.boards.forEach((board, boardIndex) => {
@@ -215,6 +227,30 @@ function validateIdentitiesAndWatchers(
     );
   });
   return diagnostics;
+}
+
+function collectDuplicatePricingDiagnostics(
+  path: string,
+  document: Document.Parsed,
+  lineCounter: LineCounter,
+  definition: ProcessDefinition,
+  diagnostics: ProcessDiagnostic[],
+): void {
+  const seenModels = new Set<string>();
+  (definition.modelPricing ?? []).forEach((pricing, pricingIndex) => {
+    if (seenModels.has(pricing.model)) {
+      diagnostics.push({
+        file: path,
+        ...locateYamlValue(document, lineCounter, ["modelPricing", pricingIndex, "model"]),
+        invalidValue: pricing.model,
+        rule: "model pricing entries must name unique exact model identifiers",
+        consequence: `Model "${pricing.model}" cannot have two authoritative token-price definitions.`,
+        correction: `Keep exactly one pricing entry for "${pricing.model}".`,
+      });
+    } else {
+      seenModels.add(pricing.model);
+    }
+  });
 }
 
 function collectDuplicateAgentDiagnostics(

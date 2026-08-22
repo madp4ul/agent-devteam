@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 16;
+const currentSchemaVersion = 17;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -60,6 +60,13 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       model TEXT,
       reasoning_effort TEXT,
       applied INTEGER NOT NULL CHECK (applied IN (0, 1))
+    );
+    CREATE TABLE IF NOT EXISTS model_pricing (
+      model TEXT PRIMARY KEY,
+      input_usd_per_million REAL NOT NULL CHECK (input_usd_per_million >= 0),
+      cached_input_usd_per_million REAL NOT NULL CHECK (cached_input_usd_per_million >= 0),
+      cache_write_input_usd_per_million REAL NOT NULL CHECK (cache_write_input_usd_per_million >= 0),
+      output_usd_per_million REAL NOT NULL CHECK (output_usd_per_million >= 0)
     );
     CREATE TABLE IF NOT EXISTS boards (
       id TEXT PRIMARY KEY,
@@ -336,10 +343,11 @@ function initializeCurrentSchema(database: DatabaseSync): void {
   }
 }
 
-function currentSchemaIsComplete(database: DatabaseSync): boolean {
+function currentSchemaIsComplete(database: DatabaseSync, requireModelPricing = true): boolean {
   const requiredTables = [
     "runtime",
     "agents",
+    ...(requireModelPricing ? ["model_pricing"] : []),
     "boards",
     "columns",
     "task_numbers",
@@ -451,6 +459,9 @@ function replaceIncompatibleDatabase(path: string): void {
       inspection.prepare("PRAGMA user_version").get() as { user_version: number }
     ).user_version;
     compatible = version === currentSchemaVersion && currentSchemaIsComplete(inspection);
+    if (!compatible && version === 16) {
+      compatible = currentSchemaIsComplete(inspection, false);
+    }
   } finally {
     inspection.close();
   }

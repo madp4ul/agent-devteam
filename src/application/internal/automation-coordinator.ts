@@ -20,11 +20,13 @@ import type { ProcessStateStore } from "./process-state-store.ts";
 import type { AutomationStateStore, RunnableActivation } from "./automation-state-store.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { ConversationContextDeliveryModule } from "./conversation-context-delivery-module.ts";
+import type { ProcessModelPricingDefinition } from "./process-definition.ts";
 
 export interface AutomationProcessContext {
   name: string;
   guidance: string;
   definitionVersion: string;
+  modelPricing: ProcessModelPricingDefinition[];
   boards: ProcessBoardView[];
   collaborators: Array<Pick<AgentRunAgent, "id" | "name" | "role" | "summary">>;
 }
@@ -349,6 +351,9 @@ export class AutomationCoordinator {
       runnable.activation.id,
       currentTask,
     );
+    const pricing = runnable.agent.model === undefined
+      ? undefined
+      : process.modelPricing.find(({ model }) => model === runnable.agent.model);
     onDispatchStarted();
     let outcomePromise: Promise<AgentRunOutcome>;
     try {
@@ -427,7 +432,8 @@ export class AutomationCoordinator {
             activeRun.interruptIdempotencyKey,
             transcript,
             usage,
-            precedingAttempt?.threadId ?? undefined,
+            pricing,
+            resumeThreadId ?? undefined,
           );
         } else {
           this.#stateStore.completeAttempt(
@@ -437,7 +443,8 @@ export class AutomationCoordinator {
             true,
             transcript,
             usage,
-            precedingAttempt?.threadId ?? undefined,
+            pricing,
+            resumeThreadId ?? undefined,
           );
         }
         activeRun.confirm();

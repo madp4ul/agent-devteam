@@ -26,6 +26,7 @@ the JSON Schema.
 | `name` | non-empty string | Process display name. |
 | `defaultTaskWorkspaceStartingRef` | non-empty string | Git ref future task workspaces resolve immediately before provisioning. Ticket 15 records this value but does not provision workspaces. |
 | `coordinationGuidance` | non-empty string | Process-wide guidance supplied to future agent activations. |
+| `modelPricing` | array | Optional exact-model token pricing used for comparable USD estimates. |
 | `agents` | array | Agent directory. May be empty when every workflow column is unwatched. |
 | `boards` | non-empty array | Ordered boards shown by the application. |
 
@@ -59,6 +60,49 @@ user's ordinary Codex configuration. The framework does not resolve or display
 an invented default. Explicit values participate in the semantic fingerprint,
 are retained with activations and attempts, and do not change instructions,
 tools, sandboxing, approval policy, or any other permission boundary.
+
+## Model token pricing
+
+`modelPricing` is an optional process-owned catalog. The framework never embeds
+provider prices or guesses the model inherited from the user's Codex
+configuration. An entry applies only when its `model` exactly matches an
+agent's explicit `model` value.
+
+```yaml
+modelPricing:
+  - model: gpt-5.6-sol
+    usdPerMillionTokens:
+      input: 5
+      cachedInput: 0.5
+      cacheWriteInput: 6.25
+      output: 30
+```
+
+Every entry supplies all four non-negative USD rates per one million tokens.
+Model identifiers are unique. The estimate uses isolated attempt usage:
+
+```text
+ordinary input = input - cached input - cache-write input
+
+estimated USD = (
+  ordinary input * input rate
+  + cached input * cached-input rate
+  + cache-write input * cache-write-input rate
+  + output * output rate
+) / 1,000,000
+```
+
+Reasoning output is already included in output and is not charged again. An
+invalid overlap, unavailable isolated usage, inherited or unmatched model, or
+incomplete pricing makes cost unavailable rather than partial. Each finished
+attempt persists its estimate, so later pricing edits do not rewrite history.
+Pricing participates in the semantic process-definition fingerprint and the
+ordinary stale-activation workflow.
+
+The browser labels the number as an estimate. Conversation totals are
+all-or-nothing across settled attempts of every outcome. A priceable running
+attempt is excluded until it settles; complete prior totals show a pending
+spinner, and a first priceable run shows `$0` with that spinner.
 
 ## Boards and columns
 

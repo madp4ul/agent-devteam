@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { promisify } from "node:util";
 
@@ -596,6 +597,7 @@ test("task conversation index stays compact, recent, distinguishable, and histor
   ]);
   assert.deepEqual(Object.keys(initial.conversations[0]!).sort(), [
     "continuation",
+    "costPending",
     "id",
     "label",
     "latestActivityAt",
@@ -731,6 +733,21 @@ boards:
 
 test("a finished attempt transcript remains inspectable after application restart", async (t) => {
   const fixture = await createHandoffFixture();
+  await writeFile(
+    fixture.definitionPath,
+    (await readFile(fixture.definitionPath, "utf8")).replace(
+      "agents:\n",
+      `modelPricing:
+  - model: gpt-5.6-sol
+    usdPerMillionTokens:
+      input: 5
+      cachedInput: 0.5
+      cacheWriteInput: 6.25
+      output: 30
+agents:
+`,
+    ),
+  );
   const runtime = new ControlledAgentRuntime();
   const application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
@@ -755,6 +772,12 @@ test("a finished attempt transcript remains inspectable after application restar
 
   await application.resumeAutomation();
   const request = await runtime.waitForRequest(1);
+  const runningIndex = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(runningIndex.available, true);
+  if (runningIndex.available) {
+    assert.equal(runningIndex.conversations[0]?.costPending, true);
+    assert.equal(runningIndex.conversations[0]?.costEstimate, undefined);
+  }
   const expectedTranscript: AttemptTranscriptItem[] = [
     { kind: "message", role: "agent", text: "The implementation is ready for review." },
   ];
@@ -788,6 +811,7 @@ test("a finished attempt transcript remains inspectable after application restar
     threadId: "reused-codex-thread",
     items: expectedTranscript,
     usage: expectedUsage,
+    costEstimate: { currency: "USD", amount: 0.02215 },
   });
   const conversation = await application.queryAgentConversation(created.task.id, conversationId);
   assert.equal(conversation.available, true);
@@ -810,14 +834,34 @@ test("a finished attempt transcript remains inspectable after application restar
         available: true,
         items: expectedTranscript,
         usage: expectedUsage,
+        costEstimate: { currency: "USD", amount: 0.02215 },
       },
     }]);
+    assert.deepEqual(conversation.conversation.costEstimate, {
+      currency: "USD",
+      amount: 0.02215,
+    });
+  }
+  const index = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(index.available, true);
+  if (index.available) {
+    assert.deepEqual(index.conversations[0]?.costEstimate, {
+      currency: "USD",
+      amount: 0.02215,
+    });
   }
   assert.deepEqual(await application.queryAgentConversation("T-9999", conversationId), {
     available: false,
     reason: "not-found",
   });
   application.close();
+  const legacyDatabase = new DatabaseSync(fixture.databasePath);
+  legacyDatabase.exec("DROP TABLE model_pricing; PRAGMA user_version = 16");
+  legacyDatabase.close();
+  await writeFile(
+    fixture.definitionPath,
+    (await readFile(fixture.definitionPath, "utf8")).replace("      input: 5\n", "      input: 50\n"),
+  );
 
   const restarted = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
@@ -832,6 +876,7 @@ test("a finished attempt transcript remains inspectable after application restar
     threadId: "reused-codex-thread",
     items: expectedTranscript,
     usage: expectedUsage,
+    costEstimate: { currency: "USD", amount: 0.02215 },
   });
   assert.deepEqual(
     await restarted.queryAgentConversation(created.task.id, conversationId),
@@ -923,6 +968,108 @@ test("a streamed Codex failure remains inspectable while its retry waits at the 
     threadId: "thread-failed-handoff",
     items: failedTranscript,
   });
+});
+
+test("conversation cost totals sum every settled attempt and become unavailable rather than partial", async (t) => {
+  const fixture = await createHandoffFixture();
+  await writeFile(
+    fixture.definitionPath,
+    (await readFile(fixture.definitionPath, "utf8")).replace(
+      "agents:\n",
+      `modelPricing:
+  - model: gpt-5.6-sol
+    usdPerMillionTokens:
+      input: 1
+      cachedInput: 1
+      cacheWriteInput: 1
+      output: 1
+agents:
+`,
+    ),
+  );
+  const runtime = new ControlledAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+    transcriptAccess: runtime,
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Compare complete conversation costs",
+    description: "Never understate a conversation with partial pricing.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-cost-total-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  const conversationId = created.task.activations[0]?.conversationId;
+  assert.ok(conversationId);
+
+  await application.resumeAutomation();
+  const first = await runtime.waitForRequest(1);
+  runtime.setTranscript(first.attemptId, []);
+  runtime.setUsage(first.attemptId, {
+    inputTokens: 1_000,
+    cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  });
+  runtime.complete({ status: "completed", summary: "First priced run.", threadId: "cost-thread" });
+  await application.waitForAutomationIdle();
+
+  const secondMessage = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Run the second comparison.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "second-cost-run",
+  });
+  assert.equal(secondMessage.accepted, true);
+  const second = await runtime.waitForRequest(2);
+  runtime.setTranscript(second.attemptId, []);
+  runtime.setUsage(second.attemptId, {
+    inputTokens: 3_000,
+    cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  });
+  runtime.complete({ status: "completed", summary: "Second priced run.", threadId: "cost-thread" });
+  await application.waitForAutomationIdle();
+  const complete = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(complete.available, true);
+  if (complete.available) {
+    assert.deepEqual(complete.conversation.runs.map(({ transcript }) =>
+      transcript.available ? transcript.costEstimate?.amount : undefined
+    ), [0.001, 0.002]);
+    assert.deepEqual(complete.conversation.costEstimate, { currency: "USD", amount: 0.003 });
+  }
+
+  const thirdMessage = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Run without reported usage.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "unavailable-cost-run",
+  });
+  assert.equal(thirdMessage.accepted, true);
+  await runtime.waitForRequest(3);
+  runtime.complete({ status: "completed", summary: "Usage unavailable.", threadId: "cost-thread" });
+  await application.waitForAutomationIdle();
+  const incomplete = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(incomplete.available, true);
+  if (incomplete.available) assert.equal(incomplete.conversation.costEstimate, undefined);
+  const index = application.queryTaskConversationIndex(created.task.id);
+  assert.equal(index.available, true);
+  if (index.available) assert.equal(index.conversations[0]?.costEstimate, undefined);
 });
 
 test("conversation index status follows running work and unresolved attention", async (t) => {

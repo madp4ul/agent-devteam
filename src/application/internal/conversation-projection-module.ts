@@ -8,6 +8,7 @@ import type {
 import type {
   AttemptTranscriptAccess,
   AttemptTranscriptQueryResult,
+  EstimatedTokenCost,
 } from "../runtime-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
@@ -96,7 +97,25 @@ export class ConversationProjectionModule {
                     AND running_attempt.status = 'running'
                 ) THEN 'running'
                 ELSE NULL
-              END AS status
+              END AS status,
+              CASE WHEN EXISTS (
+                SELECT 1
+                FROM activations priced_activation
+                JOIN attempts priced_attempt ON priced_attempt.activation_id = priced_activation.id
+                JOIN model_pricing pricing ON pricing.model = priced_attempt.model
+                WHERE priced_activation.conversation_id = conversation.id
+                  AND priced_attempt.status = 'running'
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM activations settled_activation
+                    JOIN attempts settled_attempt ON settled_attempt.activation_id = settled_activation.id
+                    LEFT JOIN attempt_transcripts settled_transcript
+                      ON settled_transcript.attempt_id = settled_attempt.id
+                    WHERE settled_activation.conversation_id = conversation.id
+                      AND settled_attempt.status <> 'running'
+                      AND json_extract(settled_transcript.usage_json, '$.estimatedCostUsd') IS NULL
+                  )
+              ) THEN 1 ELSE 0 END AS cost_pending
        FROM agent_conversations conversation
        JOIN tasks task ON task.id = conversation.task_id
        LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
@@ -116,12 +135,15 @@ export class ConversationProjectionModule {
       conversation_retired_at: string | null;
       unfinished_work: number;
       status: AgentConversationIndexEntry["status"];
+      cost_pending: number;
     }>;
     return rows.map((row) => ({
       id: row.id,
       ...this.#ownerAndContinuation(row),
       label: row.generated_label,
       latestActivityAt: row.latest_activity_at,
+      ...this.#readConversationCostEstimate(row.id),
+      costPending: row.cost_pending === 1,
       status: row.status,
       retired: row.conversation_retired_at !== null,
     }));
@@ -141,7 +163,25 @@ export class ConversationProjectionModule {
                 WHERE unfinished.task_id = conversation.task_id
                   AND unfinished.target_agent_id = conversation.owning_agent_id
                   AND unfinished.status <> 'completed'
-              ) THEN 1 ELSE 0 END AS unfinished_work
+              ) THEN 1 ELSE 0 END AS unfinished_work,
+              CASE WHEN EXISTS (
+                SELECT 1
+                FROM activations priced_activation
+                JOIN attempts priced_attempt ON priced_attempt.activation_id = priced_activation.id
+                JOIN model_pricing pricing ON pricing.model = priced_attempt.model
+                WHERE priced_activation.conversation_id = conversation.id
+                  AND priced_attempt.status = 'running'
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM activations settled_activation
+                    JOIN attempts settled_attempt ON settled_attempt.activation_id = settled_activation.id
+                    LEFT JOIN attempt_transcripts settled_transcript
+                      ON settled_transcript.attempt_id = settled_attempt.id
+                    WHERE settled_activation.conversation_id = conversation.id
+                      AND settled_attempt.status <> 'running'
+                      AND json_extract(settled_transcript.usage_json, '$.estimatedCostUsd') IS NULL
+                  )
+              ) THEN 1 ELSE 0 END AS cost_pending
        FROM agent_conversations conversation
        JOIN tasks task ON task.id = conversation.task_id
        LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
@@ -164,6 +204,7 @@ export class ConversationProjectionModule {
       unfinished_work: number;
       current_agent_name: string | null;
       agent_applied: number | null;
+      cost_pending: number;
     } | undefined;
     if (row === undefined) return undefined;
     const originatingActivation = this.#taskProjections.readTaskActivations(row.task_id)
@@ -178,6 +219,7 @@ export class ConversationProjectionModule {
               available: true as const,
               items: transcript.items,
               ...(transcript.usage === undefined ? {} : { usage: transcript.usage }),
+              ...(transcript.costEstimate === undefined ? {} : { costEstimate: transcript.costEstimate }),
             }
           : { available: false as const },
       };
@@ -191,6 +233,8 @@ export class ConversationProjectionModule {
       currentThreadId: row.current_thread_id,
       createdAt: row.created_at,
       latestActivityAt: row.latest_activity_at,
+      ...conversationCostEstimate(runs),
+      costPending: row.cost_pending === 1,
       retirement: row.conversation_retired_at === null
         ? null
         : {
@@ -203,6 +247,33 @@ export class ConversationProjectionModule {
       retirementAvailability: this.#retirementAvailability(row),
       messages: this.#readMessages(row.id),
       runs,
+    };
+  }
+
+  #readConversationCostEstimate(conversationId: string): { costEstimate?: EstimatedTokenCost } {
+    const runs = this.#readRuns(conversationId);
+    if (runs.length === 0) return {};
+    const settled = runs.filter(({ attempt }) => attempt.status !== "running");
+    if (settled.length === 0) return {};
+    const rows = this.#database.prepare(
+      `SELECT transcript.usage_json
+       FROM activations activation
+       JOIN attempts attempt ON attempt.activation_id = activation.id
+       LEFT JOIN attempt_transcripts transcript ON transcript.attempt_id = attempt.id
+       WHERE activation.conversation_id = ? AND attempt.status <> 'running'
+       ORDER BY attempt.rowid`,
+    ).all(conversationId) as Array<{ usage_json: string | null }>;
+    if (rows.length !== settled.length || rows.some(({ usage_json }) => usage_json === null)) return {};
+    const amounts = rows.map(({ usage_json }) => {
+      const value = JSON.parse(usage_json!) as { estimatedCostUsd?: number };
+      return value.estimatedCostUsd;
+    });
+    if (amounts.some((amount) => amount === undefined)) return {};
+    return {
+      costEstimate: {
+        currency: "USD",
+        amount: Number(amounts.reduce<number>((sum, amount) => sum + (amount ?? 0), 0).toFixed(12)),
+      },
     };
   }
 
@@ -299,6 +370,24 @@ export class ConversationProjectionModule {
     if (row.unfinished_work === 1) return { available: false, reason: "activation-work-pending" };
     return { available: true };
   }
+}
+
+function conversationCostEstimate(
+  runs: AgentConversationView["runs"],
+): { costEstimate?: EstimatedTokenCost } {
+  const settled = runs.filter(({ attempt }) => attempt.status !== "running");
+  if (settled.length === 0 || settled.some(({ transcript }) =>
+    !transcript.available || transcript.costEstimate === undefined
+  )) return {};
+  return {
+    costEstimate: {
+      currency: "USD",
+      amount: Number(settled.reduce(
+        (sum, { transcript }) => sum + (transcript.available ? transcript.costEstimate!.amount : 0),
+        0,
+      ).toFixed(12)),
+    },
+  };
 }
 
 function conversationMessageView(row: ConversationMessageRow): AgentConversationView["messages"][number] {

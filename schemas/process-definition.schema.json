@@ -17,6 +17,10 @@
     "name": { "$ref": "#/$defs/nonEmptyText" },
     "defaultTaskWorkspaceStartingRef": { "$ref": "#/$defs/nonEmptyText" },
     "coordinationGuidance": { "$ref": "#/$defs/nonEmptyText" },
+    "modelPricing": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/modelPricing" }
+    },
     "agents": {
       "type": "array",
       "items": { "$ref": "#/$defs/agent" }
@@ -49,6 +53,25 @@
         "model": { "$ref": "#/$defs/nonEmptyText" },
         "reasoningEffort": {
           "enum": ["minimal", "low", "medium", "high", "xhigh"]
+        }
+      }
+    },
+    "modelPricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "usdPerMillionTokens"],
+      "properties": {
+        "model": { "$ref": "#/$defs/nonEmptyText" },
+        "usdPerMillionTokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input", "cachedInput", "cacheWriteInput", "output"],
+          "properties": {
+            "input": { "type": "number", "minimum": 0 },
+            "cachedInput": { "type": "number", "minimum": 0 },
+            "cacheWriteInput": { "type": "number", "minimum": 0 },
+            "output": { "type": "number", "minimum": 0 }
+          }
         }
       }
     },

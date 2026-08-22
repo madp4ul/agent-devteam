@@ -558,6 +558,11 @@ textarea { resize: vertical; line-height: 1.5; }
 .retirement-confirmation textarea { min-height: 5rem; resize: vertical; }
 .token-usage { display: flex; align-items: center; gap: .35rem; min-height: 2.35rem; border: 1px solid var(--line); border-radius: .55rem; color: var(--muted); background: var(--paper); padding: .35rem .55rem; font-size: .78rem; white-space: nowrap; }
 .token-usage strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.cost-estimate { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted); font-size: .76rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.token-usage .cost-estimate { color: var(--ink); font-weight: 700; }
+.cost-pending-spinner { width: .72rem; height: .72rem; flex: none; border: 2px solid color-mix(in srgb, var(--muted) 35%, transparent); border-top-color: var(--running-text); border-radius: 50%; animation: cost-pending-spin .8s linear infinite; }
+@keyframes cost-pending-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cost-pending-spinner { animation-duration: 2s; } }
 .transcript-content { display: grid; min-width: 0; gap: .8rem; overflow-y: auto; overscroll-behavior-y: contain; padding-right: .3rem; }
 .conversation-run { display: grid; min-width: 0; gap: .8rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .conversation-run:first-child { border-top: 0; padding-top: 0; }

@@ -14,6 +14,7 @@ import type {
   RuntimeStartupBoundary,
   RuntimeStartupDiagnostic,
 } from "../runtime-contract.ts";
+import type { ProcessModelPricingDefinition } from "./process-definition.ts";
 import type {
   Actor,
   TaskActivityView,
@@ -380,6 +381,7 @@ export class AutomationStateStore {
     idempotencyKey: string,
     transcript?: AttemptTranscriptItem[],
     usage?: AttemptTokenUsage,
+    pricing?: ProcessModelPricingDefinition,
     resumedThreadId?: string,
   ): void {
     this.#owner.transaction(() => {
@@ -406,6 +408,7 @@ export class AutomationStateStore {
           attemptId,
           transcript ?? [],
           usage,
+          pricing,
           resumedThreadId,
           attempt.thread_id ?? undefined,
         );
@@ -692,6 +695,7 @@ export class AutomationStateStore {
     automaticRetry = true,
     transcript?: AttemptTranscriptItem[],
     usage?: AttemptTokenUsage,
+    pricing?: ProcessModelPricingDefinition,
     resumedThreadId?: string,
   ): void {
     this.#owner.transaction(() => {
@@ -719,6 +723,7 @@ export class AutomationStateStore {
           attemptId,
           transcript ?? [],
           usage,
+          pricing,
           resumedThreadId,
           outcome.threadId ?? attempt.thread_id ?? undefined,
         );
@@ -831,6 +836,7 @@ export class AutomationStateStore {
     attemptId: string,
     transcript: AttemptTranscriptItem[],
     reportedUsage?: AttemptTokenUsage,
+    pricing?: ProcessModelPricingDefinition,
     resumedThreadId?: string,
     completedThreadId?: string,
   ): void {
@@ -855,7 +861,10 @@ export class AutomationStateStore {
       .run(
         attemptId,
         JSON.stringify(transcript),
-        usage === undefined ? null : JSON.stringify(usage),
+        usage === undefined ? null : JSON.stringify({
+          ...usage,
+          ...estimatedCostUsd(usage, pricing),
+        }),
         reportedUsage === undefined ? null : JSON.stringify(reportedUsage),
       );
   }
@@ -901,6 +910,33 @@ export class AutomationStateStore {
     );
   }
 
+}
+
+function estimatedCostUsd(
+  usage: AttemptTokenUsage,
+  pricing: ProcessModelPricingDefinition | undefined,
+): { estimatedCostUsd?: number } {
+  if (pricing === undefined) return {};
+  const counts = [
+    usage.inputTokens,
+    usage.cachedInputTokens,
+    usage.cacheWriteInputTokens,
+    usage.outputTokens,
+    usage.reasoningOutputTokens,
+  ];
+  if (counts.some((count) => !Number.isSafeInteger(count) || count < 0)) return {};
+  const ordinaryInput = usage.inputTokens - usage.cachedInputTokens - usage.cacheWriteInputTokens;
+  if (ordinaryInput < 0) return {};
+  const rates = pricing.usdPerMillionTokens;
+  const amount = (
+    ordinaryInput * rates.input +
+    usage.cachedInputTokens * rates.cachedInput +
+    usage.cacheWriteInputTokens * rates.cacheWriteInput +
+    usage.outputTokens * rates.output
+  ) / 1_000_000;
+  return Number.isFinite(amount) && amount >= 0
+    ? { estimatedCostUsd: Number(amount.toFixed(12)) }
+    : {};
 }
 
 function retryDueAt(now: Date, cycleAttempt: number): string {

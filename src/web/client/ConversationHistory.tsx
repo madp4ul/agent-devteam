@@ -3,10 +3,12 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type {
   AgentConversationView,
   AttemptTokenUsage,
+  EstimatedTokenCost,
 } from "../../application/browser-transport-contract.ts";
 import type { AttemptTranscriptItem, CoordinationTaskIdentity } from "../../application/runtime-contract.ts";
 import { ActivityStatusMark } from "./ActivityStatusMark.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
+import { CostEstimate } from "./CostEstimate.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { MarkdownContent } from "./MarkdownContent.tsx";
 import { TextPreview } from "./TextPreview.tsx";
@@ -101,7 +103,12 @@ export function ConversationHistory({
               <span>Runtime</span> <strong><ElapsedTime startedAt={entry.run.attempt.startedAt} completedAt={entry.run.attempt.completedAt} /></strong>
             </p>
             {entry.run.transcript.available && entry.run.transcript.usage !== undefined
-              ? <TokenUsageSummary usage={entry.run.transcript.usage} />
+              ? <TokenUsageSummary
+                  usage={entry.run.transcript.usage}
+                  {...(entry.run.transcript.costEstimate === undefined
+                    ? {}
+                    : { costEstimate: entry.run.transcript.costEstimate })}
+                />
               : null}
           </div>
         </header>
@@ -578,7 +585,13 @@ function historyEntryTime(entry: ConversationHistoryEntry): string {
   return entry.occurredAt;
 }
 
-function TokenUsageSummary({ usage }: { usage: AttemptTokenUsage }): ReactNode {
+function TokenUsageSummary({
+  usage,
+  costEstimate,
+}: {
+  usage: AttemptTokenUsage;
+  costEstimate?: EstimatedTokenCost;
+}): ReactNode {
   const format = (value: number): string => value.toLocaleString("en-US");
   const uncachedInputTokens = Math.max(0, usage.inputTokens - usage.cachedInputTokens);
   return (
@@ -586,6 +599,8 @@ function TokenUsageSummary({ usage }: { usage: AttemptTokenUsage }): ReactNode {
       <span>Input <strong>{format(uncachedInputTokens)}</strong></span>
       <span aria-hidden="true">·</span>
       <span>Output <strong>{format(usage.outputTokens)}</strong></span>
+      {costEstimate === undefined ? null : <span aria-hidden="true">·</span>}
+      <CostEstimate {...(costEstimate === undefined ? {} : { estimate: costEstimate })} />
     </div>
   );
 }

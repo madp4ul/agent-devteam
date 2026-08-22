@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import type { AgentConversationIndexEntry } from "../../application/browser-transport-contract.ts";
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
+import { CostEstimate } from "./CostEstimate.tsx";
 
 const conversationStatusPresentation = {
   running: { className: "status-running", label: "Conversation running" },
@@ -44,6 +45,10 @@ export function TaskConversationsPanel({
               >
                 <strong>{conversation.owningAgent.name}</strong>
                 <span className="conversation-index-meta">
+                  <CostEstimate
+                    {...(conversation.costEstimate === undefined ? {} : { estimate: conversation.costEstimate })}
+                    pending={conversation.costPending}
+                  />
                   {conversation.retired ? <span className="conversation-retired-label">Retired</span> : null}
                   {status === null ? null : (
                     <span
