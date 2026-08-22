@@ -28,6 +28,7 @@ export function AgentConversationDialog({
   selectedMessageId,
   selectedPendingActivationId,
   onClose,
+  onCommentSource,
 }: {
   taskId: string;
   conversationId: string;
@@ -36,6 +37,7 @@ export function AgentConversationDialog({
   selectedMessageId?: string;
   selectedPendingActivationId?: string;
   onClose(): void;
+  onCommentSource?(commentId: string): void;
 }): ReactNode {
   const [conversation, setConversation] = useState<AgentConversationView>();
   const [conversationRunning, setConversationRunning] = useState(
@@ -336,8 +338,14 @@ export function AgentConversationDialog({
                   <CoordinationComment
                     key={item.id ?? `${entry.run.attempt.id}-${index}`}
                     id={item.id ?? `${entry.run.attempt.id}-${index}`}
-                    status={item.status}
+                    item={item}
                     body={coordinationCommentBody(item)!}
+                    {...(onCommentSource === undefined ? {} : {
+                      onCommentSource: (commentId) => {
+                        onClose();
+                        onCommentSource(commentId);
+                      },
+                    })}
                   />
                 ) : item.kind === "mcp" && item.server === "coordination" ? (
                   <CoordinationActivity
@@ -482,15 +490,30 @@ function coordinationCommentBody(item: {
   return typeof body === "string" && body.length > 0 ? body : undefined;
 }
 
-function CoordinationComment({ id, status, body }: { id: string; status: string; body: string }): ReactNode {
+function CoordinationComment({
+  id,
+  item,
+  body,
+  onCommentSource,
+}: {
+  id: string;
+  item: CoordinationTranscriptItem;
+  body: string;
+  onCommentSource?(commentId: string): void;
+}): ReactNode {
   const [expanded, setExpanded] = useState(false);
+  const result = coordinationResultRecord(item.result);
+  const commentId = item.presentation?.kind === "coordination-comment"
+    ? item.presentation.commentId
+    : literalString(result?.commentId);
+  const exceptional = coordinationExceptionalPresentation(item, result);
   return (
     <article className="transcript-coordination coordination-comment" aria-label="Comment added">
       <header className="coordination-activity-heading">
         <strong>Comment added</strong>
         <span className="coordination-activity-actions">
           <CopyMarkdownButton source={body} label="Copy comment Markdown" />
-          <ActivityStatusMark status={status} subject="Coordination action" className="coordination-status" />
+          <ActivityStatusMark status={item.status} subject="Coordination action" className="coordination-status" />
         </span>
       </header>
       <TextPreview
@@ -499,6 +522,19 @@ function CoordinationComment({ id, status, body }: { id: string; status: string;
         expanded={expanded}
         onExpanded={setExpanded}
       />
+      {exceptional === undefined ? null : (
+        <p className="coordination-activity-exception">
+          <span>{exceptional.label}</span>
+          <strong>{exceptional.text}</strong>
+        </p>
+      )}
+      {commentId === undefined || onCommentSource === undefined ? null : (
+        <footer className="coordination-comment-footer">
+          <button type="button" className="quiet-action" onClick={() => onCommentSource(commentId)}>
+            View in task history
+          </button>
+        </footer>
+      )}
     </article>
   );
 }
@@ -566,6 +602,7 @@ function coordinationActivityPresentation(item: CoordinationTranscriptItem): {
   const inspection = item.presentation?.kind === "coordination-inspection" ? item.presentation : undefined;
   const childTask = item.presentation?.kind === "coordination-child-task" ? item.presentation : undefined;
   const dependency = item.presentation?.kind === "coordination-dependency" ? item.presentation : undefined;
+  const permissionBlock = item.presentation?.kind === "coordination-permission-block" ? item.presentation : undefined;
   let action: string;
   let accessibleLabel: string;
   let facts: CoordinationActivityFact[] = [];
@@ -578,6 +615,9 @@ function coordinationActivityPresentation(item: CoordinationTranscriptItem): {
   } else if (dependency !== undefined) {
     action = accessibleLabel = "Add dependency";
     facts = dependencyFacts(dependency.sourceTask, dependency.targetTask);
+  } else if (permissionBlock !== undefined) {
+    action = accessibleLabel = "Report permission block";
+    facts = [{ kind: "value", label: "Reason", value: permissionBlock.reason }];
   } else switch (item.tool) {
     case "move_current_task": {
       const transition = literalRecord(result?.transition);
@@ -680,6 +720,7 @@ function coordinationInspectionActivityPresentation(inspection: CoordinationInsp
       return {
         action: "Inspect operating context",
         facts: [
+          { kind: "value", label: "Run context", value: inspection.attemptId },
           { kind: "task", label: "Task", task: { ...optionalLiteral("id", inspection.taskId) } },
           ...(inspection.processName === undefined ? [] : [{ kind: "value" as const, label: "Process", value: inspection.processName }]),
           ...(board === undefined ? [] : [{ kind: "value" as const, label: "Board", value: board }]),

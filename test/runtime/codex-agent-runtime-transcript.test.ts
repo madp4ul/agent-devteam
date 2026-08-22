@@ -438,6 +438,68 @@ test("a completed coordination move retains evidence and adds semantic presentat
   }]);
 });
 
+test("a running coordination move updates one row from requested arguments to authoritative result facts", async () => {
+  let releaseMove!: () => void;
+  const moveMayFinish = new Promise<void>((resolve) => { releaseMove = resolve; });
+  let moveStarted!: () => void;
+  const moveIsRunning = new Promise<void>((resolve) => { moveStarted = resolve; });
+  async function* moveEvents(): AsyncGenerator<CodexEventLike> {
+    yield { type: "thread.started", thread_id: "thread-live-coordination-move" };
+    yield {
+      type: "item.started",
+      item: {
+        id: "move-live",
+        type: "mcp_tool_call",
+        server: "coordination",
+        tool: "move_current_task",
+        status: "in_progress",
+        arguments: { destinationColumnId: "requested-review" },
+      },
+    };
+    moveStarted();
+    await moveMayFinish;
+    yield {
+      type: "item.completed",
+      item: {
+        id: "move-live",
+        type: "mcp_tool_call",
+        server: "coordination",
+        tool: "move_current_task",
+        status: "completed",
+        arguments: { destinationColumnId: "requested-review" },
+        result: { content: [{ type: "text", text: JSON.stringify({
+          accepted: true,
+          transition: { taskId: "T-0008", fromColumnId: "implementation", toColumnId: "code-review" },
+        }) }] },
+      },
+    };
+    yield { type: "turn.completed" };
+  }
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({ startThread: () => ({ runStreamed: async () => ({ events: moveEvents() }) }) }),
+  });
+  const moveRequest = request("activation-live-coordination-move", "T-0008");
+
+  const outcome = runtime.run(moveRequest, { started() {} });
+  await moveIsRunning;
+  const running = await runtime.read(moveRequest.attemptId);
+  assert.deepEqual(running?.[0]?.kind === "mcp" ? running[0].presentation : undefined, {
+    kind: "coordination-task-move",
+    toColumnId: "requested-review",
+  });
+
+  releaseMove();
+  await outcome;
+  const completed = await runtime.read(moveRequest.attemptId);
+  assert.equal(completed?.length, 1);
+  assert.deepEqual(completed?.[0]?.kind === "mcp" ? completed[0].presentation : undefined, {
+    kind: "coordination-task-move",
+    fromColumnId: "implementation",
+    toColumnId: "code-review",
+  });
+});
+
 test("a coordination comment exposes its authored Markdown as a semantic presentation", async () => {
   const body = "First line with **context**.\n\nSecond paragraph.\n\n- one\n- two\n- three";
   const runtime = createRuntime({
@@ -476,6 +538,93 @@ test("a coordination comment exposes its authored Markdown as a semantic present
   assert.deepEqual(comment?.presentation, {
     kind: "coordination-comment",
     body,
+    commentId: "comment-7",
+  });
+});
+
+test("permission-block reporting retains the authored reason as semantic presentation", async () => {
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-permission-block-presentation" },
+            {
+              type: "item.completed",
+              item: {
+                id: "permission-block-tool",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "report_permission_block",
+                status: "completed",
+                arguments: { summary: "Writing the release file requires user approval." },
+                result: { content: [{ type: "text", text: JSON.stringify({ accepted: true, taskId: "T-0008" }) }] },
+              },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+  const permissionRequest = request("activation-permission-presentation", "T-0008");
+
+  await runtime.run(permissionRequest, { started() {} });
+
+  const transcript = await runtime.read(permissionRequest.attemptId);
+  assert.deepEqual(transcript?.[0]?.kind === "mcp" ? transcript[0].presentation : undefined, {
+    kind: "coordination-permission-block",
+    reason: "Writing the release file requires user approval.",
+  });
+});
+
+test("a technical coordination action failure keeps its semantic request facts and diagnostic", async () => {
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "thread-failed-coordination-action" },
+            {
+              type: "item.completed",
+              item: {
+                id: "failed-child-tool",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "create_child_task",
+                status: "failed",
+                arguments: { title: "Review API", columnId: "code-review" },
+                error: { message: "Connection closed" },
+              },
+            },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+  const failedRequest = request("activation-failed-coordination-action", "T-0008");
+
+  await runtime.run(failedRequest, { started() {} });
+
+  const transcript = await runtime.read(failedRequest.attemptId);
+  assert.deepEqual(transcript?.[0], {
+    id: "failed-child-tool",
+    kind: "mcp",
+    server: "coordination",
+    tool: "create_child_task",
+    status: "failed",
+    rawStatus: "failed",
+    summary: "T-0008: child Review API in code-review",
+    presentation: {
+      kind: "coordination-child-task",
+      task: { title: "Review API" },
+      columnId: "code-review",
+    },
+    arguments: { title: "Review API", columnId: "code-review" },
+    error: { message: "Connection closed" },
   });
 });
 

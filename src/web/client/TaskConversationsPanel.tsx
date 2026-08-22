@@ -15,9 +15,11 @@ const conversationStatusPresentation = {
 export function TaskConversationsPanel({
   taskId,
   conversations,
+  onCommentSource,
 }: {
   taskId: string;
   conversations: AgentConversationIndexEntry[];
+  onCommentSource(commentId: string): void;
 }): ReactNode {
   const [selectedConversationId, setSelectedConversationId] = useState<string>();
   if (conversations.length === 0) return null;
@@ -64,6 +66,7 @@ export function TaskConversationsPanel({
           conversationId={selectedConversationId}
           selectedAttemptRunning={false}
           onClose={() => setSelectedConversationId(undefined)}
+          onCommentSource={onCommentSource}
         />
       )}
     </>

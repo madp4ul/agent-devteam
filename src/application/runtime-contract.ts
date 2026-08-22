@@ -70,6 +70,7 @@ export type CoordinationTranscriptPresentation =
   | {
       kind: "coordination-comment";
       body: string;
+      commentId?: string;
     }
   | {
       kind: "coordination-child-task";
@@ -80,6 +81,10 @@ export type CoordinationTranscriptPresentation =
       kind: "coordination-dependency";
       sourceTask: CoordinationTaskIdentity & { id: string };
       targetTask: CoordinationTaskIdentity;
+    }
+  | {
+      kind: "coordination-permission-block";
+      reason: string;
     }
   | {
       kind: "coordination-inspection";

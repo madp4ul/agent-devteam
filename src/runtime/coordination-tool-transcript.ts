@@ -12,7 +12,13 @@ export function coordinationToolPresentation(
   const arguments_ = recordValue(item.arguments);
   if (item.tool === "add_comment") {
     const body = stringValue(arguments_?.body);
-    return body === undefined ? undefined : { kind: "coordination-comment", body };
+    if (body === undefined) return undefined;
+    const result = coordinationResult(item.result);
+    return {
+      kind: "coordination-comment",
+      body,
+      ...optionalString("commentId", result?.commentId),
+    };
   }
   if (item.tool === "inspect_operating_context") {
     const result = coordinationResult(item.result);
@@ -109,6 +115,10 @@ export function coordinationToolPresentation(
         ...optionalString("id", relationship?.targetTaskId ?? arguments_?.targetTaskId),
       },
     };
+  }
+  if (item.tool === "report_permission_block") {
+    const reason = stringValue(arguments_?.summary);
+    return reason === undefined ? undefined : { kind: "coordination-permission-block", reason };
   }
   if (item.tool !== "move_current_task") return undefined;
   const transition = recordValue(coordinationResult(item.result)?.transition);

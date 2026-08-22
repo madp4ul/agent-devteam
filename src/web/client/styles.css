@@ -285,7 +285,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .more-actions > button { position: absolute; z-index: 5; top: calc(100% + .45rem); right: 0; min-width: 9rem; border: 1px solid var(--line); box-shadow: var(--shadow); white-space: nowrap; }
 
 .detail-topbar { position: sticky; z-index: 10; top: 0; }
-.back-link { color: var(--mint); font-weight: 800; text-decoration: none; }
+.back-link { display: flex; align-items: center; color: var(--mint); font-weight: 800; text-decoration: none; }
 .task-actions { display: flex; align-items: center; gap: .65rem; }
 .task-actions button { padding: .45rem .7rem; font-size: .78rem; }
 .task-detail { max-width: 76rem; margin: 0 auto; }
@@ -601,6 +601,10 @@ textarea { resize: vertical; line-height: 1.5; }
 .coordination-activity-exception strong { overflow-wrap: anywhere; }
 .coordination-activity-actions { display: inline-flex; align-items: center; gap: .45rem; }
 .coordination-comment .authored-text { margin-top: .4rem; }
+.coordination-comment-footer { display: flex; justify-content: flex-end; margin-top: .35rem; }
+html[data-theme] .coordination-comment-footer .quiet-action { border-radius: .4rem; color: var(--action); background: var(--surface-raised); padding: .3rem .45rem; font-size: .72rem; }
+html[data-theme] .coordination-comment-footer .quiet-action:hover { color: var(--action); background: var(--surface-hover); }
+html[data-theme] .coordination-comment-footer .quiet-action:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .transcript-tool { min-width: 0; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); padding: .38rem .6rem; overflow-wrap: anywhere; }
 .tool-status { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border-radius: 50%; background: var(--surface); }
 .tool-status svg { display: block; width: 1rem; height: 1rem; fill: none; stroke: currentcolor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }

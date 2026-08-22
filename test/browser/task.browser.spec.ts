@@ -474,8 +474,19 @@ test("task details keep board navigation pinned while scrolling long history", a
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
 
   const topbar = page.locator(".detail-topbar");
-  await expect(page.getByRole("link", { name: "Back to board" })).toBeVisible();
+  const backLink = page.getByRole("link", { name: "Back to board" });
+  await expect(backLink).toBeVisible();
   await expect.poll(() => topbar.evaluate((element) => element.getBoundingClientRect().top)).toBe(0);
+  const [topbarCenter, backLinkTextCenter] = await Promise.all([
+    topbar.evaluate((element) => element.getBoundingClientRect().top + element.clientHeight / 2),
+    backLink.evaluate((element) => {
+      const textBounds = document.createRange();
+      textBounds.selectNodeContents(element);
+      const bounds = textBounds.getBoundingClientRect();
+      return bounds.top + bounds.height / 2;
+    }),
+  ]);
+  expect(Math.abs(backLinkTextCenter - topbarCenter)).toBeLessThanOrEqual(1);
 });
 
 
@@ -1282,9 +1293,7 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   const taskTimeline = page.getByRole("region", { name: "Task timeline" });
   await expect(taskTimeline.getByText("Dependency added", { exact: true })).toBeVisible();
   await expect(taskTimeline.getByText("Now depends on Recover a workspace startup failure.", { exact: true })).toBeVisible();
-  await expect(taskTimeline.locator("strong.relationship-task-name", {
-    hasText: "Recover a workspace startup failure",
-  })).toBeVisible();
+  await expect(taskTimeline.getByRole("link", { name: "Recover a workspace startup failure" })).toBeVisible();
   await expect(finder).toBeVisible();
   await expect(options).not.toBeVisible();
   await expect(relationships.getByText("Selected: Recover a workspace startup failure")).toHaveCount(0);
@@ -1310,6 +1319,7 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await expect(relationships.getByRole("heading", { name: "Child tasks" })).toBeVisible();
   await expect(taskTimeline.getByText("Child task added", { exact: true })).toBeVisible();
   await expect(taskTimeline.getByText("Investigate a focused child outcome was added as a child task.", { exact: true })).toBeVisible();
+  await expect(taskTimeline.getByRole("link", { name: "Investigate a focused child outcome" })).toHaveAttribute("href", /\/tasks\/T-\d{4}/);
   await relationships.getByRole("link", { name: "Investigate a focused child outcome" }).click();
   const childRelationships = page.getByRole("region", { name: "Relationships" });
   const childTimeline = page.getByRole("region", { name: "Task timeline" });

@@ -317,8 +317,8 @@ test("coordination inspections present authoritative scopes and navigable task r
   await expect(currentTask.getByText("Task", { exact: true })).toBeVisible();
   await expect(currentTask.locator("strong")).toHaveText(["Current delivery task", "Implementation"]);
   const operatingContext = dialog.getByRole("article", { name: "Inspect operating context" });
-  await expect(operatingContext.getByText("Run", { exact: true })).toHaveCount(0);
-  await expect(operatingContext).not.toContainText("attempt-authoritative");
+  await expect(operatingContext.getByText("Run context", { exact: true })).toBeVisible();
+  await expect(operatingContext).toContainText("attempt-authoritative");
   const collaborators = dialog.getByRole("article", { name: "List collaborators" });
   await expect(collaborators.getByText("Result", { exact: true })).toBeVisible();
   await expect(collaborators.locator("strong")).toHaveText("2 collaborators");
@@ -379,6 +379,13 @@ test("coordination task actions link complete task identities and separate failu
         },
       },
       {
+        kind: "mcp", server: "coordination", tool: "report_permission_block", status: "succeeded",
+        presentation: {
+          kind: "coordination-permission-block",
+          reason: "Writing the protected release file requires user approval.",
+        },
+      },
+      {
         kind: "mcp", server: "coordination", tool: "list_tasks", status: "failed",
         error: { message: "coordination call failed" },
         presentation: { kind: "coordination-inspection", scope: "tasks", board: { id: "delivery" }, columns: [{ id: "awaiting-user-approval" }] },
@@ -399,6 +406,10 @@ test("coordination task actions link complete task identities and separate failu
   const dependency = dialog.getByRole("article", { name: "Add dependency" });
   await expect(dependency.getByRole("link", { name: "T-0001 Current delivery task" })).toHaveAttribute("target", "_blank");
   await expect(dependency.getByRole("link", { name: "T-0088 Review the API" })).toHaveAttribute("target", "_blank");
+  const permissionBlock = dialog.getByRole("article", { name: "Report permission block" });
+  await expect(permissionBlock.getByText("Reason", { exact: true })).toBeVisible();
+  await expect(permissionBlock).toContainText("Writing the protected release file requires user approval.");
+  await expect(permissionBlock.locator("details")).toHaveCount(0);
   const failedList = dialog.getByRole("article", { name: "List tasks" });
   await expect(failedList.getByText("Board", { exact: true })).toBeVisible();
   await expect(failedList.locator(".coordination-activity-facts strong")).toHaveText(["Delivery", "Awaiting user approval"]);
@@ -453,17 +464,12 @@ test("long coordination inspection scopes stay contained at a narrow viewport", 
 });
 
 test("a coordination comment renders its Markdown with the timeline disclosure", async ({ page }) => {
-  const body = [
-    "This is the **important comment**.",
-    "",
-    "It explains the implementation decision.",
-    "",
-    "- First consequence",
-    "- Second consequence",
-    "- Third consequence",
-    "- Fourth consequence",
-    "- Fifth consequence",
-  ].join("\n");
+  const taskResponse = await page.request.get("/api/tasks/T-0001");
+  const taskResult = await taskResponse.json();
+  const sourceComment = taskResult.task.comments.find((comment: { body: string }) =>
+    comment.body.includes("Preserve authored context"));
+  expect(sourceComment).toBeTruthy();
+  const body = sourceComment.body as string;
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
@@ -477,7 +483,8 @@ test("a coordination comment renders its Markdown with the timeline disclosure",
       rawStatus: "completed",
       summary: "T-0001: comment",
       arguments: { body, expectedRevision: 5 },
-      result: { accepted: true, commentId: "comment-7" },
+      presentation: { kind: "coordination-comment", body, commentId: sourceComment.id },
+      result: { accepted: true, commentId: sourceComment.id },
     }];
     await route.fulfill({ response, json: result });
   });
@@ -487,10 +494,10 @@ test("a coordination comment renders its Markdown with the timeline disclosure",
   const comment = page.getByRole("dialog", { name: "Agent conversation" })
     .getByRole("article", { name: "Comment added" });
 
-  await expect(comment.locator("strong", { hasText: "important comment" })).toBeVisible();
+  await expect(comment.locator("strong", { hasText: "authored context" })).toBeVisible();
   await expect(comment.getByRole("img", { name: "Coordination action succeeded" })).toBeVisible();
   await expect(comment.locator("details")).toHaveCount(0);
-  await expect(comment).not.toContainText(/Server identifier|Tool identifier|Raw status|Arguments|Result|T-0001|comment-7|completed/);
+  await expect(comment).not.toContainText(/Server identifier|Tool identifier|Raw status|Arguments|Result|T-0001|completed/);
   const disclosure = comment.getByRole("button", { name: /Show \d+ more lines/ });
   await expect(disclosure).toBeVisible();
   await disclosure.click();
@@ -499,6 +506,18 @@ test("a coordination comment renders its Markdown with the timeline disclosure",
   await comment.getByRole("button", { name: "Copy comment Markdown" }).click();
   await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n")))
     .toBe(body);
+
+  const historyAction = comment.getByRole("button", { name: "View in task history" });
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(historyAction).toBeFocused();
+  await expect(historyAction).toHaveCSS("outline-style", "solid");
+  await historyAction.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toHaveCount(0);
+  const timelineSource = page.locator(`#timeline-source-${sourceComment.id}`);
+  await expect(timelineSource).toBeFocused();
+  await expect(timelineSource).toHaveClass(/timeline-source-target/);
+  await expect(timelineSource.getByRole("button", { name: "Show less" })).toBeVisible();
 });
 
 test("wide transcript content wraps without overflowing the dialog or page", async ({ page }) => {
@@ -1007,6 +1026,62 @@ test("polling replaces one live MCP row without closing its disclosure or moving
   await expect(call.getByRole("img", { name: "MCP call succeeded" })).toBeVisible();
   await expect(call.locator("details")).toHaveAttribute("open", "");
   await expect(call).toContainText('"number": 42');
+  expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
+});
+
+test("polling replaces one running coordination action with authoritative result facts", async ({ page }) => {
+  await page.clock.install();
+  let reads = 0;
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    reads += 1;
+    const retainedMessages = Array.from({ length: 30 }, (_, index) => ({
+      id: `coordination-retained-message-${index}`,
+      kind: "message",
+      role: "agent",
+      text: `Coordination retained transcript message ${index + 1}.`,
+    }));
+    const move = reads === 1
+      ? {
+          id: "live-coordination-move",
+          kind: "mcp",
+          server: "coordination",
+          tool: "move_current_task",
+          status: "running",
+          presentation: { kind: "coordination-task-move", toColumnId: "requested-review" },
+        }
+      : {
+          id: "live-coordination-move",
+          kind: "mcp",
+          server: "coordination",
+          tool: "move_current_task",
+          status: "succeeded",
+          presentation: {
+            kind: "coordination-task-move",
+            fromColumnId: "implementation",
+            toColumnId: "code-review",
+          },
+        };
+    await route.fulfill({ status: 200, json: runningConversationScenario([move, ...retainedMessages]) });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const move = dialog.getByRole("article", { name: "Move current task" });
+  await expect(move.getByRole("img", { name: "Coordination action running" })).toBeVisible();
+  await expect(move.locator(".coordination-activity-facts strong")).toHaveText(["Requested review"]);
+  const transcriptContent = dialog.locator(".transcript-content");
+  const readingPosition = await transcriptContent.evaluate((element) => {
+    element.scrollTop = 120;
+    return element.scrollTop;
+  });
+  expect(readingPosition).toBeGreaterThan(0);
+
+  await page.clock.fastForward(2_000);
+  await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
+  await expect(move).toHaveCount(1);
+  await expect(move.getByRole("img", { name: "Coordination action succeeded" })).toBeVisible();
+  await expect(move.locator(".coordination-activity-facts strong")).toHaveText(["Implementation", "Code review"]);
   expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
 });
 

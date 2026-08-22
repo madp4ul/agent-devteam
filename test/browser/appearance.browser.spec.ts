@@ -342,6 +342,18 @@ test("conversation message, command, and MCP stream remains readable in both app
           taskTitle: "Inspect linked evidence",
         },
       },
+      {
+        id: "appearance-coordination-comment",
+        kind: "mcp",
+        server: "coordination",
+        tool: "add_comment",
+        status: "succeeded",
+        presentation: {
+          kind: "coordination-comment",
+          body: "Recorded **appearance evidence**.",
+          commentId: "appearance-comment-source",
+        },
+      },
     );
     await route.fulfill({ response, json: result });
   });
@@ -356,6 +368,7 @@ test("conversation message, command, and MCP stream remains readable in both app
     const coordination = dialog.getByRole("article", { name: "Add dependency" });
     const inspection = dialog.getByRole("article", { name: "Inspect task" });
     const inspectionLink = inspection.getByRole("link", { name: "T-0002 Inspect linked evidence" });
+    const commentHistoryAction = dialog.getByRole("button", { name: "View in task history" });
     const statuses = [
       command.getByRole("img", { name: "Command succeeded" }),
       dialog.getByRole("img", { name: "Command running" }),
@@ -371,6 +384,7 @@ test("conversation message, command, and MCP stream remains readable in both app
     expect(await contrastRatio(mcp.locator(".mcp-title"))).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(coordination.locator(".coordination-activity-title"))).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(inspectionLink)).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(commentHistoryAction)).toBeGreaterThanOrEqual(4.5);
     for (const status of statuses) expect(await contrastRatio(status)).toBeGreaterThanOrEqual(3);
     await disclosure.hover();
     await expect(disclosureIcon).toHaveCSS("stroke", theme === "dark" ? "rgb(114, 214, 159)" : "rgb(23, 78, 58)");
@@ -391,6 +405,13 @@ test("conversation message, command, and MCP stream remains readable in both app
     await inspectionLink.focus();
     await expect(inspectionLink).toBeFocused();
     await expect(inspectionLink).toHaveCSS("outline-style", "solid");
+    await commentHistoryAction.hover();
+    expect(await contrastRatio(commentHistoryAction)).toBeGreaterThanOrEqual(4.5);
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(commentHistoryAction).toBeFocused();
+    await expect(commentHistoryAction).toHaveCSS("outline-style", "solid");
+    await expect(commentHistoryAction).toHaveCSS("outline-width", "2px");
     await dialog.getByRole("button", { name: "Close conversation" }).click();
   }
 });

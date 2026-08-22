@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type {
   ActivationView,
@@ -44,6 +44,7 @@ export function TaskTimeline({
   onReplyToAgent,
   onAttentionChanged,
   onAttentionError,
+  sourceRequest,
 }: {
   taskId: string;
   comments: TaskCommentView[];
@@ -57,6 +58,7 @@ export function TaskTimeline({
   onReplyToAgent?(agentId: string, attentionReasonId?: string): void | Promise<void>;
   onAttentionChanged(): Promise<void>;
   onAttentionError(error: unknown): void;
+  sourceRequest?: { sourceId: string; sequence: number };
 }): ReactNode {
   const [conversationSelection, setConversationSelection] = useState<ConversationSelection>();
   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
@@ -89,6 +91,9 @@ export function TaskTimeline({
       focusTimelineSource(sourceId);
     });
   };
+  useEffect(() => {
+    if (sourceRequest !== undefined) followSource(sourceRequest.sourceId);
+  }, [sourceRequest?.sequence]);
 
   return (
     <>
@@ -125,6 +130,7 @@ export function TaskTimeline({
             ? {}
             : { selectedPendingActivationId: conversationSelection.pendingActivationId })}
           onClose={() => setConversationSelection(undefined)}
+          onCommentSource={followSource}
         />
       )}
     </>
@@ -636,7 +642,7 @@ function activityDescription(activity: TaskActivityView, columns: TimelineColumn
 type RelationshipActivityEvent = "created" | "removed" | "satisfied";
 type RelationshipActivityRole = "source" | "target";
 type RelationshipPresentationText = { label: string; prefix: string; suffix: string };
-type RelationshipPresentation = RelationshipPresentationText & { taskName: string };
+type RelationshipPresentation = RelationshipPresentationText & { taskId?: string; taskName: string };
 type DirectionalRelationshipKey = `${TaskRelationshipView["type"]}:${RelationshipActivityRole}:${RelationshipActivityEvent}`;
 
 const directionalRelationshipPresentations = {
@@ -674,6 +680,7 @@ function relationshipActivityPresentation(
   if (role !== "source" && role !== "target") return undefined;
   return {
     ...directionalRelationshipPresentations[`${relationshipType}:${role}:${event}`],
+    ...(relatedTaskId === undefined ? {} : { taskId: relatedTaskId }),
     taskName,
   };
 }
@@ -682,7 +689,13 @@ function relationshipDescription(presentation: RelationshipPresentation): ReactN
   return (
     <>
       {presentation.prefix}
-      <strong className="relationship-task-name">{presentation.taskName}</strong>
+      {presentation.taskId === undefined ? (
+        <strong className="relationship-task-name">{presentation.taskName}</strong>
+      ) : (
+        <a className="relationship-task-name" href={`/tasks/${encodeURIComponent(presentation.taskId)}`}>
+          {presentation.taskName}
+        </a>
+      )}
       {presentation.suffix}
     </>
   );

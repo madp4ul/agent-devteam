@@ -51,6 +51,7 @@ export function TaskPage({
   const commentInput = useRef<HTMLTextAreaElement>(null);
   const [archivalPending, setArchivalPending] = useState(false);
   const [discardConfirmation, setDiscardConfirmation] = useState(false);
+  const [timelineSourceRequest, setTimelineSourceRequest] = useState<{ sourceId: string; sequence: number }>();
   const pendingTimelineAnchor = useRef<TimelineViewportAnchor | null>(null);
   const refresh = useLatestRefresh(
     () => readTask(taskId),
@@ -284,6 +285,7 @@ export function TaskPage({
               transcriptsAvailable={!task.archived}
               onAttentionChanged={refresh}
               onAttentionError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })}
+              {...(timelineSourceRequest === undefined ? {} : { sourceRequest: timelineSourceRequest })}
               {...(task.archived ? {} : { onReplyToAgent: replyToAttentionRequest })}
             /></div>
           </div>
@@ -321,6 +323,10 @@ export function TaskPage({
                 <TaskConversationsPanel
                   taskId={task.id}
                   conversations={detail.conversations}
+                  onCommentSource={(sourceId) => setTimelineSourceRequest((current) => ({
+                    sourceId,
+                    sequence: (current?.sequence ?? 0) + 1,
+                  }))}
                 />
               </div>
             )}
