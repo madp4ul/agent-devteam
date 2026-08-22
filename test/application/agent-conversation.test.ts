@@ -598,6 +598,7 @@ test("task conversation index stays compact, recent, distinguishable, and histor
   assert.deepEqual(Object.keys(initial.conversations[0]!).sort(), [
     "continuation",
     "costPending",
+    "hasUnpricedSettledRuns",
     "id",
     "label",
     "latestActivityAt",
@@ -970,7 +971,7 @@ test("a streamed Codex failure remains inspectable while its retry waits at the 
   });
 });
 
-test("conversation cost totals sum every settled attempt and become unavailable rather than partial", async (t) => {
+test("conversation cost totals preserve the known subtotal when a settled run has no usage", async (t) => {
   const fixture = await createHandoffFixture();
   await writeFile(
     fixture.definitionPath,
@@ -1003,7 +1004,7 @@ agents:
     boardId: "delivery",
     columnId: "implementation",
     title: "Compare complete conversation costs",
-    description: "Never understate a conversation with partial pricing.",
+    description: "Preserve known cost without overstating completeness.",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "create-cost-total-task",
   });
@@ -1066,10 +1067,16 @@ agents:
   await application.waitForAutomationIdle();
   const incomplete = await application.queryAgentConversation(created.task.id, conversationId);
   assert.equal(incomplete.available, true);
-  if (incomplete.available) assert.equal(incomplete.conversation.costEstimate, undefined);
+  if (incomplete.available) {
+    assert.deepEqual(incomplete.conversation.costEstimate, { currency: "USD", amount: 0.003 });
+    assert.equal(incomplete.conversation.hasUnpricedSettledRuns, true);
+  }
   const index = application.queryTaskConversationIndex(created.task.id);
   assert.equal(index.available, true);
-  if (index.available) assert.equal(index.conversations[0]?.costEstimate, undefined);
+  if (index.available) {
+    assert.deepEqual(index.conversations[0]?.costEstimate, { currency: "USD", amount: 0.003 });
+    assert.equal(index.conversations[0]?.hasUnpricedSettledRuns, true);
+  }
 });
 
 test("conversation index status follows running work and unresolved attention", async (t) => {

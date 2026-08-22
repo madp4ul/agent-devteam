@@ -74,7 +74,9 @@ export function AgentActivityPanel({
                 .catch((error) => onFeedback({ role: "alert", text: errorMessage(error) }));
             }}
           >
-            {state.activeRun.status === "interrupting" ? "Interrupting…" : "Interrupt current attempt"}
+            {state.activeRun.status === "interrupting" ? (
+              <><span className="cost-pending-spinner" aria-hidden="true" /> Interrupting…</>
+            ) : "Interrupt current attempt"}
           </button>
         </div>
       ) : interruptedCurrent !== null ? (

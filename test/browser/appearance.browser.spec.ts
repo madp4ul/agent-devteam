@@ -272,7 +272,7 @@ test("conversation overflow icon is centered and retirement confirmation stays c
   }
 });
 
-test("conversation status dots remain distinct in dark and light appearances", async ({ page }) => {
+test("conversation activity spinner and attention dot remain distinct in dark and light appearances", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
     const detail = await response.json();
@@ -291,18 +291,21 @@ test("conversation status dots remain distinct in dark and light appearances", a
     const running = conversations.getByRole("status", { name: "Conversation running" });
     const attention = conversations.getByRole("status", { name: "Conversation needs attention" });
     await expect(running).toHaveCSS(
-      "background-color",
+      "border-top-color",
       theme === "dark" ? "rgb(156, 229, 187)" : "rgb(20, 80, 57)",
     );
+    await expect(running).toHaveCSS("animation-name", "cost-pending-spin");
     await expect(attention).toHaveCSS(
       "background-color",
       theme === "dark" ? "rgb(243, 207, 120)" : "rgb(114, 80, 14)",
     );
-    for (const dot of [running, attention]) {
-      const bounds = await dot.boundingBox();
-      expect(bounds?.width).toBe(8);
-      expect(bounds?.height).toBe(8);
-    }
+    const runningBounds = await running.boundingBox();
+    const attentionBounds = await attention.boundingBox();
+    expect(runningBounds).not.toBeNull();
+    expect(attentionBounds).not.toBeNull();
+    expect(runningBounds!.width).toBeGreaterThan(attentionBounds!.width);
+    expect(attentionBounds!.width).toBe(8);
+    expect(attentionBounds!.height).toBe(8);
   }
 });
 

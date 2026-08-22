@@ -105,16 +105,6 @@ export class ConversationProjectionModule {
                 JOIN model_pricing pricing ON pricing.model = priced_attempt.model
                 WHERE priced_activation.conversation_id = conversation.id
                   AND priced_attempt.status = 'running'
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM activations settled_activation
-                    JOIN attempts settled_attempt ON settled_attempt.activation_id = settled_activation.id
-                    LEFT JOIN attempt_transcripts settled_transcript
-                      ON settled_transcript.attempt_id = settled_attempt.id
-                    WHERE settled_activation.conversation_id = conversation.id
-                      AND settled_attempt.status <> 'running'
-                      AND json_extract(settled_transcript.usage_json, '$.estimatedCostUsd') IS NULL
-                  )
               ) THEN 1 ELSE 0 END AS cost_pending
        FROM agent_conversations conversation
        JOIN tasks task ON task.id = conversation.task_id
@@ -171,16 +161,6 @@ export class ConversationProjectionModule {
                 JOIN model_pricing pricing ON pricing.model = priced_attempt.model
                 WHERE priced_activation.conversation_id = conversation.id
                   AND priced_attempt.status = 'running'
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM activations settled_activation
-                    JOIN attempts settled_attempt ON settled_attempt.activation_id = settled_activation.id
-                    LEFT JOIN attempt_transcripts settled_transcript
-                      ON settled_transcript.attempt_id = settled_attempt.id
-                    WHERE settled_activation.conversation_id = conversation.id
-                      AND settled_attempt.status <> 'running'
-                      AND json_extract(settled_transcript.usage_json, '$.estimatedCostUsd') IS NULL
-                  )
               ) THEN 1 ELSE 0 END AS cost_pending
        FROM agent_conversations conversation
        JOIN tasks task ON task.id = conversation.task_id
@@ -250,11 +230,14 @@ export class ConversationProjectionModule {
     };
   }
 
-  #readConversationCostEstimate(conversationId: string): { costEstimate?: EstimatedTokenCost } {
+  #readConversationCostEstimate(conversationId: string): {
+    costEstimate?: EstimatedTokenCost;
+    hasUnpricedSettledRuns: boolean;
+  } {
     const runs = this.#readRuns(conversationId);
-    if (runs.length === 0) return {};
+    if (runs.length === 0) return { hasUnpricedSettledRuns: false };
     const settled = runs.filter(({ attempt }) => attempt.status !== "running");
-    if (settled.length === 0) return {};
+    if (settled.length === 0) return { hasUnpricedSettledRuns: false };
     const rows = this.#database.prepare(
       `SELECT transcript.usage_json
        FROM activations activation
@@ -263,17 +246,20 @@ export class ConversationProjectionModule {
        WHERE activation.conversation_id = ? AND attempt.status <> 'running'
        ORDER BY attempt.rowid`,
     ).all(conversationId) as Array<{ usage_json: string | null }>;
-    if (rows.length !== settled.length || rows.some(({ usage_json }) => usage_json === null)) return {};
-    const amounts = rows.map(({ usage_json }) => {
-      const value = JSON.parse(usage_json!) as { estimatedCostUsd?: number };
-      return value.estimatedCostUsd;
+    const amounts = rows.flatMap(({ usage_json }) => {
+      if (usage_json === null) return [];
+      const value = JSON.parse(usage_json) as { estimatedCostUsd?: number };
+      return value.estimatedCostUsd === undefined ? [] : [value.estimatedCostUsd];
     });
-    if (amounts.some((amount) => amount === undefined)) return {};
+    const hasUnpricedSettledRuns = rows.length !== settled.length || amounts.length !== settled.length;
     return {
-      costEstimate: {
-        currency: "USD",
-        amount: Number(amounts.reduce<number>((sum, amount) => sum + (amount ?? 0), 0).toFixed(12)),
-      },
+      ...(amounts.length === 0 ? {} : {
+        costEstimate: {
+          currency: "USD" as const,
+          amount: Number(amounts.reduce((sum, amount) => sum + amount, 0).toFixed(12)),
+        },
+      }),
+      hasUnpricedSettledRuns,
     };
   }
 
@@ -374,19 +360,21 @@ export class ConversationProjectionModule {
 
 function conversationCostEstimate(
   runs: AgentConversationView["runs"],
-): { costEstimate?: EstimatedTokenCost } {
+): { costEstimate?: EstimatedTokenCost; hasUnpricedSettledRuns: boolean } {
   const settled = runs.filter(({ attempt }) => attempt.status !== "running");
-  if (settled.length === 0 || settled.some(({ transcript }) =>
-    !transcript.available || transcript.costEstimate === undefined
-  )) return {};
+  if (settled.length === 0) return { hasUnpricedSettledRuns: false };
+  const priced = settled.filter(({ transcript }) => transcript.available && transcript.costEstimate !== undefined);
   return {
-    costEstimate: {
-      currency: "USD",
-      amount: Number(settled.reduce(
-        (sum, { transcript }) => sum + (transcript.available ? transcript.costEstimate!.amount : 0),
-        0,
-      ).toFixed(12)),
-    },
+    ...(priced.length === 0 ? {} : {
+      costEstimate: {
+        currency: "USD" as const,
+        amount: Number(priced.reduce(
+          (sum, { transcript }) => sum + (transcript.available ? transcript.costEstimate!.amount : 0),
+          0,
+        ).toFixed(12)),
+      },
+    }),
+    hasUnpricedSettledRuns: priced.length !== settled.length,
   };
 }
 

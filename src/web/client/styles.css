@@ -178,6 +178,7 @@ p { line-height: 1.55; }
 .warning-badge { display: grid; place-items: center; width: 1rem; height: 1rem; border-radius: 50%; color: #231a00; background: #f4bf4f; font-size: .7rem; font-weight: 900; }
 .status-dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--amber); }
 .status-dot.running { background: #72d69f; box-shadow: 0 0 0 5px #72d69f22; }
+.automation-status-action .cost-pending-spinner, .activity-current button .cost-pending-spinner { display: inline-block; margin-right: .35rem; vertical-align: -.1rem; }
 .secondary { color: var(--ink); background: #e9ede7; }
 .secondary:hover:not(:disabled) { background: #dce4dd; }
 .destructive { background: #a33e2b; }
@@ -239,6 +240,7 @@ input, textarea, select { width: 100%; border: 1px solid #cbd2cc; border-radius:
 .card-title { display: block; font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; font-size: .98rem; font-weight: 700; line-height: 1.35; }
 .card-signals { display: grid; gap: .32rem; margin-top: .7rem; }
 .signal { width: fit-content; border-radius: 999px; padding: .25rem .5rem; font-size: .68rem; font-weight: 800; }
+.signal.running { display: inline-flex; align-items: center; gap: .35rem; }
 .signal.blocked, .signal.failed { color: #943421; background: #f9ddd5; }
 .signal.attention { color: #72500e; background: #f6e5bd; }
 .signal.queued { color: #31516b; background: #dce9f2; }
@@ -313,7 +315,8 @@ textarea { resize: vertical; line-height: 1.5; }
 .detail-panel, .move-panel, .timeline-section { border: 1px solid var(--line); border-radius: .85rem; background: var(--paper); padding: 1.3rem; box-shadow: 0 5px 18px rgb(20 34 28 / 4%); }
 .detail-column > [data-task-section="conversations"] { position: sticky; top: var(--detail-sticky-offset); }
 .conversations-panel { padding: 1rem; }
-.conversations-panel h2 { margin: 0 0 .65rem; font-size: 1rem; }
+.conversations-panel h2 { margin: 0; font-size: 1rem; }
+.conversations-panel-heading { margin-bottom: .65rem; }
 .conversation-index { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
 .conversation-index-row { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: .75rem; border: 1px solid transparent; border-radius: .55rem; padding: .55rem .6rem; text-align: left; }
 .conversation-index-row:focus-visible { outline: 2px solid var(--info-text); outline-offset: 2px; }
@@ -322,7 +325,6 @@ textarea { resize: vertical; line-height: 1.5; }
 .conversation-index-meta { display: inline-flex; align-items: center; gap: .45rem; }
 .conversation-retired-label { color: var(--muted); font-size: .72rem; font-weight: 650; }
 .conversation-status-dot { width: .5rem; height: .5rem; border-radius: 50%; }
-.conversation-status-dot.status-running { background: var(--running-text); }
 .conversation-status-dot.status-attention { background: var(--warning-text); }
 .workspace-panel { padding: 1rem 1.1rem; }
 .workspace-actions { display: flex; width: 100%; align-items: stretch; flex-wrap: wrap; justify-content: flex-start; gap: .55rem; margin-top: .8rem; }
@@ -559,10 +561,10 @@ textarea { resize: vertical; line-height: 1.5; }
 .token-usage { display: flex; align-items: center; gap: .35rem; min-height: 2.35rem; border: 1px solid var(--line); border-radius: .55rem; color: var(--muted); background: var(--paper); padding: .35rem .55rem; font-size: .78rem; white-space: nowrap; }
 .token-usage strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 .cost-estimate { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted); font-size: .76rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cost-estimate-badge { min-height: 1.8rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface-subtle); padding: .25rem .5rem; color: var(--ink); font-weight: 700; }
 .token-usage .cost-estimate { color: var(--ink); font-weight: 700; }
-.cost-pending-spinner { width: .72rem; height: .72rem; flex: none; border: 2px solid color-mix(in srgb, var(--muted) 35%, transparent); border-top-color: var(--running-text); border-radius: 50%; animation: cost-pending-spin .8s linear infinite; }
+.cost-pending-spinner { width: .72rem; height: .72rem; flex: none; border: 2px solid color-mix(in srgb, var(--muted) 35%, transparent); border-top-color: var(--running-text); border-radius: 50%; animation: cost-pending-spin 1.6s linear infinite; }
 @keyframes cost-pending-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .cost-pending-spinner { animation-duration: 2s; } }
 .transcript-content { display: grid; min-width: 0; gap: .8rem; overflow-y: auto; overscroll-behavior-y: contain; padding-right: .3rem; }
 .conversation-run { display: grid; min-width: 0; gap: .8rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .conversation-run:first-child { border-top: 0; padding-top: 0; }
@@ -628,7 +630,7 @@ html[data-theme] .coordination-comment-footer .quiet-action:focus-visible { outl
 .tool-status.running { color: var(--running-text); }
 .tool-status.rejected { color: var(--warning-text); }
 .tool-status.failed { color: var(--failure-text); }
-.tool-status.running svg { animation: command-status-spin .9s linear infinite; }
+.tool-status.running svg { animation: command-status-spin 1.6s linear infinite; }
 .transcript-tool-details { min-width: 0; }
 .transcript-tool-details summary { display: grid; grid-template-columns: .9rem minmax(0, 1fr) 1.5rem; align-items: center; gap: .45rem; background: var(--surface); cursor: pointer; list-style: none; }
 .transcript-tool-details summary::marker { content: ""; }
@@ -654,7 +656,6 @@ html[data-theme] .coordination-comment-footer .quiet-action:focus-visible { outl
 @keyframes command-status-spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .tool-status.running svg { animation: none; }
   .command-disclosure-icon { transition: none; }
 }
 
@@ -793,4 +794,5 @@ html[data-theme] .conversation-actions-options button[aria-disabled="true"] { co
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  .cost-pending-spinner, .tool-status.running svg { animation-duration: 3.2s !important; }
 }

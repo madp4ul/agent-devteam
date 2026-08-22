@@ -93,16 +93,17 @@ estimated USD = (
 ```
 
 Reasoning output is already included in output and is not charged again. An
-invalid overlap, unavailable isolated usage, inherited or unmatched model, or
-incomplete pricing makes cost unavailable rather than partial. Each finished
-attempt persists its estimate, so later pricing edits do not rewrite history.
+invalid overlap, unavailable isolated usage, inherited or unmatched model makes
+that attempt's cost unavailable. Each finished attempt with usage persists its
+estimate, so later pricing edits do not rewrite history.
 Pricing participates in the semantic process-definition fingerprint and the
 ordinary stale-activation workflow.
 
-The browser labels the number as an estimate. Conversation totals are
-all-or-nothing across settled attempts of every outcome. A priceable running
-attempt is excluded until it settles; complete prior totals show a pending
-spinner, and a first priceable run shows `$0` with that spinner.
+The browser sums every known settled-attempt estimate across outcomes. When one
+or more settled attempts did not report a price, the known subtotal remains
+visible with `≥` to identify it as a lower bound. A priceable running attempt is
+excluded until it settles; known prior totals show a pending spinner, and a
+first priceable run shows `$0` with that spinner.
 
 ## Boards and columns
 

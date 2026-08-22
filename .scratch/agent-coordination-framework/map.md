@@ -270,7 +270,7 @@ without choosing the implementation yet.
   calculate cost only when trustworthy per-attempt usage and complete pricing
   metadata are available.
   **Resolved:** Exact-model USD-per-million pricing now produces immutable
-  per-attempt estimates plus all-or-nothing conversation totals in run,
+  per-attempt estimates plus known-subtotal conversation totals in run,
   conversation-header, and task-detail conversation surfaces; priceable active
   runs add a pending spinner without inventing live usage.
 - [Isolate Token Usage for User Follow-Ups](./issues/71-isolate-follow-up-token-usage.md)

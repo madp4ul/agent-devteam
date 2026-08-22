@@ -54,7 +54,12 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   const commands = dialog.locator(".transcript-command");
   await expect(commands).toHaveCount(3);
   await expect(commands.nth(0).getByRole("img", { name: "Command succeeded" })).toBeVisible();
-  await expect(commands.nth(1).getByRole("img", { name: "Command running" })).toBeVisible();
+  const runningCommand = commands.nth(1).getByRole("img", { name: "Command running" });
+  await expect(runningCommand).toBeVisible();
+  await expect(runningCommand.locator("svg")).toHaveCSS("animation-duration", "1.6s");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(runningCommand.locator("svg")).toHaveCSS("animation-duration", "3.2s");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   await expect(commands.nth(2).getByRole("img", { name: "Command failed" })).toBeVisible();
   await expect(commands.nth(0).locator(".command-disclosure-icon")).toBeVisible();
   await expect(commands.nth(0).getByText(command, { exact: true })).not.toBeVisible();
@@ -603,39 +608,62 @@ test("a conversation without reported usage does not present zero as measured us
   await expect(dialog).not.toContainText("0 total tokens");
 });
 
-test("priced conversations show attempt and aggregate estimates while running totals stay visibly pending", async ({ page }) => {
+test("conversation aggregates show known lower bounds while running totals stay visibly pending", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
     const detail = await response.json();
     detail.conversations[0].costEstimate = { currency: "USD", amount: 0.02215 };
+    detail.conversations[0].hasUnpricedSettledRuns = true;
     detail.conversations[0].costPending = true;
+    detail.conversations.push({
+      ...detail.conversations[0],
+      id: "browser-conversation-2",
+      costEstimate: { currency: "USD", amount: 0.013 },
+      hasUnpricedSettledRuns: false,
+      costPending: false,
+    });
     await route.fulfill({ response, json: detail });
   });
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
     const result = await response.json();
     result.conversation.costEstimate = { currency: "USD", amount: 0.02215 };
+    result.conversation.hasUnpricedSettledRuns = true;
     result.conversation.costPending = true;
     result.conversation.runs[0].transcript.costEstimate = { currency: "USD", amount: 0.02215 };
     await route.fulfill({ response, json: result });
   });
 
   await page.goto("/tasks/T-0001");
-  const conversationRow = page.getByRole("region", { name: "Conversations" }).getByRole("button").first();
-  await expect(conversationRow).toContainText("$0.02215");
-  await expect(conversationRow.getByRole("status", { name: /update when the current run finishes/i })).toBeVisible();
+  const conversationsPanel = page.getByRole("region", { name: "Conversations" });
+  const conversationRow = conversationsPanel.getByRole("button").first();
+  const panelCost = conversationsPanel.getByTestId("task-conversations-cost");
+  await expect(panelCost).toContainText("≥$0.04");
+  await expect(panelCost).not.toContainText("~");
+  await expect(panelCost).toHaveClass(/cost-estimate-badge/);
+  await expect(panelCost).toHaveRole("status");
+  await expect(panelCost).toHaveAccessibleName(/update when the current run finishes/i);
+  await expect(conversationRow).not.toContainText("$");
   await conversationRow.click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
-  await expect(dialog.getByTestId("conversation-cost")).toContainText("$0.02215");
+  await expect(dialog.getByTestId("conversation-cost")).toContainText("≥$0.02");
+  await expect(dialog.getByTestId("conversation-cost")).not.toContainText("~");
+  await expect(dialog.getByTestId("conversation-cost")).toHaveClass(/cost-estimate-badge/);
   await expect(dialog.getByTestId("conversation-cost")).toHaveRole("status");
-  await expect(dialog.getByRole("region", { name: "Token usage" })).toContainText("$0.02215");
+  const tokenUsage = dialog.getByRole("region", { name: "Token usage" });
+  await expect(tokenUsage).toContainText("$0.02");
+  await expect(tokenUsage).not.toContainText("≥");
+  await expect(tokenUsage).not.toContainText("~");
+  await expect(tokenUsage.locator(".cost-estimate")).not.toHaveClass(/cost-estimate-badge/);
 });
 
 test("a first priceable running attempt shows a zero aggregate with a pending spinner", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
     const detail = await response.json();
     delete detail.conversations[0].costEstimate;
+    detail.conversations[0].hasUnpricedSettledRuns = false;
     detail.conversations[0].costPending = true;
     await route.fulfill({ response, json: detail });
   });
@@ -643,6 +671,7 @@ test("a first priceable running attempt shows a zero aggregate with a pending sp
     const response = await route.fetch();
     const result = await response.json();
     delete result.conversation.costEstimate;
+    result.conversation.hasUnpricedSettledRuns = false;
     result.conversation.costPending = true;
     delete result.conversation.runs[0].transcript.costEstimate;
     await route.fulfill({ response, json: result });
@@ -651,19 +680,27 @@ test("a first priceable running attempt shows a zero aggregate with a pending sp
   for (const theme of ["dark", "light"] as const) {
     await page.goto("/tasks/T-0001");
     await setAppearance(page, theme);
-    const conversationRow = page.getByRole("region", { name: "Conversations" }).getByRole("button").first();
-    const pendingCost = conversationRow.getByRole("status", {
-      name: /estimated token cost \$0; will update/i,
+    const conversationsPanel = page.getByRole("region", { name: "Conversations" });
+    const conversationRow = conversationsPanel.getByRole("button").first();
+    const pendingCost = conversationsPanel.getByRole("status", {
+      name: /estimated token cost \$0\.00; will update/i,
     });
     await expect(pendingCost).toBeVisible();
-    await expect(pendingCost.locator(".cost-pending-spinner")).not.toHaveCSS(
+    await expect(pendingCost).toContainText("$0.00");
+    await expect(pendingCost).not.toContainText("~");
+    const spinner = pendingCost.locator(".cost-pending-spinner");
+    const amount = pendingCost.locator("span", { hasText: "$0.00" });
+    await expect(spinner).not.toHaveCSS(
       "border-top-color",
       "rgba(0, 0, 0, 0)",
     );
+    await expect(spinner).toHaveCSS("animation-name", "cost-pending-spin");
+    await expect(spinner).toHaveCSS("animation-duration", "3.2s");
+    expect((await spinner.boundingBox())!.x).toBeLessThan((await amount.boundingBox())!.x);
     await conversationRow.click();
     const dialog = page.getByRole("dialog", { name: "Agent conversation" });
     await expect(dialog.getByTestId("conversation-cost")).toHaveAccessibleName(
-      /estimated token cost \$0; will update/i,
+      /estimated token cost \$0\.00; will update/i,
     );
     await expect(dialog.locator(".conversation-run-metrics")).not.toContainText("$");
     await dialog.getByRole("button", { name: "Close conversation" }).click();

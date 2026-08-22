@@ -191,7 +191,9 @@ export function AgentConversationDialog({
               <CostEstimate
                 {...(conversation.costEstimate === undefined ? {} : { estimate: conversation.costEstimate })}
                 pending={conversation.costPending}
+                lowerBound={conversation.hasUnpricedSettledRuns}
                 testId="conversation-cost"
+                appearance="badge"
               />
             )}
             {conversation === undefined ? null : <ConversationActionsMenu

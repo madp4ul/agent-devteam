@@ -36,7 +36,9 @@ export function AutomationControls({
       {automation.state === "running" || automation.state === "pausing" ? (
         <button className="topbar-control automation-status-action" disabled={automation.state === "pausing"}
           onClick={() => void pauseAutomation().then(onChanged).catch(reportFailure)}>
-          <span className={`status-dot ${automation.state}`} aria-hidden="true" />
+          {automation.state === "pausing"
+            ? <span className="cost-pending-spinner" aria-hidden="true" />
+            : <span className="status-dot running" aria-hidden="true" />}
           {automation.state === "pausing" ? "Pausing…" : "Pause"}
         </button>
       ) : null}

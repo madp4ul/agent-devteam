@@ -139,7 +139,7 @@ test("compact conversation rows stay last in the supporting column and open by k
 });
 
 
-test("compact conversation dots expose running and attention without decorating idle history", async ({ page }) => {
+test("compact conversation indicators expose running and attention without decorating idle history", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
     const detail = await response.json();
@@ -158,9 +158,12 @@ test("compact conversation dots expose running and attention without decorating 
   await expect(rows.nth(0).getByRole("status")).toHaveCount(0);
   const running = rows.nth(1).getByRole("status", { name: "Conversation running" });
   await expect(running).toHaveAttribute("title", "Conversation running");
-  await expect(running).toHaveCSS("background-color", "rgb(20, 80, 57)");
+  await expect(running).toHaveClass(/cost-pending-spinner/);
+  await expect(running).toHaveCSS("animation-name", "cost-pending-spin");
+  await expect(rows.nth(1).locator(".conversation-status-dot")).toHaveCount(0);
   const attention = rows.nth(2).getByRole("status", { name: "Conversation needs attention" });
   await expect(attention).toHaveAttribute("title", "Conversation needs attention");
+  await expect(attention).toHaveClass(/conversation-status-dot/);
   await expect(attention).toHaveCSS("background-color", "rgb(114, 80, 14)");
   await expect(rows.nth(1)).not.toContainText("running");
   await expect(rows.nth(2)).not.toContainText("needs attention");

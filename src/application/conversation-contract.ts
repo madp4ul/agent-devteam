@@ -23,6 +23,7 @@ export interface AgentConversationView {
   createdAt: string;
   latestActivityAt: string;
   costEstimate?: EstimatedTokenCost;
+  hasUnpricedSettledRuns: boolean;
   costPending: boolean;
   retirement: AgentConversationRetirementView | null;
   replacesConversationId: string | null;
@@ -53,6 +54,7 @@ export interface AgentConversationIndexEntry {
   label: string;
   latestActivityAt: string;
   costEstimate?: EstimatedTokenCost;
+  hasUnpricedSettledRuns: boolean;
   costPending: boolean;
   status: "running" | "needs-attention" | null;
   continuation: AgentConversationView["continuation"];

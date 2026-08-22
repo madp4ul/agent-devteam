@@ -295,6 +295,13 @@ test("task interruption waits for confirmation and offers contextual continuatio
     await route.fulfill({ status: 200, json: result });
   });
 
+  await page.goto("/");
+  const activeCardSignal = page.locator('[data-task-id="T-0002"] .signal.running');
+  await expect(activeCardSignal).toContainText("Active · consulting-agent");
+  await expect(activeCardSignal.locator(".cost-pending-spinner")).toHaveCSS(
+    "animation-name",
+    "cost-pending-spin",
+  );
   await page.goto("/tasks/T-0002");
   await expect(page.getByRole("region", { name: "Agent activity" })).toContainText("consulting-agent");
   await expect(page.getByRole("region", { name: "Agent activity" })).toContainText(/Running · 0m/);
@@ -304,7 +311,12 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText(/Run 1 · running/);
   await page.getByRole("button", { name: "Close conversation" }).click();
   const interruptClick = page.getByRole("button", { name: "Interrupt current attempt" }).click();
-  await expect(page.getByRole("button", { name: "Interrupting…" })).toBeDisabled();
+  const interruptingButton = page.getByRole("button", { name: "Interrupting…" });
+  await expect(interruptingButton).toBeDisabled();
+  await expect(interruptingButton.locator(".cost-pending-spinner")).toHaveCSS(
+    "animation-name",
+    "cost-pending-spin",
+  );
   await interruptClick;
   const interruptedCurrent = page.locator(".activity-current.interrupted");
   await expect(interruptedCurrent).toContainText("consulting-agent");
@@ -1052,7 +1064,12 @@ test("top-bar automation action transitions and Current runs navigation stay com
   await expect(page).toHaveURL(/\/$/);
   await popup.close();
   await page.getByRole("button", { name: "Pause" }).click();
-  await expect(page.getByRole("button", { name: "Pausing…" })).toBeDisabled();
+  const pausingButton = page.getByRole("button", { name: "Pausing…" });
+  await expect(pausingButton).toBeDisabled();
+  await expect(pausingButton.locator(".cost-pending-spinner")).toHaveCSS(
+    "animation-name",
+    "cost-pending-spin",
+  );
   await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
   await expect(page.getByText("No agents are changing boards.")).toHaveCount(0);
 });

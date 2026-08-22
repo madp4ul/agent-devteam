@@ -59,9 +59,10 @@ unavailable.
 
 Each settled attempt persists its process-defined estimated token cost, so
 later pricing edits do not rewrite history. The run header presents the
-estimate beside Input and Output. The agent-conversation header and its compact
-task-detail row show an all-or-nothing sum across settled attempts, including
-failed and interrupted work. A priceable running attempt is excluded from the
-sum and adds a pending spinner; the first such run displays `$0` with the
-spinner. The UI makes no invoice, subscription, exchange-rate, tax, regional,
+estimate beside Input and Output. The agent-conversation header and task-detail
+Conversations panel header sum known settled-attempt costs, including failed
+and interrupted work. If a settled attempt has no reported usage, the known
+subtotal remains visible with `≥` as a lower bound. A priceable running attempt
+is excluded from the sum and adds a pending spinner; the first such run displays
+`$0` with the spinner. The UI makes no invoice, subscription, exchange-rate, tax, regional,
 processing-mode, tool-fee, or broader billing claim.
