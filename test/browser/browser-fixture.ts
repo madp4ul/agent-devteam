@@ -140,6 +140,25 @@ export async function setAppearance(page: Page, theme: "light" | "dark"): Promis
   await page.keyboard.press("Escape");
 }
 
+export async function selectRenderedText(locator: Locator): Promise<string> {
+  return locator.evaluate((element) => {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    return selection?.toString() ?? "";
+  });
+}
+
+export async function clearTextSelection(page: Page): Promise<void> {
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+}
+
+export async function selectedText(page: Page): Promise<string> {
+  return page.evaluate(() => window.getSelection()?.toString() ?? "");
+}
+
 export async function contrastRatio(locator: Locator): Promise<number> {
   return locator.evaluate((element) => {
     const style = getComputedStyle(element);

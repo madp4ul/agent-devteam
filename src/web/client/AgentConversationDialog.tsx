@@ -11,6 +11,11 @@ import { formatFileSize } from "./file-size.ts";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { Modal } from "./Modal.tsx";
 import { MoreActionsIconButton } from "./MoreActionsIconButton.tsx";
+import {
+  captureTextSelectionWithin,
+  restoreCapturedTextSelection,
+  type CapturedTextSelection,
+} from "./text-selection.ts";
 
 const ACTIVE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 1_000;
 const IDLE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 2_000;
@@ -68,6 +73,7 @@ export function AgentConversationDialog({
   const uploadControllers = useRef(new Map<string, AbortController>());
   const uploadsRef = useRef<ComposerUpload[]>([]);
   const pendingScrollPosition = useRef<number | "bottom" | null>(null);
+  const pendingTextSelection = useRef<CapturedTextSelection | null>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   const retirementIdempotencyKey = useRef(crypto.randomUUID());
   const pendingActivationId = useRef<string | undefined>(selectedPendingActivationId);
@@ -156,6 +162,8 @@ export function AgentConversationDialog({
       ? contentRef.current.scrollHeight
       : pendingScrollPosition.current;
     pendingScrollPosition.current = null;
+    restoreCapturedTextSelection(pendingTextSelection.current);
+    pendingTextSelection.current = null;
   }, [conversation]);
 
   const refresh = useLatestRefresh(
@@ -168,6 +176,7 @@ export function AgentConversationDialog({
             : content.scrollHeight - content.clientHeight - content.scrollTop <= 32
               ? "bottom"
               : content.scrollTop;
+          pendingTextSelection.current = captureTextSelectionWithin(content);
           setConversation(result.conversation);
           const pendingAppeared = pendingActivationId.current !== undefined &&
             result.conversation.history.some((entry) =>

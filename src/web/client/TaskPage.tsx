@@ -35,6 +35,11 @@ import {
   restoreTimelineViewportAnchor,
   type TimelineViewportAnchor,
 } from "./timeline-scroll-anchor.ts";
+import {
+  captureTextSelectionWithin,
+  restoreCapturedTextSelection,
+  type CapturedTextSelection,
+} from "./text-selection.ts";
 
 export function TaskPage({
   taskId,
@@ -55,10 +60,16 @@ export function TaskPage({
   const [discardConfirmation, setDiscardConfirmation] = useState(false);
   const [timelineSourceRequest, setTimelineSourceRequest] = useState<{ sourceId: string; sequence: number }>();
   const pendingTimelineAnchor = useRef<TimelineViewportAnchor | null>(null);
+  const taskDetailRef = useRef<HTMLElement>(null);
+  const pendingTextSelection = useRef<CapturedTextSelection | null>(null);
   const refresh = useLatestRefresh(
     () => readTask(taskId),
     (next) => {
       pendingTimelineAnchor.current = captureTimelineViewportAnchor();
+      pendingTextSelection.current = captureTextSelectionWithin(
+        taskDetailRef.current,
+        document.querySelector(".transcript-content"),
+      );
       setDetail(next);
     },
   );
@@ -70,6 +81,8 @@ export function TaskPage({
   useLayoutEffect(() => {
     restoreTimelineViewportAnchor(pendingTimelineAnchor.current);
     pendingTimelineAnchor.current = null;
+    restoreCapturedTextSelection(pendingTextSelection.current);
+    pendingTextSelection.current = null;
   }, [detail]);
   useLayoutEffect(() => {
     const panel = commentPanel.current;
@@ -220,7 +233,7 @@ export function TaskPage({
           onFeedback={setFeedback}
         />
       </header>
-      <main className="task-detail">
+      <main ref={taskDetailRef} className="task-detail">
         <section className="task-overview" data-task-section="overview">
           {feedback === undefined ? null : (
             <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>

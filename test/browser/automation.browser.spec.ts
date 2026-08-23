@@ -5,7 +5,14 @@ import { join } from "node:path";
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
 import { writeProcessEvolutionDefinition } from "../support/process-evolution-fixture.ts";
-import { expect, test, runningConversationScenario } from "./browser-fixture.ts";
+import {
+  clearTextSelection,
+  expect,
+  runningConversationScenario,
+  selectedText,
+  selectRenderedText,
+  test,
+} from "./browser-fixture.ts";
 
 test("process changes expose startup impact and explicit stale-work recovery", async ({ page }) => {
   let staleActivations = [
@@ -665,6 +672,8 @@ test("live task refresh moves a singly blocked activity to idle without disturbi
     window.scrollTo(0, 320);
     return window.scrollY;
   });
+  const selectedTaskText = await selectRenderedText(page.locator(".task-description .description strong"));
+  expect(selectedTaskText).toBe("full task history");
   await expect(activity).toContainText("No agent work is running or queued.");
   const idleBounds = await activity.boundingBox();
   expect(idleBounds).not.toBeNull();
@@ -672,6 +681,11 @@ test("live task refresh moves a singly blocked activity to idle without disturbi
   await expect(draft).toHaveValue("Keep the reader's in-progress comment.");
   await expect(draft).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(readingPosition);
+  expect(await selectedText(page)).toBe(selectedTaskText);
+  const readsAfterPreservedSelection = reads;
+  await clearTextSelection(page);
+  await expect.poll(() => reads).toBeGreaterThan(readsAfterPreservedSelection);
+  expect(await selectedText(page)).toBe("");
 });
 
 

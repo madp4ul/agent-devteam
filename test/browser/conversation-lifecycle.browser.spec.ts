@@ -1,5 +1,12 @@
-import { expect, test } from "./browser-fixture.ts";
-import { cleanWorkspaceGitScenario, runningConversationScenario } from "./browser-fixture.ts";
+import {
+  cleanWorkspaceGitScenario,
+  clearTextSelection,
+  expect,
+  runningConversationScenario,
+  selectedText,
+  selectRenderedText,
+  test,
+} from "./browser-fixture.ts";
 
 test("conversation dialog exposes its loading state until conversation evidence arrives", async ({ page }) => {
   let releaseConversation!: () => void;
@@ -457,12 +464,17 @@ test("polling replaces one live MCP row without closing its disclosure or moving
   const call = dialog.locator(".transcript-mcp");
   await expect(call.getByRole("img", { name: "MCP call running" })).toBeVisible();
   await call.locator("summary").click();
+  await expect(call.locator("summary")).toBeFocused();
   const transcriptContent = dialog.locator(".transcript-content");
   const readingPosition = await transcriptContent.evaluate((element) => {
     element.scrollTop = 120;
     return element.scrollTop;
   });
   expect(readingPosition).toBeGreaterThan(0);
+  const selectedTranscriptText = await selectRenderedText(
+    dialog.locator(".transcript-item.message .markdown-content").first(),
+  );
+  expect(selectedTranscriptText).toBe("MCP retained transcript message 1.");
 
   await page.clock.fastForward(2_000);
   await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
@@ -471,6 +483,13 @@ test("polling replaces one live MCP row without closing its disclosure or moving
   await expect(call.locator("details")).toHaveAttribute("open", "");
   await expect(call).toContainText('"number": 42');
   expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
+  expect(await selectedText(page)).toBe(selectedTranscriptText);
+  await expect(call.locator("summary")).toBeFocused();
+  const readsAfterPreservedSelection = reads;
+  await clearTextSelection(page);
+  await page.clock.fastForward(2_000);
+  await expect.poll(() => reads).toBeGreaterThan(readsAfterPreservedSelection);
+  expect(await selectedText(page)).toBe("");
 });
 
 test("polling replaces one running coordination action with authoritative result facts", async ({ page }) => {
