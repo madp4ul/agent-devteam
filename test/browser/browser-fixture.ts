@@ -83,22 +83,27 @@ export function runningConversationScenario(items: Array<Record<string, unknown>
       replacementReason: null,
       retirementAvailability: { available: false, reason: "activation-work-pending" },
       continuation: { available: true },
-      messages: [],
-      runs: [{
-        activationId: "browser-activation",
-        attempt: {
-          id: "browser-attempt",
+      history: [
+        {
+          kind: "activation",
+          activationId: "browser-activation",
           status: "running",
-          workspacePath: "C:/workspace",
-          startedAt: "2026-08-09T12:00:00.000Z",
-          completedAt: null,
-          outcome: null,
-          threadId: "thread-browser-123",
-          model: null,
-          reasoningEffort: null,
+          attemptIds: ["browser-attempt"],
+          occurredAt: "2026-08-09T12:00:00.000Z",
+          reason: { type: "column-entry", sourceEventId: "browser-move" },
+          source: {
+            kind: "activity",
+            activity: {
+              id: "browser-move",
+              type: "task.moved",
+              actor: { kind: "user", id: "paul" },
+              occurredAt: "2026-08-09T12:00:00.000Z",
+              details: { toColumnId: "implementation" },
+            },
+          },
         },
-        transcript: { available: true, items },
-      }],
+        ...items.map((item) => ({ kind: "item", activationId: "browser-activation", attemptId: "browser-attempt", item })),
+      ],
     },
   };
 }
@@ -110,9 +115,16 @@ export async function fulfillConversationTranscript(
 ): Promise<void> {
   const response = await route.fetch();
   const result = await response.json();
-  const transcriptItems = result.conversation.runs[0].transcript.items as Array<Record<string, unknown>>;
-  if (options.append) transcriptItems.push(...items);
-  else result.conversation.runs[0].transcript.items = items;
+  const history = result.conversation.history as Array<Record<string, any>>;
+  const additions = items.map((item) => ({
+    kind: "item",
+    activationId: "browser-activation",
+    attemptId: "browser-attempt",
+    item,
+  }));
+  result.conversation.history = options.append
+    ? [...history, ...additions]
+    : [...history.filter((entry) => entry.kind !== "item"), ...additions];
   await route.fulfill({ response, json: result });
 }
 

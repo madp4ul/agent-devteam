@@ -33,7 +33,7 @@ follow-up messages and the inspectable evidence from every run that has
 participated in that lineage.
 
 The existing transcript overlay becomes a conversation view. It shows the
-conversation history as one calm chronological exchange without visible run
+conversation history as one calm activation-ordered exchange without visible run
 containers or repeated run metadata. User messages and concise activation
 causes are right-aligned, agent prose is left-aligned and wide, and all
 non-message tool evidence shares one muted visual family. While continuation
@@ -191,8 +191,10 @@ second live-operations dashboard.
   the conversation projection by ordering its authored messages, attempts,
   and retained transcript items rather than duplicating all evidence into a
   second transcript store.
-- Conversation history projects one flat chronological presentation stream
-  without visible run boundaries. It retains attempt attribution internally so
+- Conversation history projects one flat activation-ordered presentation
+  stream without visible run boundaries. Each activation's cause precedes its
+  retained attempt evidence, and retries remain folded into that activation's
+  turn. It retains attempt attribution internally so
   the timeline, diagnostics, recovery, and durable evidence can still identify
   the run that produced each item.
 - Each ordinary activation contributes one concise visible cause containing a
@@ -238,7 +240,7 @@ second live-operations dashboard.
 
 - Rename the current transcript overlay and its entry actions from transcript
   terminology to conversation terminology.
-- Render the conversation as a continuous chronological stream. Remove run
+- Render the conversation as a continuous activation-ordered stream. Remove run
   containers, headings, separators, labels, completed states, durations,
   per-run usage, per-run cost, and selected-run highlighting from the view.
 - Present authored user messages and quietly labeled activation causes as
@@ -324,7 +326,7 @@ second live-operations dashboard.
 - The primary seam is the coordination application's command-and-query
   boundary. It is the highest existing seam shared by browser APIs, durable
   state, scheduling, projections, and runtime dispatch.
-- Application query coverage asserts the flat chronological presentation
+- Application query coverage asserts the flat activation-ordered presentation
   stream through that seam: originating and later activation causes, authored
   follow-ups without duplicate activation elements, retries sharing one cause,
   ordered attempt evidence, lineage notes, and transient queued/running state.

@@ -31,6 +31,11 @@ export function ActivityStatusMark({
   );
 }
 
+export function isExceptionalActivityStatus(status: string): boolean {
+  const kind = statusPresentation(status).kind;
+  return kind === "failed" || kind === "rejected";
+}
+
 function statusPresentation(status: string): {
   kind: "succeeded" | "running" | "rejected" | "failed";
   label: string;

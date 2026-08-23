@@ -1,17 +1,10 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
-import type {
-  AgentConversationView,
-  AttemptTokenUsage,
-  EstimatedTokenCost,
-} from "../../application/browser-transport-contract.ts";
+import type { AgentConversationView } from "../../application/browser-transport-contract.ts";
 import type { AttemptTranscriptItem, CoordinationTaskIdentity } from "../../application/runtime-contract.ts";
-import { ActivityStatusMark } from "./ActivityStatusMark.tsx";
+import { ActivityStatusMark, isExceptionalActivityStatus } from "./ActivityStatusMark.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
-import { CostEstimate } from "./CostEstimate.tsx";
-import { ElapsedTime } from "./ElapsedTime.tsx";
 import { MarkdownContent } from "./MarkdownContent.tsx";
-import { TextPreview } from "./TextPreview.tsx";
 
 export function ConversationHistory({
   conversation,
@@ -33,99 +26,74 @@ export function ConversationHistory({
       selectedContextPositioned.current ||
       selectedContextRef.current === null
     ) return;
-    selectedContextRef.current.scrollIntoView({ block: "start" });
+    const target = selectedContextRef.current;
     selectedContextPositioned.current = true;
+    const animationFrame = window.requestAnimationFrame(() => {
+      target.scrollIntoView({ block: "start" });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
   }, [conversation, selectedAttemptId, selectedMessageId]);
 
-  const history = conversationHistory(conversation);
-  const activeRunPresent = conversation.runs.some(({ attempt }) => attempt.status === "running");
-  if (history.length === 0) {
+  const selectedCause = selectedAttemptId === undefined
+    ? undefined
+    : conversation.history.find((entry) =>
+        (entry.kind === "activation" || entry.kind === "message") && entry.attemptIds.includes(selectedAttemptId)
+      );
+  const selectedActivationId = selectedCause?.kind === "activation" || selectedCause?.kind === "message"
+    ? selectedCause.activationId
+    : undefined;
+  const causes = conversation.history.filter((entry) => entry.kind === "activation" || entry.kind === "message");
+  const active = causes.some(({ status }) => status === "running");
+  const queued = causes.some(({ status }) => status === "queued");
+  if (conversation.history.length === 0) {
     return <p className="unavailable">This conversation has not started a run yet.</p>;
   }
 
   return (
-    <>
-      {history.map((entry) => entry.kind === "replacement" ? (
-        <section key="replacement" className="conversation-retirement-marker" role="note">
+    <div className="conversation-stream">
+      {conversation.history.map((entry, index) => entry.kind === "continuity-loss" ? (
+        <section key={`continuity-${entry.occurredAt}`} className="conversation-system-note warning" role="note">
           <p className="eyebrow">Replacement context</p>
           <p>{entry.reason}</p>
         </section>
       ) : entry.kind === "retirement" ? (
-        <section key="retirement" className="conversation-retirement-marker" role="note">
+        <section key={`retirement-${entry.retirement.occurredAt}`} className="conversation-system-note" role="note">
           <p className="eyebrow">Conversation retired</p>
           <p>{entry.retirement.reason}</p>
           <small>{entry.retirement.actor.id}</small>
         </section>
       ) : entry.kind === "message" ? (
-        <section
+        <article
           key={`message-${entry.message.id}`}
-          className={`conversation-user-turn${entry.awaitingRun ? " awaiting-run" : ""}${
-            entry.message.id === selectedMessageId ? " selected-message-turn" : ""
-          }`}
+          className="conversation-message user-message"
           data-conversation-message={entry.message.id}
-          ref={selectedAttemptId === undefined && entry.message.id === selectedMessageId
-            ? selectedContextRef
-            : undefined}
+          tabIndex={-1}
+          ref={entry.message.id === selectedMessageId || entry.activationId === selectedActivationId ? selectedContextRef : undefined}
         >
-          <article className="conversation-message user-message">
-            <header className="conversation-message-heading">
-              <p className="eyebrow">You</p>
-              <CopyMarkdownButton source={entry.message.body} label="Copy your message Markdown" />
-            </header>
-            <MarkdownContent source={entry.message.body} />
-          </article>
-          {entry.awaitingRun ? (
-            <div className="conversation-turn-pending" role="status" aria-label="Follow-up queued">
-              <span className="signal queued">Queued</span>
-              <p>
-                {activeRunPresent
-                  ? `Waiting for ${conversation.owningAgent.name} to finish the current run.`
-                  : `Waiting for ${conversation.owningAgent.name}'s next run to start.`}
-              </p>
-            </div>
-          ) : null}
-        </section>
+          <header className="conversation-message-heading">
+            <CopyMarkdownButton source={entry.message.body} label="Copy your message Markdown" />
+          </header>
+          <MarkdownContent source={entry.message.body} />
+        </article>
+      ) : entry.kind === "activation" ? (
+        <article
+          key={`activation-${entry.activationId}`}
+          className="conversation-message activation-message"
+          data-conversation-activation={entry.activationId}
+          tabIndex={-1}
+          ref={entry.activationId === selectedActivationId ? selectedContextRef : undefined}
+        >
+          <p className="eyebrow">Activation</p>
+          <p><strong>{activationReasonLabel(entry.reason.type)}</strong></p>
+          {entry.source.kind === "comment" ? <MarkdownContent source={entry.source.comment.body} /> : null}
+        </article>
       ) : (
-      <section
-        className={`conversation-run${entry.run.attempt.id === selectedAttemptId ? " selected-run" : ""}`}
-        key={entry.run.attempt.id}
-        data-conversation-attempt={entry.run.attempt.id}
-        ref={entry.run.attempt.id === selectedAttemptId ? selectedContextRef : undefined}
-        aria-labelledby={`run-${entry.run.attempt.id}`}
-      >
-        <header className="conversation-run-heading">
-          <div className="conversation-run-identity">
-            <h3 id={`run-${entry.run.attempt.id}`}>Run {entry.runIndex + 1} · {entry.run.attempt.status}</h3>
-            <p>{conversation.owningAgent.name}</p>
-          </div>
-          <div className="conversation-run-metrics">
-            <p className="conversation-run-duration">
-              <span>Runtime</span> <strong><ElapsedTime startedAt={entry.run.attempt.startedAt} completedAt={entry.run.attempt.completedAt} /></strong>
-            </p>
-            {entry.run.transcript.available && entry.run.transcript.usage !== undefined
-              ? <TokenUsageSummary
-                  usage={entry.run.transcript.usage}
-                  {...(entry.run.transcript.costEstimate === undefined
-                    ? {}
-                    : { costEstimate: entry.run.transcript.costEstimate })}
-                />
-              : null}
-          </div>
-        </header>
-        {entry.run.attempt.threadContinuity === "replaced" ? (
-          <p className="unavailable">
-            Codex could not resume the prior thread. This run started a replacement thread, so earlier model context was not retained.
-          </p>
-        ) : null}
-        {!entry.run.transcript.available ? (
-          <p className="unavailable">
-            Codex produced no inspectable evidence for this run.
-          </p>
-        ) : entry.run.transcript.items.length === 0 ? (
-          <p className="unavailable">Codex produced no inspectable conversation items for this run.</p>
-        ) : entry.run.transcript.items.map((item, index) => (
-          item.kind === "message" ? (
-            <article key={item.id ?? `${entry.run.attempt.id}-${index}`} className="transcript-item message">
+        (() => {
+          const item = entry.item;
+          const key = item.id ?? `${entry.attemptId}-${index}`;
+          return item.kind === "message" ? (
+            <article key={key} className="transcript-item message">
               <header className="conversation-message-heading">
                 <CopyMarkdownButton source={item.text} label="Copy Codex message Markdown" />
               </header>
@@ -133,8 +101,9 @@ export function ConversationHistory({
             </article>
           ) : item.kind === "command" ? (
             <TranscriptToolDisclosure
-              key={item.id ?? `${entry.run.attempt.id}-${index}`}
+              key={key}
               articleClassName="transcript-command"
+              exceptional={isExceptionalActivityStatus(item.status)}
               detailsClassName="command-details"
               titleClassName="command-title"
               evidenceClassName="command-evidence"
@@ -142,28 +111,27 @@ export function ConversationHistory({
               status={item.status}
               statusSubject="Command"
               statusClassName="command-status"
-              evidence={[
-                { label: "Invocation", value: item.command },
-                ...(item.output === undefined ? [] : [{ label: "Output", value: item.output }]),
-              ]}
+              evidence={item.output === undefined ? [] : [{ label: "Output", value: item.output }]}
+              visibleEvidence={item.command}
             />
           ) : item.kind === "coordination" && item.presentation.kind === "coordination-comment" && item.presentation.body !== undefined ? (
             <CoordinationComment
-              key={item.id ?? `${entry.run.attempt.id}-${index}`}
-              id={item.id ?? `${entry.run.attempt.id}-${index}`}
+              key={key}
+              id={key}
               item={item}
               body={item.presentation.body}
               {...(onCommentSource === undefined ? {} : { onCommentSource })}
             />
           ) : item.kind === "coordination" ? (
             <CoordinationActivity
-              key={item.id ?? `${entry.run.attempt.id}-${index}`}
+              key={key}
               item={item}
             />
           ) : item.kind === "mcp" ? (
             <TranscriptToolDisclosure
-              key={item.id ?? `${entry.run.attempt.id}-${index}`}
+              key={key}
               articleClassName="transcript-mcp"
+              exceptional={isExceptionalActivityStatus(item.status)}
               detailsClassName="mcp-details"
               titleClassName="mcp-title"
               evidenceClassName="mcp-evidence"
@@ -182,7 +150,7 @@ export function ConversationHistory({
               {...(item.summary === undefined ? {} : { summary: item.summary })}
             />
           ) : (
-            <article key={item.id ?? `${entry.run.attempt.id}-${index}`} className={`transcript-item ${item.kind}`}>
+            <article key={key} className={`transcript-item ${item.kind} ${item.kind === "tool" && isExceptionalActivityStatus(item.status) ? "exceptional" : ""}`}>
               <p className="eyebrow">{item.kind === "tool" ? `Tool · ${item.name}` : "Diagnostic"}</p>
               {item.kind === "diagnostic" ? (
                 <p>{item.text}</p>
@@ -198,19 +166,21 @@ export function ConversationHistory({
                 </>
               )}
             </article>
-          )
-        ))}
-            </section>
-            ))}
-    </>
+          );
+        })()
+      ))}
+      {active || queued ? (
+        <p className="conversation-live-state" role="status" aria-label={queued ? "Follow-up queued" : "Agent working"}>
+          {queued
+            ? active
+              ? `Waiting for ${conversation.owningAgent.name} to finish the current activation.`
+              : `Waiting for ${conversation.owningAgent.name}'s next activation to start.`
+            : `${conversation.owningAgent.name} is working…`}
+        </p>
+      ) : null}
+    </div>
   );
 }
-
-type ConversationHistoryEntry =
-  | { kind: "message"; message: AgentConversationView["messages"][number]; awaitingRun: boolean }
-  | { kind: "run"; run: AgentConversationView["runs"][number]; runIndex: number }
-  | { kind: "retirement"; retirement: NonNullable<AgentConversationView["retirement"]> }
-  | { kind: "replacement"; reason: string; occurredAt: string };
 
 function CoordinationComment({
   id,
@@ -223,38 +193,32 @@ function CoordinationComment({
   body: string;
   onCommentSource?(commentId: string): void;
 }): ReactNode {
-  const [expanded, setExpanded] = useState(false);
   const commentId = item.presentation?.kind === "coordination-comment"
     ? item.presentation.commentId
     : undefined;
   const exceptional = coordinationExceptionalPresentation(item);
   return (
-    <article className="transcript-coordination coordination-comment" aria-label="Comment added">
+    <article className={`transcript-coordination coordination-comment ${exceptional === undefined ? "" : "exceptional"}`} aria-label="Comment added">
       <header className="coordination-activity-heading">
         <strong>Comment added</strong>
         <span className="coordination-activity-actions">
+          {commentId === undefined || onCommentSource === undefined ? null : (
+            <button type="button" className="secondary quiet-action" onClick={() => onCommentSource(commentId)}>
+              View in task history
+            </button>
+          )}
           <CopyMarkdownButton source={body} label="Copy comment Markdown" />
           <ActivityStatusMark status={item.status} subject="Coordination action" className="coordination-status" />
         </span>
       </header>
-      <TextPreview
-        id={`coordination-comment-${id}`}
-        text={body}
-        expanded={expanded}
-        onExpanded={setExpanded}
-      />
+      <div id={`coordination-comment-${id}`} className="authored-text conversation-authored-text">
+        <MarkdownContent source={body} />
+      </div>
       {exceptional === undefined ? null : (
         <p className="coordination-activity-exception">
           <span>{exceptional.label}</span>
           <strong>{exceptional.text}</strong>
         </p>
-      )}
-      {commentId === undefined || onCommentSource === undefined ? null : (
-        <footer className="coordination-comment-footer">
-          <button type="button" className="quiet-action" onClick={() => onCommentSource(commentId)}>
-            View in task history
-          </button>
-        </footer>
       )}
     </article>
   );
@@ -265,7 +229,7 @@ type CoordinationTranscriptItem = Extract<AttemptTranscriptItem, { kind: "coordi
 function CoordinationActivity({ item }: { item: CoordinationTranscriptItem }): ReactNode {
   const presentation = coordinationActivityPresentation(item);
   return (
-    <article className="transcript-coordination coordination-activity" aria-label={presentation.accessibleLabel}>
+    <article className={`transcript-coordination coordination-activity ${presentation.exceptional === undefined ? "" : "exceptional"}`} aria-label={presentation.accessibleLabel}>
       <header className="coordination-activity-heading">
         <span className="coordination-activity-title">{presentation.action}</span>
         <ActivityStatusMark status={item.status} subject="Coordination action" className="coordination-status" />
@@ -498,6 +462,7 @@ function literalString(value: unknown): string | undefined {
 
 function TranscriptToolDisclosure({
   articleClassName,
+  exceptional = false,
   detailsClassName,
   titleClassName,
   evidenceClassName,
@@ -506,9 +471,11 @@ function TranscriptToolDisclosure({
   statusSubject,
   statusClassName,
   evidence,
+  visibleEvidence,
   summary,
 }: {
   articleClassName: string;
+  exceptional?: boolean;
   detailsClassName: string;
   titleClassName: string;
   evidenceClassName: string;
@@ -517,27 +484,38 @@ function TranscriptToolDisclosure({
   statusSubject: string;
   statusClassName: string;
   evidence: Array<{ label: string; value: string }>;
+  visibleEvidence?: string;
   summary?: string;
 }): ReactNode {
+  const heading = (
+    <>
+      <span className={`transcript-tool-title ${titleClassName}`}>{title}</span>
+      <ActivityStatusMark status={status} subject={statusSubject} className={statusClassName} />
+      {visibleEvidence === undefined ? null : <code className="command-invocation">{visibleEvidence}</code>}
+    </>
+  );
   return (
-    <article className={`transcript-tool ${articleClassName}`}>
-      <details className={`transcript-tool-details ${detailsClassName}`}>
-        <summary>
-          <svg className="command-disclosure-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <path d="m5 3.5 5 4.5-5 4.5" />
-          </svg>
-          <span className={`transcript-tool-title ${titleClassName}`}>{title}</span>
-          <ActivityStatusMark status={status} subject={statusSubject} className={statusClassName} />
-        </summary>
-        <div className={`transcript-tool-evidence ${evidenceClassName}`}>
-          {evidence.map((entry) => (
-            <div key={entry.label} className="transcript-evidence-entry">
-              <p>{entry.label}</p>
-              <pre>{entry.value}</pre>
-            </div>
-          ))}
-        </div>
-      </details>
+    <article className={`transcript-tool ${articleClassName} ${exceptional ? "exceptional" : ""}`}>
+      {evidence.length === 0 ? (
+        <div className={`transcript-tool-heading ${detailsClassName}`}>{heading}</div>
+      ) : (
+        <details className={`transcript-tool-details ${detailsClassName}`}>
+          <summary>
+            <svg className="command-disclosure-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="m5 3.5 5 4.5-5 4.5" />
+            </svg>
+            {heading}
+          </summary>
+          <div className={`transcript-tool-evidence ${evidenceClassName}`}>
+            {evidence.map((entry) => (
+              <div key={entry.label} className="transcript-evidence-entry">
+                <p>{entry.label}</p>
+                <pre>{entry.value}</pre>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
       {summary === undefined ? null : <p className="mcp-summary">{summary}</p>}
     </article>
   );
@@ -557,50 +535,11 @@ function structuredLiteral(value: unknown): string {
   return formatted === undefined ? String(value) : formatted;
 }
 
-function conversationHistory(conversation: AgentConversationView): ConversationHistoryEntry[] {
-  const messages = new Map(conversation.messages.map((message) => [message.id, message]));
-  const history: ConversationHistoryEntry[] = [];
-  conversation.runs.forEach((run, runIndex) => {
-    const message = run.sourceMessageId === undefined ? undefined : messages.get(run.sourceMessageId);
-    if (message !== undefined) {
-      history.push({ kind: "message", message, awaitingRun: false });
-      messages.delete(message.id);
-    }
-    history.push({ kind: "run", run, runIndex });
-  });
-  history.push(...[...messages.values()]
-    .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
-    .map((message) => ({ kind: "message" as const, message, awaitingRun: true })));
-  if (conversation.retirement !== null) history.push({ kind: "retirement", retirement: conversation.retirement });
-  if (conversation.replacementReason !== null) {
-    history.push({ kind: "replacement", reason: conversation.replacementReason, occurredAt: conversation.createdAt });
+function activationReasonLabel(reason: AgentConversationView["originatingActivation"]["reason"]["type"]): string {
+  switch (reason) {
+    case "column-entry": return "Entered a watched column";
+    case "agent-mention": return "Mentioned in a task comment";
+    case "blockers-cleared": return "Final blocker cleared";
+    case "user-follow-up": return "User follow-up";
   }
-  return history.sort((left, right) => historyEntryTime(left).localeCompare(historyEntryTime(right)));
-}
-
-function historyEntryTime(entry: ConversationHistoryEntry): string {
-  if (entry.kind === "message") return entry.message.occurredAt;
-  if (entry.kind === "run") return entry.run.attempt.startedAt;
-  if (entry.kind === "retirement") return entry.retirement.occurredAt;
-  return entry.occurredAt;
-}
-
-function TokenUsageSummary({
-  usage,
-  costEstimate,
-}: {
-  usage: AttemptTokenUsage;
-  costEstimate?: EstimatedTokenCost;
-}): ReactNode {
-  const format = (value: number): string => value.toLocaleString("en-US");
-  const uncachedInputTokens = Math.max(0, usage.inputTokens - usage.cachedInputTokens);
-  return (
-    <div className="token-usage" role="region" aria-label="Token usage">
-      <span>Input <strong>{format(uncachedInputTokens)}</strong></span>
-      <span aria-hidden="true">·</span>
-      <span>Output <strong>{format(usage.outputTokens)}</strong></span>
-      {costEstimate === undefined ? null : <span aria-hidden="true">·</span>}
-      <CostEstimate {...(costEstimate === undefined ? {} : { estimate: costEstimate })} />
-    </div>
-  );
 }

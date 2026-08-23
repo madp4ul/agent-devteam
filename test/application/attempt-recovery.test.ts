@@ -144,16 +144,11 @@ test("technical failure schedules the same head activation with capped exponenti
   const conversation = await application.queryAgentConversation(created.task.id, conversationId);
   assert.equal(conversation.available, true);
   if (conversation.available) {
-    assert.deepEqual(
-      conversation.conversation.runs.map(({ activationId, attempt }) => ({
-        activationId,
-        threadId: attempt.threadId,
-      })),
-      [
-        { activationId: firstActivationId, threadId: "thread-1" },
-        { activationId: firstActivationId, threadId: "thread-1" },
-      ],
+    const firstCause = conversation.conversation.history.find((entry) =>
+      (entry.kind === "activation" || entry.kind === "message") && entry.activationId === firstActivationId
     );
+    assert.ok(firstCause?.kind === "activation" || firstCause?.kind === "message");
+    assert.deepEqual(firstCause.attemptIds, [first.attemptId, second.attemptId]);
   }
 });
 
@@ -226,10 +221,11 @@ test("exhaustion offers retry and dismiss only on the current attention reason",
   const conversation = await application.queryAgentConversation(taskId, conversationId);
   assert.equal(conversation.available, true);
   if (conversation.available) {
-    assert.equal(conversation.conversation.runs.length, 4);
-    assert.ok(conversation.conversation.runs.every(
-      ({ activationId }) => activationId === firstActivationId,
-    ));
+    const cause = conversation.conversation.history.find((entry) =>
+      (entry.kind === "activation" || entry.kind === "message") && entry.activationId === firstActivationId
+    );
+    assert.ok(cause?.kind === "activation" || cause?.kind === "message");
+    assert.equal(cause.attemptIds.length, 4);
   }
 });
 
@@ -437,15 +433,11 @@ test("permission block requires explicit continuation and never retries automati
     const conversation = await restarted.queryAgentConversation(taskId, continuedActivation.conversationId);
     assert.equal(conversation.available, true);
     if (conversation.available) {
-      assert.equal(conversation.conversation.runs.length, 4);
-      assert.deepEqual(
-        conversation.conversation.runs.map((run) => run.activationId),
-        Array.from({ length: 4 }, () => continuedActivation.id),
+      const cause = conversation.conversation.history.find((entry) =>
+        (entry.kind === "activation" || entry.kind === "message") && entry.activationId === continuedActivation.id
       );
-      assert.deepEqual(
-        conversation.conversation.runs.map((run) => run.attempt.id),
-        [first.attemptId, resumed.attemptId, recovered.attemptId, finalAttempt.attemptId],
-      );
+      assert.ok(cause?.kind === "activation" || cause?.kind === "message");
+      assert.deepEqual(cause.attemptIds, [first.attemptId, resumed.attemptId, recovered.attemptId, finalAttempt.attemptId]);
     }
   }
   assert.deepEqual(await restarted.queryAttemptTranscript(first.attemptId), {

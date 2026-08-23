@@ -231,16 +231,21 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(page.getByText("Token usage", { exact: true })).toHaveCount(0);
   await attemptEntry.getByRole("button", { name: "View conversation" }).click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
-  await expect(dialog.locator(".conversation-run.selected-run")).toContainText("Run 1 · completed");
+  const focusedActivation = dialog.locator("[data-conversation-activation]").first();
+  await expect(focusedActivation).toBeFocused();
+  await expect(focusedActivation).toHaveCSS("outline-style", "solid");
+  expect(await focusedActivation.evaluate((element) => {
+    const activation = element.getBoundingClientRect();
+    const viewport = element.closest(".transcript-content")!.getBoundingClientRect();
+    return activation.top >= viewport.top && activation.bottom <= viewport.bottom;
+  })).toBe(true);
   const moreActions = dialog.getByRole("button", { name: "More conversation actions" });
   const closeTranscript = dialog.getByRole("button", { name: "Close conversation" });
   const tokenUsage = dialog.getByRole("region", { name: "Token usage" });
-  const [usageBox, copyBox, closeBox] = await Promise.all([
-    tokenUsage.boundingBox(),
+  const [copyBox, closeBox] = await Promise.all([
     moreActions.boundingBox(),
     closeTranscript.boundingBox(),
   ]);
-  expect(usageBox).not.toBeNull();
   expect(copyBox).not.toBeNull();
   expect(closeBox).not.toBeNull();
   expect(Math.abs((copyBox!.y + copyBox!.height / 2) - (closeBox!.y + closeBox!.height / 2))).toBeLessThanOrEqual(4);
@@ -248,15 +253,12 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(dialog.getByRole("heading", { name: "Implementation Agent", exact: true })).toBeVisible();
   await expect(dialog.locator(".modal-heading .conversation-origin-summary")).toHaveText("Origin · Column entry");
   await expect(dialog.locator(".transcript-content .conversation-origin-summary")).toHaveCount(0);
-  await expect(dialog).toContainText("Run 1 · completed");
-  await expect(dialog.locator(".conversation-run")).toContainText("Implementation Agent");
+  await expect(dialog.locator(".conversation-run")).toHaveCount(0);
   await expect(dialog).not.toContainText("Attempt 1 · completed");
-  await expect(dialog.locator(".conversation-run-metrics")).toContainText(/Runtime\s+2m 30s/);
+  await expect(dialog.locator(".conversation-run-metrics")).toHaveCount(0);
   await expect(dialog).not.toContainText("thread-browser-123");
   await expect(dialog).toContainText("I inspected the current task.");
-  await expect(tokenUsage).toHaveText(/Input 600\s*·\s*Output 600/);
-  await expect(tokenUsage).not.toContainText(/cached|reasoning|total|used|%/i);
-  await expect(tokenUsage).not.toContainText(/cost|currency|\$/i);
+  await expect(tokenUsage).toHaveCount(0);
   await expect(dialog.getByRole("img", { name: "Command succeeded" })).toBeVisible();
   await expect(dialog.getByText("output truncated")).toBeHidden();
   await dialog.locator(".transcript-command summary").click();

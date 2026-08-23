@@ -75,10 +75,14 @@ export function AgentConversationDialog({
               : content.scrollTop;
           setConversation(result.conversation);
           const pendingAppeared = pendingActivationId.current !== undefined &&
-            result.conversation.runs.some((run) => run.activationId === pendingActivationId.current);
+            result.conversation.history.some((entry) =>
+              (entry.kind === "activation" || entry.kind === "message") && entry.activationId === pendingActivationId.current
+            );
           if (pendingAppeared) pendingActivationId.current = undefined;
           setConversationRunning(
-            result.conversation.runs.some((run) => run.attempt.status === "running") ||
+            result.conversation.history.some((entry) =>
+              (entry.kind === "activation" || entry.kind === "message") && (entry.status === "queued" || entry.status === "running")
+            ) ||
             (pendingActivationId.current !== undefined && !pendingAppeared),
           );
           setUnavailable(false);
@@ -113,9 +117,12 @@ export function AgentConversationDialog({
       if (!result.accepted) throw new Error(`Follow-up unavailable: ${result.reason}`);
       pendingActivationId.current = result.activationId;
       setConversationRunning(true);
-      setConversation((current) => current === undefined || current.messages.some(({ id }) => id === result.message.id)
+      setConversation((current) => current === undefined || current.history.some((entry) => entry.kind === "message" && entry.message.id === result.message.id)
         ? current
-        : { ...current, messages: [...current.messages, result.message] });
+        : {
+            ...current,
+            history: [...current.history, { kind: "message", activationId: result.activationId, status: "queued", attemptIds: [], message: result.message }],
+          });
       setDraft("");
       idempotencyKey.current = crypto.randomUUID();
       setRefreshVersion((version) => version + 1);
@@ -233,7 +240,7 @@ export function AgentConversationDialog({
               })}
             />
           )}
-          {conversation === undefined ? null : (
+          {conversation?.continuation.available !== true ? null : (
             <form
               className="conversation-composer"
               aria-label="Continue conversation"
@@ -243,22 +250,19 @@ export function AgentConversationDialog({
               }}
             >
               <label htmlFor={`conversation-follow-up-${conversation.id}`}>Follow-up message</label>
-              <textarea
-                id={`conversation-follow-up-${conversation.id}`}
-                rows={3}
-                value={draft}
-                disabled={!conversation.continuation.available || submitting}
-                onChange={(event) => setDraft(event.target.value)}
-              />
-              {!conversation.continuation.available ? (
-                <p className="unavailable">{continuationUnavailableMessage(conversation.continuation.reason)}</p>
-              ) : null}
-              {submissionError === undefined ? null : <p className="unavailable" role="alert">{submissionError}</p>}
-              <div className="conversation-composer-actions">
-                <button type="submit" disabled={draft.trim().length === 0 || submitting || !conversation.continuation.available}>
+              <div className="conversation-composer-input">
+                <textarea
+                  id={`conversation-follow-up-${conversation.id}`}
+                  rows={3}
+                  value={draft}
+                  disabled={submitting}
+                  onChange={(event) => setDraft(event.target.value)}
+                />
+                <button type="submit" disabled={draft.trim().length === 0 || submitting}>
                   {submitting ? "Sending…" : "Send follow-up"}
                 </button>
               </div>
+              {submissionError === undefined ? null : <p className="unavailable" role="alert">{submissionError}</p>}
             </form>
           )}
         </div>
@@ -320,16 +324,6 @@ function retirementAvailabilityMessage(conversation: AgentConversationView): str
     case "already-retired": return "This conversation is retired. Ordinary activations will not return to it.";
     case "task-archived": return "Archived task conversations cannot be retired.";
     case "activation-work-pending": return "Finish, dismiss, interrupt, or recover this agent's unfinished work before retiring the conversation.";
-  }
-}
-
-function continuationUnavailableMessage(
-  reason: Extract<AgentConversationView["continuation"], { available: false }>["reason"],
-): string {
-  switch (reason) {
-    case "task-archived": return "Archived task conversations cannot be continued.";
-    case "owning-agent-unavailable": return "The owning agent is no longer available in the applied process.";
-    case "thread-unavailable": return "This conversation has no resumable Codex thread.";
   }
 }
 

@@ -267,7 +267,10 @@ test("continuing a conversation persists one authored message and activation ide
   assert.equal(continuationActivity[0]?.details.messageBody, command.body);
   const conversation = await application.queryAgentConversation(created.task.id, conversationId);
   assert.equal(conversation.available, true);
-  if (conversation.available) assert.deepEqual(conversation.conversation.messages, [accepted.message]);
+  if (conversation.available) assert.deepEqual(
+    conversation.conversation.history.filter((entry) => entry.kind === "message").map((entry) => entry.message),
+    [accepted.message],
+  );
 
   application.close();
   application = await CoordinationApplication.start({
@@ -294,8 +297,14 @@ test("continuing a conversation persists one authored message and activation ide
       historicalName: "Implementation Agent",
       present: true,
     });
-    assert.deepEqual(conversationAfterRestart.conversation.messages, [accepted.message]);
-    assert.equal(conversationAfterRestart.conversation.runs.length, 1);
+    assert.deepEqual(
+      conversationAfterRestart.conversation.history.filter((entry) => entry.kind === "message").map((entry) => entry.message),
+      [accepted.message],
+    );
+    assert.equal(
+      conversationAfterRestart.conversation.history.filter((entry) => entry.kind === "activation").flatMap((entry) => entry.attemptIds).length,
+      1,
+    );
   }
 });
 
@@ -526,8 +535,10 @@ test("a follow-up resumes the owning agent's thread and existing task workspace 
   const conversation = await application.queryAgentConversation(created.task.id, conversationId);
   assert.equal(conversation.available, true);
   if (conversation.available) {
-    assert.equal(conversation.conversation.runs.at(-1)?.sourceMessageId, continued.message.id);
-    assert.equal(conversation.conversation.runs.at(-1)?.attempt.threadContinuity, "replaced");
+    assert.ok(conversation.conversation.history.some((entry) =>
+      entry.kind === "message" && entry.message.id === continued.message.id
+    ));
+    assert.ok(conversation.conversation.history.some((entry) => entry.kind === "continuity-loss"));
     assert.equal(conversation.conversation.currentThreadId, "thread-replacement");
   }
   const afterReplacement = application.continueAgentConversation({
@@ -828,16 +839,19 @@ agents:
     assert.deepEqual(conversation.conversation.originatingActivation, activation);
     assert.equal(conversation.conversation.currentThreadId, "reused-codex-thread");
     assert.deepEqual(conversation.conversation.continuation, { available: true });
-    assert.deepEqual(conversation.conversation.runs, [{
-      activationId: activation.id,
-      attempt: activation.attempts[0],
-      transcript: {
-        available: true,
-        items: expectedTranscript,
-        usage: expectedUsage,
-        costEstimate: { currency: "USD", amount: 0.02215 },
-      },
-    }]);
+    assert.deepEqual(
+      conversation.conversation.history.map((entry) => entry.kind),
+      ["activation", "item"],
+    );
+    const activationCause = conversation.conversation.history[0];
+    assert.equal(activationCause?.kind, "activation");
+    if (activationCause?.kind === "activation") {
+      assert.equal(activationCause.activationId, activation.id);
+      assert.deepEqual(activationCause.attemptIds, [attemptId]);
+      assert.equal(activationCause.status, "completed");
+      assert.equal(activationCause.reason.type, "column-entry");
+      assert.equal(activationCause.source.kind, "activity");
+    }
     assert.deepEqual(conversation.conversation.costEstimate, {
       currency: "USD",
       amount: 0.02215,
@@ -1048,9 +1062,6 @@ agents:
   const complete = await application.queryAgentConversation(created.task.id, conversationId);
   assert.equal(complete.available, true);
   if (complete.available) {
-    assert.deepEqual(complete.conversation.runs.map(({ transcript }) =>
-      transcript.available ? transcript.costEstimate?.amount : undefined
-    ), [0.001, 0.002]);
     assert.deepEqual(complete.conversation.costEstimate, { currency: "USD", amount: 0.003 });
   }
 

@@ -308,7 +308,7 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await expect(page.locator(".attempt-entry").filter({ hasText: /consulting-agent.*Running.*Attempt 1/ })).toBeVisible();
   await page.getByRole("button", { name: "View conversation" }).click();
   await expect(page.getByRole("dialog", { name: "Agent conversation" }).getByRole("heading", { name: "consulting-agent" })).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText(/Run 1 · running/);
+  await expect(page.getByRole("dialog", { name: "Agent conversation" }).getByRole("status", { name: "Agent working" })).toBeVisible();
   await page.getByRole("button", { name: "Close conversation" }).click();
   const interruptClick = page.getByRole("button", { name: "Interrupt current attempt" }).click();
   const interruptingButton = page.getByRole("button", { name: "Interrupting…" });

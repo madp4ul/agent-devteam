@@ -76,7 +76,7 @@ test("archive removes a clean durable workspace and retains task history without
   );
   assert.equal(conversationBeforeArchive.available, true);
   if (conversationBeforeArchive.available) {
-    assert.equal(conversationBeforeArchive.conversation.messages.length, 1);
+    assert.equal(conversationBeforeArchive.conversation.history.filter((entry) => entry.kind === "message").length, 1);
   }
   const before = application.queryTaskInspectionForUser(created.task.id);
   assert.equal(before.available, true);
@@ -152,14 +152,12 @@ test("archive removes a clean durable workspace and retains task history without
   );
   assert.equal(conversationAfterArchive.available, true);
   if (conversationAfterArchive.available) {
-    assert.deepEqual(conversationAfterArchive.conversation.messages, []);
+    assert.deepEqual(conversationAfterArchive.conversation.history.filter((entry) => entry.kind === "message"), []);
     assert.deepEqual(conversationAfterArchive.conversation.continuation, {
       available: false,
       reason: "task-archived",
     });
-    assert.ok(conversationAfterArchive.conversation.runs.every(
-      ({ transcript }) => transcript.available === false,
-    ));
+    assert.deepEqual(conversationAfterArchive.conversation.history.filter((entry) => entry.kind === "item"), []);
   }
   assert.deepEqual(application.continueAgentConversation({
     taskId: created.task.id,

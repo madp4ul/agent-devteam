@@ -201,9 +201,14 @@ test("browser conversation continuation accepts and replays one authored follow-
   );
   assert.equal(conversationResponse.status, 200);
   const conversation = await conversationResponse.json() as {
-    conversation: { messages: Array<{ body: string }>; runs: unknown[] };
+    conversation: { history: Array<{ kind: string; message?: { body: string } }> };
   };
-  assert.deepEqual(conversation.conversation.messages.map(({ body: messageBody }) => messageBody), [body.body]);
+  assert.deepEqual(
+    conversation.conversation.history.flatMap((entry) => entry.kind === "message" && entry.message !== undefined
+      ? [entry.message.body]
+      : []),
+    [body.body],
+  );
 });
 
 test("browser conversation retirement validates, accepts, and replays the user reason", async (t) => {

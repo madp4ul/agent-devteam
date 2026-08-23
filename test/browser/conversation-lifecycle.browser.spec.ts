@@ -177,7 +177,7 @@ test("conversation dialog contains focus, closes with Escape, and restores its o
   await opener.click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   const close = dialog.getByRole("button", { name: "Close conversation" });
-  await expect(close).toBeFocused();
+  await expect(dialog.locator("[data-conversation-activation]").first()).toBeFocused();
   await dialog.getByRole("textbox", { name: "Follow-up message" }).focus();
   await page.keyboard.press("Tab");
   await expect(dialog.getByRole("button", { name: "More conversation actions" })).toBeFocused();
@@ -202,7 +202,7 @@ test("conversation dialog opened from the conversation list covers timeline mark
 });
 
 
-test("conversation continuation navigation highlights and scrolls to its authored message", async ({ page }) => {
+test("conversation continuation navigation focuses and scrolls to its authored message", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
     const detail = await response.json();
@@ -228,13 +228,20 @@ test("conversation continuation navigation highlights and scrolls to its authore
       text: `Prior conversation evidence ${index + 1}.`,
     }));
     const result = runningConversationScenario(items);
-    (result.conversation as Record<string, unknown>).messages = [{
+    const message = {
       id: "selected-conversation-message",
       conversationId: "browser-conversation",
       body: "Focus this exact authored follow-up.",
       actor: { kind: "user", id: "local-user" },
       occurredAt: "2026-08-15T12:00:00.000Z",
-    }];
+    };
+    (result.conversation as Record<string, any>).history.push({
+      kind: "message",
+      activationId: "selected-message-activation",
+      status: "completed",
+      attemptIds: [],
+      message,
+    });
     await route.fulfill({ status: 200, json: result });
   });
 
@@ -242,10 +249,85 @@ test("conversation continuation navigation highlights and scrolls to its authore
   const continuation = page.locator(".event-entry").filter({ hasText: "Focus this exact authored follow-up." });
   await continuation.getByRole("button", { name: "View conversation" }).click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
-  const selectedMessage = dialog.locator(".conversation-user-turn.selected-message-turn");
+  const selectedMessage = dialog.locator("[data-conversation-message='selected-conversation-message']");
   await expect(selectedMessage).toContainText("Focus this exact authored follow-up.");
-  await expect(selectedMessage).toHaveCSS("background-color", "rgb(243, 247, 250)");
+  await expect(selectedMessage).toBeFocused();
   expect(await dialog.locator(".transcript-content").evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+});
+
+test("attempt and retry navigation scroll to their shared later activation cause", async ({ page }) => {
+  let selectedAttemptIds: string[] = [];
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const firstAttempt = detail.task.activations[0]?.attempts[0];
+    if (firstAttempt !== undefined) {
+      const retryAttempt = {
+        ...firstAttempt,
+        id: "selected-retry-attempt",
+        startedAt: new Date(Date.parse(firstAttempt.completedAt) + 1_000).toISOString(),
+        completedAt: new Date(Date.parse(firstAttempt.completedAt) + 61_000).toISOString(),
+      };
+      detail.task.activations[0].attempts.push(retryAttempt);
+      selectedAttemptIds = [firstAttempt.id, retryAttempt.id];
+    }
+    await route.fulfill({ response, json: detail });
+  });
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    if (selectedAttemptIds.length !== 2) throw new Error("Expected an attempt and retry before opening their conversation.");
+    const before = Array.from({ length: 24 }, (_, index) => ({
+      id: `before-selected-activation-${index}`,
+      kind: "message",
+      role: "agent",
+      text: `Evidence before selected activation ${index + 1}.`,
+    }));
+    const after = Array.from({ length: 24 }, (_, index) => ({
+      id: `after-selected-activation-${index}`,
+      kind: "message",
+      role: "agent",
+      text: `Evidence after selected activation ${index + 1}.`,
+    }));
+    const result = runningConversationScenario([]);
+    const conversation = result.conversation as Record<string, any>;
+    conversation.history[0].attemptIds = [];
+    conversation.history.push(
+      ...before.map((item) => ({ kind: "item", activationId: "browser-activation", attemptId: "browser-attempt", item })),
+      {
+        kind: "activation",
+        activationId: "selected-later-activation",
+        status: "completed",
+        attemptIds: selectedAttemptIds,
+        occurredAt: "2026-08-09T12:03:00.000Z",
+        reason: { type: "column-entry", sourceEventId: "selected-later-source" },
+        source: {
+          kind: "activity",
+          activity: {
+            id: "selected-later-source",
+            type: "task.moved",
+            actor: { kind: "user", id: "paul" },
+            occurredAt: "2026-08-09T12:03:00.000Z",
+            details: { toColumnId: "implementation" },
+          },
+        },
+      },
+      ...after.map((item) => ({ kind: "item", activationId: "selected-later-activation", attemptId: selectedAttemptIds[1], item })),
+    );
+    await route.fulfill({ status: 200, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  for (const attemptId of selectedAttemptIds) {
+    await page.locator(`#timeline-source-${attemptId}`).locator("..").getByRole("button", { name: "View conversation" }).click();
+    const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+    const selectedActivation = dialog.locator("[data-conversation-activation='selected-later-activation']");
+    await expect(selectedActivation).toBeFocused();
+    await expect.poll(() => selectedActivation.evaluate((element) => {
+      const activation = element.getBoundingClientRect();
+      const viewport = element.closest(".transcript-content")!.getBoundingClientRect();
+      return activation.top >= viewport.top && activation.bottom <= viewport.bottom;
+    })).toBe(true);
+    await dialog.getByRole("button", { name: "Close conversation" }).click();
+  }
 });
 
 
@@ -295,8 +377,7 @@ test("an open conversation replaces one running tool entry with its terminal evi
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   const liveCommand = dialog.locator(".transcript-command").first();
   await expect(liveCommand.getByRole("img", { name: "Command running" })).toBeVisible();
-  await liveCommand.locator("summary").click();
-  await expect(liveCommand.locator("details")).toHaveAttribute("open", "");
+  await expect(liveCommand.locator("details")).toHaveCount(0);
   expect(reads).toBe(1);
   const transcriptContent = dialog.locator(".transcript-content");
   const readingPosition = await transcriptContent.evaluate((element) => {
@@ -307,10 +388,12 @@ test("an open conversation replaces one running tool entry with its terminal evi
   await page.clock.fastForward(2_000);
   await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
   await expect(liveCommand.getByRole("img", { name: "Command succeeded" })).toBeVisible();
+  await expect(liveCommand.locator("details")).toHaveCount(1);
+  expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
+  await liveCommand.locator("summary").click();
   await expect(liveCommand.locator("details")).toHaveAttribute("open", "");
   await expect(dialog).toContainText("All live checks passed.");
   await expect(dialog.locator(".transcript-item, .transcript-command")).toHaveCount(31);
-  expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
 
   await dialog.getByRole("button", { name: "Close conversation" }).click();
   await page.getByRole("button", { name: "View conversation" }).click();
@@ -457,19 +540,12 @@ test("an idle open conversation discovers externally added evidence within two s
     }]);
     const conversation = result.conversation as {
       originatingActivation: { status: string };
-      runs: Array<{
-        attempt: {
-          status: string;
-          completedAt: string | null;
-          outcome: { status: string; summary: string } | null;
-        };
-      }>;
+      history: Array<Record<string, any>>;
     };
     conversation.originatingActivation.status = "completed";
-    const attempt = conversation.runs[0]!.attempt;
-    attempt.status = "completed";
-    attempt.completedAt = "2026-08-09T12:05:00.000Z";
-    attempt.outcome = { status: "completed", summary: "Idle conversation." };
+    const cause = conversation.history.find((entry) => entry.kind === "activation");
+    if (cause === undefined) throw new Error("Expected the originating activation cause.");
+    cause.status = "completed";
     await route.fulfill({ status: 200, json: result });
   });
 
@@ -566,38 +642,29 @@ test("a conversation follow-up retains its draft on failure and refreshes in pla
     const result = runningConversationScenario([]);
     if (submitted) {
       followUpReads += 1;
-      (result.conversation as Record<string, unknown>).messages = [{
+      const message = {
         id: "browser-follow-up-message",
         conversationId: "browser-conversation",
         body: "Please check this edge case.\nIt affects retries.",
         actor: { kind: "user", id: "local-user" },
         occurredAt: "2026-08-09T12:06:00.000Z",
-      }];
+      };
+      (result.conversation as Record<string, any>).history.push({
+        kind: "message",
+        activationId: "browser-follow-up-activation",
+        status: followUpReads > 1 ? "completed" : "queued",
+        attemptIds: followUpReads > 1 ? ["browser-follow-up-attempt"] : [],
+        message,
+      });
       if (followUpReads > 1) {
         (result.conversation as { originatingActivation: { status: string } }).originatingActivation.status = "completed";
-        const runs = (result.conversation as Record<string, unknown>).runs as Array<Record<string, unknown>>;
-        Object.assign(runs[0]!.attempt as Record<string, unknown>, {
-          status: "completed",
-          completedAt: "2026-08-09T12:05:00.000Z",
-        });
-        runs.push({
-        activationId: "browser-follow-up-activation",
-        sourceMessageId: "browser-follow-up-message",
-        attempt: {
-          id: "browser-follow-up-attempt",
-          status: "completed",
-          workspacePath: "C:/workspace",
-          startedAt: "2026-08-09T12:06:01.000Z",
-          completedAt: "2026-08-09T12:06:02.000Z",
-          outcome: { status: "completed", summary: "Checked the edge case." },
-          threadId: "thread-browser-123",
-          model: null,
-          reasoningEffort: null,
-        },
-        transcript: {
-          available: true,
-          items: [{ id: "browser-follow-up-answer", kind: "message", role: "agent", text: "The edge case is covered." }],
-        },
+        const history = (result.conversation as Record<string, any>).history;
+        history.find((entry: any) => entry.kind === "activation").status = "completed";
+        history.push({
+          kind: "item",
+          activationId: "browser-follow-up-activation",
+          attemptId: "browser-follow-up-attempt",
+          item: { id: "browser-follow-up-answer", kind: "message", role: "agent", text: "The edge case is covered." },
         });
       }
     }
@@ -616,19 +683,16 @@ test("a conversation follow-up retains its draft on failure and refreshes in pla
   await expect(composer).toHaveValue("");
   await expect(dialog).toContainText("Please check this edge case.");
   const queuedTurn = dialog.getByRole("status", { name: "Follow-up queued" });
-  await expect(queuedTurn).toContainText("Waiting for Implementation Agent to finish the current run.");
-  const queuedMessage = dialog.locator(".conversation-user-turn.awaiting-run .user-message");
-  await expect(queuedMessage).toHaveCSS("border-right-width", "4px");
+  await expect(queuedTurn).toContainText("Waiting for Implementation Agent to finish the current activation.");
+  const queuedMessage = dialog.locator("[data-conversation-message='browser-follow-up-message']");
+  await expect(queuedMessage).toHaveCSS("border-right-width", "1px");
   const [messageBox, queuedBox] = await Promise.all([queuedMessage.boundingBox(), queuedTurn.boundingBox()]);
   expect(messageBox).not.toBeNull();
   expect(queuedBox).not.toBeNull();
   expect(queuedBox!.y).toBeGreaterThanOrEqual(messageBox!.y + messageBox!.height);
   await expect(dialog).toContainText("The edge case is covered.");
   await expect(queuedTurn).toHaveCount(0);
-  const historyKinds = await dialog.locator(".conversation-run, .conversation-message").evaluateAll((entries) =>
-    entries.map((entry) => entry.classList.contains("conversation-message") ? "message" : "run"),
-  );
-  expect(historyKinds).toEqual(["run", "message", "run"]);
+  await expect(dialog.locator(".conversation-run")).toHaveCount(0);
   expect(submissions).toHaveLength(2);
   expect(submissions[1]?.idempotencyKey).toBe(submissions[0]?.idempotencyKey);
 });
@@ -697,7 +761,7 @@ test("an assembled conversation follow-up runs and remains attributable in the t
   const queuedConversation = page.getByRole("dialog", { name: "Agent conversation" });
   await expect(queuedConversation).toContainText(followUpBody);
   await expect(queuedConversation.getByRole("status", { name: "Follow-up queued" })).toContainText(
-    "Waiting for Implementation Agent's next run to start.",
+    "Waiting for Implementation Agent's next activation to start.",
   );
   await page.getByRole("button", { name: "Close conversation" }).click();
   await page.getByRole("button", { name: "Resume" }).click();
@@ -705,7 +769,6 @@ test("an assembled conversation follow-up runs and remains attributable in the t
   await expect(runningStatus).toBeVisible();
   await originatingConversation.click();
   const runningConversation = page.getByRole("dialog", { name: "Agent conversation" });
-  await expect(runningConversation).toContainText("Run 2 · running");
   await expect(runningConversation).toContainText("Checking the assembled follow-up now.");
   await expect(runningConversation.getByRole("img", { name: "Command running" })).toBeVisible();
   await runningConversation.getByRole("button", { name: "Close conversation" }).click();
@@ -720,7 +783,6 @@ test("an assembled conversation follow-up runs and remains attributable in the t
     .getByTitle("Inspect existing coordination", { exact: true }).click();
   const refreshed = page.getByRole("dialog", { name: "Agent conversation" });
   await expect(refreshed).toContainText(followUpBody);
-  await expect(refreshed).toContainText("Run 2 · completed", { timeout: 15_000 });
   await expect(refreshed).toContainText("Assembled follow-up verified.");
 });
 
@@ -794,6 +856,7 @@ test("a settled conversation can be retired by keyboard and remains visible in d
   await page.reload();
   await page.getByRole("region", { name: "Conversations" }).getByTitle(replacementSource, { exact: false }).click();
   const replacementDialog = page.getByRole("dialog", { name: "Agent conversation" });
-  await expect(replacementDialog.getByRole("note")).toContainText("Replacement context");
-  await expect(replacementDialog.getByRole("note")).toContainText(reason);
+  await expect(replacementDialog).toContainText(replacementSource);
+  await expect(replacementDialog.getByRole("note")).toHaveCount(0);
+  await expect(replacementDialog).not.toContainText(reason);
 });

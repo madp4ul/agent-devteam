@@ -313,12 +313,19 @@ test("conversation follow-up composer remains readable and operable in both appe
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
     const result = await response.json();
-    result.conversation.messages.push({
+    const message = {
       id: "appearance-queued-message",
       conversationId: result.conversation.id,
       body: "Please verify this queued turn.",
       actor: { kind: "user", id: "local-user" },
       occurredAt: "2026-08-15T12:00:00.000Z",
+    };
+    result.conversation.history.push({
+      kind: "message",
+      activationId: "appearance-queued-activation",
+      status: "queued",
+      attemptIds: [],
+      message,
     });
     await route.fulfill({ response, json: result });
   });
@@ -332,22 +339,34 @@ test("conversation follow-up composer remains readable and operable in both appe
     const send = dialog.getByRole("button", { name: "Send follow-up" });
     const userMessage = dialog.locator(".user-message");
     const queuedTurn = dialog.getByRole("status", { name: "Follow-up queued" });
-    const selectedRun = dialog.locator(".conversation-run.selected-run");
 
     expect(await contrastRatio(composer)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(send)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(userMessage)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(queuedTurn)).toBeGreaterThanOrEqual(4.5);
-    await expect(userMessage).toHaveCSS("border-right-width", "4px");
-    await expect(selectedRun).toHaveCSS(
-      "background-color",
-      theme === "dark" ? "rgb(29, 48, 61)" : "rgb(243, 247, 250)",
+    await expect(userMessage).toHaveCSS("border-right-width", "1px");
+    await expect(dialog.locator(".conversation-run")).toHaveCount(0);
+    await expect(dialog.locator(".conversation-composer")).toHaveCSS("position", "sticky");
+    const [composerBox, sendBox] = await Promise.all([composer.boundingBox(), send.boundingBox()]);
+    expect(composerBox).not.toBeNull();
+    expect(sendBox).not.toBeNull();
+    expect(sendBox!.x + sendBox!.width).toBeLessThanOrEqual(composerBox!.x + composerBox!.width);
+    expect(sendBox!.y + sendBox!.height).toBeLessThanOrEqual(composerBox!.y + composerBox!.height);
+    const transcriptPadding = await dialog.locator(".transcript-content").evaluate((element) =>
+      parseFloat(getComputedStyle(element).paddingRight)
     );
-    await expect(selectedRun).toHaveCSS("box-shadow", "none");
-    expect(await selectedRun.evaluate((element) => parseFloat(getComputedStyle(element).paddingLeft)))
-      .toBeGreaterThanOrEqual(12);
+    expect(transcriptPadding).toBeGreaterThanOrEqual(8);
+    const scrollbarClearance = await dialog.locator(".transcript-content").evaluate((element) => {
+      const content = element.getBoundingClientRect();
+      const rightmost = Math.max(...[...element.querySelectorAll<HTMLElement>(".conversation-stream > *, .conversation-composer")]
+        .map((child) => child.getBoundingClientRect().right));
+      return content.left + element.clientWidth - rightmost;
+    });
+    expect(scrollbarClearance).toBeGreaterThanOrEqual(8);
     await composer.focus();
     await expect(composer).toBeFocused();
+    await expect(composer).toHaveCSS("outline-style", "solid");
+    await expect(composer).toHaveCSS("outline-offset", "-3px");
     await dialog.getByRole("button", { name: "Close conversation" }).click();
   }
 });

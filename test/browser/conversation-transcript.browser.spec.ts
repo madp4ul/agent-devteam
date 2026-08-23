@@ -9,21 +9,24 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
     const result = await response.json();
-    const run = result.conversation.runs[0];
-    run.sourceMessageId = "conversation-display-follow-up";
-    run.transcript.items = [
+    const activation = result.conversation.history.find((entry: any) => entry.kind === "activation");
+    const items = [
       { id: "message-markdown", kind: "message", role: "agent", text: codexMarkdown },
       { id: "command-success", kind: "command", command, status: "completed", output: "All tests passed." },
       { id: "command-running", kind: "command", command: "pnpm typecheck", status: "running" },
       { id: "command-failed", kind: "command", command: "pnpm lint", status: "failed", output: "Lint failed." },
     ];
-    result.conversation.messages = [{
+    const message = {
       id: "conversation-display-follow-up",
       conversationId: result.conversation.id,
       body: userMarkdown,
-      occurredAt: run.attempt.startedAt,
-      activationId: run.activationId,
-    }];
+      actor: { kind: "user", id: "local-user" },
+      occurredAt: "2026-08-09T12:00:00.000Z",
+    };
+    result.conversation.history = [
+      { kind: "message", activationId: activation.activationId, status: "running", attemptIds: ["browser-attempt"], message },
+      ...items.map((item) => ({ kind: "item", activationId: activation.activationId, attemptId: "browser-attempt", item })),
+    ];
     await route.fulfill({ response, json: result });
   });
 
@@ -36,11 +39,9 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   await expect(dialog.getByText("pnpm test", { exact: true })).toBeVisible();
   await expect(dialog.locator("strong", { hasText: "handoff" })).toBeVisible();
   await expect(dialog).not.toContainText("Codex message");
-  await expect(dialog.locator(".conversation-message, .conversation-run")).toHaveCount(2);
-  expect(await dialog.locator(".conversation-message, .conversation-run").evaluateAll((entries) =>
-    entries.map((entry) => entry.classList.contains("conversation-message") ? "message" : "run"),
-  )).toEqual(["message", "run"]);
-  expect(await dialog.locator(".conversation-run > .transcript-item, .conversation-run > .transcript-command")
+  await expect(dialog.locator(".conversation-run")).toHaveCount(0);
+  await expect(dialog.locator(".conversation-message")).toHaveCount(1);
+  expect(await dialog.locator(".conversation-stream > .transcript-item, .conversation-stream > .transcript-command")
     .evaluateAll((entries) => entries.map((entry) => entry.classList.contains("message") ? "message" : "command")))
     .toEqual(["message", "command", "command", "command"]);
 
@@ -56,27 +57,27 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   await expect(commands.nth(0).getByRole("img", { name: "Command succeeded" })).toBeVisible();
   const runningCommand = commands.nth(1).getByRole("img", { name: "Command running" });
   await expect(runningCommand).toBeVisible();
+  await expect(commands.nth(1).locator("details")).toHaveCount(0);
   await expect(runningCommand.locator("svg")).toHaveCSS("animation-duration", "1.6s");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(runningCommand.locator("svg")).toHaveCSS("animation-duration", "3.2s");
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await expect(commands.nth(2).getByRole("img", { name: "Command failed" })).toBeVisible();
   await expect(commands.nth(0).locator(".command-disclosure-icon")).toBeVisible();
-  await expect(commands.nth(0).getByText(command, { exact: true })).not.toBeVisible();
+  await expect(commands.nth(0).getByText(command, { exact: true })).toBeVisible();
   await expect(commands.nth(0).locator(".command-disclosure-icon")).toHaveCSS("transform", "none");
   await commands.nth(0).locator("summary").click();
   await expect(commands.nth(0).locator(".command-disclosure-icon")).not.toHaveCSS("transform", "none");
   await expect(commands.nth(0)).toContainText(command);
   await expect(commands.nth(0)).toContainText("All tests passed.");
-  await commands.nth(1).locator("summary").click();
   await expect(commands.nth(1)).toContainText("pnpm typecheck");
 
   const compactHeights = await dialog.evaluate(() => ({
     userMessage: document.querySelector(".conversation-message.user-message")!.getBoundingClientRect().height,
-    collapsedCommand: document.querySelectorAll(".transcript-command")[2]!.getBoundingClientRect().height,
+    command: document.querySelectorAll(".transcript-command")[2]!.getBoundingClientRect().height,
   }));
   expect(compactHeights.userMessage).toBeLessThan(90);
-  expect(compactHeights.collapsedCommand).toBeLessThan(60);
+  expect(compactHeights.command).toBeLessThan(90);
 
   const codexMessageLayout = await dialog.locator(".transcript-item.message").evaluate((element) => {
     const card = element.getBoundingClientRect();
@@ -91,6 +92,40 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   expect(codexMessageLayout.contentTopInset).toBeLessThan(18);
   expect(codexMessageLayout.copyTopInset).toBeLessThan(12);
   expect(codexMessageLayout.copyRightInset).toBeGreaterThanOrEqual(8);
+  await expect(dialog.locator(".transcript-item.message")).toHaveCSS("box-shadow", "none");
+
+  const userMessageLayout = await dialog.locator(".conversation-message.user-message").evaluate((element) => {
+    const message = element.getBoundingClientRect();
+    const content = element.querySelector(".markdown-content")!.getBoundingClientRect();
+    const copy = element.querySelector(".markdown-copy-button")!.getBoundingClientRect();
+    return {
+      copyBesideContent: copy.left >= content.right,
+      verticalCenters: Math.abs((copy.top + copy.height / 2) - (content.top + content.height / 2)),
+      height: message.height,
+    };
+  });
+  expect(userMessageLayout.copyBesideContent).toBe(true);
+  expect(userMessageLayout.verticalCenters).toBeLessThanOrEqual(8);
+  expect(userMessageLayout.height).toBeLessThan(72);
+
+  const desktopAlignment = await dialog.evaluate(() => {
+    const stream = document.querySelector(".conversation-stream")!.getBoundingClientRect();
+    const user = document.querySelector(".conversation-message.user-message")!.getBoundingClientRect();
+    const agent = document.querySelector(".transcript-item.message")!.getBoundingClientRect();
+    return {
+      userRightInset: stream.right - user.right,
+      userLeftInset: user.left - stream.left,
+      userWidthRatio: user.width / stream.width,
+      agentLeftInset: agent.left - stream.left,
+      agentWidthRatio: agent.width / stream.width,
+    };
+  });
+  expect(desktopAlignment.userRightInset).toBeLessThanOrEqual(1);
+  expect(desktopAlignment.userLeftInset).toBeGreaterThan(40);
+  expect(desktopAlignment.userWidthRatio).toBeGreaterThanOrEqual(0.7);
+  expect(desktopAlignment.userWidthRatio).toBeLessThanOrEqual(0.75);
+  expect(desktopAlignment.agentLeftInset).toBeLessThanOrEqual(1);
+  expect(desktopAlignment.agentWidthRatio).toBeGreaterThan(0.95);
 
   const compactRow = await commands.nth(2).evaluate((element) => {
     const row = element.querySelector("summary")!.getBoundingClientRect();
@@ -100,12 +135,10 @@ test("conversation messages render Markdown and commands remain quiet but inspec
       leftInset: title.left - element.getBoundingClientRect().left,
       iconCenterY: icon.top + icon.height / 2,
       titleCenterY: title.top + title.height / 2,
-      rowCenterY: row.top + row.height / 2,
     };
   });
   expect(compactRow.leftInset).toBeGreaterThanOrEqual(8);
-  expect(Math.abs(compactRow.iconCenterY - compactRow.rowCenterY)).toBeLessThanOrEqual(0.5);
-  expect(Math.abs(compactRow.titleCenterY - compactRow.rowCenterY)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(compactRow.iconCenterY - compactRow.titleCenterY)).toBeLessThanOrEqual(0.5);
   await expect(commands.nth(2)).toHaveCSS("border-radius", "7.2px");
 
   const centers = await commands.nth(0).evaluate((element) => {
@@ -120,6 +153,13 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   });
   expect(Math.abs(centers.slotX - centers.iconX)).toBeLessThanOrEqual(0.5);
   expect(Math.abs(centers.slotY - centers.iconY)).toBeLessThanOrEqual(0.5);
+  await page.setViewportSize({ width: 640, height: 820 });
+  const narrowWidths = await dialog.evaluate(() => {
+    const stream = document.querySelector(".conversation-stream")!.getBoundingClientRect();
+    return [...document.querySelectorAll<HTMLElement>(".conversation-message, .transcript-item.message")]
+      .map((element) => element.getBoundingClientRect().width / stream.width);
+  });
+  expect(narrowWidths.every((ratio) => ratio > 0.95)).toBe(true);
 });
 
 test("generic MCP calls identify the capability and disclose bounded literal evidence", async ({ page }) => {
@@ -470,10 +510,23 @@ test("a coordination comment renders its Markdown with the timeline disclosure",
   const sourceComment = taskResult.task.comments.find((comment: { body: string }) =>
     comment.body.includes("Preserve authored context"));
   expect(sourceComment).toBeTruthy();
-  const body = sourceComment.body as string;
+  const body = [
+    "Reviewed **authored context**.",
+    "Preserve the first detail.",
+    "Preserve the second detail.",
+    "Preserve the third detail.",
+    "Preserve the final detail.",
+  ].join("  \n");
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
-    await fulfillConversationTranscript(route, [{
+    await fulfillConversationTranscript(route, [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `coordination-comment-lead-in-${index}`,
+        kind: "message",
+        role: "agent",
+        text: `Earlier conversation evidence ${index + 1}.`,
+      })),
+      {
       id: "coordination-comment",
       kind: "coordination",
       tool: "add_comment",
@@ -485,7 +538,8 @@ test("a coordination comment renders its Markdown with the timeline disclosure",
         arguments: { body, expectedRevision: 5 },
         result: { accepted: true, commentId: sourceComment.id },
       },
-    }]);
+      },
+    ]);
   });
 
   await page.goto("/tasks/T-0001");
@@ -497,18 +551,53 @@ test("a coordination comment renders its Markdown with the timeline disclosure",
   await expect(comment.getByRole("img", { name: "Coordination action succeeded" })).toBeVisible();
   await expect(comment.locator("details")).toHaveCount(0);
   await expect(comment).not.toContainText(/Server identifier|Tool identifier|Raw status|Arguments|Result|T-0001|completed/);
-  const disclosure = comment.getByRole("button", { name: /Show \d+ more lines/ });
-  await expect(disclosure).toBeVisible();
-  await disclosure.click();
-  await expect(comment.getByRole("button", { name: "Show less" })).toBeVisible();
+  await expect(comment.getByRole("button", { name: /Show \d+ more lines|Show less/ })).toHaveCount(0);
+  await page.getByRole("dialog", { name: "Agent conversation" }).locator(".transcript-content").evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  expect(await comment.locator(".conversation-authored-text").evaluate((element) => {
+    const clipBottom = element.getBoundingClientRect().bottom;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const rects: DOMRect[] = [];
+    while (walker.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(walker.currentNode);
+      rects.push(...range.getClientRects());
+    }
+    const clippedText = rects.some((rect) => rect.top < clipBottom - 0.5 && rect.bottom > clipBottom + 0.5);
+    const clippedLeaf = [...element.querySelectorAll<HTMLElement>("*:not(:has(*))")]
+      .some((leaf) => {
+        const rect = leaf.getBoundingClientRect();
+        return rect.top < clipBottom - 0.5 && rect.bottom > clipBottom + 0.5;
+      });
+    return clippedText || clippedLeaf;
+  })).toBe(false);
+  const heading = comment.locator(".coordination-activity-heading");
+  const historyAction = comment.getByRole("button", { name: "View in task history" });
+  const [headingBox, historyActionBox] = await Promise.all([heading.boundingBox(), historyAction.boundingBox()]);
+  expect(headingBox).not.toBeNull();
+  expect(historyActionBox).not.toBeNull();
+  expect(Math.abs(
+    headingBox!.y + headingBox!.height / 2 - (historyActionBox!.y + historyActionBox!.height / 2),
+  )).toBeLessThanOrEqual(2);
+  const secondaryColors = await page.locator(".attempt-entry .secondary").first().evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, background: style.backgroundColor };
+  });
+  expect(await historyAction.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, background: style.backgroundColor };
+  })).toEqual(secondaryColors);
+  await expect(comment.locator(".coordination-comment-footer")).toHaveCount(0);
+  await expect(comment).toContainText("Preserve the final detail.");
 
   await comment.getByRole("button", { name: "Copy comment Markdown" }).click();
   await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n")))
     .toBe(body);
 
-  const historyAction = comment.getByRole("button", { name: "View in task history" });
+  await historyAction.focus();
   await page.keyboard.press("Tab");
-  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
   await expect(historyAction).toBeFocused();
   await expect(historyAction).toHaveCSS("outline-style", "solid");
   await historyAction.press("Enter");
@@ -566,7 +655,7 @@ test("wide transcript content wraps without overflowing the dialog or page", asy
 
   const commandDetails = dialog.locator(".command-details");
   await commandDetails.locator("summary").click();
-  const pre = commandDetails.locator("pre").nth(1);
+  const pre = commandDetails.locator("pre");
   await expect(pre).toHaveText(preformattedOutput);
   expect(await pre.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   expect(await commandDetails.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(false);
@@ -596,7 +685,6 @@ test("a conversation without reported usage does not present zero as measured us
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
     const result = await response.json();
-    delete result.conversation.runs[0].transcript.usage;
     await route.fulfill({ response, json: result });
   });
   await page.goto("/tasks/T-0001");
@@ -630,7 +718,6 @@ test("conversation aggregates show known lower bounds while running totals stay 
     result.conversation.costEstimate = { currency: "USD", amount: 0.02215 };
     result.conversation.hasUnpricedSettledRuns = true;
     result.conversation.costPending = true;
-    result.conversation.runs[0].transcript.costEstimate = { currency: "USD", amount: 0.02215 };
     await route.fulfill({ response, json: result });
   });
 
@@ -651,10 +738,7 @@ test("conversation aggregates show known lower bounds while running totals stay 
   await expect(dialog.getByTestId("conversation-cost")).toHaveClass(/cost-estimate-badge/);
   await expect(dialog.getByTestId("conversation-cost")).toHaveRole("status");
   const tokenUsage = dialog.getByRole("region", { name: "Token usage" });
-  await expect(tokenUsage).toContainText("$0.02");
-  await expect(tokenUsage).not.toContainText("≥");
-  await expect(tokenUsage).not.toContainText("~");
-  await expect(tokenUsage.locator(".cost-estimate")).not.toHaveClass(/cost-estimate-badge/);
+  await expect(tokenUsage).toHaveCount(0);
 });
 
 test("a first priceable running attempt shows a zero aggregate with a pending spinner", async ({ page }) => {
@@ -673,7 +757,6 @@ test("a first priceable running attempt shows a zero aggregate with a pending sp
     delete result.conversation.costEstimate;
     result.conversation.hasUnpricedSettledRuns = false;
     result.conversation.costPending = true;
-    delete result.conversation.runs[0].transcript.costEstimate;
     await route.fulfill({ response, json: result });
   });
 
@@ -702,7 +785,7 @@ test("a first priceable running attempt shows a zero aggregate with a pending sp
     await expect(dialog.getByTestId("conversation-cost")).toHaveAccessibleName(
       /estimated token cost \$0\.00; will update/i,
     );
-    await expect(dialog.locator(".conversation-run-metrics")).not.toContainText("$");
+    await expect(dialog.locator(".conversation-run-metrics")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Close conversation" }).click();
   }
 });
@@ -712,38 +795,50 @@ test("a conversation discloses when Codex replaced an unusable resumed thread", 
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
     const result = await response.json();
-    result.conversation.runs[0].attempt.threadContinuity = "replaced";
+    result.conversation.history.splice(1, 0, {
+      kind: "continuity-loss",
+      occurredAt: "2026-08-09T12:00:00.000Z",
+      reason: "Codex could not resume the prior thread. This activation started a replacement thread, so earlier model context was not retained.",
+    });
     await route.fulfill({ response, json: result });
   });
 
   await page.goto("/tasks/T-0001");
   await page.getByRole("button", { name: "View conversation" }).click();
   await expect(page.getByRole("dialog", { name: "Agent conversation" })).toContainText(
-    "This run started a replacement thread, so earlier model context was not retained.",
+    "This activation started a replacement thread, so earlier model context was not retained.",
   );
 });
 
-test("one conversation presents distinct run boundaries for several ordinary activations", async ({ page }) => {
+test("one conversation presents several ordinary activations without run boundaries", async ({ page }) => {
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
     const result = await response.json();
-    const firstRun = result.conversation.runs[0];
-    firstRun.attempt.status = "completed";
-    firstRun.attempt.completedAt = "2026-08-09T12:01:00.000Z";
-    firstRun.attempt.outcome = { status: "completed", summary: "First activation complete." };
-    result.conversation.runs.push({
+    const firstCause = result.conversation.history.find((entry: any) => entry.kind === "activation");
+    firstCause.status = "completed";
+    result.conversation.history.push({
+      kind: "activation",
       activationId: "browser-ordinary-activation-2",
-      attempt: {
-        ...firstRun.attempt,
-        id: "browser-ordinary-attempt-2",
-        startedAt: "2026-08-09T12:03:00.000Z",
-        completedAt: "2026-08-09T12:04:00.000Z",
-        outcome: { status: "completed", summary: "Second activation complete." },
+      status: "completed",
+      attemptIds: ["browser-ordinary-attempt-2"],
+      occurredAt: "2026-08-09T12:03:00.000Z",
+      reason: { type: "column-entry", sourceEventId: "browser-move-2" },
+      source: {
+        kind: "activity",
+        activity: {
+          id: "browser-move-2",
+          type: "task.moved",
+          actor: { kind: "user", id: "paul" },
+          occurredAt: "2026-08-09T12:03:00.000Z",
+          details: { toColumnId: "implementation" },
+        },
       },
-      transcript: {
-        available: true,
-        items: [{ kind: "message", role: "agent", text: "Handled the later ordinary activation." }],
-      },
+    });
+    result.conversation.history.push({
+      kind: "item",
+      activationId: "browser-ordinary-activation-2",
+      attemptId: "browser-ordinary-attempt-2",
+      item: { kind: "message", role: "agent", text: "Handled the later ordinary activation." },
     });
     await route.fulfill({ response, json: result });
   });
@@ -751,9 +846,9 @@ test("one conversation presents distinct run boundaries for several ordinary act
   await page.goto("/tasks/T-0001");
   await page.getByRole("button", { name: "View conversation" }).click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
-  await expect(dialog.locator(".conversation-run")).toHaveCount(2);
-  await expect(dialog.getByRole("heading", { name: "Run 1 · completed" })).toBeVisible();
-  await expect(dialog.getByRole("heading", { name: "Run 2 · completed" })).toBeVisible();
+  await expect(dialog.locator(".conversation-run")).toHaveCount(0);
+  await expect(dialog.getByText("Activation", { exact: true })).toHaveCount(2);
+  await expect(dialog.getByText(/Run \d/)).toHaveCount(0);
   await expect(dialog).toContainText("Handled the later ordinary activation.");
 });
 
@@ -763,6 +858,9 @@ test("conversation message, command, and MCP stream remains readable in both app
     await fulfillConversationTranscript(route, [
       { id: "appearance-command-running", kind: "command", command: "pnpm typecheck", status: "running" },
       { id: "appearance-command-failed", kind: "command", command: "pnpm lint", status: "failed", output: "Lint failed." },
+      { id: "appearance-tool", kind: "tool", name: "Read workspace", status: "succeeded", summary: "Inspected workspace state." },
+      { id: "appearance-tool-error", kind: "tool", name: "Write workspace", status: "error", summary: "Workspace write failed." },
+      { id: "appearance-diagnostic", kind: "diagnostic", text: "Runtime diagnostics require attention." },
       {
         id: "appearance-mcp",
         kind: "mcp",
@@ -819,6 +917,7 @@ test("conversation message, command, and MCP stream remains readable in both app
     const message = dialog.locator(".transcript-item.message").first();
     const command = dialog.locator(".transcript-command").first();
     const mcp = dialog.locator(".transcript-mcp").first();
+    const runtimeTool = dialog.locator(".transcript-item.tool").first();
     const coordination = dialog.getByRole("article", { name: "Add dependency" });
     const inspection = dialog.getByRole("article", { name: "Inspect task" });
     const inspectionLink = inspection.getByRole("link", { name: "T-0002 Inspect linked evidence" });
@@ -840,6 +939,27 @@ test("conversation message, command, and MCP stream remains readable in both app
     expect(await contrastRatio(inspectionLink)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(commentHistoryAction)).toBeGreaterThanOrEqual(4.5);
     for (const status of statuses) expect(await contrastRatio(status)).toBeGreaterThanOrEqual(3);
+    const mutedStyles = await Promise.all([command, mcp, inspection, runtimeTool].map((entry) => entry.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { background: style.backgroundColor, borderLeftWidth: style.borderLeftWidth, borderTopColor: style.borderTopColor };
+    })));
+    expect(new Set(mutedStyles.map(({ background }) => background)).size).toBe(1);
+    expect(mutedStyles.every(({ borderLeftWidth }) => borderLeftWidth === "1px")).toBe(true);
+    expect(mutedStyles[0]!.borderTopColor).toBe(mutedStyles[1]!.borderTopColor);
+    await expect(dialog.locator(".transcript-command.exceptional")).toHaveCount(1);
+    await expect(dialog.locator(".transcript-item.tool.exceptional")).toHaveCount(1);
+    const diagnosticOutline = await dialog.locator(".transcript-item.diagnostic").last().evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        widths: [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth],
+        colors: [style.borderTopColor, style.borderRightColor, style.borderBottomColor, style.borderLeftColor],
+      };
+    });
+    expect(new Set(diagnosticOutline.widths)).toEqual(new Set(["1px"]));
+    expect(new Set(diagnosticOutline.colors).size).toBe(1);
+    await expect(coordination).toHaveClass(/exceptional/);
+    expect(await dialog.locator(".transcript-command.exceptional").evaluate((element) => getComputedStyle(element).borderTopColor))
+      .toBe(await coordination.evaluate((element) => getComputedStyle(element).borderTopColor));
     await disclosure.hover();
     await expect(disclosureIcon).toHaveCSS("stroke", theme === "dark" ? "rgb(114, 214, 159)" : "rgb(23, 78, 58)");
     await disclosure.focus();
@@ -861,8 +981,9 @@ test("conversation message, command, and MCP stream remains readable in both app
     await expect(inspectionLink).toHaveCSS("outline-style", "solid");
     await commentHistoryAction.hover();
     expect(await contrastRatio(commentHistoryAction)).toBeGreaterThanOrEqual(4.5);
+    await commentHistoryAction.focus();
     await page.keyboard.press("Tab");
-    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
     await expect(commentHistoryAction).toBeFocused();
     await expect(commentHistoryAction).toHaveCSS("outline-style", "solid");
     await expect(commentHistoryAction).toHaveCSS("outline-width", "2px");

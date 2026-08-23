@@ -1,7 +1,7 @@
 import type { ActivationView } from "./automation-contract.ts";
 import type { ProcessDiagnostic } from "./process-contract.ts";
-import type { EstimatedTokenCost, AttemptTokenUsage, AttemptTranscriptItem, AttemptView } from "./runtime-contract.ts";
-import type { Actor } from "./task-contract.ts";
+import type { EstimatedTokenCost, AttemptTokenUsage, AttemptTranscriptItem } from "./runtime-contract.ts";
+import type { Actor, TaskActivityView, TaskCommentView } from "./task-contract.ts";
 
 /** Conversation index, detail, message, transcript, and continuation facts. */
 export type AgentConversationTranscriptView =
@@ -34,14 +34,23 @@ export interface AgentConversationView {
   continuation:
     | { available: true }
     | { available: false; reason: "task-archived" | "owning-agent-unavailable" | "thread-unavailable" };
-  messages: AgentConversationMessageView[];
-  runs: Array<{
-    activationId: string;
-    sourceMessageId?: string;
-    attempt: AttemptView;
-    transcript: AgentConversationTranscriptView;
-  }>;
+  history: AgentConversationHistoryEntry[];
 }
+
+export type AgentConversationHistoryEntry =
+  | {
+      kind: "activation";
+      activationId: string;
+      status: ActivationView["status"];
+      attemptIds: string[];
+      occurredAt: string;
+      reason: ActivationView["reason"];
+      source: { kind: "activity"; activity: TaskActivityView } | { kind: "comment"; comment: TaskCommentView };
+    }
+  | { kind: "message"; activationId: string; status: ActivationView["status"]; attemptIds: string[]; message: AgentConversationMessageView }
+  | { kind: "item"; activationId: string; attemptId: string; item: AttemptTranscriptItem }
+  | { kind: "retirement"; retirement: AgentConversationRetirementView }
+  | { kind: "continuity-loss"; occurredAt: string; reason: string };
 
 export type AgentConversationQueryResult =
   | { available: true; conversation: AgentConversationView }

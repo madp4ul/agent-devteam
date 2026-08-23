@@ -3,12 +3,15 @@ import type { DatabaseSync } from "node:sqlite";
 import type { ActivationView } from "../automation-contract.ts";
 import type {
   AgentConversationIndexEntry,
+  AgentConversationMessageView,
+  AgentConversationTranscriptView,
   AgentConversationView,
 } from "../conversation-contract.ts";
 import type {
   AttemptTranscriptAccess,
   AttemptTranscriptQueryResult,
   EstimatedTokenCost,
+  AttemptView,
 } from "../runtime-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
@@ -36,6 +39,13 @@ interface ConversationMessageRow {
   body: string;
   actor_id: string;
   occurred_at: string;
+}
+
+interface ConversationRun {
+  activationId: string;
+  sourceMessageId?: string;
+  attempt: AttemptView;
+  transcript: AgentConversationTranscriptView;
 }
 
 const conversationMessageColumns = "id, conversation_id, body, actor_id, occurred_at";
@@ -187,7 +197,9 @@ export class ConversationProjectionModule {
       cost_pending: number;
     } | undefined;
     if (row === undefined) return undefined;
-    const originatingActivation = this.#taskProjections.readTaskActivations(row.task_id)
+    const activations = this.#taskProjections.readTaskActivations(row.task_id)
+      .filter((activation) => activation.conversationId === row.id);
+    const originatingActivation = activations
       .find((activation) => activation.id === row.originating_activation_id);
     if (originatingActivation === undefined) return undefined;
     const runs = await Promise.all(this.#readRuns(row.id).map(async (run) => {
@@ -204,6 +216,14 @@ export class ConversationProjectionModule {
           : { available: false as const },
       };
     }));
+    const messages = this.#readMessages(row.id);
+    const retirement = row.conversation_retired_at === null
+      ? null
+      : {
+          reason: row.retirement_reason!,
+          actor: { kind: "user" as const, id: row.retirement_actor_id! },
+          occurredAt: row.conversation_retired_at,
+        };
     return {
       id: row.id,
       taskId: row.task_id,
@@ -215,19 +235,65 @@ export class ConversationProjectionModule {
       latestActivityAt: row.latest_activity_at,
       ...conversationCostEstimate(runs),
       costPending: row.cost_pending === 1,
-      retirement: row.conversation_retired_at === null
-        ? null
-        : {
-            reason: row.retirement_reason!,
-            actor: { kind: "user", id: row.retirement_actor_id! },
-            occurredAt: row.conversation_retired_at,
-          },
+      retirement,
       replacesConversationId: row.replaces_conversation_id,
       replacementReason: row.replacement_reason,
       retirementAvailability: this.#retirementAvailability(row),
-      messages: this.#readMessages(row.id),
-      runs,
+      history: this.#readHistory(activations, runs, messages, retirement),
     };
+  }
+
+  #readHistory(
+    activations: ActivationView[],
+    runs: ConversationRun[],
+    messages: AgentConversationMessageView[],
+    retirement: AgentConversationView["retirement"],
+  ): AgentConversationView["history"] {
+    const messagesById = new Map(messages.map((message) => [message.id, message]));
+    const runsByActivation = Map.groupBy(runs, (run) => run.activationId);
+    const groups: Array<{ occurredAt: string; entries: AgentConversationView["history"] }> = activations.flatMap((activation) => {
+      const message = activation.reason.type === "user-follow-up"
+        ? messagesById.get(activation.reason.sourceEventId)
+        : undefined;
+      const source = activation.reason.type === "user-follow-up"
+        ? undefined
+        : this.#taskProjections.readSourceEvent(activation.reason.sourceEventId);
+      if (message === undefined && source === undefined) return [];
+      const occurredAt = message?.occurredAt ?? source!.occurredAt;
+      const nonMessageSource = source!;
+      const activationRuns = runsByActivation.get(activation.id) ?? [];
+      const attemptIds = activationRuns.map(({ attempt }) => attempt.id);
+      const cause: AgentConversationView["history"][number] = message !== undefined
+        ? { kind: "message", activationId: activation.id, status: activation.status, attemptIds, message }
+        : "body" in nonMessageSource
+          ? { kind: "activation", activationId: activation.id, status: activation.status, attemptIds, occurredAt, reason: activation.reason, source: { kind: "comment", comment: nonMessageSource } }
+          : { kind: "activation", activationId: activation.id, status: activation.status, attemptIds, occurredAt, reason: activation.reason, source: { kind: "activity", activity: nonMessageSource } };
+      const items = activationRuns.flatMap((run) => [
+        ...(run.attempt.threadContinuity === "replaced" ? [{
+          kind: "continuity-loss" as const,
+          occurredAt: run.attempt.startedAt,
+          reason: "Codex could not resume the prior thread. This activation started a replacement thread, so earlier model context was not retained.",
+        }] : []),
+        ...(run.transcript.available
+          ? run.transcript.items.map((item) => ({
+              kind: "item" as const,
+              activationId: activation.id,
+              attemptId: run.attempt.id,
+              item,
+            }))
+          : []),
+      ]);
+      return [{ occurredAt, entries: [cause, ...items] }];
+    });
+    const systemGroups: Array<{ occurredAt: string; entries: AgentConversationView["history"] }> = [
+      ...(retirement === null ? [] : [{
+        occurredAt: retirement.occurredAt,
+        entries: [{ kind: "retirement" as const, retirement }],
+      }]),
+    ];
+    return [...groups, ...systemGroups]
+      .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
+      .flatMap(({ entries }) => entries);
   }
 
   #readConversationCostEstimate(conversationId: string): {
@@ -263,7 +329,7 @@ export class ConversationProjectionModule {
     };
   }
 
-  readMessage(id: string): AgentConversationView["messages"][number] | undefined {
+  readMessage(id: string): AgentConversationMessageView | undefined {
     const row = this.#database.prepare(
       `SELECT ${conversationMessageColumns}
        FROM agent_conversation_messages WHERE id = ?`,
@@ -298,7 +364,7 @@ export class ConversationProjectionModule {
         };
   }
 
-  #readMessages(conversationId: string): AgentConversationView["messages"] {
+  #readMessages(conversationId: string): AgentConversationMessageView[] {
     const rows = this.#database.prepare(
       `SELECT ${conversationMessageColumns}
        FROM agent_conversation_messages
@@ -311,7 +377,7 @@ export class ConversationProjectionModule {
   #readRuns(conversationId: string): Array<{
     activationId: string;
     sourceMessageId?: string;
-    attempt: AgentConversationView["runs"][number]["attempt"];
+    attempt: AttemptView;
   }> {
     const activations = this.#database.prepare(
       "SELECT id, reason_type, source_event_id FROM activations WHERE conversation_id = ? ORDER BY sequence",
@@ -359,7 +425,7 @@ export class ConversationProjectionModule {
 }
 
 function conversationCostEstimate(
-  runs: AgentConversationView["runs"],
+  runs: ConversationRun[],
 ): { costEstimate?: EstimatedTokenCost; hasUnpricedSettledRuns: boolean } {
   const settled = runs.filter(({ attempt }) => attempt.status !== "running");
   if (settled.length === 0) return { hasUnpricedSettledRuns: false };
@@ -378,7 +444,7 @@ function conversationCostEstimate(
   };
 }
 
-function conversationMessageView(row: ConversationMessageRow): AgentConversationView["messages"][number] {
+function conversationMessageView(row: ConversationMessageRow): AgentConversationMessageView {
   return {
     id: row.id,
     conversationId: row.conversation_id,
