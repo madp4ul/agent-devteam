@@ -41,19 +41,34 @@ const ACTIVATION_BOOTSTRAP = `This is a new, distinct activation in an existing 
 The current activation, task structure, process, board, owning role, and workspace state are authoritative over conflicting inherited conversation history. Reassess them before acting and do not repeat effects already present. Unchanged unbounded task text is intentionally omitted. Use the attempt-scoped operating-context coordination tool whenever inherited framework, process, board, role, or participant instructions appear incomplete, summarized, obsolete, or contradictory.`;
 
 export function composeActivationPrompt(request: AgentRunRequest): string {
+  let prompt: string;
   if (
     request.attempt.thread === "resumed" &&
     request.attempt.number > 1 &&
     request.attempt.fullCompositionReason === undefined
   ) {
-    return composeAttemptContinuation(request);
-  }
-  if (
+    prompt = composeAttemptContinuation(request);
+  } else if (
     request.attempt.thread === "resumed" &&
     request.activationContext.kind === "resumed" &&
     request.attempt.fullCompositionReason === undefined
-  ) return composeResumedActivationPrompt(request);
-  return composeFullPrompt(request);
+  ) {
+    prompt = composeResumedActivationPrompt(request);
+  } else {
+    prompt = composeFullPrompt(request);
+  }
+  return `${prompt}${renderAttachmentSection(request)}`;
+}
+
+function renderAttachmentSection(request: AgentRunRequest): string {
+  const attachments = request.attachments ?? [];
+  if (attachments.length === 0) return "";
+  const lines = attachments.map((attachment) =>
+    `- ${attachment.fileName} (${attachment.mediaType || "application/octet-stream"}, ${attachment.sizeBytes} bytes)\n` +
+    `  Authored message: ${attachment.messageId}${attachment.currentMessage ? " (current follow-up)" : ""}\n` +
+    `  Scoped path: ${attachment.path}`
+  ).join("\n");
+  return `\n\n# Conversation attachments\n\nThese files belong to this agent conversation. They are scoped runtime copies, not project files. Earlier files remain available for later follow-ups.\n\n${lines}`;
 }
 
 function composeFullPrompt(request: AgentRunRequest): string {

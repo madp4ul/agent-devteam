@@ -175,6 +175,14 @@ A user's durable follow-up within an agent conversation. It is the immutable
 source of one `user-follow-up` activation and remains distinct from agent-run
 transcript evidence and task comments.
 
+**Pending conversation upload**:
+A user-selected file being transferred for an unsent authored conversation
+message. It is temporary draft material rather than conversation evidence.
+
+**Conversation attachment**:
+An immutable file associated with one authored conversation message and
+available only within that agent conversation until the task is archived.
+
 **Agent run transcript**:
 The attempt-scoped inspectable evidence for one run, including its conversation
 messages and tool activity from the agent runtime. It is read through the

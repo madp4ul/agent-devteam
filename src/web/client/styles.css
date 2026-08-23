@@ -575,8 +575,22 @@ textarea { resize: vertical; line-height: 1.5; }
 .conversation-composer { position: sticky; z-index: 3; bottom: 0; display: grid; gap: .4rem; margin-top: 0; border-top: 1px solid var(--border); background: var(--paper); padding: .75rem 0 .15rem; }
 .conversation-composer label { color: var(--text-muted); font-size: .78rem; }
 .conversation-composer-input { position: relative; }
-.conversation-composer textarea { min-height: 5rem; max-height: min(16rem, 38dvh); padding-right: 9.5rem; resize: vertical; }
-.conversation-composer-input button { position: absolute; right: .55rem; bottom: .55rem; padding: .5rem .7rem; }
+.conversation-composer textarea { min-height: 5rem; max-height: min(16rem, 38dvh); padding-right: 12.5rem; resize: vertical; }
+.conversation-composer-actions { position: absolute; right: .55rem; bottom: .55rem; display: flex; align-items: center; gap: .45rem; }
+.conversation-composer-actions > button:not(.icon-button) { padding: .5rem .7rem; }
+.attachment-icon-button { width: 2.1rem; height: 2.1rem; flex: none; border-radius: .5rem; }
+.attachment-icon-button svg { width: 1rem; height: 1rem; }
+.conversation-upload-list, .conversation-attachment-list { display: flex; min-width: 0; margin: 0; padding: 0; flex-wrap: wrap; gap: .45rem; list-style: none; }
+.conversation-upload-list li, .conversation-attachment-list li { display: flex; min-width: 0; align-items: center; gap: .4rem; border: 1px solid var(--border); border-radius: .55rem; background: var(--surface-subtle); padding: .3rem .35rem .3rem .55rem; }
+.conversation-upload-list li { max-width: min(100%, 28rem); }
+.conversation-upload-name { min-width: 0; overflow: hidden; color: var(--text); font-size: .8rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-upload-list small, .conversation-attachment-list small { flex: none; color: var(--muted); font-size: .68rem; }
+.conversation-upload-list progress { width: 4rem; height: .35rem; accent-color: var(--action); }
+.conversation-upload-list .failed { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); }
+.conversation-upload-error { color: var(--failure-text); font-size: .7rem; }
+.conversation-upload-list .attachment-icon-button { width: 1.65rem; height: 1.65rem; border-radius: .35rem; }
+.conversation-attachment-list { margin-top: .6rem; }
+.conversation-attachment-list a { min-width: 0; color: var(--action); font-size: .78rem; font-weight: 700; overflow-wrap: anywhere; }
 .transcript-item { min-width: 0; border: 1px solid var(--line); border-radius: .65rem; background: white; padding: .65rem .75rem; overflow-wrap: anywhere; }
 .transcript-item > p:not(.eyebrow) { white-space: pre-wrap; }
 .transcript-item.message { position: relative; width: 100%; border: 0; border-radius: 0; background: var(--surface); padding: .35rem 2.2rem .35rem 0; box-shadow: none; }

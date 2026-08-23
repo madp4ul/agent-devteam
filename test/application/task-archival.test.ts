@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { promisify } from "node:util";
 import test from "node:test";
 
@@ -59,10 +60,20 @@ test("archive removes a clean durable workspace and retains task history without
   if (!taskAfterInitialRun.available) return;
   const conversationId = taskAfterInitialRun.task.activations[0]?.conversationId;
   assert.ok(conversationId);
+  const upload = await application.createConversationUpload({
+    taskId: created.task.id,
+    conversationId,
+    fileName: "archive-evidence.txt",
+    mediaType: "text/plain",
+    content: Readable.from([Buffer.from("delete with archived conversation detail")]),
+  });
+  assert.equal(upload.accepted, true);
+  if (!upload.accepted) return;
   const followUpCommand = {
     taskId: created.task.id,
     conversationId,
     body: "Retain the coordination event without retaining this detailed follow-up.",
+    attachmentIds: [upload.upload.id],
     actor: { kind: "user" as const, id: "local-user" },
     idempotencyKey: "continue-before-archive",
   };
@@ -159,6 +170,11 @@ test("archive removes a clean durable workspace and retains task history without
     });
     assert.deepEqual(conversationAfterArchive.conversation.history.filter((entry) => entry.kind === "item"), []);
   }
+  assert.deepEqual(application.readConversationAttachment({
+    taskId: created.task.id,
+    conversationId,
+    attachmentId: upload.upload.id,
+  }), { available: false, reason: "not-found" });
   assert.deepEqual(application.continueAgentConversation({
     taskId: created.task.id,
     conversationId,

@@ -12,6 +12,7 @@ import { ConversationProjectionModule } from "./conversation-projection-module.t
 import { ConversationCommandModule } from "./conversation-command-module.ts";
 import { ConversationContextDeliveryModule } from "./conversation-context-delivery-module.ts";
 import { ActivationCreationModule } from "./activation-creation-module.ts";
+import { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
 import type { AttemptTranscriptAccess } from "../runtime-contract.ts";
 
 export interface CoordinationPersistence {
@@ -20,6 +21,7 @@ export interface CoordinationPersistence {
   taskProjections: TaskProjectionStore;
   conversationProjections: ConversationProjectionModule;
   conversationCommands: ConversationCommandModule;
+  conversationAttachments: ConversationAttachmentStore;
   conversationContextDelivery: ConversationContextDeliveryModule;
   automation: AutomationStateStore;
   taskArchive: TaskArchiveStore;
@@ -32,6 +34,7 @@ export function openCoordinationPersistence(
   transcriptAccess?: AttemptTranscriptAccess,
 ): CoordinationPersistence {
   const database = CoordinationDatabase.open(path);
+  const conversationAttachments = new ConversationAttachmentStore(database, path);
   const taskProjections = new TaskProjectionStore(database);
   const idempotentCommands = new IdempotentCommandExecutor(database);
   const notifications = new NotificationStore(database);
@@ -45,6 +48,7 @@ export function openCoordinationPersistence(
   const conversationProjections = new ConversationProjectionModule(
     database,
     taskProjections,
+    conversationAttachments,
     transcriptAccess,
   );
   const conversationCommands = new ConversationCommandModule(
@@ -52,6 +56,7 @@ export function openCoordinationPersistence(
     idempotentCommands,
     activityJournal,
     activationCreation,
+    conversationAttachments,
   );
   return {
     process: new ProcessStateStore(database),
@@ -67,6 +72,7 @@ export function openCoordinationPersistence(
     taskProjections,
     conversationProjections,
     conversationCommands,
+    conversationAttachments,
     conversationContextDelivery: new ConversationContextDeliveryModule(database),
     automation: new AutomationStateStore(
       database,
@@ -76,8 +82,17 @@ export function openCoordinationPersistence(
       activityJournal,
       attentionRecorder,
     ),
-    taskArchive: new TaskArchiveStore(database, taskProjections, idempotentCommands, activityJournal),
+    taskArchive: new TaskArchiveStore(
+      database,
+      taskProjections,
+      idempotentCommands,
+      activityJournal,
+      conversationAttachments,
+    ),
     notifications,
-    close: () => database.close(),
+    close: () => {
+      conversationAttachments.close();
+      database.close();
+    },
   };
 }

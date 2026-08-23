@@ -240,8 +240,19 @@ export interface AgentRunRequest {
   task: TaskView;
   workspace: TaskWorkspaceView;
   activationContext: ActivationContextView;
+  attachments?: AgentRunAttachment[];
   resumeThreadId?: string;
   attempt: AttemptContextView;
+}
+
+export interface AgentRunAttachment {
+  id: string;
+  messageId: string;
+  fileName: string;
+  mediaType: string;
+  sizeBytes: number;
+  path: string;
+  currentMessage: boolean;
 }
 
 export interface ActivationContextView {

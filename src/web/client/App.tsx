@@ -11,6 +11,20 @@ export function App(): ReactNode {
   useThemePreference();
   const [locationKey, setLocationKey] = useState(0);
   useEffect(() => {
+    const preventFileNavigation = (event: DragEvent): void => {
+      if (
+        (event.dataTransfer?.files.length ?? 0) > 0 ||
+        Array.from(event.dataTransfer?.types ?? []).includes("Files")
+      ) event.preventDefault();
+    };
+    window.addEventListener("dragover", preventFileNavigation);
+    window.addEventListener("drop", preventFileNavigation);
+    return () => {
+      window.removeEventListener("dragover", preventFileNavigation);
+      window.removeEventListener("drop", preventFileNavigation);
+    };
+  }, []);
+  useEffect(() => {
     const onPopState = (): void => setLocationKey((value) => value + 1);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);

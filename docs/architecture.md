@@ -71,7 +71,8 @@ separate state that must later be reconciled.
 ### Durable state
 
 SQLite stores the live coordination model: boards, tasks, comments,
-relationships, activity, activations, agent conversations, attempts, attention,
+relationships, activity, activations, agent conversations, conversation
+attachment metadata, attempts, attention,
 notifications, and automation state. User-facing projections aggregate those
 facts without becoming another source of truth or duplicating attempt-owned run
 evidence. Conversations retain their task, owner, activation, thread, and
@@ -85,6 +86,13 @@ Settled current conversations can be retired atomically with an attributable
 reason. Retired lineages remain durable and explicitly continuable, while the
 next ordinary activation creates the pair's replacement and receives that
 reason once with its complete initial task composition.
+
+Conversation attachment bytes live beside SQLite in a framework-owned content
+store under the same bound project state root. Pending uploads are temporary;
+submission binds their metadata to one authored message in the continuation
+transaction. The immutable originals survive restart and conversation
+retirement, while task archival removes both authored messages and their
+content. Startup clears abandoned uploads and disposable runtime projections.
 
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
@@ -113,6 +121,13 @@ that conversation. The attempt-scoped MCP adapter can recover the complete
 current operating context without accepting task or agent scope from the model.
 When the runtime must replace a thread, it records that loss of continuity and
 adopts the replacement as the conversation's next resume target.
+
+Before an attachment-bearing run starts, automation projects that
+conversation's surviving originals into an attempt-scoped directory outside
+the Git workspace. The prompt identifies all scoped files, current supported
+images are also sent as native Codex image input, and the Codex sandbox receives
+read/write access only to that projection. The projection is removed when the
+attempt settles; no client filename selects a framework path.
 
 ### Git task workspaces
 
@@ -144,11 +159,12 @@ marked archived only after Git reports successful worktree removal.
 | --- | --- | --- |
 | Workflow structure and agent instructions | User and project | Version-controlled process files in the project repository |
 | Boards, tasks, activity, activations, run history, notification policy, and eligible notification occurrences | Coordination framework | SQLite in the bound project state root |
+| Conversation attachment originals | Coordination framework | Framework-owned content store in the bound project state root |
 | Task implementation work | Process and agents | One Git worktree per task in the same state root |
 | Appearance, notification consent, and operating-system permission | Browser and operating system | Browser-local storage and browser permission state |
 
 The project repository is bound to its state root through repository-local Git
-configuration. The database and task worktrees form one recovery and relocation
+configuration. The database, attachment content store, and task worktrees form one recovery and relocation
 unit; live coordination state is not stored in the primary checkout or inside
 an agent's task workspace.
 
@@ -157,13 +173,18 @@ an agent's task workspace.
 1. A user or agent submits a command through its adapter.
 2. The coordination core validates the command and commits the state change,
    immutable activity, and any resulting activation atomically.
+   For a follow-up, streamed pending uploads are bound to its authored message
+   in that same command; an attachment-only message is valid.
 3. When automation is running, it claims the next eligible activation for a
    task and prepares or verifies that task's Git workspace.
 4. Codex receives the activation reason plus current structural and workspace
    context. A conversation's first activation receives the complete task and
    operating composition; a later activation receives its authoritative
    bootstrap and only newly delivered task text and activity. Retries retain
-   their activation's composed context and separate attempt facts.
+   their activation's composed context and separate attempt facts. Surviving
+   attachments from that conversation are projected into the run's scoped
+   file directory, with current supported images also supplied as native image
+   input.
 5. The agent works in the task workspace and coordinates through its scoped MCP
    tools. Tool commands return to the same coordination core used by the user.
 6. The framework records the attempt outcome and transcript. A successful run

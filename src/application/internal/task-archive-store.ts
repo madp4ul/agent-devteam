@@ -10,6 +10,7 @@ import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
+import type { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
 
 export class TaskArchiveStore {
   readonly #owner: CoordinationDatabase;
@@ -17,18 +18,21 @@ export class TaskArchiveStore {
   readonly #projections: TaskProjectionStore;
   readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
+  readonly #conversationAttachments: ConversationAttachmentStore;
 
   constructor(
     database: CoordinationDatabase,
     projections: TaskProjectionStore,
     idempotentCommands: IdempotentCommandExecutor,
     activityJournal: ActivityJournal,
+    conversationAttachments: ConversationAttachmentStore,
   ) {
     this.#owner = database;
     this.#database = database.connection;
     this.#projections = projections;
     this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
+    this.#conversationAttachments = conversationAttachments;
   }
 
   claim(
@@ -154,34 +158,45 @@ export class TaskArchiveStore {
     actor: Actor,
     idempotencyKey: string,
   ): Extract<ArchiveTaskResult, { accepted: true }> {
-    return this.#owner.transaction(() => {
-      const occurredAt = new Date().toISOString();
-      this.#database.prepare("DELETE FROM attempt_transcripts WHERE attempt_id IN (SELECT attempt.id FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id WHERE activation.task_id = ?)").run(taskId);
-      this.#database.prepare("DELETE FROM agent_conversation_messages WHERE task_id = ?").run(taskId);
-      this.#idempotentCommands.forgetScope({
-        kind: "continue-agent-conversation",
-        scope: [taskId],
+    const deletion = this.#conversationAttachments.stageTaskContentDeletion(taskId);
+    let result: Extract<ArchiveTaskResult, { accepted: true }>;
+    try {
+      result = this.#owner.transaction(() => {
+        const occurredAt = new Date().toISOString();
+        this.#database.prepare(
+          "DELETE FROM attempt_transcripts WHERE attempt_id IN (SELECT attempt.id FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id WHERE activation.task_id = ?)",
+        ).run(taskId);
+        this.#database.prepare("DELETE FROM agent_conversation_messages WHERE task_id = ?").run(taskId);
+        this.#idempotentCommands.forgetScope({
+          kind: "continue-agent-conversation",
+          scope: [taskId],
+        });
+        this.#database.prepare("DELETE FROM task_workspaces WHERE task_id = ?").run(taskId);
+        this.#database.prepare("DELETE FROM task_starting_refs WHERE task_id = ?").run(taskId);
+        const marked = this.#database.prepare(
+          `UPDATE tasks
+           SET archived_at = ?, archival_pending = 0, archival_actor_id = NULL,
+               archival_idempotency_key = NULL, revision = revision + 1
+           WHERE id = ? AND archival_pending = 1`,
+        ).run(occurredAt, taskId);
+        if (marked.changes !== 1) throw new Error("Task archival claim was lost before completion");
+        this.#activityJournal.append(taskId, "task.archived", actor, {}, occurredAt);
+        const task = this.#projections.readTask(taskId);
+        if (task === undefined) throw new Error("Archived task could not be read back");
+        const result = { accepted: true as const, task };
+        this.#idempotentCommands.retain({
+          kind: "archive-task",
+          scope: [taskId],
+          idempotencyKey,
+        }, result);
+        return result;
       });
-      this.#database.prepare("DELETE FROM task_workspaces WHERE task_id = ?").run(taskId);
-      this.#database.prepare("DELETE FROM task_starting_refs WHERE task_id = ?").run(taskId);
-      const marked = this.#database.prepare(
-        `UPDATE tasks
-         SET archived_at = ?, archival_pending = 0, archival_actor_id = NULL,
-             archival_idempotency_key = NULL, revision = revision + 1
-         WHERE id = ? AND archival_pending = 1`,
-      ).run(occurredAt, taskId);
-      if (marked.changes !== 1) throw new Error("Task archival claim was lost before completion");
-      this.#activityJournal.append(taskId, "task.archived", actor, {}, occurredAt);
-      const task = this.#projections.readTask(taskId);
-      if (task === undefined) throw new Error("Archived task could not be read back");
-      const result = { accepted: true as const, task };
-      this.#idempotentCommands.retain({
-        kind: "archive-task",
-        scope: [taskId],
-        idempotencyKey,
-      }, result);
-      return result;
-    });
+    } catch (error) {
+      deletion.rollback();
+      throw error;
+    }
+    deletion.commit();
+    return result;
   }
 
   unarchive(taskId: string, actor: Actor, idempotencyKey: string): UnarchiveTaskResult {

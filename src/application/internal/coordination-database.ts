@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 17;
+const currentSchemaVersion = 18;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -190,6 +190,26 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       actor_id TEXT NOT NULL,
       occurred_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS pending_conversation_uploads (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
+      file_name TEXT NOT NULL,
+      media_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS conversation_attachments (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
+      message_id TEXT NOT NULL REFERENCES agent_conversation_messages(id) ON DELETE CASCADE,
+      file_name TEXT NOT NULL,
+      media_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+      position INTEGER NOT NULL CHECK (position >= 0),
+      UNIQUE (message_id, position)
+    );
     CREATE TABLE IF NOT EXISTS task_workspaces (
       task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
       path TEXT NOT NULL UNIQUE,
@@ -357,6 +377,8 @@ function currentSchemaIsComplete(database: DatabaseSync, requireModelPricing = t
     "agent_conversations",
     "activation_contexts",
     "agent_conversation_messages",
+    "pending_conversation_uploads",
+    "conversation_attachments",
     "task_workspaces",
     "task_starting_refs",
     "attempts",

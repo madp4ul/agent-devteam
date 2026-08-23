@@ -42,6 +42,7 @@ export interface ContinueInterruptedTaskRequest extends IdempotentBrowserRequest
 
 export interface ContinueAgentConversationRequest extends IdempotentBrowserRequest {
   body: string;
+  attachmentIds?: string[];
 }
 
 export interface RetireAgentConversationRequest extends IdempotentBrowserRequest {
@@ -97,7 +98,9 @@ export type {
   AgentConversationIndexEntry,
   AgentConversationQueryResult,
   AgentConversationView,
+  ConversationAttachmentView,
   ContinueAgentConversationResult,
+  PendingConversationUploadView,
   RetireAgentConversationResult,
 } from "./conversation-contract.ts";
 export type {

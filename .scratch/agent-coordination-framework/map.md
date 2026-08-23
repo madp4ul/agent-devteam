@@ -255,10 +255,13 @@ without choosing the implementation yet.
 - [Archive Task Worktrees Owned by a Different Windows Identity](./issues/67-archive-differently-owned-worktrees.md)
   — Give host-side archival exact process-local Git trust and preserve distinct
   dirty, durability, registration, ownership, and removal outcomes.
-- [Define User File Attachment Workflows](./issues/68-define-user-file-attachment-workflows.md)
+- [Add Files to Conversation Follow-Ups](./issues/68-define-user-file-attachment-workflows.md)
   — Start from file uploads on continuing-conversation follow-ups and decide
   ownership, storage, agent delivery, safety, and whether task or comment
   attachments belong in the first increment.
+  **Ready:** Conversation-only follow-up attachments now have explicit upload,
+  ownership, storage, Codex delivery, browser safety, retention, and acceptance
+  criteria without introducing task-wide or cross-conversation sharing.
 - [Wrap Long Lines in Rendered Markdown Code Blocks](./issues/69-wrap-rendered-markdown-code-lines.md)
   — Keep fenced Markdown code inside its content surface and visibly wrap long
   lines instead of widening the task UI or relying on horizontal scrolling.

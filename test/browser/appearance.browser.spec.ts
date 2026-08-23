@@ -311,6 +311,10 @@ test("conversation activity spinner and attention dot remain distinct in dark an
 
 test("conversation follow-up composer remains readable and operable in both appearances", async ({ page }) => {
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
     const response = await route.fetch();
     const result = await response.json();
     const message = {
@@ -339,11 +343,21 @@ test("conversation follow-up composer remains readable and operable in both appe
     const send = dialog.getByRole("button", { name: "Send follow-up" });
     const userMessage = dialog.locator(".user-message");
     const queuedTurn = dialog.getByRole("status", { name: "Follow-up queued" });
+    const fileName = `appearance-${theme}.txt`;
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: fileName,
+      mimeType: "text/plain",
+      buffer: Buffer.from("appearance evidence"),
+    });
+    const uploadChip = dialog.getByRole("list", { name: "Files for this follow-up" }).getByRole("listitem");
+    await expect(uploadChip).toContainText(fileName);
 
     expect(await contrastRatio(composer)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(send)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(userMessage)).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(queuedTurn)).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(uploadChip.locator(".conversation-upload-name"))).toBeGreaterThanOrEqual(4.5);
+    await expect(uploadChip).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expect(userMessage).toHaveCSS("border-right-width", "1px");
     await expect(dialog.locator(".conversation-run")).toHaveCount(0);
     await expect(dialog.locator(".conversation-composer")).toHaveCSS("position", "sticky");
@@ -367,6 +381,7 @@ test("conversation follow-up composer remains readable and operable in both appe
     await expect(composer).toBeFocused();
     await expect(composer).toHaveCSS("outline-style", "solid");
     await expect(composer).toHaveCSS("outline-offset", "-3px");
+    await uploadChip.getByRole("button", { name: `Remove ${fileName}` }).click();
     await dialog.getByRole("button", { name: "Close conversation" }).click();
   }
 });

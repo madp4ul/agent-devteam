@@ -4,6 +4,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type {
   ContinueAgentConversationCommand,
   ContinueAgentConversationResult,
+  ConversationAttachmentView,
   RetireAgentConversationCommand,
   RetireAgentConversationResult,
 } from "../conversation-contract.ts";
@@ -11,32 +12,41 @@ import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
 import type { ActivationCreationModule } from "./activation-creation-module.ts";
+import type { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
 
 export class ConversationCommandModule {
   readonly #database: DatabaseSync;
   readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
   readonly #activationCreation: ActivationCreationModule;
+  readonly #attachments: ConversationAttachmentStore;
 
   constructor(
     database: CoordinationDatabase,
     idempotentCommands: IdempotentCommandExecutor,
     activityJournal: ActivityJournal,
     activationCreation: ActivationCreationModule,
+    attachments: ConversationAttachmentStore,
   ) {
     this.#database = database.connection;
     this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
     this.#activationCreation = activationCreation;
+    this.#attachments = attachments;
   }
 
   continue(command: ContinueAgentConversationCommand): ContinueAgentConversationResult {
-    return this.#idempotentCommands.execute({
-      kind: "continue-agent-conversation",
-      scope: [command.taskId, command.conversationId],
-      idempotencyKey: command.idempotencyKey,
-    }, () => {
-      if (command.body.trim().length === 0) return { accepted: false, reason: "empty-message" };
+    const attachmentIds = command.attachmentIds ?? [];
+    let result: ContinueAgentConversationResult;
+    try {
+      result = this.#idempotentCommands.execute({
+        kind: "continue-agent-conversation",
+        scope: [command.taskId, command.conversationId],
+        idempotencyKey: command.idempotencyKey,
+      }, () => {
+        if (command.body.trim().length === 0 && attachmentIds.length === 0) {
+          return { accepted: false, reason: "empty-message" };
+        }
       const conversation = this.#database.prepare(
         `SELECT conversation.owning_agent_id, conversation.current_thread_id,
                 task.archived_at, agent.applied AS agent_applied
@@ -55,6 +65,13 @@ export class ConversationCommandModule {
       if (conversation.agent_applied !== 1) return { accepted: false, reason: "owning-agent-unavailable" };
       if (conversation.current_thread_id === null) return { accepted: false, reason: "thread-unavailable" };
 
+      const attachmentValidation = this.#attachments.validatePending(
+        command.taskId,
+        command.conversationId,
+        attachmentIds,
+      );
+      if (!attachmentValidation.accepted) return attachmentValidation;
+
       const occurredAt = new Date().toISOString();
       const message = {
         id: randomUUID(),
@@ -62,12 +79,22 @@ export class ConversationCommandModule {
         body: command.body,
         actor: command.actor,
         occurredAt,
+        attachments: [] as ConversationAttachmentView[],
       };
       this.#database.prepare(
         `INSERT INTO agent_conversation_messages
           (id, conversation_id, task_id, body, actor_kind, actor_id, occurred_at)
          VALUES (?, ?, ?, ?, 'user', ?, ?)`,
       ).run(message.id, message.conversationId, command.taskId, message.body, command.actor.id, occurredAt);
+
+      const binding = this.#attachments.bindPending(
+        command.taskId,
+        command.conversationId,
+        message.id,
+        attachmentIds,
+      );
+      if (!binding.accepted) throw new Error(`Validated attachment binding failed: ${binding.reason}`);
+      message.attachments = binding.attachments;
 
       const activationId = this.#activationCreation.createFollowUp({
         taskId: command.taskId,
@@ -88,8 +115,14 @@ export class ConversationCommandModule {
              latest_activity_sequence = (SELECT COALESCE(MAX(sequence), 0) FROM activity_ledger)
          WHERE id = ?`,
       ).run(occurredAt, command.conversationId);
-      return { accepted: true as const, message, activationId };
-    }, (result) => result.accepted);
+        return { accepted: true as const, message, activationId };
+      }, (result) => result.accepted);
+    } catch (error) {
+      this.#attachments.discardDurableCopies(command.taskId, command.conversationId, attachmentIds);
+      throw error;
+    }
+    if (result.accepted) this.#attachments.finalizePending(result.message.attachments.map(({ id }) => id));
+    return result;
   }
 
   retire(command: RetireAgentConversationCommand): RetireAgentConversationResult {

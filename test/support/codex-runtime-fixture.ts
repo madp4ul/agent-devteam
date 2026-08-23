@@ -30,7 +30,9 @@ export class FakeCodexClient implements CodexClientLike {
     this.threadOptions = options;
     return {
       runStreamed: async (prompt) => {
-        this.prompt = prompt;
+        this.prompt = typeof prompt === "string"
+          ? prompt
+          : prompt.find((item) => item.type === "text")?.text ?? "";
         return {
           events: events(
             { type: "thread.started", thread_id: this.threadId },

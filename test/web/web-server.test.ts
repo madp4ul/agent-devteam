@@ -183,7 +183,18 @@ test("browser conversation continuation accepts and replays one authored follow-
     assetDirectory: fixture.assetDirectory,
   });
   t.after(() => server.close());
-  const body = { body: "Please check the browser boundary.", idempotencyKey: "browser-follow-up" };
+  const uploadResponse = await fetch(
+    `${server.baseUrl}/api/tasks/${created.task.id}/conversations/${activation.conversationId}/uploads?fileName=${encodeURIComponent("..\\browser evidence.txt")}`,
+    { method: "POST", headers: { "content-type": "text/plain" }, body: "browser attachment bytes" },
+  );
+  assert.equal(uploadResponse.status, 201);
+  const uploaded = await uploadResponse.json() as { accepted: true; upload: { id: string; fileName: string } };
+  assert.equal(uploaded.upload.fileName, "browser evidence.txt");
+  const body = {
+    body: "Please check the browser boundary.",
+    attachmentIds: [uploaded.upload.id],
+    idempotencyKey: "browser-follow-up",
+  };
 
   const accepted = await postJson(
     `${server.baseUrl}/api/tasks/${created.task.id}/conversations/${activation.conversationId}`,
@@ -209,6 +220,12 @@ test("browser conversation continuation accepts and replays one authored follow-
       : []),
     [body.body],
   );
+  const attachmentResponse = await fetch(
+    `${server.baseUrl}/api/tasks/${created.task.id}/conversations/${activation.conversationId}/attachments/${uploaded.upload.id}`,
+  );
+  assert.equal(attachmentResponse.status, 200);
+  assert.equal(attachmentResponse.headers.get("content-disposition"), "attachment; filename*=UTF-8''browser%20evidence.txt");
+  assert.equal(await attachmentResponse.text(), "browser attachment bytes");
 });
 
 test("browser conversation retirement validates, accepts, and replays the user reason", async (t) => {

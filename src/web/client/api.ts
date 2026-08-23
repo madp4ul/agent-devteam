@@ -17,6 +17,7 @@ import type {
   TaskOverviewView,
   AttemptTranscriptQueryResult,
   AgentConversationQueryResult,
+  PendingConversationUploadView,
   ContinueAgentConversationResult,
   RetireAgentConversationResult,
   ActivationRecoveryAction,
@@ -323,14 +324,57 @@ export async function continueAgentConversation(
   conversationId: string,
   body: string,
   idempotencyKey: string,
+  attachmentIds: string[] = [],
 ): Promise<ContinueAgentConversationResult> {
   return request(
     `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}`,
     {
       method: "POST",
-      body: serializeBrowserRequest<ContinueAgentConversationRequest>({ body, idempotencyKey }),
+      body: serializeBrowserRequest<ContinueAgentConversationRequest>({ body, idempotencyKey, attachmentIds }),
     },
   );
+}
+
+export function uploadConversationFile(
+  taskId: string,
+  conversationId: string,
+  file: File,
+  onProgress: (fraction: number) => void,
+  signal: AbortSignal,
+): Promise<PendingConversationUploadView> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}/uploads?fileName=${encodeURIComponent(file.name)}`);
+    request.setRequestHeader("content-type", file.type || "application/octet-stream");
+    request.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress(event.loaded / event.total);
+    });
+    request.addEventListener("load", () => {
+      let body: unknown;
+      try { body = JSON.parse(request.responseText); } catch { body = { error: "invalid-response" }; }
+      if (request.status < 200 || request.status >= 300) {
+        reject(new ApiError(request.status, body));
+        return;
+      }
+      resolve((body as { upload: PendingConversationUploadView }).upload);
+    });
+    request.addEventListener("error", () => reject(new Error("File upload failed.")));
+    request.addEventListener("abort", () => reject(new DOMException("Upload cancelled", "AbortError")));
+    signal.addEventListener("abort", () => request.abort(), { once: true });
+    request.send(file);
+  });
+}
+
+export async function removeConversationUpload(taskId: string, conversationId: string, uploadId: string): Promise<void> {
+  const response = await fetch(
+    `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}/uploads/${encodeURIComponent(uploadId)}`,
+    { method: "DELETE" },
+  );
+  if (!response.ok && response.status !== 404) throw new ApiError(response.status, await response.json());
+}
+
+export function conversationAttachmentUrl(taskId: string, conversationId: string, attachmentId: string): string {
+  return `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
 export async function retireAgentConversation(

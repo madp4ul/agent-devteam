@@ -47,6 +47,9 @@ type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
   | "queryAttemptTranscript"
   | "queryAgentConversation"
   | "continueAgentConversation"
+  | "createConversationUpload"
+  | "removeConversationUpload"
+  | "readConversationAttachment"
   | "retireAgentConversation"
   | "archiveTask"
   | "unarchiveTask"
@@ -248,6 +251,9 @@ async function handleBrowserApi(
   }
   const transcriptMatch = /^\/api\/attempts\/([^/]+)\/transcript$/.exec(url.pathname);
   const conversationMatch = /^\/api\/tasks\/([^/]+)\/conversations\/([^/]+)$/.exec(url.pathname);
+  const conversationUploadsMatch = /^\/api\/tasks\/([^/]+)\/conversations\/([^/]+)\/uploads$/.exec(url.pathname);
+  const conversationUploadMatch = /^\/api\/tasks\/([^/]+)\/conversations\/([^/]+)\/uploads\/([^/]+)$/.exec(url.pathname);
+  const conversationAttachmentMatch = /^\/api\/tasks\/([^/]+)\/conversations\/([^/]+)\/attachments\/([^/]+)$/.exec(url.pathname);
   const retireConversationMatch = /^\/api\/tasks\/([^/]+)\/conversations\/([^/]+)\/retire$/.exec(url.pathname);
   const dismissStaleMatch = /^\/api\/activations\/([^/]+)\/dismiss-stale$/.exec(url.pathname);
   const dismissActivationMatch = /^\/api\/activations\/([^/]+)\/dismiss$/.exec(url.pathname);
@@ -281,6 +287,63 @@ async function handleBrowserApi(
           ? 409
           : 503;
     sendJson(response, status, result);
+    return;
+  }
+  if (method === "POST" && conversationUploadsMatch?.[1] !== undefined && conversationUploadsMatch[2] !== undefined) {
+    const fileName = url.searchParams.get("fileName");
+    if (fileName === null || fileName.trim().length === 0) throw new Error("fileName must be supplied");
+    const declaredLength = Number(request.headers["content-length"] ?? 0);
+    if (Number.isFinite(declaredLength) && declaredLength > 512 * 1024 * 1024) {
+      sendJson(response, 413, { accepted: false, reason: "file-too-large" });
+      return;
+    }
+    const result = await application.createConversationUpload({
+      taskId: decodeURIComponent(conversationUploadsMatch[1]),
+      conversationId: decodeURIComponent(conversationUploadsMatch[2]),
+      fileName,
+      mediaType: request.headers["content-type"] ?? "application/octet-stream",
+      content: request,
+    });
+    const status = result.accepted
+      ? 201
+      : result.reason === "not-found"
+        ? 404
+        : result.reason === "file-too-large" || result.reason === "attachment-limit-exceeded"
+          ? 413
+          : result.reason === "task-archived"
+            ? 409
+            : 507;
+    sendJson(response, status, result);
+    return;
+  }
+  if (method === "DELETE" && conversationUploadMatch?.[1] !== undefined && conversationUploadMatch[2] !== undefined && conversationUploadMatch[3] !== undefined) {
+    const removed = application.removeConversationUpload({
+      taskId: decodeURIComponent(conversationUploadMatch[1]),
+      conversationId: decodeURIComponent(conversationUploadMatch[2]),
+      uploadId: decodeURIComponent(conversationUploadMatch[3]),
+    });
+    if (removed) response.writeHead(204).end();
+    else sendJson(response, 404, { error: "not-found" });
+    return;
+  }
+  if (method === "GET" && conversationAttachmentMatch?.[1] !== undefined && conversationAttachmentMatch[2] !== undefined && conversationAttachmentMatch[3] !== undefined) {
+    const result = application.readConversationAttachment({
+      taskId: decodeURIComponent(conversationAttachmentMatch[1]),
+      conversationId: decodeURIComponent(conversationAttachmentMatch[2]),
+      attachmentId: decodeURIComponent(conversationAttachmentMatch[3]),
+    });
+    if (!result.available) {
+      sendJson(response, 404, result);
+      return;
+    }
+    response.writeHead(200, {
+      "content-type": result.attachment.mediaType || "application/octet-stream",
+      "content-length": String(result.attachment.sizeBytes),
+      "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(result.attachment.fileName)}`,
+      "x-content-type-options": "nosniff",
+    });
+    for await (const chunk of result.content) response.write(chunk);
+    response.end();
     return;
   }
   if (method === "GET" && conversationMatch?.[1] !== undefined && conversationMatch[2] !== undefined) {
@@ -321,6 +384,7 @@ async function handleBrowserApi(
       taskId: decodeURIComponent(conversationMatch[1]),
       conversationId: decodeURIComponent(conversationMatch[2]),
       body: stringField(body, "body"),
+      ...(body.attachmentIds === undefined ? {} : { attachmentIds: stringArrayField(body, "attachmentIds") }),
       actor: { kind: "user", id: "local-user" },
       idempotencyKey: stringField(body, "idempotencyKey"),
     });

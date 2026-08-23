@@ -10,6 +10,7 @@ import type { ProcessBoardView, StartupView } from "../process-contract.ts";
 import type {
   AgentRunAgent,
   AgentRunOutcome,
+  AgentRunRequest,
   AttemptTranscriptAccess,
   RuntimeStartupDiagnostic,
   RuntimeDispatchOptions,
@@ -20,6 +21,7 @@ import type { ProcessStateStore } from "./process-state-store.ts";
 import type { AutomationStateStore, RunnableActivation } from "./automation-state-store.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { ConversationContextDeliveryModule } from "./conversation-context-delivery-module.ts";
+import type { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
 import type { ProcessModelPricingDefinition } from "./process-definition.ts";
 
 export interface AutomationProcessContext {
@@ -36,6 +38,7 @@ export interface AutomationCoordinatorOptions {
   taskProjections: TaskProjectionStore;
   automationStore: AutomationStateStore;
   conversationContextDelivery: ConversationContextDeliveryModule;
+  conversationAttachments: ConversationAttachmentStore;
   startup: StartupView;
   runtimeDispatch?: RuntimeDispatchOptions;
   startingRef?: string;
@@ -61,6 +64,7 @@ export class AutomationCoordinator {
   readonly #taskProjections: TaskProjectionStore;
   readonly #stateStore: AutomationStateStore;
   readonly #conversationContextDelivery: ConversationContextDeliveryModule;
+  readonly #conversationAttachments: ConversationAttachmentStore;
   readonly #startup: StartupView;
   readonly #runtimeDispatch:
     | {
@@ -85,6 +89,7 @@ export class AutomationCoordinator {
     this.#taskProjections = options.taskProjections;
     this.#stateStore = options.automationStore;
     this.#conversationContextDelivery = options.conversationContextDelivery;
+    this.#conversationAttachments = options.conversationAttachments;
     this.#startup = options.startup;
     this.#automation = options.startup.automation;
     this.#runtimeDispatch =
@@ -351,12 +356,24 @@ export class AutomationCoordinator {
       runnable.activation.id,
       currentTask,
     );
+    let attachments: AgentRunRequest["attachments"] = [];
+    let attachmentPreparationError: unknown;
+    try {
+      attachments = this.#conversationAttachments.prepareRuntimeAttachments(
+        runnable.activation.conversationId,
+        runnable.activation.reason.sourceEventId,
+        attempt.id,
+      );
+    } catch (error) {
+      attachmentPreparationError = error;
+    }
     const pricing = runnable.agent.model === undefined
       ? undefined
       : process.modelPricing.find(({ model }) => model === runnable.agent.model);
     onDispatchStarted();
     let outcomePromise: Promise<AgentRunOutcome>;
     try {
+      if (attachmentPreparationError !== undefined) throw attachmentPreparationError;
       outcomePromise = runtimeDispatch.agentRuntime.run(
         {
           activationId: runnable.activation.id,
@@ -374,6 +391,7 @@ export class AutomationCoordinator {
           task: currentTask,
           workspace,
           activationContext,
+          attachments,
           ...(resumeThreadId === null || resumeThreadId === undefined ? {} : { resumeThreadId }),
           attempt: {
             number: attempt.number,
@@ -453,6 +471,7 @@ export class AutomationCoordinator {
         else activeRun.confirm();
         throw error;
       } finally {
+        this.#conversationAttachments.releaseRuntimeAttachments(attempt.id);
         this.#activeRuns.delete(runnable.task.id);
         if (this.#automation.state === "pausing" && this.#activeRuns.size === 0) {
           this.#automation = { state: "paused", attemptsMayStart: false };

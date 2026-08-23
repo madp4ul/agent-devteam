@@ -5,6 +5,8 @@ import type { AttemptTranscriptItem, CoordinationTaskIdentity } from "../../appl
 import { ActivityStatusMark, isExceptionalActivityStatus } from "./ActivityStatusMark.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { MarkdownContent } from "./MarkdownContent.tsx";
+import { conversationAttachmentUrl } from "./api.ts";
+import { formatFileSize } from "./file-size.ts";
 
 export function ConversationHistory({
   conversation,
@@ -75,6 +77,18 @@ export function ConversationHistory({
             <CopyMarkdownButton source={entry.message.body} label="Copy your message Markdown" />
           </header>
           <MarkdownContent source={entry.message.body} />
+          {(entry.message.attachments ?? []).length === 0 ? null : (
+            <ul className="conversation-attachment-list">
+              {(entry.message.attachments ?? []).map((attachment) => (
+                <li key={attachment.id}>
+                  <a href={conversationAttachmentUrl(conversation.taskId, conversation.id, attachment.id)} download={attachment.fileName}>
+                    {attachment.fileName}
+                  </a>
+                  <small>{formatFileSize(attachment.sizeBytes)}</small>
+                </li>
+              ))}
+            </ul>
+          )}
         </article>
       ) : entry.kind === "activation" ? (
         <article

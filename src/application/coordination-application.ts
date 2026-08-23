@@ -27,8 +27,12 @@ import type {
 } from "./automation-contract.ts";
 import type {
   AgentConversationQueryResult,
+  CreateConversationUploadCommand,
+  CreateConversationUploadResult,
   ContinueAgentConversationCommand,
   ContinueAgentConversationResult,
+  ReadConversationAttachmentCommand,
+  ReadConversationAttachmentResult,
   RetireAgentConversationCommand,
   RetireAgentConversationResult,
   TaskConversationIndexQueryResult,
@@ -146,7 +150,14 @@ export class CoordinationApplication {
         ),
       ], options.transcriptAccess);
     }
-    const { process, taskCommands, taskProjections, automation, conversationContextDelivery } = persistence;
+    const {
+      process,
+      taskCommands,
+      taskProjections,
+      automation,
+      conversationContextDelivery,
+      conversationAttachments,
+    } = persistence;
     if (!validation.valid) {
       const startup: StartupView = {
         mode: "configuration-error",
@@ -161,6 +172,7 @@ export class CoordinationApplication {
           taskProjections,
           automationStore: automation,
           conversationContextDelivery,
+          conversationAttachments,
           startup,
         }),
         new TaskDiscovery(process, taskProjections, automation, startup),
@@ -208,6 +220,7 @@ export class CoordinationApplication {
             taskProjections,
             automationStore: automation,
             conversationContextDelivery,
+            conversationAttachments,
             startup,
           }),
           new TaskDiscovery(process, taskProjections, automation, startup),
@@ -251,6 +264,7 @@ export class CoordinationApplication {
         taskProjections,
         automationStore: automation,
         conversationContextDelivery,
+        conversationAttachments,
         startup,
         ...(options.runtimeDispatch === undefined
           ? {}
@@ -276,7 +290,7 @@ export class CoordinationApplication {
     transcriptAccess?: AttemptTranscriptAccess,
   ): CoordinationApplication {
     const persistence = openCoordinationPersistence(":memory:", transcriptAccess);
-    const { process, taskProjections, automation, conversationContextDelivery } = persistence;
+    const { process, taskProjections, automation, conversationContextDelivery, conversationAttachments } = persistence;
     const startup: StartupView = {
       mode: "configuration-error",
       diagnostics,
@@ -290,6 +304,7 @@ export class CoordinationApplication {
         taskProjections,
         automationStore: automation,
         conversationContextDelivery,
+        conversationAttachments,
         startup,
       }),
       new TaskDiscovery(process, taskProjections, automation, startup),
@@ -636,6 +651,33 @@ export class CoordinationApplication {
     const result = this.#persistence.conversationCommands.continue(command);
     if (result.accepted) this.#automation.kick();
     return result;
+  }
+
+  async createConversationUpload(
+    command: CreateConversationUploadCommand,
+  ): Promise<CreateConversationUploadResult> {
+    if (this.#startup.mode === "configuration-error") {
+      return { accepted: false, reason: "storage-failed" };
+    }
+    return this.#persistence.conversationAttachments.createPending(command);
+  }
+
+  removeConversationUpload(scope: {
+    taskId: string;
+    conversationId: string;
+    uploadId: string;
+  }): boolean {
+    return this.#persistence.conversationAttachments.removePending(
+      scope.taskId,
+      scope.conversationId,
+      scope.uploadId,
+    );
+  }
+
+  readConversationAttachment(
+    command: ReadConversationAttachmentCommand,
+  ): ReadConversationAttachmentResult {
+    return this.#persistence.conversationAttachments.read(command);
   }
 
   retireAgentConversation(command: RetireAgentConversationCommand): RetireAgentConversationResult {

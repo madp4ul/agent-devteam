@@ -180,6 +180,8 @@ test("conversation dialog contains focus, closes with Escape, and restores its o
   await expect(dialog.locator("[data-conversation-activation]").first()).toBeFocused();
   await dialog.getByRole("textbox", { name: "Follow-up message" }).focus();
   await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Attach files" })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(dialog.getByRole("button", { name: "More conversation actions" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
@@ -609,6 +611,121 @@ test("a live conversation follows appended items only while the reader is at the
   )).toBeLessThanOrEqual(1);
 });
 
+
+test("file drops are swallowed globally and an open follow-up accepts an attachment from anywhere", async ({ page }) => {
+  let submitted: { body: string; attachmentIds: string[] } | undefined;
+  await page.route("**/api/tasks/T-0001/conversations/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "POST" && url.pathname.endsWith("/uploads")) {
+      await route.fulfill({
+        status: 201,
+        json: {
+          accepted: true,
+          upload: {
+            id: "upload-screen",
+            conversationId: "browser-conversation",
+            fileName: "screen.png",
+            mediaType: "image/png",
+            sizeBytes: 4,
+          },
+        },
+      });
+      return;
+    }
+    if (request.method() === "DELETE") {
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    if (request.method() === "POST") {
+      submitted = request.postDataJSON() as { body: string; attachmentIds: string[] };
+      await route.fulfill({
+        status: 200,
+        json: {
+          accepted: true,
+          activationId: "attachment-follow-up",
+          message: {
+            id: "attachment-message",
+            conversationId: "browser-conversation",
+            body: submitted.body,
+            actor: { kind: "user", id: "local-user" },
+            occurredAt: "2026-08-09T12:06:00.000Z",
+            attachments: [{ id: "upload-screen", fileName: "screen.png", mediaType: "image/png", sizeBytes: 4 }],
+          },
+        },
+      });
+      return;
+    }
+    const result = runningConversationScenario([]);
+    if (submitted !== undefined) {
+      (result.conversation as Record<string, any>).history.push({
+        kind: "message",
+        activationId: "attachment-follow-up",
+        status: "queued",
+        attemptIds: [],
+        message: {
+          id: "attachment-message",
+          conversationId: "browser-conversation",
+          body: submitted.body,
+          actor: { kind: "user", id: "local-user" },
+          occurredAt: "2026-08-09T12:06:00.000Z",
+          attachments: [{ id: "upload-screen", fileName: "screen.png", mediaType: "image/png", sizeBytes: 4 }],
+        },
+      });
+    }
+    await route.fulfill({ status: 200, json: result });
+  });
+
+  await page.goto("/tasks/T-0001");
+  await expect(page.getByRole("button", { name: "View conversation" })).toBeVisible();
+  expect(await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["safe"], "ignored.png", { type: "image/png" }));
+    const event = new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(true);
+
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  await expect(dialog.getByRole("button", { name: "Attach files" })).toBeVisible();
+  await page.evaluate(() => {
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", {
+      value: { files: [], items: [{ webkitGetAsEntry: () => ({ isDirectory: true }) }] },
+    });
+    window.dispatchEvent(event);
+  });
+  await expect(dialog.getByRole("alert")).toContainText("Folders cannot be attached");
+  await expect(dialog.getByRole("list", { name: "Files for this follow-up" })).toHaveCount(0);
+  await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["safe"], "screen.png", { type: "image/png" }));
+    window.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  const chip = dialog.getByRole("list", { name: "Files for this follow-up" }).getByRole("listitem");
+  await expect(chip).toContainText("screen.png");
+  await expect(chip).not.toContainText(/fakepath|\\|\//);
+
+  for (const button of [dialog.getByRole("button", { name: "Attach files" }), chip.getByRole("button", { name: "Remove screen.png" })]) {
+    const centers = await button.evaluate((element) => {
+      const buttonBox = element.getBoundingClientRect();
+      const iconBox = element.querySelector("svg")!.getBoundingClientRect();
+      return {
+        x: Math.abs(buttonBox.x + buttonBox.width / 2 - (iconBox.x + iconBox.width / 2)),
+        y: Math.abs(buttonBox.y + buttonBox.height / 2 - (iconBox.y + iconBox.height / 2)),
+      };
+    });
+    expect(centers.x).toBeLessThanOrEqual(1);
+    expect(centers.y).toBeLessThanOrEqual(1);
+  }
+
+  await dialog.getByRole("button", { name: "Send follow-up" }).click();
+  expect(submitted).toMatchObject({ body: "", attachmentIds: ["upload-screen"] });
+  const download = dialog.getByRole("link", { name: "screen.png" });
+  await expect(download).toHaveAttribute("download", "screen.png");
+  await expect(download).toHaveAttribute("href", /\/attachments\/upload-screen$/);
+});
 
 test("a conversation follow-up retains its draft on failure and refreshes in place after retry", async ({ page }) => {
   let submitted = false;

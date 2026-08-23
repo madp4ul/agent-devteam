@@ -21,6 +21,50 @@ import {
   request,
 } from "../support/codex-runtime-fixture.ts";
 
+test("conversation attachments become scoped files and current images become native input", async () => {
+  let input: unknown;
+  let clientOptions: CodexClientOptionsLike | undefined;
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: (options) => {
+      clientOptions = options;
+      return {
+        startThread: () => ({
+          runStreamed: async (value) => {
+            input = value;
+            return { events: events(
+              { type: "thread.started", thread_id: "thread-attachments" },
+              { type: "turn.completed" },
+            ) };
+          },
+        }),
+      };
+    },
+  });
+  const attached = request("activation-attachments", "T-0068");
+  attached.attachments = [
+    {
+      id: "image-1", messageId: "message-current", fileName: "screen.png", mediaType: "image/png",
+      sizeBytes: 123, path: "C:\\state\\runtime\\attempt\\screen.png", currentMessage: true,
+    },
+    {
+      id: "sheet-1", messageId: "message-earlier", fileName: "data.xlsx",
+      mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      sizeBytes: 456, path: "C:\\state\\runtime\\attempt\\data.xlsx", currentMessage: false,
+    },
+  ];
+
+  await runtime.run(attached, { started() {} });
+
+  assert.ok(Array.isArray(input));
+  assert.equal(input[0]?.type, "text");
+  assert.match(input[0]?.text ?? "", /Conversation attachments[\s\S]*screen\.png[\s\S]*data\.xlsx/);
+  assert.deepEqual(input.slice(1), [{ type: "local_image", path: "C:\\state\\runtime\\attempt\\screen.png" }]);
+  assert.deepEqual(clientOptions?.config?.sandbox_workspace_write, {
+    writable_roots: ["C:\\state\\runtime\\attempt"],
+  });
+});
+
 test("a later-satisfied mention can complete inertly without duplicate coordination calls", async () => {
   let prompt = "";
   const runtime = createRuntime({
@@ -28,7 +72,9 @@ test("a later-satisfied mention can complete inertly without duplicate coordinat
     createClient: () => ({
       startThread: () => ({
         runStreamed: async (value) => {
-          prompt = value;
+          prompt = typeof value === "string"
+            ? value
+            : value.find((item) => item.type === "text")?.text ?? "";
           return {
             events: events(
               { type: "thread.started", thread_id: "thread-inert" },
@@ -175,7 +221,9 @@ test("an unusable interrupted thread falls back to a fresh thread with honest co
         freshStarts += 1;
         return {
           runStreamed: async (value) => {
-            prompt = value;
+            prompt = typeof value === "string"
+              ? value
+              : value.find((item) => item.type === "text")?.text ?? "";
             return {
               events: events(
                 { type: "thread.started", thread_id: "thread-replacement" },
@@ -453,4 +501,3 @@ test("resumed attempts keep separate usage even when they reuse one Codex thread
     reasoningOutputTokens: 10,
   });
 });
-

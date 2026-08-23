@@ -1,4 +1,5 @@
-import { Codex, type CodexOptions, type ThreadOptions } from "@openai/codex-sdk";
+import { Codex, type CodexOptions, type Input, type ThreadOptions } from "@openai/codex-sdk";
+import { dirname, extname } from "node:path";
 
 import type {
   AgentRunOutcome,
@@ -46,7 +47,7 @@ export type CodexEventLike =
 
 export interface CodexThreadLike {
   runStreamed(
-    prompt: string,
+    prompt: Input,
     options?: { signal?: AbortSignal },
   ): Promise<{ events: AsyncGenerator<CodexEventLike> }>;
 }
@@ -94,6 +95,11 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
             GIT_CONFIG_VALUE_0: gitSafeDirectoryPath(request.workspace.path),
           },
         },
+        ...((request.attachments?.length ?? 0) === 0 ? {} : {
+          sandbox_workspace_write: {
+            writable_roots: [...new Set(request.attachments!.map(({ path }) => dirname(path)))],
+          },
+        }),
         mcp_servers: {
           coordination: {
             command: this.#options.mcpServer.command,
@@ -138,7 +144,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
       let streamed;
       try {
         streamed = await thread.runStreamed(
-          composeActivationPrompt(effectiveRequest),
+          codexInput(effectiveRequest),
           signal === undefined ? {} : { signal },
         );
       } catch (error) {
@@ -149,7 +155,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
         threadReplaced = true;
         thread = client.startThread(threadOptions);
         streamed = await thread.runStreamed(
-          composeActivationPrompt(effectiveRequest),
+          codexInput(effectiveRequest),
           signal === undefined ? {} : { signal },
         );
       }
@@ -269,6 +275,17 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
   #remember(attemptId: string, transcript: AttemptTranscriptItem[]): void {
     this.#transcripts.set(attemptId, structuredClone(transcript));
   }
+}
+
+function codexInput(request: AgentRunRequest): Input {
+  const prompt = composeActivationPrompt(request);
+  const images = (request.attachments ?? []).filter((attachment) =>
+    attachment.currentMessage &&
+    [".png", ".jpg", ".jpeg", ".webp"].includes(extname(attachment.fileName).toLowerCase())
+  );
+  return images.length === 0
+    ? prompt
+    : [{ type: "text", text: prompt }, ...images.map(({ path }) => ({ type: "local_image" as const, path }))];
 }
 
 function tokenUsageFrom(value: unknown): AttemptTokenUsage | undefined {

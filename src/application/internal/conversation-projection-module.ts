@@ -15,6 +15,7 @@ import type {
 } from "../runtime-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
+import type { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
 
 interface ConversationOwnerAndContinuationRow {
   owning_agent_id: string;
@@ -54,14 +55,17 @@ export class ConversationProjectionModule {
   readonly #database: DatabaseSync;
   readonly #taskProjections: TaskProjectionStore;
   readonly #transcriptAccess: AttemptTranscriptAccess | undefined;
+  readonly #attachments: ConversationAttachmentStore;
 
   constructor(
     database: CoordinationDatabase,
     taskProjections: TaskProjectionStore,
+    attachments: ConversationAttachmentStore,
     transcriptAccess?: AttemptTranscriptAccess,
   ) {
     this.#database = database.connection;
     this.#taskProjections = taskProjections;
+    this.#attachments = attachments;
     this.#transcriptAccess = transcriptAccess;
   }
 
@@ -334,7 +338,7 @@ export class ConversationProjectionModule {
       `SELECT ${conversationMessageColumns}
        FROM agent_conversation_messages WHERE id = ?`,
     ).get(id) as ConversationMessageRow | undefined;
-    return row === undefined ? undefined : conversationMessageView(row);
+    return row === undefined ? undefined : this.#conversationMessageView(row);
   }
 
   async readAttemptTranscript(attemptId: string): Promise<AttemptTranscriptQueryResult> {
@@ -371,7 +375,18 @@ export class ConversationProjectionModule {
        WHERE conversation_id = ?
        ORDER BY rowid`,
     ).all(conversationId) as unknown as ConversationMessageRow[];
-    return rows.map(conversationMessageView);
+    return rows.map((row) => this.#conversationMessageView(row));
+  }
+
+  #conversationMessageView(row: ConversationMessageRow): AgentConversationMessageView {
+    return {
+      id: row.id,
+      conversationId: row.conversation_id,
+      body: row.body,
+      actor: { kind: "user", id: row.actor_id },
+      occurredAt: row.occurred_at,
+      attachments: this.#attachments.readMessageAttachments(row.id),
+    };
   }
 
   #readRuns(conversationId: string): Array<{
@@ -441,15 +456,5 @@ function conversationCostEstimate(
       },
     }),
     hasUnpricedSettledRuns: priced.length !== settled.length,
-  };
-}
-
-function conversationMessageView(row: ConversationMessageRow): AgentConversationMessageView {
-  return {
-    id: row.id,
-    conversationId: row.conversation_id,
-    body: row.body,
-    actor: { kind: "user", id: row.actor_id },
-    occurredAt: row.occurred_at,
   };
 }

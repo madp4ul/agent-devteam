@@ -1,7 +1,8 @@
 # Project-state backup and restore
 
 The bound project state root is one recovery unit. It contains the coordination
-database and every framework-owned task worktree, while the repository's Git
+database, conversation attachment content, and every framework-owned task
+worktree, while the repository's Git
 common directory contains the matching worktree registrations. Back up or
 restore only while the coordination application and all task agents are
 stopped.
@@ -30,7 +31,8 @@ for a database created by a supported released version.
    ```
 
 2. Confirm that the root exists and contains `project-state.json`,
-   `coordination.sqlite3`, and `task-worktrees`. Copy the entire root to a new,
+   `coordination.sqlite3`, `conversation-attachments`, and `task-worktrees`.
+   Copy the entire root to a new,
    versioned backup directory. Do not copy only the database or one worktree.
 3. Preserve the repository clone, including its local `.git/config` binding and
    `.git/worktrees` administrative records, with the same backup generation.
