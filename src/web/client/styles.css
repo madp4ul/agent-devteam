@@ -613,9 +613,7 @@ html[data-theme] .coordination-activity-actions .quiet-action:focus-visible { ou
 .tool-status.failed { color: var(--failure-text); }
 .tool-status.running svg { animation: command-status-spin 1.6s linear infinite; }
 .transcript-tool-details { min-width: 0; }
-.transcript-tool-details summary, .transcript-tool-heading { display: grid; grid-template-columns: .9rem minmax(0, 1fr) 1.5rem; align-items: center; gap: .45rem; background: var(--surface-subtle); }
-.transcript-tool-details summary { cursor: pointer; list-style: none; }
-.transcript-tool-heading { grid-template-columns: minmax(0, 1fr) 1.5rem; }
+.transcript-tool-details summary { display: grid; grid-template-columns: .9rem minmax(0, 1fr) 1.5rem; align-items: center; gap: .45rem; background: var(--surface-subtle); cursor: pointer; list-style: none; }
 .transcript-tool-details summary::marker { content: ""; }
 .transcript-tool-details summary::-webkit-details-marker { display: none; }
 .command-disclosure-icon { display: block; width: .8rem; height: .8rem; fill: none; stroke: var(--muted); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; transition: transform .16s ease; }
@@ -626,8 +624,6 @@ html[data-theme] .coordination-activity-actions .quiet-action:focus-visible { ou
 .transcript-tool-evidence { min-width: 0; padding-top: .5rem; }
 .transcript-tool-evidence p { margin: .45rem 0 .2rem; color: var(--muted); font-size: .7rem; font-weight: 700; text-transform: uppercase; }
 .transcript-tool-evidence pre { width: 100%; max-width: 100%; max-height: 18rem; overflow: auto; border-radius: .45rem; color: var(--code-text); background: var(--code-surface); padding: .7rem; white-space: pre; }
-.command-invocation { grid-column: 2 / -1; min-width: 0; color: var(--text); font-family: var(--font-mono); font-size: .78rem; font-weight: 400; white-space: pre-wrap; overflow-wrap: anywhere; }
-.transcript-tool-heading .command-invocation { grid-column: 1 / -1; }
 .mcp-summary { margin: .35rem 2rem 0 1.35rem; color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; }
 .tool-output { min-width: 0; margin-top: .8rem; }
 .tool-output summary { width: fit-content; color: var(--forest); font-weight: 700; cursor: pointer; }

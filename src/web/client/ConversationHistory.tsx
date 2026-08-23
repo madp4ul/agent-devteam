@@ -111,8 +111,10 @@ export function ConversationHistory({
               status={item.status}
               statusSubject="Command"
               statusClassName="command-status"
-              evidence={item.output === undefined ? [] : [{ label: "Output", value: item.output }]}
-              visibleEvidence={item.command}
+              evidence={[
+                { label: "Invocation", value: item.command },
+                ...(item.output === undefined ? [] : [{ label: "Output", value: item.output }]),
+              ]}
             />
           ) : item.kind === "coordination" && item.presentation.kind === "coordination-comment" && item.presentation.body !== undefined ? (
             <CoordinationComment
@@ -471,7 +473,6 @@ function TranscriptToolDisclosure({
   statusSubject,
   statusClassName,
   evidence,
-  visibleEvidence,
   summary,
 }: {
   articleClassName: string;
@@ -484,38 +485,27 @@ function TranscriptToolDisclosure({
   statusSubject: string;
   statusClassName: string;
   evidence: Array<{ label: string; value: string }>;
-  visibleEvidence?: string;
   summary?: string;
 }): ReactNode {
-  const heading = (
-    <>
-      <span className={`transcript-tool-title ${titleClassName}`}>{title}</span>
-      <ActivityStatusMark status={status} subject={statusSubject} className={statusClassName} />
-      {visibleEvidence === undefined ? null : <code className="command-invocation">{visibleEvidence}</code>}
-    </>
-  );
   return (
     <article className={`transcript-tool ${articleClassName} ${exceptional ? "exceptional" : ""}`}>
-      {evidence.length === 0 ? (
-        <div className={`transcript-tool-heading ${detailsClassName}`}>{heading}</div>
-      ) : (
-        <details className={`transcript-tool-details ${detailsClassName}`}>
-          <summary>
-            <svg className="command-disclosure-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path d="m5 3.5 5 4.5-5 4.5" />
-            </svg>
-            {heading}
-          </summary>
-          <div className={`transcript-tool-evidence ${evidenceClassName}`}>
-            {evidence.map((entry) => (
-              <div key={entry.label} className="transcript-evidence-entry">
-                <p>{entry.label}</p>
-                <pre>{entry.value}</pre>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
+      <details className={`transcript-tool-details ${detailsClassName}`}>
+        <summary>
+          <svg className="command-disclosure-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="m5 3.5 5 4.5-5 4.5" />
+          </svg>
+          <span className={`transcript-tool-title ${titleClassName}`}>{title}</span>
+          <ActivityStatusMark status={status} subject={statusSubject} className={statusClassName} />
+        </summary>
+        <div className={`transcript-tool-evidence ${evidenceClassName}`}>
+          {evidence.map((entry) => (
+            <div key={entry.label} className="transcript-evidence-entry">
+              <p>{entry.label}</p>
+              <pre>{entry.value}</pre>
+            </div>
+          ))}
+        </div>
+      </details>
       {summary === undefined ? null : <p className="mcp-summary">{summary}</p>}
     </article>
   );

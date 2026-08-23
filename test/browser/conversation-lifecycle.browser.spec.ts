@@ -377,7 +377,8 @@ test("an open conversation replaces one running tool entry with its terminal evi
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   const liveCommand = dialog.locator(".transcript-command").first();
   await expect(liveCommand.getByRole("img", { name: "Command running" })).toBeVisible();
-  await expect(liveCommand.locator("details")).toHaveCount(0);
+  await liveCommand.locator("summary").click();
+  await expect(liveCommand.locator("details")).toHaveAttribute("open", "");
   expect(reads).toBe(1);
   const transcriptContent = dialog.locator(".transcript-content");
   const readingPosition = await transcriptContent.evaluate((element) => {
@@ -388,12 +389,10 @@ test("an open conversation replaces one running tool entry with its terminal evi
   await page.clock.fastForward(2_000);
   await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
   await expect(liveCommand.getByRole("img", { name: "Command succeeded" })).toBeVisible();
-  await expect(liveCommand.locator("details")).toHaveCount(1);
-  expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
-  await liveCommand.locator("summary").click();
   await expect(liveCommand.locator("details")).toHaveAttribute("open", "");
   await expect(dialog).toContainText("All live checks passed.");
   await expect(dialog.locator(".transcript-item, .transcript-command")).toHaveCount(31);
+  expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
 
   await dialog.getByRole("button", { name: "Close conversation" }).click();
   await page.getByRole("button", { name: "View conversation" }).click();

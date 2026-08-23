@@ -252,8 +252,7 @@ comment history navigation into the tool header. Collapsed Markdown now ends at
 a complete rendered line, and timeline navigation gives the selected activation
 cause visible focus after scrolling it into view.
 
-Final conversation-specific tuning removes authored-content truncation and its
-Show More / Show Less control from the transcript. Commands always show their
-full invocation, while any command output remains inspectable through a
-disclosure that is omitted when no output exists. The sticky follow-up textarea uses an inset focus outline
+Final conversation-specific tuning removes authored-comment truncation and its
+Show More / Show Less control from the transcript so comments always show their
+full authored text. The sticky follow-up textarea uses an inset focus outline
 so its highlight stays fully visible inside the dialog frame.

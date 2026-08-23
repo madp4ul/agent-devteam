@@ -57,27 +57,27 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   await expect(commands.nth(0).getByRole("img", { name: "Command succeeded" })).toBeVisible();
   const runningCommand = commands.nth(1).getByRole("img", { name: "Command running" });
   await expect(runningCommand).toBeVisible();
-  await expect(commands.nth(1).locator("details")).toHaveCount(0);
   await expect(runningCommand.locator("svg")).toHaveCSS("animation-duration", "1.6s");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(runningCommand.locator("svg")).toHaveCSS("animation-duration", "3.2s");
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await expect(commands.nth(2).getByRole("img", { name: "Command failed" })).toBeVisible();
   await expect(commands.nth(0).locator(".command-disclosure-icon")).toBeVisible();
-  await expect(commands.nth(0).getByText(command, { exact: true })).toBeVisible();
+  await expect(commands.nth(0).getByText(command, { exact: true })).not.toBeVisible();
   await expect(commands.nth(0).locator(".command-disclosure-icon")).toHaveCSS("transform", "none");
   await commands.nth(0).locator("summary").click();
   await expect(commands.nth(0).locator(".command-disclosure-icon")).not.toHaveCSS("transform", "none");
   await expect(commands.nth(0)).toContainText(command);
   await expect(commands.nth(0)).toContainText("All tests passed.");
+  await commands.nth(1).locator("summary").click();
   await expect(commands.nth(1)).toContainText("pnpm typecheck");
 
   const compactHeights = await dialog.evaluate(() => ({
     userMessage: document.querySelector(".conversation-message.user-message")!.getBoundingClientRect().height,
-    command: document.querySelectorAll(".transcript-command")[2]!.getBoundingClientRect().height,
+    collapsedCommand: document.querySelectorAll(".transcript-command")[2]!.getBoundingClientRect().height,
   }));
   expect(compactHeights.userMessage).toBeLessThan(90);
-  expect(compactHeights.command).toBeLessThan(90);
+  expect(compactHeights.collapsedCommand).toBeLessThan(60);
 
   const codexMessageLayout = await dialog.locator(".transcript-item.message").evaluate((element) => {
     const card = element.getBoundingClientRect();
@@ -135,10 +135,12 @@ test("conversation messages render Markdown and commands remain quiet but inspec
       leftInset: title.left - element.getBoundingClientRect().left,
       iconCenterY: icon.top + icon.height / 2,
       titleCenterY: title.top + title.height / 2,
+      rowCenterY: row.top + row.height / 2,
     };
   });
   expect(compactRow.leftInset).toBeGreaterThanOrEqual(8);
-  expect(Math.abs(compactRow.iconCenterY - compactRow.titleCenterY)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(compactRow.iconCenterY - compactRow.rowCenterY)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(compactRow.titleCenterY - compactRow.rowCenterY)).toBeLessThanOrEqual(0.5);
   await expect(commands.nth(2)).toHaveCSS("border-radius", "7.2px");
 
   const centers = await commands.nth(0).evaluate((element) => {
@@ -655,7 +657,7 @@ test("wide transcript content wraps without overflowing the dialog or page", asy
 
   const commandDetails = dialog.locator(".command-details");
   await commandDetails.locator("summary").click();
-  const pre = commandDetails.locator("pre");
+  const pre = commandDetails.locator("pre").nth(1);
   await expect(pre).toHaveText(preformattedOutput);
   expect(await pre.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   expect(await commandDetails.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(false);
