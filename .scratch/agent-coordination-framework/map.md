@@ -287,6 +287,10 @@ without choosing the implementation yet.
   **Resolved:** The measured composer now sticks beside timeline evidence,
   grows within a viewport-aware cap, keeps autocomplete and final timeline
   controls visible, and preserves composition context through Reply and retry.
+- [Explore Codex Compaction-Threshold Parity](./issues/74-explore-codex-compaction-threshold-parity.md)
+  — Determine whether SDK-launched agents retain the same amount of useful
+  history as ordinary Codex sessions and whether a model-aware explicit
+  auto-compaction policy is safer than inheriting evolving defaults.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.
