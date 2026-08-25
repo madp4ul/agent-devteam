@@ -6,7 +6,7 @@ the browser safe from accidental file-drop navigation.
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Problem Statement
 
@@ -273,3 +273,25 @@ workspace.
   task-level attachment model anticipated by the original product design.
   Cross-conversation sharing must return as a separate product decision rather
   than emerging from an implementation shortcut.
+
+## Answer
+
+Implemented conversation-scoped attachments for authored follow-ups. The
+browser supports labelled upload, retry, and removal controls; streamed upload
+progress; file chips; attachment-only messages; and safe window-wide file-drop
+handling that prevents native navigation. Sent files remain visible and
+downloadable on their authored messages.
+
+Attachment metadata is authoritative in SQLite and immutable originals live in
+framework-owned storage under the bound project state root. Pending uploads are
+bounded, expire, and are cleaned after removal or restart. Codex runs receive
+attempt-scoped copies of every surviving file in their conversation, with
+supported images from the current follow-up also sent as native image input.
+Files remain isolated from other conversations and are removed with detailed
+conversation content when the task is archived.
+
+Application, HTTP, runtime-adapter, archival, browser-lifecycle, accessibility,
+and dark/light appearance tests cover the implemented workflow. Typechecking,
+the production build, the non-browser test suite, and the browser suite passed;
+the final standards and specification reviews reported no remaining functional
+findings.

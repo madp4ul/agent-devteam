@@ -6,7 +6,7 @@ branch for user review.
 
 **Blocked by:** None
 
-**Status:** open
+**Status:** resolved
 
 - [ ] Reproduce and document the exact Git constraints for the review flows
   encountered in real-project use, including whether the target is a branch
@@ -30,3 +30,14 @@ branch for user review.
   worktree constraints mean the primary repository cannot simply switch to an
   agent branch. It begins as a bounded feasibility and workflow investigation.
 
+## Answer
+
+Visual Studio now supports opening a repository's linked worktrees directly.
+The user can therefore review an agent's changes by opening the task worktree
+in Visual Studio instead of switching the primary worktree to a branch that is
+already checked out elsewhere.
+
+This host-native workflow preserves the active task worktree, its uncommitted
+changes, concurrent task isolation, and Git's linked-worktree safety rules. No
+coordination-framework workspace behavior or additional implementation is
+needed, so the ticket is closed.

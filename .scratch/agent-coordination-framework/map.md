@@ -230,6 +230,9 @@ without choosing the implementation yet.
 - [Review Agent Commits While Task Worktrees Are Open](./issues/62-review-agent-commits-with-open-worktrees.md)
   — Investigate safe review workflows that respect Git linked-worktree
   constraints without discarding or disrupting active task workspaces.
+  **Resolved:** Open the task's linked worktree directly in Visual Studio for
+  review; this avoids switching the primary worktree and requires no framework
+  workspace changes.
 - [Evaluate an Initial-Prompt Token Breakdown](./issues/63-evaluate-initial-prompt-token-breakdown.md)
   — Determine whether initial prompt usage can be measured and presented
   separately without misrepresenting SDK token accounting.
@@ -262,6 +265,10 @@ without choosing the implementation yet.
   **Ready:** Conversation-only follow-up attachments now have explicit upload,
   ownership, storage, Codex delivery, browser safety, retention, and acceptance
   criteria without introducing task-wide or cross-conversation sharing.
+  **Resolved:** Follow-up composers now upload and present conversation-owned
+  file chips, suppress unsafe browser file navigation, preserve and download
+  originals from framework state, expose scoped files and native current images
+  to Codex, and remove attachment content during task archival.
 - [Wrap Long Lines in Rendered Markdown Code Blocks](./issues/69-wrap-rendered-markdown-code-lines.md)
   — Keep fenced Markdown code inside its content surface and visibly wrap long
   lines instead of widening the task UI or relying on horizontal scrolling.
