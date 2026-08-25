@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 
-import type { AgentConversationIndexEntry } from "../../application/browser-transport-contract.ts";
+import type { AgentConversationIndexEntry, TokenCostBreakdown } from "../../application/browser-transport-contract.ts";
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 import { CostEstimate } from "./CostEstimate.tsx";
@@ -36,6 +36,7 @@ export function TaskConversationsPanel({
               {...(costSummary.estimate === undefined ? {} : { estimate: costSummary.estimate })}
               pending={costSummary.pending}
               lowerBound={costSummary.lowerBound}
+              {...(costSummary.breakdown === undefined ? {} : { breakdown: costSummary.breakdown })}
               testId="task-conversations-cost"
               appearance="badge"
             />
@@ -94,6 +95,7 @@ function summarizeConversationCosts(
   estimate?: { currency: "USD"; amount: number };
   pending: boolean;
   lowerBound: boolean;
+  breakdown?: TokenCostBreakdown;
 } | undefined {
   const pending = conversations.some((conversation) => conversation.costPending);
   const lowerBound = conversations.some((conversation) => conversation.hasUnpricedSettledRuns);
@@ -102,9 +104,38 @@ function summarizeConversationCosts(
   ));
   if (estimates.length === 0 && !pending) return undefined;
   const amount = estimates.reduce((total, estimate) => total + estimate.amount, 0);
+  const pricedConversations = conversations.filter((conversation) => conversation.costEstimate !== undefined);
+  const breakdowns = pricedConversations.flatMap((conversation) => (
+    conversation.costBreakdown === undefined ? [] : [conversation.costBreakdown]
+  ));
   return {
     estimate: { currency: "USD", amount },
     pending,
     lowerBound,
+    ...(breakdowns.length === 0 || breakdowns.length !== pricedConversations.length ? {} : {
+      breakdown: {
+        categories: groupCostCategories(breakdowns),
+        reasoningOutputTokens: breakdowns.reduce(
+          (total, breakdown) => total + breakdown.reasoningOutputTokens,
+          0,
+        ),
+      },
+    }),
   };
+}
+
+function groupCostCategories(
+  breakdowns: TokenCostBreakdown[],
+): TokenCostBreakdown["categories"] {
+  const grouped = new Map<string, TokenCostBreakdown["categories"][number]>();
+  for (const { categories } of breakdowns) {
+    for (const item of categories) {
+      const key = `${item.category}:${item.usdPerMillionTokens}`;
+      const existing = grouped.get(key);
+      grouped.set(key, existing === undefined
+        ? { ...item }
+        : { ...existing, tokens: existing.tokens + item.tokens });
+    }
+  }
+  return [...grouped.values()];
 }

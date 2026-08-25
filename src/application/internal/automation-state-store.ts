@@ -11,6 +11,7 @@ import type {
   AttemptContextView,
   AttemptTranscriptItem,
   AttemptTokenUsage,
+  TokenCostBreakdown,
   RuntimeStartupBoundary,
   RuntimeStartupDiagnostic,
 } from "../runtime-contract.ts";
@@ -863,7 +864,7 @@ export class AutomationStateStore {
         JSON.stringify(transcript),
         usage === undefined ? null : JSON.stringify({
           ...usage,
-          ...estimatedCostUsd(usage, pricing),
+          ...estimatedCost(usage, pricing),
         }),
         reportedUsage === undefined ? null : JSON.stringify(reportedUsage),
       );
@@ -912,10 +913,10 @@ export class AutomationStateStore {
 
 }
 
-function estimatedCostUsd(
+function estimatedCost(
   usage: AttemptTokenUsage,
   pricing: ProcessModelPricingDefinition | undefined,
-): { estimatedCostUsd?: number } {
+): { estimatedCostUsd?: number; estimatedCostBreakdown?: TokenCostBreakdown } {
   if (pricing === undefined) return {};
   const counts = [
     usage.inputTokens,
@@ -935,7 +936,18 @@ function estimatedCostUsd(
     usage.outputTokens * rates.output
   ) / 1_000_000;
   return Number.isFinite(amount) && amount >= 0
-    ? { estimatedCostUsd: Number(amount.toFixed(12)) }
+    ? {
+        estimatedCostUsd: Number(amount.toFixed(12)),
+        estimatedCostBreakdown: {
+          categories: [
+            { category: "input", tokens: ordinaryInput, usdPerMillionTokens: rates.input },
+            { category: "cachedInput", tokens: usage.cachedInputTokens, usdPerMillionTokens: rates.cachedInput },
+            { category: "cacheWriteInput", tokens: usage.cacheWriteInputTokens, usdPerMillionTokens: rates.cacheWriteInput },
+            { category: "output", tokens: usage.outputTokens, usdPerMillionTokens: rates.output },
+          ],
+          reasoningOutputTokens: usage.reasoningOutputTokens,
+        },
+      }
     : {};
 }
 

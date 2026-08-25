@@ -958,6 +958,15 @@ agents:
     outputTokens: 600,
     reasoningOutputTokens: 350,
   };
+  const expectedCostBreakdown = {
+    categories: [
+      { category: "input" as const, tokens: 400, usdPerMillionTokens: 5 },
+      { category: "cachedInput" as const, tokens: 1_800, usdPerMillionTokens: 0.5 },
+      { category: "cacheWriteInput" as const, tokens: 200, usdPerMillionTokens: 6.25 },
+      { category: "output" as const, tokens: 600, usdPerMillionTokens: 30 },
+    ],
+    reasoningOutputTokens: 350,
+  };
   runtime.setTranscript(request.attemptId, expectedTranscript);
   runtime.setUsage(request.attemptId, expectedUsage);
   runtime.complete({
@@ -982,6 +991,7 @@ agents:
     items: expectedTranscript,
     usage: expectedUsage,
     costEstimate: { currency: "USD", amount: 0.02215 },
+    costBreakdown: expectedCostBreakdown,
   });
   const conversation = await application.queryAgentConversation(created.task.id, conversationId);
   assert.equal(conversation.available, true);
@@ -1014,6 +1024,7 @@ agents:
       currency: "USD",
       amount: 0.02215,
     });
+    assert.deepEqual(conversation.conversation.costBreakdown, expectedCostBreakdown);
   }
   const index = application.queryTaskConversationIndex(created.task.id);
   assert.equal(index.available, true);
@@ -1022,6 +1033,7 @@ agents:
       currency: "USD",
       amount: 0.02215,
     });
+    assert.deepEqual(index.conversations[0]?.costBreakdown, expectedCostBreakdown);
   }
   assert.deepEqual(await application.queryAgentConversation("T-9999", conversationId), {
     available: false,
@@ -1050,6 +1062,7 @@ agents:
     items: expectedTranscript,
     usage: expectedUsage,
     costEstimate: { currency: "USD", amount: 0.02215 },
+    costBreakdown: expectedCostBreakdown,
   });
   assert.deepEqual(
     await restarted.queryAgentConversation(created.task.id, conversationId),

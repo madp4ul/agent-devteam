@@ -5,6 +5,7 @@ import type {
   AttemptTranscriptItem,
   AttemptTokenUsage,
   EstimatedTokenCost,
+  TokenCostBreakdown,
   AttemptView,
   RuntimeStartupBoundary,
 } from "../runtime-contract.ts";
@@ -400,7 +401,7 @@ export class TaskProjectionStore {
   }
 
   readPersistedAttemptTranscript(attemptId: string):
-    | { items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage; costEstimate?: EstimatedTokenCost }
+    | { items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage; costEstimate?: EstimatedTokenCost; costBreakdown?: TokenCostBreakdown }
     | undefined {
     const row = this.#database
       .prepare("SELECT items_json, usage_json FROM attempt_transcripts WHERE attempt_id = ?")
@@ -411,14 +412,16 @@ export class TaskProjectionStore {
     }
     const persisted = JSON.parse(row.usage_json) as AttemptTokenUsage & {
       estimatedCostUsd?: number;
+      estimatedCostBreakdown?: TokenCostBreakdown;
     };
-    const { estimatedCostUsd, ...usage } = persisted;
+    const { estimatedCostUsd, estimatedCostBreakdown, ...usage } = persisted;
     return {
       items: JSON.parse(row.items_json) as AttemptTranscriptItem[],
       usage,
       ...(estimatedCostUsd === undefined
         ? {}
         : { costEstimate: { currency: "USD", amount: estimatedCostUsd } }),
+      ...(estimatedCostBreakdown === undefined ? {} : { costBreakdown: estimatedCostBreakdown }),
     };
   }
 

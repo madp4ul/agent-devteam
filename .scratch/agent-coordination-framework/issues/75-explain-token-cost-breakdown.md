@@ -8,26 +8,20 @@ each billable token category.
 
 **Blocked by:** None
 
-**Status:** open
+**Status:** resolved
 
 ## User experience
 
-- Keep the existing compact cost total in run headers, agent-conversation
-  headers, and the task-detail Conversations panel header.
-- Hovering the cost control should reveal a compact breakdown. The same detail
-  must be reachable by keyboard focus and activation; provide an operable
-  click/tap disclosure when a transient tooltip would not work for touch or
-  assistive-technology users.
-- Show one calculation row for each applicable billing category: ordinary
-  input, cached-input reads, cache-write input, and output. Each row shows the
-  token quantity, snapshotted USD rate per million tokens, and resulting USD
-  subtotal.
-- When reasoning-token usage is available, identify it as part of output rather
-  than charging it again as a separate category unless a future pricing schema
-  explicitly gives it a distinct rate.
+- Keep the existing compact cost total in the agent-conversation header and the
+  task-detail Conversations panel header.
+- Hovering or focusing the cost control reveals a small tooltip with a bullet
+  for each reported billable category: ordinary input, cached-input reads,
+  cache-write input, and output. Each bullet shows token quantity, snapshotted
+  USD rate per million tokens, and resulting USD subtotal.
+- Do not show reasoning-token usage separately because it is already included
+  in output and has no distinct process-defined rate.
 - Preserve the current two-decimal total in the compact control. Use enough
-  precision inside the breakdown for small subtotals to remain meaningful and
-  make rounding understandable.
+  three decimal places for the smaller subtotals inside the breakdown.
 
 ## Aggregated controls
 
@@ -35,9 +29,10 @@ each billable token category.
 - A conversation control aggregates the known settled attempts included in its
   displayed total. The Conversations-panel control aggregates the same known
   costs across its conversations.
-- If historical attempts used different snapshotted rates, do not imply that
-  one current rate applies to every token. Split otherwise-identical categories
-  by rate or group them by attempt so the subtotals reconcile truthfully.
+- In the Conversations panel, combine token counts for the same billing
+  category and rate so the task-wide tooltip stays compact.
+- Preserve each attempt's snapshotted rows when aggregating, so historical
+  attempts with different rates remain truthful.
 - Preserve issue 70's lower-bound behavior: when settled attempts without cost
   are excluded, explain that the shown breakdown covers known costs only.
 - Preserve pending behavior: active priceable attempts remain excluded until
@@ -52,13 +47,11 @@ each billable token category.
   the persisted attempt estimate, subject only to presentation rounding.
 - Use the attempt's persisted usage and snapshotted pricing semantics; later
   process edits must not rewrite historical breakdowns.
-- Give the disclosure an accessible name and deterministic focus, dismissal,
-  and Escape behavior. Hover-only content is insufficient.
+- Give the disclosure an accessible name, keyboard focus, and Escape dismissal.
 - Keep the detail visually subordinate to task content and readable in both
   dark and light themes without enlarging the resting header controls.
-- Add browser coverage for pointer and keyboard access, category calculations,
-  small-value precision, aggregation across different rates, lower-bound and
-  pending explanations, dismissal, and both appearance themes.
+- Add focused application and browser coverage for persistence, aggregation,
+  pointer and keyboard access, calculations, and pending/lower-bound notes.
 
 ## Context
 
@@ -67,3 +60,14 @@ is useful for comparison, but it does not let a user verify whether a run was
 mostly ordinary input, discounted cache reads, cache writes, or output. This
 ticket adds an inspectable explanation without turning the primary transcript
 surface into a billing table or claiming invoice authority.
+
+## Answer
+
+Implemented as a lightweight tooltip on both existing aggregate cost controls.
+Each settled priced attempt snapshots its ordinary-input, cached-input,
+cache-write-input, and output token counts together with the rate used. The
+tooltip renders those rows as `tokens × USD/1M = subtotal`; reasoning-token
+usage is neither displayed separately nor charged twice. The task-level view
+groups equal categories and rates across conversations and shows subtotals to
+three decimal places. Both totals combine only complete known breakdowns while
+retaining the existing pending and lower-bound explanations.

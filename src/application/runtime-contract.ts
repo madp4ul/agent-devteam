@@ -218,6 +218,17 @@ export interface EstimatedTokenCost {
   amount: number;
 }
 
+export type TokenCostCategory = "input" | "cachedInput" | "cacheWriteInput" | "output";
+
+export interface TokenCostBreakdown {
+  categories: Array<{
+    category: TokenCostCategory;
+    tokens: number;
+    usdPerMillionTokens: number;
+  }>;
+  reasoningOutputTokens: number;
+}
+
 export interface AgentRunAgent {
   id: string;
   name: string;
@@ -313,6 +324,6 @@ export type OperatingContextQueryResult =
   | { available: false; reason: "invalid-attempt-scope" | "configuration-error"; diagnostics?: ProcessDiagnostic[] };
 
 export type AttemptTranscriptQueryResult =
-  | { available: true; threadId: string; items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage; costEstimate?: EstimatedTokenCost }
+  | { available: true; threadId: string; items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage; costEstimate?: EstimatedTokenCost; costBreakdown?: TokenCostBreakdown }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { available: false; reason: "not-found" | "unavailable" };

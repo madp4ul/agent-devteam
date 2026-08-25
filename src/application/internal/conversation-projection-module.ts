@@ -11,6 +11,7 @@ import type {
   AttemptTranscriptAccess,
   AttemptTranscriptQueryResult,
   EstimatedTokenCost,
+  TokenCostBreakdown,
   AttemptView,
 } from "../runtime-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
@@ -216,6 +217,7 @@ export class ConversationProjectionModule {
               items: transcript.items,
               ...(transcript.usage === undefined ? {} : { usage: transcript.usage }),
               ...(transcript.costEstimate === undefined ? {} : { costEstimate: transcript.costEstimate }),
+              ...(transcript.costBreakdown === undefined ? {} : { costBreakdown: transcript.costBreakdown }),
             }
           : { available: false as const },
       };
@@ -302,6 +304,7 @@ export class ConversationProjectionModule {
 
   #readConversationCostEstimate(conversationId: string): {
     costEstimate?: EstimatedTokenCost;
+    costBreakdown?: TokenCostBreakdown;
     hasUnpricedSettledRuns: boolean;
   } {
     const runs = this.#readRuns(conversationId);
@@ -316,19 +319,29 @@ export class ConversationProjectionModule {
        WHERE activation.conversation_id = ? AND attempt.status <> 'running'
        ORDER BY attempt.rowid`,
     ).all(conversationId) as Array<{ usage_json: string | null }>;
-    const amounts = rows.flatMap(({ usage_json }) => {
+    const pricedRows = rows.flatMap(({ usage_json }) => {
       if (usage_json === null) return [];
-      const value = JSON.parse(usage_json) as { estimatedCostUsd?: number };
-      return value.estimatedCostUsd === undefined ? [] : [value.estimatedCostUsd];
+      const value = JSON.parse(usage_json) as {
+        estimatedCostUsd?: number;
+        estimatedCostBreakdown?: TokenCostBreakdown;
+      };
+      return value.estimatedCostUsd === undefined ? [] : [{
+        amount: value.estimatedCostUsd,
+        breakdown: value.estimatedCostBreakdown,
+      }];
     });
-    const hasUnpricedSettledRuns = rows.length !== settled.length || amounts.length !== settled.length;
+    const hasUnpricedSettledRuns = rows.length !== settled.length || pricedRows.length !== settled.length;
+    const breakdowns = pricedRows.flatMap(({ breakdown }) => breakdown === undefined ? [] : [breakdown]);
     return {
-      ...(amounts.length === 0 ? {} : {
+      ...(pricedRows.length === 0 ? {} : {
         costEstimate: {
           currency: "USD" as const,
-          amount: Number(amounts.reduce((sum, amount) => sum + amount, 0).toFixed(12)),
+          amount: Number(pricedRows.reduce((sum, { amount }) => sum + amount, 0).toFixed(12)),
         },
       }),
+      ...(breakdowns.length === pricedRows.length && breakdowns.length > 0
+        ? { costBreakdown: combineCostBreakdowns(breakdowns) }
+        : {}),
       hasUnpricedSettledRuns,
     };
   }
@@ -441,10 +454,13 @@ export class ConversationProjectionModule {
 
 function conversationCostEstimate(
   runs: ConversationRun[],
-): { costEstimate?: EstimatedTokenCost; hasUnpricedSettledRuns: boolean } {
+): { costEstimate?: EstimatedTokenCost; costBreakdown?: TokenCostBreakdown; hasUnpricedSettledRuns: boolean } {
   const settled = runs.filter(({ attempt }) => attempt.status !== "running");
   if (settled.length === 0) return { hasUnpricedSettledRuns: false };
   const priced = settled.filter(({ transcript }) => transcript.available && transcript.costEstimate !== undefined);
+  const breakdowns = priced.flatMap(({ transcript }) =>
+    transcript.available && transcript.costBreakdown !== undefined ? [transcript.costBreakdown] : []
+  );
   return {
     ...(priced.length === 0 ? {} : {
       costEstimate: {
@@ -455,6 +471,19 @@ function conversationCostEstimate(
         ).toFixed(12)),
       },
     }),
+    ...(breakdowns.length === priced.length && breakdowns.length > 0
+      ? { costBreakdown: combineCostBreakdowns(breakdowns) }
+      : {}),
     hasUnpricedSettledRuns: priced.length !== settled.length,
+  };
+}
+
+function combineCostBreakdowns(breakdowns: TokenCostBreakdown[]): TokenCostBreakdown {
+  return {
+    categories: breakdowns.flatMap(({ categories }) => categories),
+    reasoningOutputTokens: breakdowns.reduce(
+      (total, { reasoningOutputTokens }) => total + reasoningOutputTokens,
+      0,
+    ),
   };
 }

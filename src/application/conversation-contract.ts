@@ -1,11 +1,11 @@
 import type { ActivationView } from "./automation-contract.ts";
 import type { ProcessDiagnostic } from "./process-contract.ts";
-import type { EstimatedTokenCost, AttemptTokenUsage, AttemptTranscriptItem } from "./runtime-contract.ts";
+import type { EstimatedTokenCost, AttemptTokenUsage, AttemptTranscriptItem, TokenCostBreakdown } from "./runtime-contract.ts";
 import type { Actor, TaskActivityView, TaskCommentView } from "./task-contract.ts";
 
 /** Conversation index, detail, message, transcript, and continuation facts. */
 export type AgentConversationTranscriptView =
-  | { available: true; items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage; costEstimate?: EstimatedTokenCost }
+  | { available: true; items: AttemptTranscriptItem[]; usage?: AttemptTokenUsage; costEstimate?: EstimatedTokenCost; costBreakdown?: TokenCostBreakdown }
   | { available: false };
 
 export interface AgentConversationView {
@@ -23,6 +23,7 @@ export interface AgentConversationView {
   createdAt: string;
   latestActivityAt: string;
   costEstimate?: EstimatedTokenCost;
+  costBreakdown?: TokenCostBreakdown;
   hasUnpricedSettledRuns: boolean;
   costPending: boolean;
   retirement: AgentConversationRetirementView | null;
@@ -63,6 +64,7 @@ export interface AgentConversationIndexEntry {
   label: string;
   latestActivityAt: string;
   costEstimate?: EstimatedTokenCost;
+  costBreakdown?: TokenCostBreakdown;
   hasUnpricedSettledRuns: boolean;
   costPending: boolean;
   status: "running" | "needs-attention" | null;

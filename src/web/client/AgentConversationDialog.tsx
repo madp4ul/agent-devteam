@@ -307,6 +307,7 @@ export function AgentConversationDialog({
                 {...(conversation.costEstimate === undefined ? {} : { estimate: conversation.costEstimate })}
                 pending={conversation.costPending}
                 lowerBound={conversation.hasUnpricedSettledRuns}
+                {...(conversation.costBreakdown === undefined ? {} : { breakdown: conversation.costBreakdown })}
                 testId="conversation-cost"
                 appearance="badge"
               />

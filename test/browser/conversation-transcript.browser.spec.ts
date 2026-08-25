@@ -699,16 +699,35 @@ test("a conversation without reported usage does not present zero as measured us
 });
 
 test("conversation aggregates show known lower bounds while running totals stay visibly pending", async ({ page }) => {
+  const firstBreakdown = {
+    categories: [
+      { category: "input", tokens: 400, usdPerMillionTokens: 5 },
+      { category: "cachedInput", tokens: 1_800, usdPerMillionTokens: 0.5 },
+      { category: "cacheWriteInput", tokens: 200, usdPerMillionTokens: 6.25 },
+      { category: "output", tokens: 600, usdPerMillionTokens: 30 },
+    ],
+    reasoningOutputTokens: 350,
+  };
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
     const detail = await response.json();
     detail.conversations[0].costEstimate = { currency: "USD", amount: 0.02215 };
+    detail.conversations[0].costBreakdown = firstBreakdown;
     detail.conversations[0].hasUnpricedSettledRuns = true;
     detail.conversations[0].costPending = true;
     detail.conversations.push({
       ...detail.conversations[0],
       id: "browser-conversation-2",
-      costEstimate: { currency: "USD", amount: 0.013 },
+      costEstimate: { currency: "USD", amount: 0.0116 },
+      costBreakdown: {
+        categories: [
+          { category: "input", tokens: 1_000, usdPerMillionTokens: 5 },
+          { category: "cachedInput", tokens: 200, usdPerMillionTokens: 0.5 },
+          { category: "cacheWriteInput", tokens: 80, usdPerMillionTokens: 6.25 },
+          { category: "output", tokens: 200, usdPerMillionTokens: 30 },
+        ],
+        reasoningOutputTokens: 0,
+      },
       hasUnpricedSettledRuns: false,
       costPending: false,
     });
@@ -718,6 +737,7 @@ test("conversation aggregates show known lower bounds while running totals stay 
     const response = await route.fetch();
     const result = await response.json();
     result.conversation.costEstimate = { currency: "USD", amount: 0.02215 };
+    result.conversation.costBreakdown = firstBreakdown;
     result.conversation.hasUnpricedSettledRuns = true;
     result.conversation.costPending = true;
     await route.fulfill({ response, json: result });
@@ -727,18 +747,41 @@ test("conversation aggregates show known lower bounds while running totals stay 
   const conversationsPanel = page.getByRole("region", { name: "Conversations" });
   const conversationRow = conversationsPanel.getByRole("button").first();
   const panelCost = conversationsPanel.getByTestId("task-conversations-cost");
-  await expect(panelCost).toContainText("≥$0.04");
+  await expect(panelCost).toContainText("≥$0.03");
   await expect(panelCost).not.toContainText("~");
   await expect(panelCost).toHaveClass(/cost-estimate-badge/);
   await expect(panelCost).toHaveRole("status");
   await expect(panelCost).toHaveAccessibleName(/update when the current run finishes/i);
+  await panelCost.hover();
+  const panelBreakdown = panelCost.getByRole("tooltip", { name: "Token cost breakdown" });
+  await expect(panelBreakdown).toBeVisible();
+  await expect(panelBreakdown).toContainText("Input");
+  await expect(panelBreakdown.locator("li")).toHaveCount(4);
+  await expect(panelBreakdown).toContainText("1,400 × $5.00 / 1M = $0.007");
+  await expect(panelBreakdown).toContainText("Cached input");
+  await expect(panelBreakdown).toContainText("2,000 × $0.50 / 1M = $0.001");
+  await expect(panelBreakdown).toContainText("Cache write input");
+  await expect(panelBreakdown).toContainText("280 × $6.25 / 1M = $0.002");
+  await expect(panelBreakdown).toContainText("Output");
+  await expect(panelBreakdown).toContainText("800 × $30.00 / 1M = $0.024");
+  await expect(panelBreakdown).not.toContainText("reasoning tokens");
+  await expect(panelBreakdown).toContainText("Known costs only");
+  await expect(panelBreakdown).toContainText("Running cost will be added when available");
   await expect(conversationRow).not.toContainText("$");
   await conversationRow.click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
-  await expect(dialog.getByTestId("conversation-cost")).toContainText("≥$0.02");
-  await expect(dialog.getByTestId("conversation-cost")).not.toContainText("~");
-  await expect(dialog.getByTestId("conversation-cost")).toHaveClass(/cost-estimate-badge/);
-  await expect(dialog.getByTestId("conversation-cost")).toHaveRole("status");
+  const conversationCost = dialog.getByTestId("conversation-cost");
+  await expect(conversationCost).toContainText("≥$0.02");
+  await expect(conversationCost).not.toContainText("~");
+  await expect(conversationCost).toHaveClass(/cost-estimate-badge/);
+  await expect(conversationCost).toHaveRole("status");
+  await conversationCost.focus();
+  const conversationBreakdown = conversationCost.getByRole("tooltip", { name: "Token cost breakdown" });
+  await expect(conversationBreakdown).toBeVisible();
+  await expect(conversationBreakdown).toContainText("400 × $5.00 / 1M = $0.002");
+  await expect(conversationBreakdown).toContainText("1,800 × $0.50 / 1M = $0.001");
+  await expect(conversationBreakdown).toContainText("200 × $6.25 / 1M = $0.001");
+  await expect(conversationBreakdown).toContainText("600 × $30.00 / 1M = $0.018");
   const tokenUsage = dialog.getByRole("region", { name: "Token usage" });
   await expect(tokenUsage).toHaveCount(0);
 });
