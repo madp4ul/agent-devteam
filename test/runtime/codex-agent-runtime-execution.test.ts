@@ -450,7 +450,7 @@ test("a completed turn retains its reported token usage for the current attempt"
   assert.equal(await usageAccess.readUsage("attempt-without-reported-usage"), null);
 });
 
-test("resumed attempts keep separate usage even when they reuse one Codex thread", async () => {
+test("runtime preserves cumulative usage snapshots when attempts reuse one Codex thread", async () => {
   const streamed = (inputTokens: number) => async () => ({
     events: events(
       { type: "thread.started", thread_id: "shared-usage-thread" },

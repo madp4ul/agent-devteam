@@ -421,10 +421,10 @@ export class AutomationStateStore {
         .prepare(
           `UPDATE attempts
            SET status = 'failed', completed_at = ?, outcome_status = 'failed',
-               outcome_summary = ?, outcome_kind = 'interrupted'
+               outcome_summary = ?, outcome_kind = 'interrupted', pricing_json = ?
            WHERE id = ?`,
         )
-        .run(occurredAt, summary, attemptId);
+        .run(occurredAt, summary, serializedPricing(pricing), attemptId);
       this.#database
         .prepare(
           `UPDATE activations
@@ -737,7 +737,8 @@ export class AutomationStateStore {
         .prepare(
           `UPDATE attempts
            SET status = ?, completed_at = ?, outcome_status = ?, outcome_summary = ?,
-               thread_id = COALESCE(?, thread_id), outcome_kind = ?, thread_continuity = ?
+               thread_id = COALESCE(?, thread_id), outcome_kind = ?, thread_continuity = ?,
+               pricing_json = ?
            WHERE id = ?`,
         )
         .run(
@@ -748,6 +749,7 @@ export class AutomationStateStore {
           outcome.threadId ?? null,
           outcomeKind,
           outcome.threadContinuity ?? null,
+          serializedPricing(pricing),
           attemptId,
         );
       if (outcome.status === "completed") {
@@ -923,6 +925,10 @@ function persistedUsage(
       estimatedCostBreakdown: cost.costBreakdown,
     }),
   };
+}
+
+function serializedPricing(pricing: ProcessModelPricingDefinition | undefined): string | null {
+  return pricing === undefined ? null : JSON.stringify(pricing);
 }
 
 function retryDueAt(now: Date, cycleAttempt: number): string {

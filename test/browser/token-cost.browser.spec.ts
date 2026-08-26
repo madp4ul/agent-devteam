@@ -131,6 +131,7 @@ test("conversation aggregates show known lower bounds while running totals stay 
   await conversationRow.click();
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   const conversationCost = dialog.getByTestId("conversation-cost");
+  await expect(dialog.locator(".cost-estimate")).toHaveCount(1);
   await expect(conversationCost).toContainText("≥$0.02");
   await expect(conversationCost).not.toContainText("~");
   await expect(conversationCost).toHaveClass(/cost-estimate-badge/);

@@ -121,6 +121,17 @@ that conversation. The attempt-scoped MCP adapter can recover the complete
 current operating context without accepting task or agent scope from the model.
 When the runtime must replace a thread, it records that loss of continuity and
 adopts the replacement as the conversation's next resume target.
+Codex `turn.completed` usage is a cumulative thread snapshot that includes every
+metered model call. Automation retains that raw snapshot, but prices a resumed
+attempt only after subtracting the preceding trustworthy snapshot on the same
+thread so attempt evidence remains attributable. It also snapshots the price
+used when an attempt settles. For a conversation total, the newest monotonic
+cumulative snapshot is the authoritative checkpoint for each thread whose
+snapshotted price stayed stable; replacement threads contribute separate
+checkpoints. At price boundaries or when a checkpoint is not trustworthy, the
+projection falls back to the isolated attempt costs. This preserves historical
+rates, pending evidence, and known-cost lower bounds without repeatedly adding
+cumulative snapshots.
 
 Before an attachment-bearing run starts, automation projects that
 conversation's surviving originals into an attempt-scoped directory outside

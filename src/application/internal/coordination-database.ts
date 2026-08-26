@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 18;
+const currentSchemaVersion = 19;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -232,6 +232,7 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       thread_id TEXT,
       model TEXT,
       reasoning_effort TEXT,
+      pricing_json TEXT,
       outcome_kind TEXT
       ,thread_continuity TEXT CHECK (thread_continuity IS NULL OR thread_continuity = 'replaced')
     );
@@ -461,6 +462,7 @@ function currentSchemaIsComplete(database: DatabaseSync, requireModelPricing = t
     conversationColumns.has("replacement_reason") &&
     attemptColumns.has("outcome_kind") &&
     attemptColumns.has("thread_continuity") &&
+    attemptColumns.has("pricing_json") &&
     transcriptColumns.has("usage_json") &&
     transcriptColumns.has("reported_usage_json") &&
     commentColumns.has("attempt_id") &&

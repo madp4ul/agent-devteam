@@ -306,6 +306,85 @@ test("conversation cost totals preserve the known subtotal when a settled run ha
   }
 });
 
+test("continued turns price cumulative Codex usage snapshots exactly once", async (t) => {
+  const { application, conversationId, created, runtime } = await startPricedConversationFixture(t, {
+    rates: [{ model: "gpt-5.6-sol", usdPerMillionTokens: 1 }],
+    title: "Price continued cumulative usage",
+    description: "Count each metered model-call token exactly once.",
+    idempotencyKey: "create-turn-local-cost-task",
+  });
+
+  await application.resumeAutomation();
+  const first = await runtime.waitForRequest(1);
+  runtime.setTranscript(first.attemptId, []);
+  runtime.setUsage(first.attemptId, {
+    inputTokens: 50_000,
+    cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  });
+  runtime.complete({ status: "completed", summary: "First turn.", threadId: "turn-local-cost-thread" });
+  await application.waitForAutomationIdle();
+
+  const continued = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Continue with the preceding context cached.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-turn-local-cost-task",
+  });
+  assert.equal(continued.accepted, true);
+  const second = await runtime.waitForRequest(2);
+  runtime.setTranscript(second.attemptId, []);
+  runtime.setUsage(second.attemptId, {
+    inputTokens: 150_000,
+    cachedInputTokens: 50_000,
+    cacheWriteInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  });
+  runtime.complete({ status: "completed", summary: "Continued turn.", threadId: "turn-local-cost-thread" });
+  await application.waitForAutomationIdle();
+
+  assert.deepEqual(await application.queryAttemptTranscript(second.attemptId), {
+    available: true,
+    threadId: "turn-local-cost-thread",
+    items: [],
+    usage: {
+      inputTokens: 100_000,
+      cachedInputTokens: 50_000,
+      cacheWriteInputTokens: 0,
+      outputTokens: 0,
+      reasoningOutputTokens: 0,
+    },
+    costEstimate: { currency: "USD", amount: 0.1 },
+    costBreakdown: {
+      categories: [
+        { category: "input", tokens: 50_000, usdPerMillionTokens: 1 },
+        { category: "cachedInput", tokens: 50_000, usdPerMillionTokens: 1 },
+        { category: "cacheWriteInput", tokens: 0, usdPerMillionTokens: 1 },
+        { category: "output", tokens: 0, usdPerMillionTokens: 1 },
+      ],
+      reasoningOutputTokens: 0,
+    },
+  });
+  const conversation = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(conversation.available, true);
+  if (conversation.available) {
+    assert.deepEqual(conversation.conversation.costEstimate, { currency: "USD", amount: 0.15 });
+    assert.deepEqual(conversation.conversation.costBreakdown, {
+      categories: [
+        { category: "input", tokens: 100_000, usdPerMillionTokens: 1 },
+        { category: "cachedInput", tokens: 50_000, usdPerMillionTokens: 1 },
+        { category: "cacheWriteInput", tokens: 0, usdPerMillionTokens: 1 },
+        { category: "output", tokens: 0, usdPerMillionTokens: 1 },
+      ],
+      reasoningOutputTokens: 0,
+    });
+  }
+});
+
 test("complete task detail owns the conversation cost summary", async (t) => {
   const {
     application,

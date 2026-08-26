@@ -307,6 +307,32 @@ without choosing the implementation yet.
   **Resolved:** Hovering or focusing either aggregate cost control now shows a
   compact calculation breakdown backed by the usage and rates snapshotted when
   each priced attempt settled.
+- [Correct Conversation Cost Aggregation](./issues/76-correct-conversation-cost-aggregation.md)
+  — Establish whether continued-turn SDK usage is cumulative, isolate each
+  turn exactly once, and show one truthful accumulated cost breakdown per
+  agent conversation instead of repeating per-turn splits.
+  **Resolved:** Treat `turn.completed.usage` as a cumulative thread checkpoint;
+  price its newest trustworthy snapshot once per stable-price thread lineage,
+  falling back to isolated attempt deltas across price or trust boundaries.
+- [Reconcile Conversation Usage with Automatic Compaction](./issues/77-reconcile-conversation-usage-with-compaction.md)
+  — After cost accounting rules out cumulative-display inflation, determine
+  whether unusually high cached input reflects cumulative metered work or an
+  actual failure to inherit Codex's automatic-compaction behavior.
+- [Disclose Agent-Inspectable Task Content](./issues/78-disclose-agent-inspectable-task-content.md)
+  — Give task-detail content a consistent accessible marker when it is exposed
+  through agent coordination tools, leaving user-only content unmarked.
+- [Filter the Timeline to Agent-Inspectable Events](./issues/79-filter-timeline-to-agent-inspectable-events.md)
+  — Let users reduce long timelines to the exact coordination evidence agents
+  can inspect, using the same authoritative visibility semantics as the UI.
+- [Keep Bottom-Anchored Conversation Follow-Ups Visible](./issues/80-keep-bottom-anchored-conversation-following.md)
+  — Keep a conversation following its end when a user submits there while
+  preserving the reading position of users who have scrolled away.
+- [Preselect the Most Recent Task Agent in Mention Autocomplete](./issues/81-preselect-most-recent-task-agent-mention.md)
+  — Make the latest applicable task agent the active `@` suggestion so common
+  replies need no name typing without inserting or submitting automatically.
+- [Omit Self-Authored Comments from Continuation Updates](./issues/82-omit-self-authored-comments-from-continuation-updates.md)
+  — Keep resumed-agent change summaries focused on new external information by
+  omitting the agent's own comments already preserved in its conversation.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.

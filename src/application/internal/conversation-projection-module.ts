@@ -10,6 +10,7 @@ import type {
 import type {
   AttemptTranscriptAccess,
   AttemptTranscriptQueryResult,
+  AttemptTokenUsage,
   EstimatedTokenCost,
   TokenCostBreakdown,
   AttemptView,
@@ -17,8 +18,10 @@ import type {
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
+import type { ProcessModelPricingDefinition } from "./process-definition.ts";
 import {
   aggregateTokenCosts,
+  calculateAttemptTokenCost,
   type AggregatedTokenCost,
   type TokenCostEvidence,
 } from "../token-cost.ts";
@@ -163,15 +166,7 @@ export class ConversationProjectionModule {
                 WHERE unfinished.task_id = conversation.task_id
                   AND unfinished.target_agent_id = conversation.owning_agent_id
                   AND unfinished.status <> 'completed'
-              ) THEN 1 ELSE 0 END AS unfinished_work,
-              CASE WHEN EXISTS (
-                SELECT 1
-                FROM activations priced_activation
-                JOIN attempts priced_attempt ON priced_attempt.activation_id = priced_activation.id
-                JOIN model_pricing pricing ON pricing.model = priced_attempt.model
-                WHERE priced_activation.conversation_id = conversation.id
-                  AND priced_attempt.status = 'running'
-              ) THEN 1 ELSE 0 END AS cost_pending
+              ) THEN 1 ELSE 0 END AS unfinished_work
        FROM agent_conversations conversation
        JOIN tasks task ON task.id = conversation.task_id
        LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
@@ -194,7 +189,6 @@ export class ConversationProjectionModule {
       unfinished_work: number;
       current_agent_name: string | null;
       agent_applied: number | null;
-      cost_pending: number;
     } | undefined;
     if (row === undefined) return undefined;
     const activations = this.#taskProjections.readTaskActivations(row.task_id)
@@ -234,7 +228,7 @@ export class ConversationProjectionModule {
       currentThreadId: row.current_thread_id,
       createdAt: row.created_at,
       latestActivityAt: row.latest_activity_at,
-      ...conversationCostEstimate(runs, row.cost_pending === 1),
+      ...this.#readConversationCostEstimate(row.id),
       retirement,
       replacesConversationId: row.replaces_conversation_id,
       replacementReason: row.replacement_reason,
@@ -298,9 +292,9 @@ export class ConversationProjectionModule {
 
   #readConversationCostEstimate(conversationId: string): AggregatedTokenCost {
     const rows = this.#database.prepare(
-      `SELECT attempt.status,
+      `SELECT attempt.status, attempt.thread_id, attempt.pricing_json,
               CASE WHEN pricing.model IS NULL THEN 0 ELSE 1 END AS priceable,
-              transcript.usage_json
+              transcript.usage_json, transcript.reported_usage_json
        FROM activations activation
        JOIN attempts attempt ON attempt.activation_id = activation.id
        LEFT JOIN attempt_transcripts transcript ON transcript.attempt_id = attempt.id
@@ -309,24 +303,26 @@ export class ConversationProjectionModule {
        ORDER BY attempt.rowid`,
     ).all(conversationId) as Array<{
       status: AttemptView["status"];
+      thread_id: string | null;
+      pricing_json: string | null;
       priceable: number;
       usage_json: string | null;
+      reported_usage_json: string | null;
     }>;
-    return aggregateTokenCosts(rows.map(({ status, priceable, usage_json }): TokenCostEvidence => {
-      if (usage_json === null) return conversationTokenCostEvidence(status, priceable === 1);
-      const value = JSON.parse(usage_json) as {
-        estimatedCostUsd?: number;
-        estimatedCostBreakdown?: TokenCostBreakdown;
-      };
-      return conversationTokenCostEvidence(status, priceable === 1, {
-        ...(value.estimatedCostUsd === undefined ? {} : {
-          costEstimate: { currency: "USD", amount: value.estimatedCostUsd },
-        }),
-        ...(value.estimatedCostBreakdown === undefined ? {} : {
-          costBreakdown: value.estimatedCostBreakdown,
-        }),
-      });
-    }));
+    return conversationCostFromCumulativeSnapshots(rows.map((row) => ({
+      status: row.status,
+      threadId: row.thread_id,
+      priceable: row.priceable === 1,
+      ...(row.pricing_json === null ? {} : {
+        pricing: JSON.parse(row.pricing_json) as ProcessModelPricingDefinition,
+      }),
+      ...(row.reported_usage_json === null ? {} : {
+        reportedUsage: JSON.parse(row.reported_usage_json) as AttemptTokenUsage,
+      }),
+      ...(row.usage_json === null ? {} : {
+        isolatedCost: persistedTokenCost(JSON.parse(row.usage_json) as PersistedTokenCost),
+      }),
+    })));
   }
 
   readMessage(id: string): AgentConversationMessageView | undefined {
@@ -435,20 +431,93 @@ export class ConversationProjectionModule {
   }
 }
 
-function conversationCostEstimate(
-  runs: ConversationRun[],
-  costPending: boolean,
-): AggregatedTokenCost {
-  return aggregateTokenCosts(runs.map(({ attempt, transcript }) =>
-    conversationTokenCostEvidence(attempt.status, costPending, {
-      ...(!transcript.available || transcript.costEstimate === undefined
-        ? {}
-        : { costEstimate: transcript.costEstimate }),
-      ...(!transcript.available || transcript.costBreakdown === undefined
-        ? {}
-        : { costBreakdown: transcript.costBreakdown }),
-    })
-  ));
+interface PersistedTokenCost {
+  estimatedCostUsd?: number;
+  estimatedCostBreakdown?: TokenCostBreakdown;
+}
+
+interface ConversationCostSnapshot {
+  status: AttemptView["status"];
+  threadId: string | null;
+  priceable: boolean;
+  pricing?: ProcessModelPricingDefinition;
+  reportedUsage?: AttemptTokenUsage;
+  isolatedCost?: {
+    costEstimate?: EstimatedTokenCost;
+    costBreakdown?: TokenCostBreakdown;
+  };
+}
+
+function conversationCostFromCumulativeSnapshots(rows: ConversationCostSnapshot[]): AggregatedTokenCost {
+  const evidence: TokenCostEvidence[] = rows
+    .filter(({ status }) => status === "running")
+    .map(({ priceable }) => ({ status: "running", priceable }));
+  const settled = rows.filter(({ status }) => status !== "running");
+  const threadGroups = Map.groupBy(
+    settled.filter(({ threadId }) => threadId !== null),
+    ({ threadId }) => threadId!,
+  );
+  for (const threadRows of threadGroups.values()) {
+    const pricing = stablePricing(threadRows);
+    const snapshots = threadRows.flatMap(({ reportedUsage }, index) =>
+      reportedUsage === undefined ? [] : [{ index, usage: reportedUsage }]
+    );
+    const latest = snapshots.at(-1);
+    if (
+      pricing !== undefined &&
+      latest !== undefined &&
+      snapshotsAreMonotonic(snapshots.map(({ usage }) => usage))
+    ) {
+      const cost = calculateAttemptTokenCost(latest.usage, pricing);
+      evidence.push(conversationTokenCostEvidence("completed", true, cost));
+      if (latest.index !== threadRows.length - 1 || cost === undefined) {
+        evidence.push({ status: "settled" });
+      }
+      continue;
+    }
+    evidence.push(...threadRows.map((row) =>
+      conversationTokenCostEvidence(row.status, row.priceable, row.isolatedCost)
+    ));
+  }
+  evidence.push(...settled
+    .filter(({ threadId }) => threadId === null)
+    .map((row) => conversationTokenCostEvidence(row.status, row.priceable, row.isolatedCost)));
+  return aggregateTokenCosts(evidence, { compactBreakdown: true });
+}
+
+function stablePricing(rows: ConversationCostSnapshot[]): ProcessModelPricingDefinition | undefined {
+  const first = rows[0]?.pricing;
+  if (first === undefined) return undefined;
+  const key = JSON.stringify(first);
+  return rows.every(({ pricing }) => pricing !== undefined && JSON.stringify(pricing) === key)
+    ? first
+    : undefined;
+}
+
+function snapshotsAreMonotonic(snapshots: AttemptTokenUsage[]): boolean {
+  return snapshots.every((snapshot, index) => index === 0 || usageDelta(snapshot, snapshots[index - 1]!) !== undefined);
+}
+
+function usageDelta(current: AttemptTokenUsage, previous: AttemptTokenUsage): AttemptTokenUsage | undefined {
+  const delta = {
+    inputTokens: current.inputTokens - previous.inputTokens,
+    cachedInputTokens: current.cachedInputTokens - previous.cachedInputTokens,
+    cacheWriteInputTokens: current.cacheWriteInputTokens - previous.cacheWriteInputTokens,
+    outputTokens: current.outputTokens - previous.outputTokens,
+    reasoningOutputTokens: current.reasoningOutputTokens - previous.reasoningOutputTokens,
+  };
+  return Object.values(delta).every((value) => value >= 0) ? delta : undefined;
+}
+
+function persistedTokenCost(value: PersistedTokenCost): NonNullable<ConversationCostSnapshot["isolatedCost"]> {
+  return {
+    ...(value.estimatedCostUsd === undefined ? {} : {
+      costEstimate: { currency: "USD", amount: value.estimatedCostUsd },
+    }),
+    ...(value.estimatedCostBreakdown === undefined ? {} : {
+      costBreakdown: value.estimatedCostBreakdown,
+    }),
+  };
 }
 
 function conversationTokenCostEvidence(
