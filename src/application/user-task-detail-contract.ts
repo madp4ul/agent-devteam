@@ -14,6 +14,7 @@ import type {
   TaskView,
   UserTaskInspectionView,
 } from "./task-contract.ts";
+import type { AggregatedTokenCost } from "./token-cost.ts";
 
 export interface UserRelatedTaskView {
   id: string;
@@ -50,6 +51,7 @@ export interface UserTaskDetailView {
   timelineRelationshipTasks: UserTimelineRelatedTaskView[];
   startup: StartupView;
   conversations: AgentConversationIndexEntry[];
+  conversationCost?: AggregatedTokenCost;
 }
 
 export type UserTaskDetailQueryResult =

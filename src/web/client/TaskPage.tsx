@@ -386,6 +386,7 @@ export function TaskPage({
                 <TaskConversationsPanel
                   taskId={task.id}
                   conversations={detail.conversations}
+                  conversationCost={detail.conversationCost}
                   onCommentSource={(sourceId) => setTimelineSourceRequest((current) => ({
                     sourceId,
                     sequence: (current?.sequence ?? 0) + 1,

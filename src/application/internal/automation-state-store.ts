@@ -15,6 +15,7 @@ import type {
   RuntimeStartupBoundary,
   RuntimeStartupDiagnostic,
 } from "../runtime-contract.ts";
+import { calculateAttemptTokenCost } from "../token-cost.ts";
 import type { ProcessModelPricingDefinition } from "./process-definition.ts";
 import type {
   Actor,
@@ -862,10 +863,7 @@ export class AutomationStateStore {
       .run(
         attemptId,
         JSON.stringify(transcript),
-        usage === undefined ? null : JSON.stringify({
-          ...usage,
-          ...estimatedCost(usage, pricing),
-        }),
+        usage === undefined ? null : JSON.stringify(persistedUsage(usage, pricing)),
         reportedUsage === undefined ? null : JSON.stringify(reportedUsage),
       );
   }
@@ -913,42 +911,18 @@ export class AutomationStateStore {
 
 }
 
-function estimatedCost(
+function persistedUsage(
   usage: AttemptTokenUsage,
   pricing: ProcessModelPricingDefinition | undefined,
-): { estimatedCostUsd?: number; estimatedCostBreakdown?: TokenCostBreakdown } {
-  if (pricing === undefined) return {};
-  const counts = [
-    usage.inputTokens,
-    usage.cachedInputTokens,
-    usage.cacheWriteInputTokens,
-    usage.outputTokens,
-    usage.reasoningOutputTokens,
-  ];
-  if (counts.some((count) => !Number.isSafeInteger(count) || count < 0)) return {};
-  const ordinaryInput = usage.inputTokens - usage.cachedInputTokens - usage.cacheWriteInputTokens;
-  if (ordinaryInput < 0) return {};
-  const rates = pricing.usdPerMillionTokens;
-  const amount = (
-    ordinaryInput * rates.input +
-    usage.cachedInputTokens * rates.cachedInput +
-    usage.cacheWriteInputTokens * rates.cacheWriteInput +
-    usage.outputTokens * rates.output
-  ) / 1_000_000;
-  return Number.isFinite(amount) && amount >= 0
-    ? {
-        estimatedCostUsd: Number(amount.toFixed(12)),
-        estimatedCostBreakdown: {
-          categories: [
-            { category: "input", tokens: ordinaryInput, usdPerMillionTokens: rates.input },
-            { category: "cachedInput", tokens: usage.cachedInputTokens, usdPerMillionTokens: rates.cachedInput },
-            { category: "cacheWriteInput", tokens: usage.cacheWriteInputTokens, usdPerMillionTokens: rates.cacheWriteInput },
-            { category: "output", tokens: usage.outputTokens, usdPerMillionTokens: rates.output },
-          ],
-          reasoningOutputTokens: usage.reasoningOutputTokens,
-        },
-      }
-    : {};
+): AttemptTokenUsage & { estimatedCostUsd?: number; estimatedCostBreakdown?: TokenCostBreakdown } {
+  const cost = calculateAttemptTokenCost(usage, pricing);
+  return {
+    ...usage,
+    ...(cost === undefined ? {} : {
+      estimatedCostUsd: cost.costEstimate.amount,
+      estimatedCostBreakdown: cost.costBreakdown,
+    }),
+  };
 }
 
 function retryDueAt(now: Date, cycleAttempt: number): string {

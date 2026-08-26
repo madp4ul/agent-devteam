@@ -368,7 +368,7 @@ export function uploadConversationFile(
 export async function removeConversationUpload(taskId: string, conversationId: string, uploadId: string): Promise<void> {
   const response = await fetch(
     `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}/uploads/${encodeURIComponent(uploadId)}`,
-    { method: "DELETE" },
+    { method: "DELETE", keepalive: true },
   );
   if (!response.ok && response.status !== 404) throw new ApiError(response.status, await response.json());
 }

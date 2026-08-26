@@ -1,13 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
-import type { AgentConversationView, PendingConversationUploadView } from "../../application/browser-transport-contract.ts";
-import { continueAgentConversation, readAgentConversation, removeConversationUpload, retireAgentConversation, uploadConversationFile } from "./api.ts";
-import { AttachmentIconButton } from "./AttachmentIconButton.tsx";
+import type { AgentConversationView } from "../../application/browser-transport-contract.ts";
+import { readAgentConversation, retireAgentConversation } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
+import { ConversationFollowUpComposer } from "./ConversationFollowUpComposer.tsx";
 import { ConversationHistory } from "./ConversationHistory.tsx";
 import { CostEstimate } from "./CostEstimate.tsx";
 import { errorMessage } from "./feedback.ts";
-import { formatFileSize } from "./file-size.ts";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { Modal } from "./Modal.tsx";
 import { MoreActionsIconButton } from "./MoreActionsIconButton.tsx";
@@ -19,18 +18,6 @@ import {
 
 const ACTIVE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 1_000;
 const IDLE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 2_000;
-const MAX_ATTACHMENTS = 20;
-const MAX_ATTACHMENT_BYTES = 512 * 1024 * 1024;
-
-interface ComposerUpload {
-  key: string;
-  file: File;
-  progress: number;
-  state: "uploading" | "uploaded" | "failed";
-  upload?: PendingConversationUploadView;
-  error?: string;
-}
-
 export function AgentConversationDialog({
   taskId,
   conversationId,
@@ -56,10 +43,6 @@ export function AgentConversationDialog({
   );
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string>();
-  const [draft, setDraft] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [submissionError, setSubmissionError] = useState<string>();
-  const [uploads, setUploads] = useState<ComposerUpload[]>([]);
   const [retirementOpen, setRetirementOpen] = useState(false);
   const [retirementReason, setRetirementReason] = useState("");
   const [retirementSubmitting, setRetirementSubmitting] = useState(false);
@@ -69,93 +52,10 @@ export function AgentConversationDialog({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const moreActionsButtonRef = useRef<HTMLButtonElement>(null);
   const retirementReasonRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadControllers = useRef(new Map<string, AbortController>());
-  const uploadsRef = useRef<ComposerUpload[]>([]);
   const pendingScrollPosition = useRef<number | "bottom" | null>(null);
   const pendingTextSelection = useRef<CapturedTextSelection | null>(null);
-  const idempotencyKey = useRef(crypto.randomUUID());
   const retirementIdempotencyKey = useRef(crypto.randomUUID());
   const pendingActivationId = useRef<string | undefined>(selectedPendingActivationId);
-  uploadsRef.current = uploads;
-
-  const startUpload = (item: ComposerUpload): void => {
-    const controller = new AbortController();
-    uploadControllers.current.set(item.key, controller);
-    setUploads((current) => current.map((entry) => entry.key === item.key
-      ? { key: entry.key, file: entry.file, state: "uploading", progress: 0 }
-      : entry));
-    void uploadConversationFile(taskId, conversationId, item.file, (progress) => {
-      setUploads((current) => current.map((entry) => entry.key === item.key ? { ...entry, progress } : entry));
-    }, controller.signal).then((upload) => {
-      uploadControllers.current.delete(item.key);
-      setUploads((current) => current.map((entry) => entry.key === item.key
-        ? { ...entry, state: "uploaded", progress: 1, upload }
-        : entry));
-    }).catch((caught) => {
-      uploadControllers.current.delete(item.key);
-      if (caught instanceof DOMException && caught.name === "AbortError") return;
-      setUploads((current) => current.map((entry) => entry.key === item.key
-        ? { ...entry, state: "failed", error: errorMessage(caught) }
-        : entry));
-    });
-  };
-  const addFiles = (files: FileList | File[]): void => {
-    const additions = Array.from(files);
-    if (additions.length === 0) return;
-    if (uploadsRef.current.length + additions.length > MAX_ATTACHMENTS) {
-      setSubmissionError(`A follow-up can contain at most ${MAX_ATTACHMENTS} files.`);
-      return;
-    }
-    const total = [...uploadsRef.current.map(({ file }) => file), ...additions]
-      .reduce((sum, file) => sum + file.size, 0);
-    if (additions.some(({ size }) => size > MAX_ATTACHMENT_BYTES) || total > MAX_ATTACHMENT_BYTES) {
-      setSubmissionError("The selected files exceed the 512 MB attachment limit.");
-      return;
-    }
-    setSubmissionError(undefined);
-    const items = additions.map((file): ComposerUpload => ({
-      key: crypto.randomUUID(), file, progress: 0, state: "uploading",
-    }));
-    setUploads((current) => [...current, ...items]);
-    for (const item of items) startUpload(item);
-  };
-  const removeUpload = (item: ComposerUpload): void => {
-    uploadControllers.current.get(item.key)?.abort();
-    uploadControllers.current.delete(item.key);
-    setUploads((current) => current.filter(({ key }) => key !== item.key));
-    if (item.upload !== undefined) {
-      void removeConversationUpload(taskId, conversationId, item.upload.id).catch(() => undefined);
-    }
-  };
-  const closeConversation = (): void => {
-    for (const controller of uploadControllers.current.values()) controller.abort();
-    uploadControllers.current.clear();
-    for (const item of uploadsRef.current) {
-      if (item.upload !== undefined) void removeConversationUpload(taskId, conversationId, item.upload.id).catch(() => undefined);
-    }
-    onClose();
-  };
-
-  useEffect(() => {
-    if (conversation?.continuation.available !== true || retirementOpen) return;
-    const acceptDroppedFiles = (event: DragEvent): void => {
-      const transfer = event.dataTransfer;
-      if (transfer === null) return;
-      const directory = Array.from(transfer.items).some((item) => item.webkitGetAsEntry()?.isDirectory === true);
-      if (directory) {
-        event.preventDefault();
-        setSubmissionError("Folders cannot be attached. Select the files inside the folder instead.");
-        return;
-      }
-      if (transfer.files.length === 0) return;
-      event.preventDefault();
-      addFiles(transfer.files);
-    };
-    window.addEventListener("drop", acceptDroppedFiles);
-    return () => window.removeEventListener("drop", acceptDroppedFiles);
-  });
-
   useLayoutEffect(() => {
     if (pendingScrollPosition.current === null || contentRef.current === null) return;
     contentRef.current.scrollTop = pendingScrollPosition.current === "bottom"
@@ -207,39 +107,6 @@ export function AgentConversationDialog({
     (caught) => setError(errorMessage(caught)),
   );
 
-  const submitFollowUp = async (): Promise<void> => {
-    const attachmentIds = uploads.flatMap(({ state, upload }) => state === "uploaded" && upload !== undefined ? [upload.id] : []);
-    if ((draft.trim().length === 0 && attachmentIds.length === 0) || uploads.some(({ state }) => state !== "uploaded") || submitting || conversation?.continuation.available !== true) return;
-    setSubmitting(true);
-    setSubmissionError(undefined);
-    try {
-      const result = await continueAgentConversation(
-        taskId,
-        conversationId,
-        draft,
-        idempotencyKey.current,
-        attachmentIds,
-      );
-      if (!result.accepted) throw new Error(`Follow-up unavailable: ${result.reason}`);
-      pendingActivationId.current = result.activationId;
-      setConversationRunning(true);
-      setConversation((current) => current === undefined || current.history.some((entry) => entry.kind === "message" && entry.message.id === result.message.id)
-        ? current
-        : {
-            ...current,
-            history: [...current.history, { kind: "message", activationId: result.activationId, status: "queued", attemptIds: [], message: result.message }],
-          });
-      setDraft("");
-      setUploads([]);
-      uploadControllers.current.clear();
-      idempotencyKey.current = crypto.randomUUID();
-      setRefreshVersion((version) => version + 1);
-    } catch (caught) {
-      setSubmissionError(errorMessage(caught));
-    } finally {
-      setSubmitting(false);
-    }
-  };
   const submitRetirement = async (): Promise<void> => {
     if (conversation === undefined || retirementReason.trim().length === 0 || retirementSubmitting) return;
     setRetirementSubmitting(true);
@@ -284,7 +151,7 @@ export function AgentConversationDialog({
       className="transcript-modal"
       backdropClassName="transcript-backdrop"
       initialFocusRef={closeButtonRef}
-      onClose={closeConversation}
+      onClose={onClose}
     >
         <header className="modal-heading">
           <div className="conversation-heading-copy">
@@ -324,7 +191,7 @@ export function AgentConversationDialog({
                 setRetirementOpen(true);
               }}
             />}
-            <CloseIconButton buttonRef={closeButtonRef} label="Close conversation" onClick={closeConversation} />
+            <CloseIconButton buttonRef={closeButtonRef} label="Close conversation" onClick={onClose} />
           </div>
         </header>
         <div ref={contentRef} className="transcript-content">
@@ -343,72 +210,30 @@ export function AgentConversationDialog({
               {...(selectedMessageId === undefined ? {} : { selectedMessageId })}
               {...(onCommentSource === undefined ? {} : {
                 onCommentSource: (commentId) => {
-                  closeConversation();
+                  onClose();
                   onCommentSource(commentId);
                 },
               })}
             />
           )}
           {conversation?.continuation.available !== true ? null : (
-            <form
-              className="conversation-composer"
-              aria-label="Continue conversation"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitFollowUp();
+            <ConversationFollowUpComposer
+              key={conversation.id}
+              taskId={taskId}
+              conversationId={conversation.id}
+              acceptWindowDrops={!retirementOpen}
+              onAccepted={(result) => {
+                pendingActivationId.current = result.activationId;
+                setConversationRunning(true);
+                setConversation((current) => current === undefined || current.history.some((entry) => entry.kind === "message" && entry.message.id === result.message.id)
+                  ? current
+                  : {
+                      ...current,
+                      history: [...current.history, { kind: "message", activationId: result.activationId, status: "queued", attemptIds: [], message: result.message }],
+                    });
+                setRefreshVersion((version) => version + 1);
               }}
-            >
-              <label htmlFor={`conversation-follow-up-${conversation.id}`}>Follow-up message</label>
-              <input
-                ref={fileInputRef}
-                className="visually-hidden"
-                type="file"
-                multiple
-                tabIndex={-1}
-                onChange={(event) => {
-                  if (event.target.files !== null) addFiles(event.target.files);
-                  event.target.value = "";
-                }}
-              />
-              {uploads.length === 0 ? null : (
-                <ul className="conversation-upload-list" aria-label="Files for this follow-up">
-                  {uploads.map((item) => (
-                    <li key={item.key} className={item.state}>
-                      <span className="conversation-upload-name" title={item.upload?.fileName ?? item.file.name}>{item.upload?.fileName ?? item.file.name}</span>
-                      <small>{formatFileSize(item.file.size)}</small>
-                      {item.state === "uploading" ? <progress max={1} value={item.progress} aria-label={`Uploading ${item.file.name}`} /> : null}
-                      {item.state === "uploaded" ? <small className="conversation-upload-success">Uploaded</small> : null}
-                      {item.state === "failed" ? <span className="conversation-upload-error" role="alert">Upload failed: {item.error ?? "transfer error"}</span> : null}
-                      {item.state === "failed" ? (
-                        <AttachmentIconButton action="retry" label={`Retry ${item.file.name}`} onClick={() => startUpload(item)} />
-                      ) : null}
-                      <AttachmentIconButton action="remove" label={`Remove ${item.file.name}`} onClick={() => removeUpload(item)} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="conversation-composer-input">
-                <textarea
-                  id={`conversation-follow-up-${conversation.id}`}
-                  rows={3}
-                  value={draft}
-                  disabled={submitting}
-                  onChange={(event) => setDraft(event.target.value)}
-                />
-                <div className="conversation-composer-actions">
-                  <AttachmentIconButton
-                    action="attach"
-                    label="Attach files"
-                    disabled={submitting || uploads.length >= MAX_ATTACHMENTS}
-                    onClick={() => fileInputRef.current?.click()}
-                  />
-                  <button type="submit" disabled={(draft.trim().length === 0 && uploads.every(({ state }) => state !== "uploaded")) || uploads.some(({ state }) => state !== "uploaded") || submitting}>
-                  {submitting ? "Sending…" : "Send follow-up"}
-                  </button>
-                </div>
-              </div>
-              {submissionError === undefined ? null : <p className="unavailable" role="alert">{submissionError}</p>}
-            </form>
+            />
           )}
         </div>
     </Modal>

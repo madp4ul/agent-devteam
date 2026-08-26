@@ -14,10 +14,9 @@ import type {
   ReadConversationAttachmentResult,
 } from "../conversation-contract.ts";
 import type { AgentRunAttachment } from "../runtime-contract.ts";
+import { conversationAttachmentPolicy } from "../conversation-attachment-policy.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 
-export const MAX_CONVERSATION_ATTACHMENTS = 20;
-export const MAX_CONVERSATION_ATTACHMENT_BYTES = 512 * 1024 * 1024;
 const PENDING_UPLOAD_LIFETIME_MILLISECONDS = 24 * 60 * 60 * 1_000;
 const PENDING_UPLOAD_CLEANUP_INTERVAL_MILLISECONDS = 60 * 1_000;
 
@@ -93,7 +92,7 @@ export class ConversationAttachmentStore {
     const pending = this.#database.prepare(
       "SELECT COUNT(*) AS count, COALESCE(SUM(size_bytes), 0) AS size_bytes FROM pending_conversation_uploads WHERE task_id = ? AND conversation_id = ?",
     ).get(command.taskId, command.conversationId) as { count: number; size_bytes: number };
-    if (pending.count >= MAX_CONVERSATION_ATTACHMENTS) return { accepted: false, reason: "attachment-limit-exceeded" };
+    if (pending.count >= conversationAttachmentPolicy.maximumAttachments) return { accepted: false, reason: "attachment-limit-exceeded" };
 
     const id = randomUUID();
     const fileName = safeBaseName(command.fileName);
@@ -107,7 +106,7 @@ export class ConversationAttachmentStore {
       for await (const value of command.content) {
         const chunk = Buffer.from(value);
         sizeBytes += chunk.byteLength;
-        if (sizeBytes > MAX_CONVERSATION_ATTACHMENT_BYTES) {
+        if (sizeBytes > conversationAttachmentPolicy.maximumTotalBytes) {
           await handle.close();
           handle = undefined;
           rmSync(path, { force: true });
@@ -117,7 +116,7 @@ export class ConversationAttachmentStore {
       }
       await handle.close();
       handle = undefined;
-      if (pending.size_bytes + sizeBytes > MAX_CONVERSATION_ATTACHMENT_BYTES) {
+      if (pending.size_bytes + sizeBytes > conversationAttachmentPolicy.maximumTotalBytes) {
         rmSync(path, { force: true });
         return { accepted: false, reason: "attachment-limit-exceeded" };
       }
@@ -188,7 +187,7 @@ export class ConversationAttachmentStore {
     | { accepted: true; uploads: PendingUploadRow[] }
     | { accepted: false; reason: "invalid-attachments" | "attachment-limit-exceeded" } {
     this.cleanupExpiredPendingUploads();
-    if (uploadIds.length > MAX_CONVERSATION_ATTACHMENTS || new Set(uploadIds).size !== uploadIds.length) {
+    if (uploadIds.length > conversationAttachmentPolicy.maximumAttachments || new Set(uploadIds).size !== uploadIds.length) {
       return { accepted: false, reason: "attachment-limit-exceeded" };
     }
     const rows = uploadIds.map((id) => this.#database.prepare(
@@ -198,7 +197,7 @@ export class ConversationAttachmentStore {
     ).get(id, taskId, conversationId) as PendingUploadRow | undefined);
     if (rows.some((row) => row === undefined)) return { accepted: false, reason: "invalid-attachments" };
     const uploads = rows as PendingUploadRow[];
-    if (uploads.reduce((sum, row) => sum + row.size_bytes, 0) > MAX_CONVERSATION_ATTACHMENT_BYTES) {
+    if (uploads.reduce((sum, row) => sum + row.size_bytes, 0) > conversationAttachmentPolicy.maximumTotalBytes) {
       return { accepted: false, reason: "attachment-limit-exceeded" };
     }
     return { accepted: true, uploads };

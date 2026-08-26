@@ -98,6 +98,7 @@ import type {
   UserTimelineRelatedTaskView,
   UserTaskDetailQueryResult,
 } from "./user-task-detail-contract.ts";
+import { aggregateTokenCostSummaries } from "./token-cost.ts";
 
 export class CoordinationApplication {
   readonly #persistence: CoordinationPersistence;
@@ -519,6 +520,13 @@ export class CoordinationApplication {
     const collaborators = this.queryCollaborators();
     const conversationIndex = this.queryTaskConversationIndex(taskId);
     const activeRuns = this.queryActiveRuns();
+    const conversations = conversationIndex.available ? conversationIndex.conversations : [];
+    const conversationCost = aggregateTokenCostSummaries(conversations.map((conversation) => ({
+      ...(conversation.costEstimate === undefined ? {} : { costEstimate: conversation.costEstimate }),
+      ...(conversation.costBreakdown === undefined ? {} : { costBreakdown: conversation.costBreakdown }),
+      costPending: conversation.costPending,
+      hasUnpricedSettledRuns: conversation.hasUnpricedSettledRuns,
+    })), { compactBreakdown: true });
     return {
       ...loaded,
       inspection: inspection.task,
@@ -529,7 +537,10 @@ export class CoordinationApplication {
       automation: this.queryAutomation(),
       startup: this.queryStartup(),
       collaborators: collaborators.available ? collaborators.collaborators : [],
-      conversations: conversationIndex.available ? conversationIndex.conversations : [],
+      conversations,
+      ...(conversationCost.costEstimate === undefined && !conversationCost.costPending
+        ? {}
+        : { conversationCost }),
     };
   }
 

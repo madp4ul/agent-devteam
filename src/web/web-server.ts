@@ -29,6 +29,7 @@ import type {
   UserBoardProjection,
   UserTaskDetailQueryResult,
 } from "../application/browser-transport-contract.ts";
+import { conversationAttachmentPolicy } from "../application/conversation-attachment-policy.ts";
 import type { AgentToolScopeRegistry } from "../mcp/agent-tool-scope.ts";
 
 type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
@@ -293,7 +294,7 @@ async function handleBrowserApi(
     const fileName = url.searchParams.get("fileName");
     if (fileName === null || fileName.trim().length === 0) throw new Error("fileName must be supplied");
     const declaredLength = Number(request.headers["content-length"] ?? 0);
-    if (Number.isFinite(declaredLength) && declaredLength > 512 * 1024 * 1024) {
+    if (Number.isFinite(declaredLength) && declaredLength > conversationAttachmentPolicy.maximumTotalBytes) {
       sendJson(response, 413, { accepted: false, reason: "file-too-large" });
       return;
     }

@@ -17,6 +17,11 @@ import type {
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
+import {
+  aggregateTokenCosts,
+  type AggregatedTokenCost,
+  type TokenCostEvidence,
+} from "../token-cost.ts";
 
 interface ConversationOwnerAndContinuationRow {
   owning_agent_id: string;
@@ -112,15 +117,7 @@ export class ConversationProjectionModule {
                     AND running_attempt.status = 'running'
                 ) THEN 'running'
                 ELSE NULL
-              END AS status,
-              CASE WHEN EXISTS (
-                SELECT 1
-                FROM activations priced_activation
-                JOIN attempts priced_attempt ON priced_attempt.activation_id = priced_activation.id
-                JOIN model_pricing pricing ON pricing.model = priced_attempt.model
-                WHERE priced_activation.conversation_id = conversation.id
-                  AND priced_attempt.status = 'running'
-              ) THEN 1 ELSE 0 END AS cost_pending
+              END AS status
        FROM agent_conversations conversation
        JOIN tasks task ON task.id = conversation.task_id
        LEFT JOIN agents agent ON agent.id = conversation.owning_agent_id
@@ -140,7 +137,6 @@ export class ConversationProjectionModule {
       conversation_retired_at: string | null;
       unfinished_work: number;
       status: AgentConversationIndexEntry["status"];
-      cost_pending: number;
     }>;
     return rows.map((row) => ({
       id: row.id,
@@ -148,7 +144,6 @@ export class ConversationProjectionModule {
       label: row.generated_label,
       latestActivityAt: row.latest_activity_at,
       ...this.#readConversationCostEstimate(row.id),
-      costPending: row.cost_pending === 1,
       status: row.status,
       retired: row.conversation_retired_at !== null,
     }));
@@ -239,8 +234,7 @@ export class ConversationProjectionModule {
       currentThreadId: row.current_thread_id,
       createdAt: row.created_at,
       latestActivityAt: row.latest_activity_at,
-      ...conversationCostEstimate(runs),
-      costPending: row.cost_pending === 1,
+      ...conversationCostEstimate(runs, row.cost_pending === 1),
       retirement,
       replacesConversationId: row.replaces_conversation_id,
       replacementReason: row.replacement_reason,
@@ -302,48 +296,37 @@ export class ConversationProjectionModule {
       .flatMap(({ entries }) => entries);
   }
 
-  #readConversationCostEstimate(conversationId: string): {
-    costEstimate?: EstimatedTokenCost;
-    costBreakdown?: TokenCostBreakdown;
-    hasUnpricedSettledRuns: boolean;
-  } {
-    const runs = this.#readRuns(conversationId);
-    if (runs.length === 0) return { hasUnpricedSettledRuns: false };
-    const settled = runs.filter(({ attempt }) => attempt.status !== "running");
-    if (settled.length === 0) return { hasUnpricedSettledRuns: false };
+  #readConversationCostEstimate(conversationId: string): AggregatedTokenCost {
     const rows = this.#database.prepare(
-      `SELECT transcript.usage_json
+      `SELECT attempt.status,
+              CASE WHEN pricing.model IS NULL THEN 0 ELSE 1 END AS priceable,
+              transcript.usage_json
        FROM activations activation
        JOIN attempts attempt ON attempt.activation_id = activation.id
        LEFT JOIN attempt_transcripts transcript ON transcript.attempt_id = attempt.id
-       WHERE activation.conversation_id = ? AND attempt.status <> 'running'
+       LEFT JOIN model_pricing pricing ON pricing.model = attempt.model
+       WHERE activation.conversation_id = ?
        ORDER BY attempt.rowid`,
-    ).all(conversationId) as Array<{ usage_json: string | null }>;
-    const pricedRows = rows.flatMap(({ usage_json }) => {
-      if (usage_json === null) return [];
+    ).all(conversationId) as Array<{
+      status: AttemptView["status"];
+      priceable: number;
+      usage_json: string | null;
+    }>;
+    return aggregateTokenCosts(rows.map(({ status, priceable, usage_json }): TokenCostEvidence => {
+      if (usage_json === null) return conversationTokenCostEvidence(status, priceable === 1);
       const value = JSON.parse(usage_json) as {
         estimatedCostUsd?: number;
         estimatedCostBreakdown?: TokenCostBreakdown;
       };
-      return value.estimatedCostUsd === undefined ? [] : [{
-        amount: value.estimatedCostUsd,
-        breakdown: value.estimatedCostBreakdown,
-      }];
-    });
-    const hasUnpricedSettledRuns = rows.length !== settled.length || pricedRows.length !== settled.length;
-    const breakdowns = pricedRows.flatMap(({ breakdown }) => breakdown === undefined ? [] : [breakdown]);
-    return {
-      ...(pricedRows.length === 0 ? {} : {
-        costEstimate: {
-          currency: "USD" as const,
-          amount: Number(pricedRows.reduce((sum, { amount }) => sum + amount, 0).toFixed(12)),
-        },
-      }),
-      ...(breakdowns.length === pricedRows.length && breakdowns.length > 0
-        ? { costBreakdown: combineCostBreakdowns(breakdowns) }
-        : {}),
-      hasUnpricedSettledRuns,
-    };
+      return conversationTokenCostEvidence(status, priceable === 1, {
+        ...(value.estimatedCostUsd === undefined ? {} : {
+          costEstimate: { currency: "USD", amount: value.estimatedCostUsd },
+        }),
+        ...(value.estimatedCostBreakdown === undefined ? {} : {
+          costBreakdown: value.estimatedCostBreakdown,
+        }),
+      });
+    }));
   }
 
   readMessage(id: string): AgentConversationMessageView | undefined {
@@ -454,36 +437,33 @@ export class ConversationProjectionModule {
 
 function conversationCostEstimate(
   runs: ConversationRun[],
-): { costEstimate?: EstimatedTokenCost; costBreakdown?: TokenCostBreakdown; hasUnpricedSettledRuns: boolean } {
-  const settled = runs.filter(({ attempt }) => attempt.status !== "running");
-  if (settled.length === 0) return { hasUnpricedSettledRuns: false };
-  const priced = settled.filter(({ transcript }) => transcript.available && transcript.costEstimate !== undefined);
-  const breakdowns = priced.flatMap(({ transcript }) =>
-    transcript.available && transcript.costBreakdown !== undefined ? [transcript.costBreakdown] : []
-  );
-  return {
-    ...(priced.length === 0 ? {} : {
-      costEstimate: {
-        currency: "USD" as const,
-        amount: Number(priced.reduce(
-          (sum, { transcript }) => sum + (transcript.available ? transcript.costEstimate!.amount : 0),
-          0,
-        ).toFixed(12)),
-      },
-    }),
-    ...(breakdowns.length === priced.length && breakdowns.length > 0
-      ? { costBreakdown: combineCostBreakdowns(breakdowns) }
-      : {}),
-    hasUnpricedSettledRuns: priced.length !== settled.length,
-  };
+  costPending: boolean,
+): AggregatedTokenCost {
+  return aggregateTokenCosts(runs.map(({ attempt, transcript }) =>
+    conversationTokenCostEvidence(attempt.status, costPending, {
+      ...(!transcript.available || transcript.costEstimate === undefined
+        ? {}
+        : { costEstimate: transcript.costEstimate }),
+      ...(!transcript.available || transcript.costBreakdown === undefined
+        ? {}
+        : { costBreakdown: transcript.costBreakdown }),
+    })
+  ));
 }
 
-function combineCostBreakdowns(breakdowns: TokenCostBreakdown[]): TokenCostBreakdown {
-  return {
-    categories: breakdowns.flatMap(({ categories }) => categories),
-    reasoningOutputTokens: breakdowns.reduce(
-      (total, { reasoningOutputTokens }) => total + reasoningOutputTokens,
-      0,
-    ),
-  };
+function conversationTokenCostEvidence(
+  status: AttemptView["status"],
+  priceable: boolean,
+  cost: {
+    costEstimate?: EstimatedTokenCost;
+    costBreakdown?: TokenCostBreakdown;
+  } = {},
+): TokenCostEvidence {
+  return status === "running"
+    ? { status: "running", priceable }
+    : {
+      status: "settled",
+      ...(cost.costEstimate === undefined ? {} : { costEstimate: cost.costEstimate }),
+      ...(cost.costBreakdown === undefined ? {} : { costBreakdown: cost.costBreakdown }),
+    };
 }
