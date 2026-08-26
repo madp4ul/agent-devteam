@@ -336,6 +336,10 @@ without choosing the implementation yet.
 - [Omit Self-Authored Comments from Continuation Updates](./issues/82-omit-self-authored-comments-from-continuation-updates.md)
   — Keep resumed-agent change summaries focused on new external information by
   omitting the agent's own comments already preserved in its conversation.
+- [Show Process Cost Statistics in Settings](./issues/83-show-process-cost-statistics-in-settings.md)
+  — Add a quiet read-only Settings section for the process's currently
+  configured model rates and the truthful accumulated estimated cost across
+  all retained tasks.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.
