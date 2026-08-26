@@ -223,15 +223,53 @@ test("a completed attempt retains its snapshotted price after process pricing ch
     fixture.definitionPath,
     (await readFile(fixture.definitionPath, "utf8")).replace("      input: 1\n", "      input: 50\n"),
   );
+  const restartedRuntime = new ControlledAgentRuntime();
   const restarted = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: restartedRuntime,
+    },
+    transcriptAccess: restartedRuntime,
   });
   t.after(() => restarted.close());
   const conversation = await restarted.queryAgentConversation(created.task.id, conversationId);
   assert.equal(conversation.available, true);
   if (conversation.available) {
     assert.deepEqual(conversation.conversation.costEstimate, { currency: "USD", amount: 0.001 });
+  }
+
+  const continued = restarted.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Continue after the configured price changes.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-after-price-change",
+  });
+  assert.equal(continued.accepted, true);
+  await restarted.resumeAutomation();
+  const second = await restartedRuntime.waitForRequest(1);
+  restartedRuntime.setTranscript(second.attemptId, []);
+  restartedRuntime.setUsage(second.attemptId, attemptUsageFixture({ inputTokens: 3_000 }));
+  restartedRuntime.complete({ status: "completed", summary: "New price snapshotted.", threadId: "price-snapshot-thread" });
+  await restarted.waitForAutomationIdle();
+
+  const repricedConversation = await restarted.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(repricedConversation.available, true);
+  if (repricedConversation.available) {
+    assert.deepEqual(repricedConversation.conversation.costEstimate, { currency: "USD", amount: 0.101 });
+    assert.deepEqual(repricedConversation.conversation.costBreakdown, {
+      categories: [
+        { category: "input", tokens: 1_000, usdPerMillionTokens: 1 },
+        { category: "cachedInput", tokens: 0, usdPerMillionTokens: 1 },
+        { category: "cacheWriteInput", tokens: 0, usdPerMillionTokens: 1 },
+        { category: "output", tokens: 0, usdPerMillionTokens: 1 },
+        { category: "input", tokens: 2_000, usdPerMillionTokens: 50 },
+      ],
+      reasoningOutputTokens: 0,
+    });
   }
 });
 
@@ -303,6 +341,47 @@ test("conversation cost totals preserve the known subtotal when a settled run ha
   if (index.available) {
     assert.deepEqual(index.conversations[0]?.costEstimate, { currency: "USD", amount: 0.003 });
     assert.equal(index.conversations[0]?.hasUnpricedSettledRuns, true);
+  }
+
+  const fourthMessage = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Report a later cumulative checkpoint under the same price.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "recover-conversation-cost-from-checkpoint",
+  });
+  assert.equal(fourthMessage.accepted, true);
+  const fourth = await runtime.waitForRequest(4);
+  runtime.setTranscript(fourth.attemptId, []);
+  runtime.setUsage(fourth.attemptId, {
+    inputTokens: 6_000,
+    cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  });
+  runtime.complete({ status: "completed", summary: "Later cumulative checkpoint.", threadId: "cost-thread" });
+  await application.waitForAutomationIdle();
+
+  assert.deepEqual(await application.queryAttemptTranscript(fourth.attemptId), {
+    available: true,
+    threadId: "cost-thread",
+    items: [],
+  });
+  const recovered = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(recovered.available, true);
+  if (recovered.available) {
+    assert.deepEqual(recovered.conversation.costEstimate, { currency: "USD", amount: 0.006 });
+    assert.deepEqual(recovered.conversation.costBreakdown, {
+      categories: [
+        { category: "input", tokens: 6_000, usdPerMillionTokens: 1 },
+        { category: "cachedInput", tokens: 0, usdPerMillionTokens: 1 },
+        { category: "cacheWriteInput", tokens: 0, usdPerMillionTokens: 1 },
+        { category: "output", tokens: 0, usdPerMillionTokens: 1 },
+      ],
+      reasoningOutputTokens: 0,
+    });
+    assert.equal(recovered.conversation.hasUnpricedSettledRuns, false);
   }
 });
 
@@ -376,6 +455,46 @@ test("continued turns price cumulative Codex usage snapshots exactly once", asyn
     assert.deepEqual(conversation.conversation.costBreakdown, {
       categories: [
         { category: "input", tokens: 100_000, usdPerMillionTokens: 1 },
+        { category: "cachedInput", tokens: 50_000, usdPerMillionTokens: 1 },
+        { category: "cacheWriteInput", tokens: 0, usdPerMillionTokens: 1 },
+        { category: "output", tokens: 0, usdPerMillionTokens: 1 },
+      ],
+      reasoningOutputTokens: 0,
+    });
+  }
+
+  const replacement = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Continue after Codex replaces the unusable thread.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "replace-turn-local-cost-thread",
+  });
+  assert.equal(replacement.accepted, true);
+  const third = await runtime.waitForRequest(3);
+  runtime.setTranscript(third.attemptId, []);
+  runtime.setUsage(third.attemptId, {
+    inputTokens: 20_000,
+    cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  });
+  runtime.complete({
+    status: "completed",
+    summary: "Replacement thread turn.",
+    threadId: "replacement-cost-thread",
+    threadContinuity: "replaced",
+  });
+  await application.waitForAutomationIdle();
+
+  const withReplacement = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(withReplacement.available, true);
+  if (withReplacement.available) {
+    assert.deepEqual(withReplacement.conversation.costEstimate, { currency: "USD", amount: 0.17 });
+    assert.deepEqual(withReplacement.conversation.costBreakdown, {
+      categories: [
+        { category: "input", tokens: 120_000, usdPerMillionTokens: 1 },
         { category: "cachedInput", tokens: 50_000, usdPerMillionTokens: 1 },
         { category: "cacheWriteInput", tokens: 0, usdPerMillionTokens: 1 },
         { category: "output", tokens: 0, usdPerMillionTokens: 1 },

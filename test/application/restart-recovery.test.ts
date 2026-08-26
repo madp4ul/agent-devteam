@@ -286,7 +286,7 @@ test("startup recreates an incompatible pre-release database", async () => {
   assert.equal(recreated.queryTask(created.task.id).available, false);
   recreated.close();
   const current = new DatabaseSync(fixture.databasePath, { readOnly: true });
-  assert.equal((current.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 18);
+  assert.equal((current.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 19);
   current.close();
 });
 
