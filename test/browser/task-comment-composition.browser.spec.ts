@@ -145,6 +145,186 @@ test("comment participants are discoverable and insert canonical mentions withou
   expect(userConsequenceColor).toBe(userMentionColor);
 });
 
+test("an empty mention preselects the most recently run task agent for immediate keyboard reply", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.collaborators.unshift({
+      id: "reviewer",
+      name: "Review Agent",
+      role: "Reviews changes",
+      summary: "Checks correctness and scope.",
+    });
+    detail.task.activations.unshift({
+      id: "historical-review",
+      conversationId: "historical-review-conversation",
+      targetAgentId: "reviewer",
+      status: "completed",
+      reason: { type: "column-entry", sourceEventId: "historical-review-move" },
+      attempts: [{
+        id: "historical-review-attempt",
+        status: "completed",
+        workspacePath: "C:/task-workspaces/T-0001",
+        startedAt: "2026-08-08T10:00:00.000Z",
+        completedAt: "2026-08-08T10:05:00.000Z",
+        outcome: { status: "completed", summary: "Reviewed.", threadId: "historical-review-thread" },
+        threadId: "historical-review-thread",
+        model: null,
+        reasoningEffort: null,
+      }],
+      startupFailure: null,
+      recovery: null,
+      model: null,
+      reasoningEffort: null,
+      stale: false,
+      dismissal: null,
+    });
+    detail.task.activations.push({
+      id: "recent-implementation",
+      conversationId: "recent-implementation-conversation",
+      targetAgentId: "implementer",
+      status: "completed",
+      reason: { type: "column-entry", sourceEventId: "recent-implementation-move" },
+      attempts: [{
+        id: "recent-implementation-attempt",
+        status: "completed",
+        workspacePath: "C:/task-workspaces/T-0001",
+        startedAt: "2027-08-08T10:00:00.000Z",
+        completedAt: "2027-08-08T10:05:00.000Z",
+        outcome: { status: "completed", summary: "Implemented.", threadId: "recent-implementation-thread" },
+        threadId: "recent-implementation-thread",
+        model: null,
+        reasoningEffort: null,
+      }],
+      startupFailure: null,
+      recovery: null,
+      model: null,
+      reasoningEffort: null,
+      stale: false,
+      dismissal: null,
+    });
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const comment = page.getByRole("region", { name: "Add comment" });
+  const draft = comment.getByRole("textbox", { name: "Comment" });
+  const suggestions = comment.getByRole("listbox", { name: "Mention participants" });
+
+  await draft.fill("@");
+  await expect(draft).toHaveValue("@");
+  await expect(page.locator(".comment-entry").filter({ hasText: "@implementer" })).toHaveCount(0);
+  await expect(suggestions.getByRole("option", { name: /Implementation Agent/ }))
+    .toHaveAttribute("aria-selected", "true");
+  await expect(draft).toHaveAttribute("aria-activedescendant", "mention-participant-implementer");
+
+  await draft.press("Enter");
+  await expect(draft).toHaveValue("@implementer ");
+  await expect(page.locator(".comment-entry").filter({ hasText: "@implementer" })).toHaveCount(0);
+  await comment.getByRole("button", { name: "Post" }).click();
+  const submitted = page.locator(".comment-entry").filter({ hasText: "@implementer" });
+  await expect(submitted).toContainText("Requested Implementation Agent");
+});
+
+test("mention preselection falls back when the most recent task agent is unavailable and keeps pointer choice", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.collaborators.unshift({
+      id: "reviewer",
+      name: "Review Agent",
+      role: "Reviews changes",
+      summary: "Checks correctness and scope.",
+    });
+    detail.task.activations.push({
+      id: "removed-agent-run",
+      conversationId: "removed-agent-conversation",
+      targetAgentId: "removed-agent",
+      status: "queued",
+      reason: { type: "agent-mention", sourceEventId: "removed-agent-request" },
+      attempts: [{
+        id: "removed-agent-attempt",
+        status: "interrupted",
+        workspacePath: "C:/task-workspaces/T-0001",
+        startedAt: "2028-08-10T10:00:00.000Z",
+        completedAt: "2028-08-10T10:05:00.000Z",
+        outcome: { status: "user-interrupted", summary: "Stopped.", threadId: "removed-agent-thread" },
+        threadId: "removed-agent-thread",
+        model: null,
+        reasoningEffort: null,
+      }],
+      startupFailure: null,
+      recovery: null,
+      model: null,
+      reasoningEffort: null,
+      stale: false,
+      dismissal: null,
+    });
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const comment = page.getByRole("region", { name: "Add comment" });
+  const draft = comment.getByRole("textbox", { name: "Comment" });
+  const suggestions = comment.getByRole("listbox", { name: "Mention participants" });
+
+  await draft.fill("Ask @");
+  const reviewer = suggestions.getByRole("option", { name: /Review Agent/ });
+  await expect(reviewer).toHaveAttribute("aria-selected", "true");
+  await suggestions.getByRole("option", { name: /Implementation Agent/ }).click();
+  await expect(draft).toHaveValue("Ask @implementer ");
+});
+
+test("failed and interrupted runs can each provide the most recent available mention participant", async ({ page }) => {
+  let recentStatus: "failed" | "interrupted" = "failed";
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.collaborators.push({
+      id: "reviewer",
+      name: "Review Agent",
+      role: "Reviews changes",
+      summary: "Checks correctness and scope.",
+    });
+    detail.task.activations.push({
+      id: `recent-${recentStatus}-review`,
+      conversationId: `recent-${recentStatus}-review-conversation`,
+      targetAgentId: "reviewer",
+      status: recentStatus === "interrupted" ? "queued" : "failed",
+      reason: { type: "column-entry", sourceEventId: `recent-${recentStatus}-review-move` },
+      attempts: [{
+        id: `recent-${recentStatus}-review-attempt`,
+        status: recentStatus,
+        workspacePath: "C:/task-workspaces/T-0001",
+        startedAt: "2029-08-10T10:00:00.000Z",
+        completedAt: "2029-08-10T10:05:00.000Z",
+        outcome: recentStatus === "interrupted"
+          ? { status: "user-interrupted", summary: "Stopped." }
+          : { status: "failed", summary: "Failed." },
+        threadId: `recent-${recentStatus}-review-thread`,
+        model: null,
+        reasoningEffort: null,
+      }],
+      startupFailure: null,
+      recovery: null,
+      model: null,
+      reasoningEffort: null,
+      stale: false,
+      dismissal: null,
+    });
+    await route.fulfill({ response, json: detail });
+  });
+
+  for (const status of ["failed", "interrupted"] as const) {
+    recentStatus = status;
+    await page.goto("/tasks/T-0001");
+    const draft = page.getByRole("textbox", { name: "Comment" });
+    await draft.fill("@");
+    await expect(page.getByRole("option", { name: /Review Agent/ }))
+      .toHaveAttribute("aria-selected", "true");
+  }
+});
+
 
 test("comment composer stays beside a long timeline without covering its final entry", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 800 });

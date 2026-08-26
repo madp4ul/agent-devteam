@@ -158,6 +158,7 @@ export function TaskPage({
   const interruptedAgentId = inspection.currentActivation?.state === "interrupted"
     ? inspection.currentActivation.targetAgentId
     : interruptedActivation?.targetAgentId;
+  const mostRecentTaskAgentId = findMostRecentlyRunAgentId(task.activations);
   const interruption = interruptedActivationId === undefined || interruptedAgentId === undefined
     ? undefined
     : {
@@ -326,6 +327,7 @@ export function TaskPage({
               {task.archived ? null : <div data-task-section="comment"><CommentForm
                 taskId={task.id}
                 collaborators={detail.collaborators}
+                mostRecentTaskAgentId={mostRecentTaskAgentId}
                 body={commentDraft}
                 inputRef={commentInput}
                 panelRef={commentPanel}
@@ -458,6 +460,7 @@ export function TaskPage({
 function CommentForm({
   taskId,
   collaborators,
+  mostRecentTaskAgentId,
   body,
   inputRef,
   panelRef,
@@ -466,6 +469,7 @@ function CommentForm({
 }: {
   taskId: string;
   collaborators: CollaboratorView[];
+  mostRecentTaskAgentId: string | undefined;
   body: string;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   panelRef: React.RefObject<HTMLElement | null>;
@@ -476,7 +480,7 @@ function CommentForm({
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
   const [selectionStart, setSelectionStart] = useState(0);
-  const [activeSuggestion, setActiveSuggestion] = useState(0);
+  const [activeSuggestionId, setActiveSuggestionId] = useState<string>();
   const [dismissedMention, setDismissedMention] = useState<string>();
   const participants: MentionParticipant[] = [
     ...collaborators.map((agent) => ({ ...agent, token: `@${agent.id}` as const })),
@@ -492,7 +496,13 @@ function CommentForm({
         participant.name.toLocaleLowerCase().includes(query) ||
         participant.summary.toLocaleLowerCase().includes(query);
     });
-  const selectedSuggestion = Math.min(activeSuggestion, Math.max(0, suggestions.length - 1));
+  const preferredSuggestionId = mention?.query.length === 0 &&
+      collaborators.some((collaborator) => collaborator.id === mostRecentTaskAgentId)
+    ? mostRecentTaskAgentId
+    : undefined;
+  const selectedSuggestion = Math.max(0, suggestions.findIndex((suggestion) =>
+    suggestion.id === (activeSuggestionId ?? preferredSuggestionId)
+  ));
   useLayoutEffect(() => {
     const textarea = inputRef.current;
     if (textarea === null) return;
@@ -509,7 +519,7 @@ function CommentForm({
     onBodyChanged(next);
     setSelectionStart(nextSelection);
     setDismissedMention(undefined);
-    setActiveSuggestion(0);
+    setActiveSuggestionId(undefined);
     window.requestAnimationFrame(() => {
       inputRef.current?.focus();
       inputRef.current?.setSelectionRange(nextSelection, nextSelection);
@@ -560,7 +570,7 @@ function CommentForm({
               fitCommentTextarea(event.currentTarget);
               onBodyChanged(event.currentTarget.value);
               setDismissedMention(undefined);
-              setActiveSuggestion(0);
+              setActiveSuggestionId(undefined);
               updateSelection(event.currentTarget);
             }}
             onClick={(event) => updateSelection(event.currentTarget)}
@@ -570,7 +580,9 @@ function CommentForm({
               if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
                 const direction = event.key === "ArrowDown" ? 1 : -1;
-                setActiveSuggestion((selectedSuggestion + direction + suggestions.length) % suggestions.length);
+                setActiveSuggestionId(
+                  suggestions[(selectedSuggestion + direction + suggestions.length) % suggestions.length]?.id,
+                );
               } else if (event.key === "Enter") {
                 event.preventDefault();
                 const participant = suggestions[selectedSuggestion];
@@ -612,6 +624,20 @@ function CommentForm({
 
 interface MentionParticipant extends CollaboratorView {
   token: `@${string}`;
+}
+
+function findMostRecentlyRunAgentId(
+  activations: BrowserTaskDetail["task"]["activations"],
+): string | undefined {
+  let mostRecent: { agentId: string; startedAt: string } | undefined;
+  for (const activation of activations) {
+    for (const attempt of activation.attempts) {
+      if (mostRecent === undefined || attempt.startedAt > mostRecent.startedAt) {
+        mostRecent = { agentId: activation.targetAgentId, startedAt: attempt.startedAt };
+      }
+    }
+  }
+  return mostRecent?.agentId;
 }
 
 function containsMention(body: string, participantId: string): boolean {
