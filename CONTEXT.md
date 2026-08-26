@@ -155,6 +155,14 @@ ordinary activation for the same task and agent normally joins that pair's
 current conversation, retries remain in that conversation, and a user follow-up
 adds a new activation without transferring workflow responsibility.
 
+**Conversation context fill**:
+The latest measured active Codex context for the conversation's current thread,
+expressed as tokens and a percentage of that model's effective context window.
+It describes the context retained after the latest completed turn, not cumulative
+metered usage or conversation cost. It is absent when Codex does not provide a
+trustworthy local measurement.
+_Avoid_: Conversation token total, cumulative context usage
+
 **Conversation retirement**:
 A user decision that retires a task-and-agent pair's current conversation from
 automatic reuse without activating the agent; the pair's next ordinary

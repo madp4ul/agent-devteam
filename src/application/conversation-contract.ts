@@ -1,6 +1,6 @@
 import type { ActivationView } from "./automation-contract.ts";
 import type { ProcessDiagnostic } from "./process-contract.ts";
-import type { EstimatedTokenCost, AttemptTokenUsage, AttemptTranscriptItem, TokenCostBreakdown } from "./runtime-contract.ts";
+import type { AttemptContextWindowUsage, EstimatedTokenCost, AttemptTokenUsage, AttemptTranscriptItem, TokenCostBreakdown } from "./runtime-contract.ts";
 import type { Actor, TaskActivityView, TaskCommentView } from "./task-contract.ts";
 
 /** Conversation index, detail, message, transcript, and continuation facts. */
@@ -26,6 +26,7 @@ export interface AgentConversationView {
   costBreakdown?: TokenCostBreakdown;
   hasUnpricedSettledRuns: boolean;
   costPending: boolean;
+  contextWindowUsage?: AttemptContextWindowUsage;
   retirement: AgentConversationRetirementView | null;
   replacesConversationId: string | null;
   replacementReason: string | null;

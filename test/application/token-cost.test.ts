@@ -504,6 +504,66 @@ test("continued turns price cumulative Codex usage snapshots exactly once", asyn
   }
 });
 
+test("conversation context fill follows the latest Codex thread and survives restart", async (t) => {
+  const { application, conversationId, created, fixture, runtime } = await startPricedConversationFixture(t, {
+    rates: [{ model: "gpt-5.6-sol", usdPerMillionTokens: 1 }],
+    title: "Show current conversation context fill",
+    description: "Retain the active Codex context measurement.",
+    idempotencyKey: "create-context-fill-task",
+    cleanup: false,
+  });
+
+  await application.resumeAutomation();
+  const first = await runtime.waitForRequest(1);
+  runtime.setTranscript(first.attemptId, []);
+  runtime.setContextWindowUsage(first.attemptId, {
+    usedTokens: 132_000,
+    contextWindowTokens: 258_400,
+    usedPercent: 49,
+  });
+  runtime.complete({ status: "completed", summary: "First thread measured.", threadId: "first-context-thread" });
+  await application.waitForAutomationIdle();
+
+  const continued = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Continue after Codex replaces the thread.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "replace-context-fill-thread",
+  });
+  assert.equal(continued.accepted, true);
+  const second = await runtime.waitForRequest(2);
+  runtime.setTranscript(second.attemptId, []);
+  runtime.setContextWindowUsage(second.attemptId, {
+    usedTokens: 36_640,
+    contextWindowTokens: 258_400,
+    usedPercent: 10,
+  });
+  runtime.complete({
+    status: "completed",
+    summary: "Replacement thread measured.",
+    threadId: "replacement-context-thread",
+    threadContinuity: "replaced",
+  });
+  await application.waitForAutomationIdle();
+  application.close();
+
+  const restarted = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => restarted.close());
+  const conversation = await restarted.queryAgentConversation(created.task.id, conversationId);
+  assert.equal(conversation.available, true);
+  if (conversation.available) {
+    assert.deepEqual(conversation.conversation.contextWindowUsage, {
+      usedTokens: 36_640,
+      contextWindowTokens: 258_400,
+      usedPercent: 10,
+    });
+  }
+});
+
 test("complete task detail owns the conversation cost summary", async (t) => {
   const {
     application,

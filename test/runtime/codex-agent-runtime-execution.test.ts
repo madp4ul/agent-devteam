@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import type { AgentRunRequest } from "../../src/application/runtime-contract.ts";
@@ -499,5 +502,49 @@ test("runtime preserves cumulative usage snapshots when attempts reuse one Codex
     cacheWriteInputTokens: 0,
     outputTokens: 20,
     reasoningOutputTokens: 10,
+  });
+});
+
+test("a completed turn exposes Codex's latest active-context measurement", async (t) => {
+  const sessionsRoot = await mkdtemp(join(tmpdir(), "coordination-codex-sessions-"));
+  t.after(() => rm(sessionsRoot, { recursive: true, force: true }));
+  const datedDirectory = join(sessionsRoot, "2026", "08", "26");
+  await mkdir(datedDirectory, { recursive: true });
+  await writeFile(
+    join(datedDirectory, "rollout-2026-08-26T12-00-00-context-thread.jsonl"),
+    `${JSON.stringify({
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {
+          total_token_usage: { total_tokens: 932_000 },
+          last_token_usage: { total_tokens: 132_000 },
+          model_context_window: 258_400,
+        },
+      },
+    })}\n`,
+  );
+  const runtime = createRuntime({
+    codexSessionsRoot: sessionsRoot,
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: events(
+            { type: "thread.started", thread_id: "context-thread" },
+            { type: "turn.completed" },
+          ),
+        }),
+      }),
+    }),
+  });
+  const completed = request("activation-context-usage", "T-0077");
+
+  await runtime.run(completed, { started() {} });
+
+  assert.deepEqual(await runtime.readContextWindowUsage(completed.attemptId), {
+    usedTokens: 132_000,
+    contextWindowTokens: 258_400,
+    usedPercent: 49,
   });
 });

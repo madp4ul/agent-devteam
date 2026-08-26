@@ -213,6 +213,12 @@ export interface AttemptTokenUsage {
   reasoningOutputTokens: number;
 }
 
+export interface AttemptContextWindowUsage {
+  usedTokens: number;
+  contextWindowTokens: number;
+  usedPercent: number;
+}
+
 export interface EstimatedTokenCost {
   currency: "USD";
   amount: number;
@@ -303,6 +309,7 @@ export interface AgentRuntime {
 export interface AttemptTranscriptAccess {
   read(attemptId: string): Promise<AttemptTranscriptItem[] | null>;
   readUsage?(attemptId: string): Promise<AttemptTokenUsage | null>;
+  readContextWindowUsage?(attemptId: string): Promise<AttemptContextWindowUsage | null>;
 }
 
 export interface AgentRunLifecycle {

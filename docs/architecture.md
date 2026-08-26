@@ -132,6 +132,13 @@ checkpoints. At price boundaries or when a checkpoint is not trustworthy, the
 projection falls back to the isolated attempt costs. This preserves historical
 rates, pending evidence, and known-cost lower bounds without repeatedly adding
 cumulative snapshots.
+After a completed Codex turn, the runtime also reads the newest matching
+`token_count` record from that thread's local Codex rollout. It adapts Codex's
+latest active-context tokens, model context window, and percentage calculation
+into optional attempt evidence. The conversation projection exposes only the
+newest measurement for its current thread; the browser does not infer context
+fill from cumulative cost counters. Missing or changed rollout evidence removes
+the optional meter without affecting the run outcome.
 
 Before an attachment-bearing run starts, automation projects that
 conversation's surviving originals into an attempt-scoped directory outside

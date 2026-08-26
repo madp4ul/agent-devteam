@@ -11,6 +11,7 @@ import type {
   AgentRunOutcome,
   AgentRunRequest,
   AgentRuntime,
+  AttemptContextWindowUsage,
   AttemptTranscriptAccess,
   AttemptTranscriptItem,
   AttemptTokenUsage,
@@ -32,6 +33,7 @@ export class ControlledAgentRuntime implements AgentRuntime, AttemptTranscriptAc
   readonly requests: AgentRunRequest[] = [];
   readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
   readonly #usage = new Map<string, AttemptTokenUsage>();
+  readonly #contextWindowUsage = new Map<string, AttemptContextWindowUsage>();
   readonly #startedThreadId: string | null;
   #complete: ((outcome: AgentRunOutcome) => void) | undefined;
   readonly #waiters: Array<{
@@ -77,6 +79,10 @@ export class ControlledAgentRuntime implements AgentRuntime, AttemptTranscriptAc
     this.#usage.set(attemptId, structuredClone(usage));
   }
 
+  setContextWindowUsage(attemptId: string, usage: AttemptContextWindowUsage): void {
+    this.#contextWindowUsage.set(attemptId, structuredClone(usage));
+  }
+
   async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {
     const transcript = this.#transcripts.get(attemptId);
     return transcript === undefined ? null : structuredClone(transcript);
@@ -84,6 +90,10 @@ export class ControlledAgentRuntime implements AgentRuntime, AttemptTranscriptAc
 
   async readUsage(attemptId: string): Promise<AttemptTokenUsage | null> {
     return this.#usage.get(attemptId) ?? null;
+  }
+
+  async readContextWindowUsage(attemptId: string): Promise<AttemptContextWindowUsage | null> {
+    return this.#contextWindowUsage.get(attemptId) ?? null;
   }
 }
 

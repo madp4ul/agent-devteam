@@ -10,6 +10,7 @@ import type {
   AgentRunOutcome,
   AttemptContextView,
   AttemptTranscriptItem,
+  AttemptContextWindowUsage,
   AttemptTokenUsage,
   TokenCostBreakdown,
   RuntimeStartupBoundary,
@@ -383,6 +384,7 @@ export class AutomationStateStore {
     idempotencyKey: string,
     transcript?: AttemptTranscriptItem[],
     usage?: AttemptTokenUsage,
+    contextWindowUsage?: AttemptContextWindowUsage,
     pricing?: ProcessModelPricingDefinition,
     resumedThreadId?: string,
   ): void {
@@ -421,10 +423,17 @@ export class AutomationStateStore {
         .prepare(
           `UPDATE attempts
            SET status = 'failed', completed_at = ?, outcome_status = 'failed',
-               outcome_summary = ?, outcome_kind = 'interrupted', pricing_json = ?
+               outcome_summary = ?, outcome_kind = 'interrupted', pricing_json = ?,
+               context_window_usage_json = ?
            WHERE id = ?`,
         )
-        .run(occurredAt, summary, serializedPricing(pricing), attemptId);
+        .run(
+          occurredAt,
+          summary,
+          serializedPricing(pricing),
+          serializedContextWindowUsage(contextWindowUsage),
+          attemptId,
+        );
       this.#database
         .prepare(
           `UPDATE activations
@@ -697,6 +706,7 @@ export class AutomationStateStore {
     automaticRetry = true,
     transcript?: AttemptTranscriptItem[],
     usage?: AttemptTokenUsage,
+    contextWindowUsage?: AttemptContextWindowUsage,
     pricing?: ProcessModelPricingDefinition,
     resumedThreadId?: string,
   ): void {
@@ -738,7 +748,7 @@ export class AutomationStateStore {
           `UPDATE attempts
            SET status = ?, completed_at = ?, outcome_status = ?, outcome_summary = ?,
                thread_id = COALESCE(?, thread_id), outcome_kind = ?, thread_continuity = ?,
-               pricing_json = ?
+               pricing_json = ?, context_window_usage_json = ?
            WHERE id = ?`,
         )
         .run(
@@ -750,6 +760,7 @@ export class AutomationStateStore {
           outcomeKind,
           outcome.threadContinuity ?? null,
           serializedPricing(pricing),
+          serializedContextWindowUsage(contextWindowUsage),
           attemptId,
         );
       if (outcome.status === "completed") {
@@ -929,6 +940,10 @@ function persistedUsage(
 
 function serializedPricing(pricing: ProcessModelPricingDefinition | undefined): string | null {
   return pricing === undefined ? null : JSON.stringify(pricing);
+}
+
+function serializedContextWindowUsage(usage: AttemptContextWindowUsage | undefined): string | null {
+  return usage === undefined ? null : JSON.stringify(usage);
 }
 
 function retryDueAt(now: Date, cycleAttempt: number): string {

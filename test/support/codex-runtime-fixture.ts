@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import type { AgentRunRequest } from "../../src/application/runtime-contract.ts";
 import {
@@ -12,7 +14,10 @@ import {
 } from "../../src/runtime/codex-agent-runtime.ts";
 
 export function createRuntime(options: CodexAgentRuntimeOptions): CodexAgentRuntime {
-  return new CodexAgentRuntime(options);
+  return new CodexAgentRuntime({
+    codexSessionsRoot: join(tmpdir(), "coordination-missing-codex-sessions"),
+    ...options,
+  });
 }
 
 export class FakeCodexClient implements CodexClientLike {

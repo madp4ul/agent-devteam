@@ -318,6 +318,9 @@ without choosing the implementation yet.
   — After cost accounting rules out cumulative-display inflation, determine
   whether unusually high cached input reflects cumulative metered work or an
   actual failure to inherit Codex's automatic-compaction behavior.
+  **Resolved:** Local evidence separated 587,019 cumulative tokens from 61,084
+  active-context tokens in a 258,400-token window; preserve inherited compaction
+  and show Codex's latest context calculation as an optional conversation meter.
 - [Disclose Agent-Inspectable Task Content](./issues/78-disclose-agent-inspectable-task-content.md)
   — Give task-detail content a consistent accessible marker when it is exposed
   through agent coordination tools, leaving user-only content unmarked.

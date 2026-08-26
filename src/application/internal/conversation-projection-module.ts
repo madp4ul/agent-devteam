@@ -10,6 +10,7 @@ import type {
 import type {
   AttemptTranscriptAccess,
   AttemptTranscriptQueryResult,
+  AttemptContextWindowUsage,
   AttemptTokenUsage,
   EstimatedTokenCost,
   TokenCostBreakdown,
@@ -229,6 +230,7 @@ export class ConversationProjectionModule {
       createdAt: row.created_at,
       latestActivityAt: row.latest_activity_at,
       ...this.#readConversationCostEstimate(row.id),
+      ...this.#readConversationContextWindowUsage(row.id, row.current_thread_id),
       retirement,
       replacesConversationId: row.replaces_conversation_id,
       replacementReason: row.replacement_reason,
@@ -323,6 +325,26 @@ export class ConversationProjectionModule {
         isolatedCost: persistedTokenCost(JSON.parse(row.usage_json) as PersistedTokenCost),
       }),
     })));
+  }
+
+  #readConversationContextWindowUsage(
+    conversationId: string,
+    currentThreadId: string | null,
+  ): Pick<AgentConversationView, "contextWindowUsage"> {
+    if (currentThreadId === null) return {};
+    const row = this.#database.prepare(
+      `SELECT attempt.context_window_usage_json
+       FROM activations activation
+       JOIN attempts attempt ON attempt.activation_id = activation.id
+       WHERE activation.conversation_id = ?
+         AND attempt.thread_id = ?
+         AND attempt.context_window_usage_json IS NOT NULL
+       ORDER BY attempt.rowid DESC
+       LIMIT 1`,
+    ).get(conversationId, currentThreadId) as { context_window_usage_json: string } | undefined;
+    return row === undefined
+      ? {}
+      : { contextWindowUsage: JSON.parse(row.context_window_usage_json) as AttemptContextWindowUsage };
   }
 
   readMessage(id: string): AgentConversationMessageView | undefined {

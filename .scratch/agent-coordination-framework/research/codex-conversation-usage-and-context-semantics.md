@@ -163,3 +163,12 @@ integration boundary.
 5. Create a follow-up for active-context display only after choosing a supported
    transport for app-server `last` plus `modelContextWindow` (or after an SDK
    upgrade exposes them). Do not infer occupancy from SDK cumulative `total`.
+
+## Implemented follow-up
+
+Issue 77 uses the completed thread's local rollout as a fail-optional adapter
+until the SDK exposes the same facts. It reads the newest `token_count` record,
+uses `last_token_usage.total_tokens` and `model_context_window`, and reproduces
+Codex's current 12,000-token-baseline percentage calculation. The adapter is
+version-sensitive by design: missing or changed evidence suppresses the meter
+without affecting agent execution.

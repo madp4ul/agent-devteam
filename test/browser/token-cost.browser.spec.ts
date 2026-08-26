@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+
 import { expect, setAppearance, test } from "./browser-fixture.ts";
 import { tokenCostEvidenceFixture } from "../support/conversation-feature-fixtures.ts";
 
@@ -196,6 +198,47 @@ test("a first priceable running attempt shows a zero aggregate with a pending sp
       /estimated token cost \$0\.00; will update/i,
     );
     await expect(dialog.locator(".conversation-run-metrics")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Close conversation" }).click();
+  }
+});
+
+test("conversation context fill is an accessible circular meter beside cost in both themes", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.conversation.costEstimate = { currency: "USD", amount: 0.12 };
+    result.conversation.contextWindowUsage = {
+      usedTokens: 132_000,
+      contextWindowTokens: 258_400,
+      usedPercent: 49,
+    };
+    await route.fulfill({ response, json: result });
+  });
+
+  for (const theme of ["dark", "light"] as const) {
+    await page.goto("/tasks/T-0001");
+    await setAppearance(page, theme);
+    await page.getByRole("button", { name: "View conversation" }).click();
+    const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+    const cost = dialog.getByTestId("conversation-cost");
+    const meter = dialog.getByRole("meter", {
+      name: "Context window 49% used, 132,000 of 258,400 tokens",
+    });
+    await expect(meter).toBeVisible();
+    await expect(meter).toHaveAttribute("aria-valuenow", "49");
+    await expect(meter.locator("svg")).toHaveCount(1);
+    await expect(meter.locator("circle")).toHaveCount(2);
+    await expect(meter.locator(".context-window-meter-value")).toHaveAttribute("stroke-dasharray", "49 51");
+    await expect(meter.locator(".context-window-meter-value")).not.toHaveCSS("stroke", "rgba(0, 0, 0, 0)");
+    await meter.focus();
+    await expect(meter.getByRole("tooltip", { name: "Context window usage" })).toContainText(
+      "132,000 / 258,400 tokens",
+    );
+    const costBox = await cost.boundingBox();
+    const meterBox = await meter.boundingBox();
+    assert.ok(costBox && meterBox);
+    expect(meterBox.x).toBeGreaterThan(costBox.x);
+    expect(Math.abs((meterBox.y + meterBox.height / 2) - (costBox.y + costBox.height / 2))).toBeLessThan(1);
     await dialog.getByRole("button", { name: "Close conversation" }).click();
   }
 });

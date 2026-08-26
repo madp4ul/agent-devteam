@@ -105,6 +105,7 @@ export type {
 } from "./conversation-contract.ts";
 export type {
   ActivationStartupFailureView,
+  AttemptContextWindowUsage,
   AttemptTokenUsage,
   EstimatedTokenCost,
   TokenCostBreakdown,

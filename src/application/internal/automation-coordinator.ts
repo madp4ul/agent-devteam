@@ -436,6 +436,9 @@ export class AutomationCoordinator {
         const usage = this.#transcriptAccess?.readUsage === undefined
           ? undefined
           : await this.#transcriptAccess.readUsage(attempt.id) ?? undefined;
+        const contextWindowUsage = this.#transcriptAccess?.readContextWindowUsage === undefined
+          ? undefined
+          : await this.#transcriptAccess.readContextWindowUsage(attempt.id) ?? undefined;
         if (activeRun.state === "interrupting") {
           if (
             activeRun.interruptedBy === undefined ||
@@ -450,6 +453,7 @@ export class AutomationCoordinator {
             activeRun.interruptIdempotencyKey,
             transcript,
             usage,
+            contextWindowUsage,
             pricing,
             resumeThreadId ?? undefined,
           );
@@ -461,6 +465,7 @@ export class AutomationCoordinator {
             true,
             transcript,
             usage,
+            contextWindowUsage,
             pricing,
             resumeThreadId ?? undefined,
           );

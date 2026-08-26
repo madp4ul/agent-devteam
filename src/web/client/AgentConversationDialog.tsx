@@ -6,6 +6,7 @@ import { CloseIconButton } from "./CloseIconButton.tsx";
 import { ConversationFollowUpComposer } from "./ConversationFollowUpComposer.tsx";
 import { ConversationHistory } from "./ConversationHistory.tsx";
 import { CostEstimate } from "./CostEstimate.tsx";
+import { ContextWindowMeter } from "./ContextWindowMeter.tsx";
 import { errorMessage } from "./feedback.ts";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { Modal } from "./Modal.tsx";
@@ -179,6 +180,9 @@ export function AgentConversationDialog({
                 appearance="badge"
               />
             )}
+            {conversation?.contextWindowUsage === undefined
+              ? null
+              : <ContextWindowMeter usage={conversation.contextWindowUsage} />}
             {conversation === undefined ? null : <ConversationActionsMenu
               buttonRef={moreActionsButtonRef}
               threadId={conversation.currentThreadId}
