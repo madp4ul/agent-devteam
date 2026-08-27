@@ -26,6 +26,8 @@ export class ConversationContextDeliveryModule {
                 conversation.delivered_comment_sequence,
                 conversation.delivered_activity_sequence,
                 conversation.replacement_reason,
+                conversation.owning_agent_id,
+                conversation.current_thread_id,
                 activation.source_event_id
          FROM activations activation
          JOIN agent_conversations conversation ON conversation.id = activation.conversation_id
@@ -37,6 +39,8 @@ export class ConversationContextDeliveryModule {
         delivered_comment_sequence: number;
         delivered_activity_sequence: number;
         replacement_reason: string | null;
+        owning_agent_id: string;
+        current_thread_id: string | null;
         source_event_id: string;
       } | undefined;
       if (conversation === undefined) {
@@ -45,12 +49,35 @@ export class ConversationContextDeliveryModule {
 
       const initial = conversation.originating_activation_id === activationId;
       const commentRows = this.#database.prepare(
-        `SELECT sequence, id FROM task_comments
-         WHERE task_id = ? AND (? = 1 OR sequence > ?)
-         ORDER BY sequence`,
-      ).all(task.id, initial ? 1 : 0, conversation.delivered_comment_sequence) as Array<{
+        `SELECT comment.sequence, comment.id,
+                CASE WHEN comment.actor_kind = 'agent'
+                           AND comment.actor_id = ?
+                           AND ? IS NOT NULL
+                           AND EXISTS (
+                             SELECT 1
+                             FROM attempts authored_attempt
+                             JOIN activations authored_activation
+                               ON authored_activation.id = authored_attempt.activation_id
+                             WHERE authored_attempt.id = comment.attempt_id
+                               AND authored_activation.conversation_id = ?
+                               AND authored_attempt.thread_id = ?
+                           )
+                     THEN 1 ELSE 0 END AS retained_by_current_thread
+         FROM task_comments comment
+         WHERE comment.task_id = ? AND (? = 1 OR comment.sequence > ?)
+         ORDER BY comment.sequence`,
+      ).all(
+        conversation.owning_agent_id,
+        conversation.current_thread_id,
+        conversation.id,
+        conversation.current_thread_id,
+        task.id,
+        initial ? 1 : 0,
+        conversation.delivered_comment_sequence,
+      ) as Array<{
         sequence: number;
         id: string;
+        retained_by_current_thread: number;
       }>;
       const activityRows = this.#database.prepare(
         `SELECT sequence, id FROM activity_ledger
@@ -60,11 +87,17 @@ export class ConversationContextDeliveryModule {
         sequence: number;
         id: string;
       }>;
-      const commentIds = new Set(commentRows.map(({ id }) => id));
+      const commentIds = new Set(commentRows
+        .filter(({ retained_by_current_thread }) => initial || retained_by_current_thread === 0)
+        .map(({ id }) => id));
+      const retainedCommentIds = new Set(commentRows
+        .filter(({ retained_by_current_thread }) => !initial && retained_by_current_thread === 1)
+        .map(({ id }) => id));
       const activityIds = new Set(activityRows.map(({ id }) => id));
       const sourceInCurrentContext =
         commentIds.has(conversation.source_event_id) || activityIds.has(conversation.source_event_id);
       const sourceDeliveredPreviously = !sourceInCurrentContext && (
+        retainedCommentIds.has(conversation.source_event_id) ||
         this.#database.prepare(
           `SELECT 1 FROM task_comments
            WHERE task_id = ? AND id = ? AND sequence <= ?`,

@@ -116,6 +116,53 @@ test("a source already delivered in initial history is not delivered again to it
   await application.waitForAutomationIdle();
 });
 
+test("a self-authored activation source stays available through retained conversation history", async (t) => {
+  const fixture = await createHandoffFixture();
+  const runtime = new ControlledAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Retain a self-authored activation source",
+    description: "Keep exact source provenance without repeating retained text.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-self-authored-source-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  await application.resumeAutomation();
+  const initial = await runtime.waitForRequest(1);
+  const source = application.addTaskComment({
+    taskId: created.task.id,
+    body: "@implementer revisit this after the current activation.",
+    actor: { kind: "agent", id: initial.agent.id },
+    attemptId: initial.attemptId,
+    idempotencyKey: "self-authored-source-comment",
+  });
+  assert.equal(source.accepted, true);
+  if (!source.accepted) return;
+  runtime.complete({ status: "completed", summary: "Initial activation complete.", threadId: "self-source-thread" });
+
+  const resumed = await runtime.waitForRequest(2);
+  assert.equal(resumed.resumeThreadId, "self-source-thread");
+  assert.equal(resumed.activationContext.sourceDelivery, "conversation-history");
+  assert.deepEqual(resumed.activationContext.comments, []);
+  assert.equal("body" in resumed.sourceEvent ? resumed.sourceEvent.body : undefined, source.comment.body);
+  assert.ok(resumed.task.comments.some(({ id }) => id === source.comment.id));
+  runtime.complete({ status: "completed", summary: "Self-authored source handled.", threadId: "self-source-thread" });
+  await application.waitForAutomationIdle();
+});
+
 test("ordinary activations reuse the task-and-agent conversation and deliver only new task context", async (t) => {
   const fixture = await createHandoffFixture();
   const runtime = new ControlledAgentRuntime();
@@ -154,6 +201,28 @@ test("ordinary activations reuse the task-and-agent conversation and deliver onl
   assert.deepEqual(initial.activationContext.comments.map(({ body }) => body), [
     "Initial authored background without a mention.",
   ]);
+  const knownSelfComment = application.addTaskComment({
+    taskId: created.task.id,
+    body: "Implementation note already retained by this conversation.",
+    actor: { kind: "agent", id: initial.agent.id },
+    attemptId: initial.attemptId,
+    idempotencyKey: "known-self-authored-continuity-comment",
+  });
+  assert.equal(knownSelfComment.accepted, true);
+  const unprovenSelfComment = application.addTaskComment({
+    taskId: created.task.id,
+    body: "Same identity without conversation provenance.",
+    actor: { kind: "agent", id: initial.agent.id },
+    idempotencyKey: "unproven-self-authored-continuity-comment",
+  });
+  assert.equal(unprovenSelfComment.accepted, true);
+  const collaboratorComment = application.addTaskComment({
+    taskId: created.task.id,
+    body: "Reviewer context must remain visible.",
+    actor: { kind: "agent", id: "reviewer" },
+    idempotencyKey: "collaborator-continuity-comment",
+  });
+  assert.equal(collaboratorComment.accepted, true);
   runtime.complete({ status: "completed", summary: "Initial work complete.", threadId: "continuity-thread" });
   await application.waitForAutomationIdle();
   application.pauseAutomation();
@@ -196,7 +265,12 @@ test("ordinary activations reuse the task-and-agent conversation and deliver onl
   assert.equal(resumed.attempt.number, 1);
   assert.equal(resumed.activationContext.kind, "resumed");
   assert.equal(resumed.activationContext.description, "Changed task description delivered once.");
+  assert.ok(resumed.task.comments.some(({ body }) =>
+    body === "Implementation note already retained by this conversation."
+  ));
   assert.deepEqual(resumed.activationContext.comments.map(({ body }) => body), [
+    "Same identity without conversation provenance.",
+    "Reviewer context must remain visible.",
     "Intervening authored context.",
     "@implementer handle this exact resumed request in full.",
   ]);
@@ -428,6 +502,31 @@ test("retiring a settled conversation preserves it and the next ordinary activat
   });
   assert.equal(stillCurrent.accepted, true);
   if (stillCurrent.accepted) assert.equal(stillCurrent.task.activations.at(-1)?.conversationId, replacementId);
+
+  await application.resumeAutomation();
+  const historicalRequest = await runtime.waitForRequest(4);
+  assert.equal(historicalRequest.activationId, laterHistoricalFollowUp.accepted
+    ? laterHistoricalFollowUp.activationId
+    : "");
+  const historicalSelfComment = application.addTaskComment({
+    taskId: created.task.id,
+    body: "A same-agent comment authored in the retired conversation.",
+    actor: { kind: "agent", id: historicalRequest.agent.id },
+    attemptId: historicalRequest.attemptId,
+    idempotencyKey: "retired-conversation-self-comment",
+  });
+  assert.equal(historicalSelfComment.accepted, true);
+  runtime.complete({ status: "completed", summary: "Historical clarification supplied.", threadId: "retired-thread" });
+
+  const currentRequest = await runtime.waitForRequest(5);
+  assert.equal(currentRequest.resumeThreadId, "replacement-thread");
+  assert.equal(currentRequest.activationContext.kind, "resumed");
+  assert.deepEqual(currentRequest.activationContext.comments.map(({ body }) => body), [
+    "@implementer keep this ordinary work in the replacement lineage.",
+    "A same-agent comment authored in the retired conversation.",
+  ]);
+  runtime.complete({ status: "completed", summary: "Replacement lineage stayed current.", threadId: "replacement-thread" });
+  await application.waitForAutomationIdle();
 
   application.close();
   application = await CoordinationApplication.start({

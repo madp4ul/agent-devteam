@@ -247,6 +247,19 @@ test("an unusable interrupted thread falls back to a fresh thread with honest co
     thread: "resumed",
     continuationMessage: null,
   };
+  recovering.task.comments.push({
+    id: "comment-known-before-replacement",
+    body: "Self-authored context must return after thread replacement.",
+    actor: { kind: "agent", id: recovering.agent.id },
+    occurredAt: "2026-08-12T09:10:00.000Z",
+    attemptId: "attempt-before-replacement",
+  });
+  recovering.activationContext = {
+    kind: "resumed",
+    comments: [],
+    activity: [],
+    sourceDelivery: "conversation-history",
+  };
 
   const outcome = await runtime.run(recovering, { started() {} });
 
@@ -255,6 +268,7 @@ test("an unusable interrupted thread falls back to a fresh thread with honest co
   assert.equal(outcome.threadContinuity, "replaced");
   assert.match(prompt, /Thread: replaced/);
   assert.match(prompt, /previous host stopped/i);
+  assert.match(prompt, /Self-authored context must return after thread replacement\./);
 });
 
 test("explicit agent execution profiles become SDK thread options", async () => {

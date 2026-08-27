@@ -9,6 +9,8 @@ The task's current board column shows which role has primary workflow responsibi
 
 An activation is one durable request for one agent to take a turn on this task. Activations wait in order while another agent is working on the task. This run handles exactly one activation. The task may have changed after that activation was created, so evaluate its original expectation against current task and workspace state. Do not repeat work or coordination effects that later activity already completed.
 
+The supplied activation context is the authoritative and complete snapshot of the task at dispatch: a fresh or replacement thread receives the full current record, while a resumed conversation receives every change not already retained in that thread. If the context is internally contradictory or explicitly incomplete, you can inspect the current operating context.
+
 ## How coordination changes state
 
 Moving a task into a watched column transfers primary responsibility and normally creates an activation for that column's watcher. Use a move for the process's ordinary handoff, whether the route goes forward or backward.
@@ -38,7 +40,7 @@ A successful Codex response has no implicit board effect. The task remains exact
 
 const ACTIVATION_BOOTSTRAP = `This is a new, distinct activation in an existing agent conversation, not another attempt of the preceding activation. Handle only the activation identified below and preserve its separate run provenance.
 
-The current activation, task structure, process, board, owning role, and workspace state are authoritative over conflicting inherited conversation history. Reassess them before acting and do not repeat effects already present. Unchanged unbounded task text is intentionally omitted. Use the attempt-scoped operating-context coordination tool whenever inherited framework, process, board, role, or participant instructions appear incomplete, summarized, obsolete, or contradictory.`;
+The context below is the authoritative and complete snapshot of task changes not already retained by this conversation. The current activation, task structure, process, board, owning role, and workspace state are authoritative over conflicting inherited conversation history. Reassess them before acting and do not repeat effects already present. Unchanged unbounded task text is intentionally omitted. Use the attempt-scoped operating-context coordination tool when inherited framework, process, board, role, or participant instructions are explicitly incomplete, obsolete, or contradictory.`;
 
 export function composeActivationPrompt(request: AgentRunRequest): string {
   let prompt: string;

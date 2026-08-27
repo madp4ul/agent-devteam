@@ -119,8 +119,12 @@ remain distinct inside that lineage, and each attempt's messages and tool
 activity remain separately attributable run evidence. A first activation gets
 the complete current task composition; each later distinct activation gets a
 fresh authoritative bootstrap plus task context not previously delivered to
-that conversation. The attempt-scoped MCP adapter can recover the complete
-current operating context without accepting task or agent scope from the model.
+that conversation. Incremental delivery omits an owning agent's comment only
+when immutable attempt, conversation, and thread provenance proves the resumed
+Codex thread already retains it; missing provenance, another conversation, and
+thread replacement preserve or restore the comment. The attempt-scoped MCP
+adapter can recover the complete current operating context without accepting
+task or agent scope from the model.
 When the runtime must replace a thread, it records that loss of continuity and
 adopts the replacement as the conversation's next resume target.
 Codex `turn.completed` usage is a cumulative thread snapshot that includes every
