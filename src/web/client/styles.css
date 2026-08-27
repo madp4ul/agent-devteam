@@ -533,6 +533,23 @@ textarea { resize: vertical; line-height: 1.5; }
 .setting-toggle { display: flex; align-items: center; gap: .65rem; padding: .4rem 0; }
 .setting-toggle input { width: 1.1rem; height: 1.1rem; }
 .browser-delivery { margin-top: 1.25rem; padding: 1rem; border-radius: .75rem; background: var(--surface-subtle); }
+.cost-statistics-summary { display: grid; grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(0, 1fr)); gap: .75rem; margin: 1.2rem 0; }
+.cost-statistics-summary > div { min-width: 0; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface-subtle); padding: .9rem 1rem; }
+.cost-statistics-summary dt { color: var(--text-muted); font-size: .72rem; font-weight: 750; letter-spacing: .025em; text-transform: uppercase; }
+.cost-statistics-summary dd { margin: .4rem 0 0; color: var(--text); font-size: clamp(1.1rem, 2vw, 1.45rem); font-weight: 760; overflow-wrap: anywhere; }
+.cost-statistics-summary .cost-statistic-primary { border-color: var(--process-border); background: var(--process-soft); }
+.cost-statistics-summary .cost-statistic-primary dd { font-size: clamp(1.45rem, 3vw, 2rem); }
+.cost-statistics-note { margin: .6rem 0; border-left: 3px solid var(--warning-text); color: var(--text-emphasis); padding: .2rem 0 .2rem .75rem; }
+.cost-statistics-pending { border-left-color: var(--info-text); }
+.configured-rates { margin-top: 1.6rem; }
+.configured-rates > p, .cost-statistics-empty { color: var(--text-muted); }
+.cost-rate-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: .7rem; }
+.cost-rate-table-scroll table { width: 100%; min-width: 42rem; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.cost-rate-table-scroll th, .cost-rate-table-scroll td { border-bottom: 1px solid var(--border); padding: .7rem .8rem; text-align: right; white-space: nowrap; }
+.cost-rate-table-scroll th:first-child { text-align: left; }
+.cost-rate-table-scroll thead th { color: var(--text-muted); background: var(--surface-subtle); font-size: .72rem; text-transform: uppercase; }
+.cost-rate-table-scroll tbody tr:last-child > * { border-bottom: 0; }
+.cost-rate-table-scroll code { color: var(--text); background: transparent; padding: 0; }
 .consent-modal { width: min(28rem, 100%); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: .75rem; margin-top: 1.25rem; }
 .transcript-modal .modal-heading { min-width: 0; flex-wrap: wrap; margin-bottom: 1rem; }
@@ -680,6 +697,8 @@ html[data-theme] .coordination-activity-actions .quiet-action:focus-visible { ou
   .settings-categories { flex-direction: row; overflow-x: auto; }
   .settings-modal .settings-categories button { flex: 1 0 auto; border-left: 0; border-bottom: 3px solid transparent; border-radius: .35rem .35rem 0 0; text-align: center; }
   .settings-modal .settings-categories button[aria-current="page"], .settings-modal .settings-categories button[aria-current="page"]:hover { border-bottom-color: var(--action); }
+  .cost-statistics-summary { grid-template-columns: 1fr 1fr; }
+  .cost-statistics-summary .cost-statistic-primary { grid-column: 1 / -1; }
   .board-toolbar { align-items: flex-start; flex-direction: column; }
   .board-column { flex-basis: min(18rem, calc(100vw - 2.5rem)); }
   .task-hero { flex-direction: column; }

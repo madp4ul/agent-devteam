@@ -34,6 +34,7 @@ import type { AgentToolScopeRegistry } from "../mcp/agent-tool-scope.ts";
 
 type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
   | "queryNotificationPolicy"
+  | "queryProcessCostStatistics"
   | "updateNotificationPolicy"
   | "queryNotificationOccurrences"
   | "queryUserBoard"
@@ -201,6 +202,10 @@ async function handleBrowserApi(
       throw new Error("after must be a non-negative integer");
     }
     sendJson(response, 200, application.queryNotificationOccurrences(after));
+    return;
+  }
+  if (method === "GET" && url.pathname === "/api/settings/cost-statistics") {
+    sendJson(response, 200, application.queryProcessCostStatistics());
     return;
   }
   if (method === "GET" && url.pathname === "/api/board") {

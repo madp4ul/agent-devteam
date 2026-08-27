@@ -30,6 +30,7 @@ import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts
 import type { ActivityJournal } from "./activity-journal.ts";
 import type { AttentionRecorder } from "./attention-recorder.ts";
 import type { ConversationProjectionModule } from "./conversation-projection-module.ts";
+import type { ArchivedConversationCostSnapshot } from "./archived-conversation-cost.ts";
 
 export interface RunnableActivation {
   activation: ActivationView;
@@ -890,6 +891,16 @@ export class AutomationStateStore {
     if (resumedThreadId === undefined || completedThreadId !== resumedThreadId) {
       return reportedUsage;
     }
+    const archived = this.#database.prepare(
+      `SELECT conversation.archived_cost_json
+       FROM attempts current_attempt
+       JOIN activations activation ON activation.id = current_attempt.activation_id
+       JOIN agent_conversations conversation ON conversation.id = activation.conversation_id
+       WHERE current_attempt.id = ?`,
+    ).get(attemptId) as { archived_cost_json: string | null } | undefined;
+    const snapshot = archived?.archived_cost_json === null || archived?.archived_cost_json === undefined
+      ? undefined
+      : JSON.parse(archived.archived_cost_json) as ArchivedConversationCostSnapshot;
     const prior = this.#database
       .prepare(
         `SELECT transcript.reported_usage_json
@@ -897,12 +908,17 @@ export class AutomationStateStore {
          LEFT JOIN attempt_transcripts transcript ON transcript.attempt_id = attempt.id
          WHERE attempt.thread_id = ?
            AND attempt.id <> ?
+           AND attempt.rowid > ?
          ORDER BY attempt.rowid DESC
          LIMIT 1`,
       )
-      .get(resumedThreadId, attemptId) as { reported_usage_json: string | null } | undefined;
-    if (prior?.reported_usage_json === null || prior === undefined) return undefined;
-    const baseline = JSON.parse(prior.reported_usage_json) as AttemptTokenUsage;
+      .get(resumedThreadId, attemptId, snapshot?.throughAttemptRowId ?? 0) as
+        { reported_usage_json: string | null } | undefined;
+    if (prior?.reported_usage_json === null) return undefined;
+    const baseline = prior === undefined
+      ? snapshot?.threadUsageCheckpoints.find(({ threadId }) => threadId === resumedThreadId)?.reportedUsage
+      : JSON.parse(prior.reported_usage_json) as AttemptTokenUsage;
+    if (baseline === undefined) return undefined;
     const delta: AttemptTokenUsage = {
       inputTokens: reportedUsage.inputTokens - baseline.inputTokens,
       cachedInputTokens: reportedUsage.cachedInputTokens - baseline.cachedInputTokens,

@@ -1,6 +1,10 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import type { UpdateNotificationPolicyCommand } from "../../application/browser-transport-contract.ts";
+import type {
+  ProcessCostStatisticsView,
+  UpdateNotificationPolicyCommand,
+} from "../../application/browser-transport-contract.ts";
+import { readProcessCostStatistics } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage } from "./feedback.ts";
@@ -11,7 +15,7 @@ export function SettingsDialog({ notifications, onClose }: {
   notifications: DesktopNotificationControl;
   onClose(): void;
 }): ReactNode {
-  const [category, setCategory] = useState<"notifications" | "appearance">("notifications");
+  const [category, setCategory] = useState<"notifications" | "appearance" | "cost-statistics">("notifications");
   const [error, setError] = useState<string>();
   const firstCategory = useRef<HTMLButtonElement>(null);
 
@@ -29,7 +33,7 @@ export function SettingsDialog({ notifications, onClose }: {
       onClose={onClose}
     >
         <header className="modal-heading">
-          <div><p className="eyebrow">Process and browser preferences</p><h2 id="settings-title">Settings</h2></div>
+          <h2 id="settings-title">Settings</h2>
           <CloseIconButton label="Close settings" onClick={onClose} />
         </header>
         <div className="settings-layout">
@@ -38,17 +42,17 @@ export function SettingsDialog({ notifications, onClose }: {
               onClick={() => setCategory("notifications")}>Notifications</button>
             <button aria-current={category === "appearance" ? "page" : undefined}
               onClick={() => setCategory("appearance")}>Appearance</button>
+            <button aria-current={category === "cost-statistics" ? "page" : undefined}
+              onClick={() => setCategory("cost-statistics")}>Cost statistics</button>
           </nav>
           <div className="settings-content">
-            {category === "appearance" ? (
-              <section aria-labelledby="appearance-settings-heading">
-                <h3 id="appearance-settings-heading">Appearance</h3>
+            {category === "cost-statistics" ? <CostStatisticsSection /> : category === "appearance" ? (
+              <section>
                 <p>Stored in this browser and shared across projects.</p>
                 <ThemeControl />
               </section>
             ) : (
-              <section aria-labelledby="notification-settings-heading">
-                <h3 id="notification-settings-heading">Notifications</h3>
+              <section>
                 {policy === undefined ? <p>Loading notification policy…</p> : (
                   <>
                     <SettingToggle label="Enable shared notifications" checked={policy.enabled}
@@ -84,6 +88,108 @@ export function SettingsDialog({ notifications, onClose }: {
         </div>
     </Modal>
   );
+}
+
+function CostStatisticsSection(): ReactNode {
+  const [statistics, setStatistics] = useState<ProcessCostStatisticsView>();
+  const [loadError, setLoadError] = useState<string>();
+  useEffect(() => {
+    let current = true;
+    void readProcessCostStatistics()
+      .then((loaded) => {
+        if (current) setStatistics(loaded);
+      })
+      .catch((caught) => {
+        if (current) setLoadError(errorMessage(caught));
+      });
+    return () => { current = false; };
+  }, []);
+
+  return (
+    <section>
+      {loadError === undefined ? null : <p className="feedback alert" role="alert">{loadError}</p>}
+      {statistics === undefined && loadError === undefined ? <p>Loading cost statistics…</p> : null}
+      {statistics === undefined ? null : (
+        <>
+          <dl className="cost-statistics-summary" aria-label="Accumulated cost summary">
+            <div className="cost-statistic-primary">
+              <dt>Total cost</dt>
+              <dd>{statistics.totalCostEstimate === undefined
+                ? "Not yet available"
+                : `${statistics.hasUnpricedSettledRuns ? "≥" : ""}${formatStatisticUsd(statistics.totalCostEstimate.amount)}`}</dd>
+            </div>
+            <div>
+              <dt>Tasks</dt>
+              <dd>{statistics.contributingTaskCount}</dd>
+            </div>
+            <div>
+              <dt>AVG cost per task</dt>
+              <dd>{statistics.averageCostPerContributingTask === undefined
+                ? "—"
+                : formatStatisticUsd(statistics.averageCostPerContributingTask.amount)}</dd>
+            </div>
+          </dl>
+          {statistics.costPending ? (
+            <p className="cost-statistics-note cost-statistics-pending" role="status">
+              Running work may add cost when its usage becomes available.
+            </p>
+          ) : null}
+          {statistics.hasUnpricedSettledRuns ? (
+            <p className="cost-statistics-note">
+              This is a known-cost lower bound because one or more settled runs have no priceable usage.
+              The average covers only the tasks counted as having priced usage.
+            </p>
+          ) : null}
+          <section className="configured-rates" aria-labelledby="configured-rates-heading">
+            <h4 id="configured-rates-heading">Configured model rates</h4>
+            <p>Current USD price per one million tokens.</p>
+            {statistics.configuredModelPrices.length === 0 ? (
+              <p className="cost-statistics-empty">No model prices are configured in the loaded process.</p>
+            ) : (
+              <div className="cost-rate-table-scroll">
+                <table aria-label="Configured model rates">
+                  <thead><tr>
+                    <th scope="col">Model</th>
+                    <th scope="col">Input</th>
+                    <th scope="col">Cached input</th>
+                    <th scope="col">Cache write</th>
+                    <th scope="col">Output</th>
+                  </tr></thead>
+                  <tbody>{statistics.configuredModelPrices.map(({ model, usdPerMillionTokens }) => (
+                    <tr key={model}>
+                      <th scope="row"><code>{model}</code></th>
+                      <td>{formatRate(usdPerMillionTokens.input)}</td>
+                      <td>{formatRate(usdPerMillionTokens.cachedInput)}</td>
+                      <td>{formatRate(usdPerMillionTokens.cacheWriteInput)}</td>
+                      <td>{formatRate(usdPerMillionTokens.output)}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </section>
+  );
+}
+
+function formatStatisticUsd(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(amount);
+}
+
+function formatRate(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  }).format(amount);
 }
 
 export function NotificationConsentDialog({ notifications }: {

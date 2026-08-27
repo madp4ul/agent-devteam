@@ -989,6 +989,8 @@ test("Settings applies policy and Appearance immediately with keyboard focus res
   })).toEqual({ x: 0, y: 0 });
   const notificationsCategory = dialog.getByRole("button", { name: "Notifications" });
   await expect(notificationsCategory).toHaveAttribute("aria-current", "page");
+  await expect(dialog.getByText("Process and browser preferences", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("heading", { name: "Notifications" })).toHaveCount(0);
   const notificationBounds = await notificationsCategory.boundingBox();
   const notificationDialogBounds = await dialog.boundingBox();
   const global = dialog.getByRole("checkbox", { name: "Enable shared notifications" });
@@ -1003,6 +1005,7 @@ test("Settings applies policy and Appearance immediately with keyboard focus res
   await expect(backlog).not.toBeChecked();
 
   await dialog.getByRole("button", { name: "Appearance" }).click();
+  await expect(dialog.getByRole("heading", { name: "Appearance" })).toHaveCount(0);
   const appearanceBounds = await notificationsCategory.boundingBox();
   const appearanceDialogBounds = await dialog.boundingBox();
   expect(appearanceBounds?.y).toBeCloseTo(notificationBounds?.y ?? 0, 0);

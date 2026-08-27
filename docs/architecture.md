@@ -80,8 +80,10 @@ activity lineage across retries and replacement threads. Each current
 task-and-agent conversation also retains authoritative delivery progress for
 task descriptions, comments, and activity so later activations receive new
 task context once across restart. Continuation is one
-authoritative command, and archival preserves the lineage while removing
-detailed transcript, authored-message, and replay content.
+authoritative command, and archival preserves the lineage, its final aggregated
+cost snapshot, and the cumulative thread checkpoints needed for later cost
+continuation while removing detailed transcript, authored-message, and replay
+content.
 Settled current conversations can be retired atomically with an attributable
 reason. Retired lineages remain durable and explicitly continuable, while the
 next ordinary activation creates the pair's replacement and receives that

@@ -242,3 +242,101 @@ test("conversation context fill is an accessible circular meter beside cost in b
     await dialog.getByRole("button", { name: "Close conversation" }).click();
   }
 });
+
+test("Cost statistics shows the exact total, contributing tasks, average, and configured rates", async ({ page }) => {
+  await page.route("**/api/settings/cost-statistics", async (route) => route.fulfill({ json: {
+    configuredModelPrices: [
+      {
+        model: "gpt-5.6-sol",
+        usdPerMillionTokens: { input: 2.5, cachedInput: 0.25, cacheWriteInput: 3.125, output: 15 },
+      },
+      {
+        model: "gpt-5.6-terra",
+        usdPerMillionTokens: { input: 1.75, cachedInput: 0.175, cacheWriteInput: 2.2, output: 10 },
+      },
+    ],
+    totalCostEstimate: { currency: "USD", amount: 12.3456 },
+    contributingTaskCount: 7,
+    averageCostPerContributingTask: { currency: "USD", amount: 1.763657142857 },
+    costPending: false,
+    hasUnpricedSettledRuns: false,
+  } }));
+
+  for (const theme of ["dark", "light"] as const) {
+    await page.goto("/");
+    await setAppearance(page, theme);
+    await page.getByRole("button", { name: "Settings" }).click();
+    const dialog = page.getByRole("dialog", { name: "Settings" });
+    const category = dialog.getByRole("button", { name: "Cost statistics" });
+    await category.focus();
+    await page.keyboard.press("Enter");
+
+    await expect(dialog.getByRole("heading", { name: "Cost statistics" })).toHaveCount(0);
+    await expect(dialog.getByText("Estimated token costs accumulated", { exact: false })).toHaveCount(0);
+    await expect(dialog.getByText("Total cost", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Tasks", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("AVG cost per task", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("$12.3456", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("7", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("$1.7637", { exact: true })).toBeVisible();
+    const rates = dialog.getByRole("table", { name: "Configured model rates" });
+    await expect(rates).toBeVisible();
+    await expect(rates.getByRole("row")).toHaveCount(3);
+    await expect(rates).toContainText("gpt-5.6-sol");
+    await expect(rates).toContainText("$3.125");
+    await expect(rates).toContainText("gpt-5.6-terra");
+    await expect(dialog).not.toContainText("Where these estimates come from");
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("Cost statistics keeps unknown totals truthful and its rate table responsive", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.route("**/api/settings/cost-statistics", async (route) => route.fulfill({ json: {
+    configuredModelPrices: [{
+      model: "model-with-a-very-long-exact-identifier-for-responsive-coverage",
+      usdPerMillionTokens: { input: 1, cachedInput: 0.1, cacheWriteInput: 1.25, output: 8 },
+    }],
+    contributingTaskCount: 0,
+    costPending: true,
+    hasUnpricedSettledRuns: true,
+  } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("button", { name: "Cost statistics" }).click();
+
+  await expect(dialog.getByText("Not yet available", { exact: true })).toBeVisible();
+  await expect(dialog).not.toContainText("$0.00");
+  await expect(dialog).toContainText("Running work may add cost");
+  await expect(dialog).toContainText("settled runs have no priceable usage");
+  const scroller = dialog.locator(".cost-rate-table-scroll");
+  await expect(scroller).toBeVisible();
+  const overflow = await scroller.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(overflow.scrollWidth).toBeGreaterThan(overflow.clientWidth);
+  expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(390);
+});
+
+test("Cost statistics does not describe a priced-task average as a project lower bound", async ({ page }) => {
+  await page.route("**/api/settings/cost-statistics", async (route) => route.fulfill({ json: {
+    configuredModelPrices: [],
+    totalCostEstimate: { currency: "USD", amount: 0.03 },
+    contributingTaskCount: 1,
+    averageCostPerContributingTask: { currency: "USD", amount: 0.03 },
+    costPending: false,
+    hasUnpricedSettledRuns: true,
+  } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("button", { name: "Cost statistics" }).click();
+
+  await expect(dialog.getByText("≥$0.03", { exact: true })).toBeVisible();
+  const average = dialog.getByText("$0.03", { exact: true });
+  await expect(average).toBeVisible();
+  await expect(average.locator("xpath=preceding-sibling::dt")).toHaveText("AVG cost per task");
+  await expect(dialog).toContainText("average covers only the tasks counted as having priced usage");
+});

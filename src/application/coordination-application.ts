@@ -93,6 +93,7 @@ import type {
   UserTaskInspectionQueryResult,
 } from "./task-contract.ts";
 import type { UserBoardProjection } from "./user-board-contract.ts";
+import type { ProcessCostStatisticsView } from "./process-cost-statistics-contract.ts";
 import type {
   UserRelatedTaskView,
   UserTimelineRelatedTaskView,
@@ -504,6 +505,30 @@ export class CoordinationApplication {
     return this.#discovery.queryArchivedTaskOverviews();
   }
 
+  queryProcessCostStatistics(): ProcessCostStatisticsView {
+    const taskCosts = this.#persistence.conversationProjections.readProjectTaskCosts();
+    const total = aggregateTokenCostSummaries(taskCosts.map(({ cost }) => cost), {
+      compactBreakdown: true,
+    });
+    const contributingTaskCount = taskCosts.filter(({ cost }) => cost.costEstimate !== undefined).length;
+    const averageAmount = total.costEstimate === undefined || contributingTaskCount === 0
+      ? undefined
+      : Number((total.costEstimate.amount / contributingTaskCount).toFixed(12));
+    return {
+      configuredModelPrices: this.#processContext?.modelPricing.map((pricing) => ({
+        model: pricing.model,
+        usdPerMillionTokens: { ...pricing.usdPerMillionTokens },
+      })) ?? [],
+      ...(total.costEstimate === undefined ? {} : { totalCostEstimate: total.costEstimate }),
+      contributingTaskCount,
+      ...(averageAmount === undefined ? {} : {
+        averageCostPerContributingTask: { currency: "USD", amount: averageAmount },
+      }),
+      costPending: total.costPending,
+      hasUnpricedSettledRuns: total.hasUnpricedSettledRuns,
+    };
+  }
+
   queryTaskInspection(taskId: string): TaskInspectionQueryResult {
     return this.#discovery.queryTaskInspection(taskId);
   }
@@ -521,12 +546,7 @@ export class CoordinationApplication {
     const conversationIndex = this.queryTaskConversationIndex(taskId);
     const activeRuns = this.queryActiveRuns();
     const conversations = conversationIndex.available ? conversationIndex.conversations : [];
-    const conversationCost = aggregateTokenCostSummaries(conversations.map((conversation) => ({
-      ...(conversation.costEstimate === undefined ? {} : { costEstimate: conversation.costEstimate }),
-      ...(conversation.costBreakdown === undefined ? {} : { costBreakdown: conversation.costBreakdown }),
-      costPending: conversation.costPending,
-      hasUnpricedSettledRuns: conversation.hasUnpricedSettledRuns,
-    })), { compactBreakdown: true });
+    const conversationCost = aggregateTokenCostSummaries(conversations, { compactBreakdown: true });
     return {
       ...loaded,
       inspection: inspection.task,

@@ -88,6 +88,7 @@ export function openCoordinationPersistence(
       idempotentCommands,
       activityJournal,
       conversationAttachments,
+      conversationProjections,
     ),
     notifications,
     close: () => {

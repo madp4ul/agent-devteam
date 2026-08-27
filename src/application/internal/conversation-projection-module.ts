@@ -20,7 +20,9 @@ import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
 import type { ProcessModelPricingDefinition } from "./process-definition.ts";
+import type { ArchivedConversationCostSnapshot } from "./archived-conversation-cost.ts";
 import {
+  aggregateTokenCostSummaries,
   aggregateTokenCosts,
   calculateAttemptTokenCost,
   type AggregatedTokenCost,
@@ -147,9 +149,22 @@ export class ConversationProjectionModule {
       ...this.#ownerAndContinuation(row),
       label: row.generated_label,
       latestActivityAt: row.latest_activity_at,
-      ...this.#readConversationCostEstimate(row.id),
+      ...this.readConversationCostEstimate(row.id),
       status: row.status,
       retired: row.conversation_retired_at !== null,
+    }));
+  }
+
+  readProjectTaskCosts(): Array<{ taskId: string; cost: AggregatedTokenCost }> {
+    const taskIds = this.#database.prepare(
+      `SELECT DISTINCT task_id FROM agent_conversations ORDER BY task_id`,
+    ).all() as Array<{ task_id: string }>;
+    return taskIds.map(({ task_id: taskId }) => ({
+      taskId,
+      cost: aggregateTokenCostSummaries(
+        this.readTaskIndex(taskId) ?? [],
+        { compactBreakdown: true },
+      ),
     }));
   }
 
@@ -229,7 +244,7 @@ export class ConversationProjectionModule {
       currentThreadId: row.current_thread_id,
       createdAt: row.created_at,
       latestActivityAt: row.latest_activity_at,
-      ...this.#readConversationCostEstimate(row.id),
+      ...this.readConversationCostEstimate(row.id),
       ...this.#readConversationContextWindowUsage(row.id, row.current_thread_id),
       retirement,
       replacesConversationId: row.replaces_conversation_id,
@@ -292,7 +307,13 @@ export class ConversationProjectionModule {
       .flatMap(({ entries }) => entries);
   }
 
-  #readConversationCostEstimate(conversationId: string): AggregatedTokenCost {
+  readConversationCostEstimate(conversationId: string): AggregatedTokenCost {
+    const archived = this.#database.prepare(
+      `SELECT archived_cost_json FROM agent_conversations WHERE id = ?`,
+    ).get(conversationId) as { archived_cost_json: string | null } | undefined;
+    const snapshot = archived?.archived_cost_json === null || archived?.archived_cost_json === undefined
+      ? undefined
+      : JSON.parse(archived.archived_cost_json) as ArchivedConversationCostSnapshot;
     const rows = this.#database.prepare(
       `SELECT attempt.status, attempt.thread_id, attempt.pricing_json,
               CASE WHEN pricing.model IS NULL THEN 0 ELSE 1 END AS priceable,
@@ -301,9 +322,9 @@ export class ConversationProjectionModule {
        JOIN attempts attempt ON attempt.activation_id = activation.id
        LEFT JOIN attempt_transcripts transcript ON transcript.attempt_id = attempt.id
        LEFT JOIN model_pricing pricing ON pricing.model = attempt.model
-       WHERE activation.conversation_id = ?
+       WHERE activation.conversation_id = ? AND attempt.rowid > ?
        ORDER BY attempt.rowid`,
-    ).all(conversationId) as Array<{
+    ).all(conversationId, snapshot?.throughAttemptRowId ?? 0) as Array<{
       status: AttemptView["status"];
       thread_id: string | null;
       pricing_json: string | null;
@@ -311,7 +332,7 @@ export class ConversationProjectionModule {
       usage_json: string | null;
       reported_usage_json: string | null;
     }>;
-    return conversationCostFromCumulativeSnapshots(rows.map((row) => ({
+    const current = conversationCostFromCumulativeSnapshots(rows.map((row) => ({
       status: row.status,
       threadId: row.thread_id,
       priceable: row.priceable === 1,
@@ -324,7 +345,10 @@ export class ConversationProjectionModule {
       ...(row.usage_json === null ? {} : {
         isolatedCost: persistedTokenCost(JSON.parse(row.usage_json) as PersistedTokenCost),
       }),
-    })));
+    })), snapshot?.threadUsageCheckpoints);
+    return snapshot === undefined
+      ? current
+      : aggregateTokenCostSummaries([snapshot.cost, current], { compactBreakdown: true });
   }
 
   #readConversationContextWindowUsage(
@@ -470,7 +494,10 @@ interface ConversationCostSnapshot {
   };
 }
 
-function conversationCostFromCumulativeSnapshots(rows: ConversationCostSnapshot[]): AggregatedTokenCost {
+function conversationCostFromCumulativeSnapshots(
+  rows: ConversationCostSnapshot[],
+  priorThreadCheckpoints: ArchivedConversationCostSnapshot["threadUsageCheckpoints"] = [],
+): AggregatedTokenCost {
   const evidence: TokenCostEvidence[] = rows
     .filter(({ status }) => status === "running")
     .map(({ priceable }) => ({ status: "running", priceable }));
@@ -480,17 +507,27 @@ function conversationCostFromCumulativeSnapshots(rows: ConversationCostSnapshot[
     ({ threadId }) => threadId!,
   );
   for (const threadRows of threadGroups.values()) {
-    const pricing = stablePricing(threadRows);
-    const snapshots = threadRows.flatMap(({ reportedUsage }, index) =>
+    const baseline = priorThreadCheckpoints.find(({ threadId }) => threadId === threadRows[0]?.threadId);
+    const pricing = stablePricing([
+      ...(baseline === undefined ? [] : [baseline.pricing === undefined ? {} : { pricing: baseline.pricing }]),
+      ...threadRows,
+    ]);
+    const snapshots = [
+      ...(baseline === undefined ? [] : [{ index: -1, usage: baseline.reportedUsage }]),
+      ...threadRows.flatMap(({ reportedUsage }, index) =>
       reportedUsage === undefined ? [] : [{ index, usage: reportedUsage }]
-    );
+      ),
+    ];
     const latest = snapshots.at(-1);
     if (
       pricing !== undefined &&
       latest !== undefined &&
       snapshotsAreMonotonic(snapshots.map(({ usage }) => usage))
     ) {
-      const cost = calculateAttemptTokenCost(latest.usage, pricing);
+      const billableUsage = baseline === undefined
+        ? latest.usage
+        : usageDelta(latest.usage, baseline.reportedUsage);
+      const cost = billableUsage === undefined ? undefined : calculateAttemptTokenCost(billableUsage, pricing);
       evidence.push(conversationTokenCostEvidence("completed", true, cost));
       if (latest.index !== threadRows.length - 1 || cost === undefined) {
         evidence.push({ status: "settled" });
@@ -507,7 +544,7 @@ function conversationCostFromCumulativeSnapshots(rows: ConversationCostSnapshot[
   return aggregateTokenCosts(evidence, { compactBreakdown: true });
 }
 
-function stablePricing(rows: ConversationCostSnapshot[]): ProcessModelPricingDefinition | undefined {
+function stablePricing(rows: Array<{ pricing?: ProcessModelPricingDefinition }>): ProcessModelPricingDefinition | undefined {
   const first = rows[0]?.pricing;
   if (first === undefined) return undefined;
   const key = JSON.stringify(first);

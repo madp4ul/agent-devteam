@@ -88,6 +88,13 @@ test("the browser adapter serves the React application and authoritative board p
     available: false,
     reason: "not-found",
   });
+
+  const costStatisticsResponse = await fetch(`${server.baseUrl}/api/settings/cost-statistics`);
+  assert.equal(costStatisticsResponse.status, 200);
+  assert.deepEqual(
+    await costStatisticsResponse.json(),
+    JSON.parse(JSON.stringify(application.queryProcessCostStatistics())),
+  );
 });
 
 test("browser commands preserve creation idempotency and revision conflicts", async (t) => {

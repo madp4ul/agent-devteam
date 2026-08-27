@@ -698,3 +698,216 @@ test("complete task detail owns the conversation cost summary", async (t) => {
     }
   });
 });
+
+test("process cost statistics aggregate retained tasks without repricing history", async (t) => {
+  const {
+    application,
+    conversationId: firstConversationId,
+    created: firstTask,
+    fixture,
+    runtime,
+  } = await startPricedConversationFixture(t, {
+    rates: [
+      { model: "gpt-5.6-sol", usdPerMillionTokens: 1 },
+      { model: "gpt-5.6-terra", usdPerMillionTokens: 2 },
+    ],
+    title: "Retain project cost history",
+    description: "Aggregate both agent conversations after archival.",
+    idempotencyKey: "create-retained-project-cost-task",
+    cleanup: false,
+  });
+  const review = application.addTaskComment({
+    taskId: firstTask.task.id,
+    body: "@reviewer contribute an independent priced conversation.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "add-project-cost-review-conversation",
+  });
+  assert.equal(review.accepted, true);
+
+  await application.resumeAutomation();
+  const implementationRun = await runtime.waitForRequest(1);
+  runtime.setTranscript(implementationRun.attemptId, []);
+  runtime.setUsage(implementationRun.attemptId, attemptUsageFixture({ inputTokens: 1_000 }));
+  runtime.complete({ status: "completed", summary: "Implementation priced.", threadId: "project-cost-implementation" });
+  const reviewRun = await runtime.waitForRequest(2);
+  runtime.setTranscript(reviewRun.attemptId, []);
+  runtime.setUsage(reviewRun.attemptId, attemptUsageFixture({ inputTokens: 2_000 }));
+  runtime.complete({ status: "completed", summary: "Review priced.", threadId: "project-cost-review" });
+  await application.waitForAutomationIdle();
+
+  const currentFirstTask = application.queryTaskInspectionForUser(firstTask.task.id);
+  assert.equal(currentFirstTask.available, true);
+  if (!currentFirstTask.available) return;
+  const completed = application.moveTask({
+    taskId: firstTask.task.id,
+    destinationColumnId: "completion",
+    expectedRevision: currentFirstTask.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "complete-retained-project-cost-task",
+  });
+  assert.equal(completed.accepted, true);
+  const archived = await application.archiveTask({
+    taskId: firstTask.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "archive-retained-project-cost-task",
+  });
+  assert.equal(archived.accepted, true);
+  const unarchived = application.unarchiveTask({
+    taskId: firstTask.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "unarchive-retained-project-cost-task",
+  });
+  assert.equal(unarchived.accepted, true);
+  const unarchivedConversation = await application.queryAgentConversation(
+    firstTask.task.id,
+    firstConversationId,
+  );
+  assert.equal(unarchivedConversation.available, true);
+  if (unarchivedConversation.available) {
+    assert.equal(unarchivedConversation.conversation.currentThreadId, "project-cost-implementation");
+    assert.deepEqual(unarchivedConversation.conversation.continuation, { available: true });
+  }
+  const resumedAfterArchive = application.continueAgentConversation({
+    taskId: firstTask.task.id,
+    conversationId: firstConversationId,
+    body: "Continue the retained thread without counting its cumulative checkpoint twice.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-retained-project-cost-thread",
+  });
+  assert.equal(resumedAfterArchive.accepted, true);
+  const resumedRun = await runtime.waitForRequest(3);
+  assert.equal(resumedRun.resumeThreadId, "project-cost-implementation");
+  runtime.setTranscript(resumedRun.attemptId, []);
+  runtime.setUsage(resumedRun.attemptId, attemptUsageFixture({ inputTokens: 1_500 }));
+  runtime.complete({
+    status: "completed",
+    summary: "Archived thread continued.",
+    threadId: "project-cost-implementation",
+  });
+  await application.waitForAutomationIdle();
+  const rearchived = await application.archiveTask({
+    taskId: firstTask.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "rearchive-retained-project-cost-task",
+  });
+  assert.equal(rearchived.accepted, true);
+  const unarchivedAgain = application.unarchiveTask({
+    taskId: firstTask.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "unarchive-retained-review-cost-thread",
+  });
+  assert.equal(unarchivedAgain.accepted, true);
+  const taskAfterRearchive = application.queryUserTaskDetail(firstTask.task.id);
+  assert.equal(taskAfterRearchive.available, true);
+  if (!taskAfterRearchive.available) return;
+  const reviewerConversationId = taskAfterRearchive.conversations.find(
+    ({ owningAgent }) => owningAgent.id === "reviewer",
+  )?.id;
+  assert.ok(reviewerConversationId);
+  const resumedReview = application.continueAgentConversation({
+    taskId: firstTask.task.id,
+    conversationId: reviewerConversationId,
+    body: "Continue the untouched retained review thread without recounting its checkpoint.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-retained-review-cost-thread",
+  });
+  assert.equal(resumedReview.accepted, true);
+  const resumedReviewRun = await runtime.waitForRequest(4);
+  assert.equal(resumedReviewRun.resumeThreadId, "project-cost-review");
+  runtime.setTranscript(resumedReviewRun.attemptId, []);
+  runtime.setUsage(resumedReviewRun.attemptId, attemptUsageFixture({ inputTokens: 2_500 }));
+  runtime.complete({
+    status: "completed",
+    summary: "Untouched archived review thread continued.",
+    threadId: "project-cost-review",
+  });
+  await application.waitForAutomationIdle();
+  const archivedAgain = await application.archiveTask({
+    taskId: firstTask.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "archive-retained-review-cost-thread",
+  });
+  assert.equal(archivedAgain.accepted, true);
+  application.close();
+
+  const source = await readFile(fixture.definitionPath, "utf8");
+  await writeFile(
+    fixture.definitionPath,
+    source
+      .replaceAll("input: 1\n", "input: 10\n")
+      .replaceAll("cachedInput: 1\n", "cachedInput: 10\n")
+      .replaceAll("cacheWriteInput: 1\n", "cacheWriteInput: 10\n")
+      .replaceAll("output: 1\n", "output: 10\n")
+      .replaceAll("input: 2\n", "input: 20\n")
+      .replaceAll("cachedInput: 2\n", "cachedInput: 20\n")
+      .replaceAll("cacheWriteInput: 2\n", "cacheWriteInput: 20\n")
+      .replaceAll("output: 2\n", "output: 20\n"),
+  );
+  const restartedRuntime = new ControlledAgentRuntime();
+  const restarted = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: restartedRuntime,
+    },
+    transcriptAccess: restartedRuntime,
+  });
+  t.after(() => restarted.close());
+  const secondTask = restarted.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Add current-rate project cost",
+    description: "Contribute cost at the newly configured rate.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-current-project-cost-task",
+  });
+  assert.equal(secondTask.accepted, true);
+  const unpricedTask = restarted.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Retain unknown settled usage",
+    description: "Keep the known project total as a lower bound.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-unpriced-project-cost-task",
+  });
+  assert.equal(unpricedTask.accepted, true);
+  const pendingTask = restarted.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Expose pending project cost",
+    description: "Keep running priceable work visibly pending.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-pending-project-cost-task",
+  });
+  assert.equal(pendingTask.accepted, true);
+
+  await restarted.resumeAutomation();
+  const currentRun = await restartedRuntime.waitForRequest(1);
+  restartedRuntime.setTranscript(currentRun.attemptId, []);
+  restartedRuntime.setUsage(currentRun.attemptId, attemptUsageFixture({ inputTokens: 3_000 }));
+  restartedRuntime.complete({ status: "completed", summary: "Current rate priced.", threadId: "current-project-cost" });
+  const unpricedRun = await restartedRuntime.waitForRequest(2);
+  restartedRuntime.setTranscript(unpricedRun.attemptId, []);
+  restartedRuntime.complete({ status: "completed", summary: "Usage unavailable.", threadId: "unpriced-project-cost" });
+  await restartedRuntime.waitForRequest(3);
+
+  assert.deepEqual(restarted.queryProcessCostStatistics(), {
+    configuredModelPrices: [
+      {
+        model: "gpt-5.6-sol",
+        usdPerMillionTokens: { input: 10, cachedInput: 10, cacheWriteInput: 10, output: 10 },
+      },
+      {
+        model: "gpt-5.6-terra",
+        usdPerMillionTokens: { input: 20, cachedInput: 20, cacheWriteInput: 20, output: 20 },
+      },
+    ],
+    totalCostEstimate: { currency: "USD", amount: 0.0365 },
+    contributingTaskCount: 2,
+    averageCostPerContributingTask: { currency: "USD", amount: 0.01825 },
+    costPending: true,
+    hasUnpricedSettledRuns: true,
+  });
+});

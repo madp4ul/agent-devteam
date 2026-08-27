@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync } from "node:fs";
 
-const currentSchemaVersion = 20;
+const currentSchemaVersion = 21;
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
@@ -176,6 +176,7 @@ function initializeCurrentSchema(database: DatabaseSync): void {
       ,retirement_actor_id TEXT
       ,replaces_conversation_id TEXT REFERENCES agent_conversations(id)
       ,replacement_reason TEXT
+      ,archived_cost_json TEXT
     );
     CREATE TABLE IF NOT EXISTS activation_contexts (
       activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
@@ -461,6 +462,7 @@ function currentSchemaIsComplete(database: DatabaseSync, requireModelPricing = t
     conversationColumns.has("retirement_actor_id") &&
     conversationColumns.has("replaces_conversation_id") &&
     conversationColumns.has("replacement_reason") &&
+    conversationColumns.has("archived_cost_json") &&
     attemptColumns.has("outcome_kind") &&
     attemptColumns.has("thread_continuity") &&
     attemptColumns.has("pricing_json") &&

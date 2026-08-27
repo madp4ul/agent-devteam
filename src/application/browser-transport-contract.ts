@@ -121,3 +121,7 @@ export type {
   NotificationPolicyView,
   UpdateNotificationPolicyCommand,
 } from "./notification-contract.ts";
+export type {
+  ConfiguredModelPriceView,
+  ProcessCostStatisticsView,
+} from "./process-cost-statistics-contract.ts";

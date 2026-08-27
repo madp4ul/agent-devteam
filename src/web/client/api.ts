@@ -25,6 +25,7 @@ import type {
   TaskWorkspaceGitStateView,
   NotificationPolicyView,
   NotificationOccurrenceBatch,
+  ProcessCostStatisticsView,
   UpdateNotificationPolicyRequest,
   UserBoardColumnView,
   UserBoardProjection,
@@ -62,6 +63,10 @@ export async function readBoard(): Promise<BrowserBoardState> {
 
 export async function readNotificationPolicy(): Promise<NotificationPolicyView> {
   return request("/api/settings/notifications");
+}
+
+export async function readProcessCostStatistics(): Promise<ProcessCostStatisticsView> {
+  return request("/api/settings/cost-statistics");
 }
 
 export async function updateNotificationPolicy(
