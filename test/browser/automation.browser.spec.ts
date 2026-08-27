@@ -305,9 +305,9 @@ test("task interruption waits for confirmation and offers contextual continuatio
   await page.goto("/");
   const activeCardSignal = page.locator('[data-task-id="T-0002"] .signal.running');
   await expect(activeCardSignal).toContainText("Active · consulting-agent");
-  await expect(activeCardSignal.locator(".cost-pending-spinner")).toHaveCSS(
+  await expect(activeCardSignal.locator(".activity-spinner")).toHaveCSS(
     "animation-name",
-    "cost-pending-spin",
+    "activity-spinner-spin",
   );
   await page.goto("/tasks/T-0002");
   await expect(page.getByRole("region", { name: "Agent activity" })).toContainText("consulting-agent");
@@ -320,9 +320,9 @@ test("task interruption waits for confirmation and offers contextual continuatio
   const interruptClick = page.getByRole("button", { name: "Interrupt current attempt" }).click();
   const interruptingButton = page.getByRole("button", { name: "Interrupting…" });
   await expect(interruptingButton).toBeDisabled();
-  await expect(interruptingButton.locator(".cost-pending-spinner")).toHaveCSS(
+  await expect(interruptingButton.locator(".activity-spinner")).toHaveCSS(
     "animation-name",
-    "cost-pending-spin",
+    "activity-spinner-spin",
   );
   await interruptClick;
   const interruptedCurrent = page.locator(".activity-current.interrupted");
@@ -1080,9 +1080,9 @@ test("top-bar automation action transitions and Current runs navigation stay com
   await page.getByRole("button", { name: "Pause" }).click();
   const pausingButton = page.getByRole("button", { name: "Pausing…" });
   await expect(pausingButton).toBeDisabled();
-  await expect(pausingButton.locator(".cost-pending-spinner")).toHaveCSS(
+  await expect(pausingButton.locator(".activity-spinner")).toHaveCSS(
     "animation-name",
-    "cost-pending-spin",
+    "activity-spinner-spin",
   );
   await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
   await expect(page.getByText("No agents are changing boards.")).toHaveCount(0);

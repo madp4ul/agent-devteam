@@ -165,8 +165,8 @@ test("compact conversation indicators expose running and attention without decor
   await expect(rows.nth(0).getByRole("status")).toHaveCount(0);
   const running = rows.nth(1).getByRole("status", { name: "Conversation running" });
   await expect(running).toHaveAttribute("title", "Conversation running");
-  await expect(running).toHaveClass(/cost-pending-spinner/);
-  await expect(running).toHaveCSS("animation-name", "cost-pending-spin");
+  await expect(running).toHaveClass(/activity-spinner/);
+  await expect(running).toHaveCSS("animation-name", "activity-spinner-spin");
   await expect(rows.nth(1).locator(".conversation-status-dot")).toHaveCount(0);
   const attention = rows.nth(2).getByRole("status", { name: "Conversation needs attention" });
   await expect(attention).toHaveAttribute("title", "Conversation needs attention");
@@ -621,6 +621,16 @@ test("a live conversation follows appended items only while the reader is at the
   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
   const transcriptContent = dialog.locator(".transcript-content");
   await expect(dialog).toContainText("Live transcript message 40.");
+  const working = dialog.getByRole("status", { name: "Agent working" });
+  const workingSpinner = working.locator(".activity-spinner");
+  const workingCopy = working.locator("span").last();
+  await expect(workingSpinner).toHaveCount(1);
+  await expect(workingSpinner).toHaveCSS("animation-name", "activity-spinner-spin");
+  const [spinnerBox, copyBox] = await Promise.all([workingSpinner.boundingBox(), workingCopy.boundingBox()]);
+  expect(spinnerBox).not.toBeNull();
+  expect(copyBox).not.toBeNull();
+  expect(spinnerBox!.x).toBeLessThan(copyBox!.x);
+  expect(Math.abs(spinnerBox!.y + spinnerBox!.height / 2 - (copyBox!.y + copyBox!.height / 2))).toBeLessThanOrEqual(2);
   await transcriptContent.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });

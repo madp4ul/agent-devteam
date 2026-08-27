@@ -183,13 +183,13 @@ test("a first priceable running attempt shows a zero aggregate with a pending sp
     await expect(pendingCost).toBeVisible();
     await expect(pendingCost).toContainText("$0.00");
     await expect(pendingCost).not.toContainText("~");
-    const spinner = pendingCost.locator(".cost-pending-spinner");
+    const spinner = pendingCost.locator(".activity-spinner");
     const amount = pendingCost.locator("span", { hasText: "$0.00" });
     await expect(spinner).not.toHaveCSS(
       "border-top-color",
       "rgba(0, 0, 0, 0)",
     );
-    await expect(spinner).toHaveCSS("animation-name", "cost-pending-spin");
+    await expect(spinner).toHaveCSS("animation-name", "activity-spinner-spin");
     await expect(spinner).toHaveCSS("animation-duration", "3.2s");
     expect((await spinner.boundingBox())!.x).toBeLessThan((await amount.boundingBox())!.x);
     await conversationRow.click();

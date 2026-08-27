@@ -80,7 +80,7 @@ export function TaskCard({
         ) : null}
         {task.run.activeAgentId === null ? null : (
           <span className="signal running">
-            <span className="cost-pending-spinner" aria-hidden="true" />
+            <span className="activity-spinner" aria-hidden="true" />
             Active · {task.run.activeAgentId}
             {activeRun === undefined ? null : <> · <ElapsedTime startedAt={activeRun.startedAt} /></>}
           </span>

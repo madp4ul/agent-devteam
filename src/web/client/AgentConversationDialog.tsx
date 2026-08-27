@@ -54,18 +54,88 @@ export function AgentConversationDialog({
   const moreActionsButtonRef = useRef<HTMLButtonElement>(null);
   const retirementReasonRef = useRef<HTMLTextAreaElement>(null);
   const pendingScrollPosition = useRef<number | "bottom" | null>(null);
+  const bottomFollowing = useRef<"inactive" | "following" | "cancelled">("inactive");
   const pendingTextSelection = useRef<CapturedTextSelection | null>(null);
+  const bottomFollowFrame = useRef<number | undefined>(undefined);
+  const userScrollFrame = useRef<number | undefined>(undefined);
+  const userScrollPending = useRef(false);
+  const pointerScrolling = useRef(false);
   const retirementIdempotencyKey = useRef(crypto.randomUUID());
   const pendingActivationId = useRef<string | undefined>(selectedPendingActivationId);
+  const cancelBottomFollowing = (): void => {
+    if (bottomFollowing.current === "following") bottomFollowing.current = "cancelled";
+  };
+  const cancelIfViewportMoved = (startingScrollTop: number): void => {
+    if (bottomFollowing.current !== "following") return;
+    if (bottomFollowFrame.current !== undefined) window.cancelAnimationFrame(bottomFollowFrame.current);
+    bottomFollowFrame.current = undefined;
+    userScrollPending.current = true;
+    if (userScrollFrame.current !== undefined) window.cancelAnimationFrame(userScrollFrame.current);
+    userScrollFrame.current = window.requestAnimationFrame(() => {
+      userScrollFrame.current = undefined;
+      userScrollPending.current = false;
+      if (
+        bottomFollowing.current === "following" &&
+        contentRef.current !== null &&
+        Math.abs(contentRef.current.scrollTop - startingScrollTop) > 1
+      ) {
+        cancelBottomFollowing();
+      } else if (bottomFollowing.current === "following" && contentRef.current !== null) {
+        contentRef.current.scrollTop = contentRef.current.scrollHeight;
+      }
+    });
+  };
   useLayoutEffect(() => {
-    if (pendingScrollPosition.current === null || contentRef.current === null) return;
-    contentRef.current.scrollTop = pendingScrollPosition.current === "bottom"
-      ? contentRef.current.scrollHeight
-      : pendingScrollPosition.current;
+    const content = contentRef.current;
+    if (content === null) return;
+    if (userScrollPending.current) {
+      if (typeof pendingScrollPosition.current === "number") content.scrollTop = pendingScrollPosition.current;
+    } else if (bottomFollowing.current === "following" || pendingScrollPosition.current === "bottom") {
+      content.scrollTop = content.scrollHeight;
+    } else if (pendingScrollPosition.current !== null) {
+      content.scrollTop = pendingScrollPosition.current;
+    }
     pendingScrollPosition.current = null;
     restoreCapturedTextSelection(pendingTextSelection.current);
     pendingTextSelection.current = null;
   }, [conversation]);
+  useEffect(() => {
+    const content = contentRef.current;
+    if (content === null) return;
+    const followAfterLayout = (): void => {
+      if (
+        bottomFollowing.current !== "following" ||
+        bottomFollowFrame.current !== undefined ||
+        userScrollPending.current
+      ) return;
+      bottomFollowFrame.current = window.requestAnimationFrame(() => {
+        bottomFollowFrame.current = undefined;
+        if (bottomFollowing.current === "following" && contentRef.current !== null) {
+          contentRef.current.scrollTop = contentRef.current.scrollHeight;
+        }
+      });
+    };
+    const resizeObserver = new ResizeObserver(followAfterLayout);
+    const observeFollowedSurfaces = (): void => {
+      resizeObserver.observe(content);
+      for (const element of content.querySelectorAll<HTMLElement>(".conversation-stream, .conversation-composer")) {
+        resizeObserver.observe(element);
+      }
+      followAfterLayout();
+    };
+    const mutationObserver = new MutationObserver(observeFollowedSurfaces);
+    mutationObserver.observe(content, { childList: true, subtree: true });
+    observeFollowedSurfaces();
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      if (bottomFollowFrame.current !== undefined) window.cancelAnimationFrame(bottomFollowFrame.current);
+      bottomFollowFrame.current = undefined;
+      if (userScrollFrame.current !== undefined) window.cancelAnimationFrame(userScrollFrame.current);
+      userScrollFrame.current = undefined;
+      userScrollPending.current = false;
+    };
+  }, [conversationId]);
 
   const refresh = useLatestRefresh(
     () => readAgentConversation(taskId, conversationId),
@@ -74,7 +144,13 @@ export function AgentConversationDialog({
           const content = contentRef.current;
           pendingScrollPosition.current = content === null
             ? null
-            : content.scrollHeight - content.clientHeight - content.scrollTop <= 32
+            : userScrollPending.current
+              ? content.scrollTop
+              : bottomFollowing.current === "following"
+              ? "bottom"
+              : bottomFollowing.current === "cancelled"
+                ? content.scrollTop
+                : content.scrollHeight - content.clientHeight - content.scrollTop <= 32
               ? "bottom"
               : content.scrollTop;
           pendingTextSelection.current = captureTextSelectionWithin(content);
@@ -198,7 +274,35 @@ export function AgentConversationDialog({
             <CloseIconButton buttonRef={closeButtonRef} label="Close conversation" onClick={onClose} />
           </div>
         </header>
-        <div ref={contentRef} className="transcript-content">
+        <div
+          ref={contentRef}
+          className="transcript-content"
+          onWheelCapture={(event) => {
+            cancelIfViewportMoved(event.currentTarget.scrollTop);
+          }}
+          onTouchMove={(event) => {
+            cancelIfViewportMoved(event.currentTarget.scrollTop);
+          }}
+          onPointerDown={(event) => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            pointerScrolling.current = event.clientX >= bounds.right - 24 && event.clientX <= bounds.right;
+          }}
+          onPointerUp={() => {
+            pointerScrolling.current = false;
+          }}
+          onPointerCancel={() => {
+            pointerScrolling.current = false;
+          }}
+          onScroll={() => {
+            if (pointerScrolling.current) cancelBottomFollowing();
+          }}
+          onKeyDown={(event) => {
+            if (
+              bottomFollowing.current === "following" &&
+              ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)
+            ) cancelIfViewportMoved(event.currentTarget.scrollTop);
+          }}
+        >
           {error !== undefined ? (
             <p className="unavailable" role="alert">{error}</p>
           ) : unavailable ? (
@@ -226,6 +330,16 @@ export function AgentConversationDialog({
               taskId={taskId}
               conversationId={conversation.id}
               acceptWindowDrops={!retirementOpen}
+              onSubmissionStart={() => {
+                const content = contentRef.current;
+                bottomFollowing.current = content !== null &&
+                  content.scrollHeight - content.clientHeight - content.scrollTop <= 32
+                  ? "following"
+                  : "inactive";
+              }}
+              onSubmissionFailed={() => {
+                bottomFollowing.current = "inactive";
+              }}
               onAccepted={(result) => {
                 pendingActivationId.current = result.activationId;
                 setConversationRunning(true);

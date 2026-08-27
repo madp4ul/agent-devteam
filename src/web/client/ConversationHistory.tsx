@@ -191,7 +191,12 @@ export function ConversationHistory({
             ? active
               ? `Waiting for ${conversation.owningAgent.name} to finish the current activation.`
               : `Waiting for ${conversation.owningAgent.name}'s next activation to start.`
-            : `${conversation.owningAgent.name} is working…`}
+            : (
+                <>
+                  <span className="activity-spinner" aria-hidden="true" />
+                  <span>{conversation.owningAgent.name} is working…</span>
+                </>
+              )}
         </p>
       ) : null}
     </div>

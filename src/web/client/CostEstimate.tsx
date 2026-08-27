@@ -40,7 +40,7 @@ export function CostEstimate({
       {...(testId === undefined ? {} : { "data-testid": testId })}
       onKeyDown={breakdown === undefined ? undefined : dismissTooltip}
     >
-      {pending === true ? <span className="cost-pending-spinner" aria-hidden="true" /> : null}
+      {pending === true ? <span className="activity-spinner" aria-hidden="true" /> : null}
       <span aria-hidden="true">{lowerBound === true ? "≥" : ""}{formatted}</span>
       {breakdown === undefined ? null : (
         <span

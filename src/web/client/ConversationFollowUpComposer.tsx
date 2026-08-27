@@ -25,11 +25,15 @@ export function ConversationFollowUpComposer({
   taskId,
   conversationId,
   acceptWindowDrops,
+  onSubmissionStart,
+  onSubmissionFailed,
   onAccepted,
 }: {
   taskId: string;
   conversationId: string;
   acceptWindowDrops: boolean;
+  onSubmissionStart(): void;
+  onSubmissionFailed(): void;
   onAccepted(followUp: AcceptedFollowUp): void;
 }): ReactNode {
   const [draft, setDraft] = useState("");
@@ -146,6 +150,7 @@ export function ConversationFollowUpComposer({
       uploads.some(({ state }) => state !== "uploaded") ||
       submitting
     ) return;
+    onSubmissionStart();
     setSubmitting(true);
     setSubmissionError(undefined);
     try {
@@ -164,6 +169,7 @@ export function ConversationFollowUpComposer({
       idempotencyKey.current = crypto.randomUUID();
       onAccepted(result);
     } catch (caught) {
+      onSubmissionFailed();
       setSubmissionError(errorMessage(caught));
     } finally {
       setSubmitting(false);

@@ -294,7 +294,7 @@ test("conversation activity spinner and attention dot remain distinct in dark an
       "border-top-color",
       theme === "dark" ? "rgb(156, 229, 187)" : "rgb(20, 80, 57)",
     );
-    await expect(running).toHaveCSS("animation-name", "cost-pending-spin");
+    await expect(running).toHaveCSS("animation-name", "activity-spinner-spin");
     await expect(attention).toHaveCSS(
       "background-color",
       theme === "dark" ? "rgb(243, 207, 120)" : "rgb(114, 80, 14)",

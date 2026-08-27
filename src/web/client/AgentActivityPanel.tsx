@@ -75,7 +75,7 @@ export function AgentActivityPanel({
             }}
           >
             {state.activeRun.status === "interrupting" ? (
-              <><span className="cost-pending-spinner" aria-hidden="true" /> Interrupting…</>
+              <><span className="activity-spinner" aria-hidden="true" /> Interrupting…</>
             ) : "Interrupt current attempt"}
           </button>
         </div>

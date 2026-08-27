@@ -63,7 +63,7 @@ export function TaskConversationsPanel({
                   {status === null ? null : (
                     <span
                       className={conversation.status === "running"
-                        ? "cost-pending-spinner"
+                        ? "activity-spinner"
                         : `conversation-status-dot ${status.className}`}
                       role="status"
                       aria-label={status.label}
