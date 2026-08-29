@@ -393,6 +393,11 @@ without choosing the implementation yet.
   routine queries, a difficult projection, and a populated released-like
   schema upgrade, judging only steady-state maintainer value while keeping
   issue 42's recovery envelope application-owned.
+  **Resolved:** Prefer Drizzle as the future query and migration-drafting
+  direction, but keep production on `node:sqlite` and owned SQL until a stable
+  native adapter passes strict typecheck and the transaction-local proof;
+  generated migrations remain reviewed drafts inside issue 42's application
+  safety envelope.
 
 ## Maintainer refactoring implementation
 
@@ -401,6 +406,11 @@ without choosing the implementation yet.
   incrementally with separately registered, capability-narrowed route modules
   behind one dependency-free typed dispatcher, preserving all transport and
   application-authority behavior.
+  **Resolved:** All 52 browser and agent method/template pairs now register
+  through a small typed literal/named-segment dispatcher; browser and
+  bearer-authenticated agent composition remain separate, route groups receive
+  narrow capabilities, streaming/static behavior stays raw and unchanged, and
+  the deterministic catalogs have complete inventory coverage.
 
 ## Deferred release engineering
 

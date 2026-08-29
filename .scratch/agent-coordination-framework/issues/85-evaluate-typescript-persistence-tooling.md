@@ -139,3 +139,12 @@ those conditions fails.
 [Ticket 87 — Prototype Drizzle Persistence and Migration Ergonomics](./87-prototype-drizzle-persistence-migrations.md)
 owns that follow-up proof, including a populated-fixture schema upgrade so the
 steady-state migration-authoring benefit is tested alongside query ergonomics.
+
+**Follow-up result:** The prototype found enough steady-state benefit to prefer
+Drizzle as the future direction for both typed query authoring and migration
+drafting. It also confirmed that production must wait: stable ORM 0.45.2 has no
+native `node:sqlite` export and requires `skipLibCheck` under this repository's
+strict TypeScript settings. Kit's generated table rebuild also failed against
+its own modeled dependent view until reviewed SQL corrected it, so issue 42's
+application-owned safety envelope remains mandatory. See the
+[prototype report](../research/drizzle-persistence-prototype.md).

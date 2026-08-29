@@ -1,0 +1,24 @@
+{
+  "name": "drizzle-persistence-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prototype": "node --experimental-strip-types src/tui.ts",
+    "typecheck": "tsc --noEmit",
+    "typecheck:published-libraries": "tsc -p tsconfig-library-check.json --noEmit",
+    "generate:v1": "drizzle-kit generate --config=drizzle-v1.config.ts --name=v1",
+    "generate:v1-custom": "drizzle-kit generate --config=drizzle-v1.config.ts --custom --name=v1-custom-objects",
+    "generate:v2": "drizzle-kit generate --config=drizzle-v2.config.ts --name=v2",
+    "generate:v2-custom": "drizzle-kit generate --config=drizzle-v2.config.ts --custom --name=v2-data-and-objects"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "drizzle-orm": "0.45.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "24.10.1",
+    "drizzle-kit": "0.31.10",
+    "typescript": "5.9.3"
+  }
+}

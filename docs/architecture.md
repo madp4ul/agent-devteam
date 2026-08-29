@@ -51,8 +51,11 @@ workflow or automation policy.
 
 The local HTTP adapter remains framework-free and keeps browser and
 project-scoped agent authorization/capability boundaries explicit. Project-owned
-routing may organize transport mechanics, but it does not introduce middleware
-or another application authority. [ADR 0016](adr/0016-keep-the-local-http-adapter-framework-free-until-platform-needs-emerge.md)
+routing uses a shared typed literal/named-segment dispatcher beneath separate
+browser and authenticated agent route-set composition; request/response codecs
+remain transport mechanics, and routes receive only their coherent capability
+subset. This organization does not introduce middleware or another application
+authority. [ADR 0016](adr/0016-keep-the-local-http-adapter-framework-free-until-platform-needs-emerge.md)
 defines the observable product and maintenance conditions that justify
 reconsidering a focused router or full web framework, plus the proof required
 before adoption.

@@ -12,7 +12,7 @@ project-owned SQL plus focused typed row decoders?
 **Informed by:**
 [85 — Evaluate TypeScript Persistence and Migration Tooling](./85-evaluate-typescript-persistence-tooling.md)
 
-**Status:** open
+**Status:** resolved
 
 ## Decision frame
 
@@ -98,16 +98,57 @@ specified implementation tickets only.
 
 ## Acceptance criteria
 
-- [ ] The proof compares equivalent raw-SQL/decoder and Drizzle implementations
+- [x] The proof compares equivalent raw-SQL/decoder and Drizzle implementations
   of both a routine command and a difficult real-repository-shaped projection.
-- [ ] The proof performs an equivalent nontrivial populated-fixture schema
+- [x] The proof performs an equivalent nontrivial populated-fixture schema
   upgrade through project-owned SQL and Drizzle Kit and identifies precisely
   which migration work the toolkit eliminates, generates, or leaves manual.
-- [ ] Compile-time feedback, runtime mapping, SQL visibility, synchronous
+- [x] Compile-time feedback, runtime mapping, SQL visibility, synchronous
   transaction ownership, schema authority, generated artifacts, and ongoing
   driver/dependency costs are demonstrated rather than inferred from examples.
-- [ ] Backup, rollback, unknown-future refusal, integrity/foreign-key checks,
+- [x] Backup, rollback, unknown-future refusal, integrity/foreign-key checks,
   released fixtures, and startup gating remain explicitly evaluated as
   application guarantees outside the migration generator.
-- [ ] The conclusion ignores adoption cost, gives a clear recommendation and
+- [x] The conclusion ignores adoption cost, gives a clear recommendation and
   stopping condition, and states whether ticket 85 or issue 42 should change.
+
+## Answer
+
+The prototype revises ticket 85 toward Drizzle for both ordinary query
+authoring and migration drafting, while keeping issue 42's complete safety
+envelope application-owned. The full evidence, emitted SQL, artifact inventory,
+commands, and stopping condition are in
+[Drizzle Persistence and Migration Prototype](../research/drizzle-persistence-prototype.md).
+
+For routine work, Drizzle inferred schema columns, insert values, nullability,
+aliases, joins, and results, removed the handwritten row assertion, and mapped
+the SQLite boolean while preserving a visible caller-owned synchronous `BEGIN
+IMMEDIATE`. The difficult projection still required two unchecked `sql<T>`
+claims for JSON extraction and a conditional aggregate plus a project-owned
+JSON decoder. Drizzle reduces the unsafe surface; it does not eliminate focused
+runtime decoding or make complex SQL intrinsically clearer.
+
+Drizzle Kit generated the repetitive SQLite table rebuild, data copy,
+foreign-key change, partial-index recreation, and added column. The first fair
+generated migration nevertheless failed against a dependent view even though
+that view was declared in both Drizzle schemas. The corrected proof needed
+reviewed `DROP VIEW`/`CREATE VIEW` statements, a custom data backfill, trigger
+recreation, and application-owned schema identity. Both approaches then proved
+verified backup of committed WAL data, transactional rollback after an
+injected late failure, future-schema refusal, integrity and foreign-key checks,
+and preserved data/view/trigger behavior. Those guarantees came from the
+shared application envelope, not Kit.
+
+Do not adopt the tested stable packages now. Drizzle ORM 0.45.2 has no stable
+`node:sqlite` export, so the proof carries `better-sqlite3` 13.0.3 permanently,
+and its declarations do not pass this repository's strict TypeScript 5.9
+settings without `skipLibCheck`. Re-run this proof when a stable first-party
+native adapter and clean strict declarations exist. Adopt only if the exact
+candidate preserves synchronous APIs, one connection, workflow-owned
+transactions, visible SQL, focused decoders, and reviewed immutable migrations.
+Otherwise stop and retain project-owned SQL.
+
+Issue 42 needs no product-requirement or timing change. If the production gates
+are later met, Drizzle Kit may draft its reviewed migration SQL; the ordered
+registry, released identity, backup, verification, startup gating, rollback,
+recovery behavior, and released fixtures remain application-owned.

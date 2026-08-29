@@ -9,7 +9,7 @@ security boundary, streaming path, and application-authority rule.
 
 **Blocked by:** 84 — Evaluate the Web API Routing Boundary.
 
-**Status:** open
+**Status:** resolved
 
 ## Decision source
 
@@ -171,4 +171,48 @@ re-evaluate current candidates and versions rather than assuming Fastify 5.x.
 
 ## Answer
 
-Pending implementation.
+Implemented the framework-free typed dispatcher and migrated the complete local
+HTTP transport surface away from the conditional route chains.
+
+The pure dispatcher now owns only the closed method union, literal/named
+single-segment matching, one-time parameter decoding, static precedence,
+startup diagnostics for duplicate, ambiguous, and repeated-parameter routes,
+awaited handler invocation, internal match outcomes, and a deterministic route
+catalog. Request decoding and response/status mechanics moved into focused HTTP
+codec modules without buffering raw streaming routes.
+
+Browser routes are separately composed as Settings, automation, tasks,
+conversations, archive/workspace, and attention groups. Agent routes are
+separately authenticated before dispatch and composed as discovery and
+current-task groups. Each group declares its required application capability
+subset; browser provenance comes from one adapter-owned local-user actor, while
+current-task agent identity remains derived only from immutable bearer scope.
+Conversation uploads and downloads retain raw request/content streaming and
+their existing size and response-header behavior. Static assets remain in the
+Node server lifecycle adapter.
+
+The route catalog accounts for all 38 browser and 14 agent method/template
+pairs and enforces prefix separation. Added pure dispatcher, fake-capability
+route, authentication/scope, streaming compatibility, and inventory tests.
+Updated `docs/architecture.md` with the implemented inspection boundary.
+
+Verification after two-axis review fixes:
+
+- TypeScript typechecking passed.
+- 23 focused dispatcher/route/existing web-server tests passed.
+- Production Vite build passed.
+- The full Node suite ran 262 tests: all issue-86 and web tests passed; two
+  unrelated existing runtime prompt-composition assertions failed because the
+  current prompt omits an expected sentence. Issue 86 changes no runtime prompt
+  or runtime test files.
+- The full Playwright suite passed 127/130. An isolated rerun cleared the
+  dropped-file failure; two unchanged browser scenarios remained reproducible:
+  process-evolution task detail received an application-originated
+  `{ available: false, reason: "not-found" }`, and an attention test counted an
+  existing informational icon button. The pre-refactor route used the same
+  application query, and issue 86 changes no browser client or Playwright test
+  files.
+
+No routing dependency or framework was added. This implementation performed no
+Git staging; concurrent work staged some shared documentation while issue 86
+was in progress, and that reviewed index state was left untouched.
