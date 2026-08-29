@@ -385,6 +385,15 @@ without choosing the implementation yet.
   registry; prototype Drizzle's steady-state query and migration ergonomics,
   with stable native-driver support or a justified permanent driver change as
   a separate production gate.
+- [Reassess Automation Persistence Lifecycles](./issues/89-reassess-automation-persistence-lifecycles.md)
+  — After activation-resolution commands have their own cohesive home, decide
+  whether scheduling, workspace claims, interruption, attempt settlement,
+  retries, transcript usage, and failure attention still belong behind one
+  automation persistence interface or warrant lifecycle-focused deep modules.
+- [Evaluate the Codex Runtime Event Seam](./issues/90-evaluate-codex-runtime-event-seam.md)
+  — Decide whether SDK thread execution, streamed-event state, live transcript
+  evidence, outcomes, usage, and rollout context measurement should remain one
+  runtime module or gain a smaller event/evidence seam for safer SDK changes.
 
 ## Maintainer refactoring prototypes
 
@@ -411,6 +420,11 @@ without choosing the implementation yet.
   bearer-authenticated agent composition remain separate, route groups receive
   narrow capabilities, streaming/static behavior stays raw and unchanged, and
   the deterministic catalogs have complete inventory coverage.
+- [Localize Activation Resolution Commands](./issues/88-localize-activation-resolution-commands.md)
+  — Preserve retry, permission continuation, and ordinary, interrupted, stale,
+  or failed activation dismissal while moving their complete activation,
+  attention, suspension, activity, and idempotency behavior behind one cohesive
+  internal module.
 
 ## Deferred release engineering
 

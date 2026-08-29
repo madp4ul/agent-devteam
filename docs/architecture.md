@@ -111,6 +111,12 @@ The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
 state rather than silently replacing or adopting inconsistent data.
 
+Persistence remains on the built-in synchronous `node:sqlite` driver with
+project-owned SQL. [ADR 0017](adr/0017-reconsider-drizzle-when-native-node-sqlite-and-strict-types-are-stable.md)
+defines the observable native-adapter and strict-type conditions that trigger a
+fresh Drizzle proof, and the application-owned transaction and migration-safety
+properties that proof must preserve before adoption.
+
 ### Automation and agent runtime
 
 Automation turns committed activation records into agent runs. It preserves the
@@ -270,6 +276,9 @@ coordination database.
 - [ADR 0016](adr/0016-keep-the-local-http-adapter-framework-free-until-platform-needs-emerge.md)
   records the local HTTP routing decision and its framework-reconsideration
   boundary.
+- [ADR 0017](adr/0017-reconsider-drizzle-when-native-node-sqlite-and-strict-types-are-stable.md)
+  records the persistence-tooling decision and the exact conditions that
+  justify reconsidering Drizzle.
 - [Architecture decisions](adr/) explain why the product owns its board, runs
   host-native, uses React and Vite, binds state beside the project, and relocates
   state through an offline command.
