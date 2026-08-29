@@ -549,6 +549,7 @@ test("a coordination comment renders its Markdown with the timeline disclosure",
   const comment = page.getByRole("dialog", { name: "Agent conversation" })
     .getByRole("article", { name: "Comment added" });
 
+  await expect(comment.getByRole("button", { name: "Agent-inspectable information" })).toBeVisible();
   await expect(comment.locator("strong", { hasText: "authored context" })).toBeVisible();
   await expect(comment.getByRole("img", { name: "Coordination action succeeded" })).toBeVisible();
   await expect(comment.locator("details")).toHaveCount(0);

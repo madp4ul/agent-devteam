@@ -11,6 +11,7 @@ import type {
 import type {
   BoardView,
   TaskOverviewView,
+  TaskInspectionView,
   TaskView,
   UserTaskInspectionView,
 } from "./task-contract.ts";
@@ -39,6 +40,20 @@ export type UserTimelineRelatedTaskView =
       archived: boolean;
     };
 
+/**
+ * Browser disclosure metadata derived from the agent-facing read projections.
+ * Durable IDs let presentation preserve the distinction when records are
+ * regrouped into a timeline or repeated in a conversation surface.
+ */
+export interface AgentInspectableTaskContentView {
+  taskFields: Array<keyof TaskInspectionView>;
+  commentIds: string[];
+  relationshipIds: string[];
+  activityIds: string[];
+  conversationMessageIds: string[];
+  attachmentIds: string[];
+}
+
 export interface UserTaskDetailView {
   task: TaskView;
   board: BoardView;
@@ -49,6 +64,7 @@ export interface UserTaskDetailView {
   collaborators: CollaboratorView[];
   relationshipTasks: UserRelatedTaskView[];
   timelineRelationshipTasks: UserTimelineRelatedTaskView[];
+  agentInspectableContent: AgentInspectableTaskContentView;
   startup: StartupView;
   conversations: AgentConversationIndexEntry[];
   conversationCost?: AggregatedTokenCost;

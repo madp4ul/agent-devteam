@@ -12,6 +12,7 @@ import {
   unarchiveTask,
 } from "./api.ts";
 import { AgentActivityPanel } from "./AgentActivityPanel.tsx";
+import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { AutomationControls } from "./AutomationControls.tsx";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
@@ -143,6 +144,7 @@ export function TaskPage({
     );
   }
   const { task, board, inspection } = detail;
+  const inspectableTaskFields = new Set(detail.agentInspectableContent.taskFields);
   const currentColumnMovement = task.activity
     .filter((entry) => entry.type === "task.moved" && entry.details.toColumnId === task.columnId)
     .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))[0];
@@ -241,8 +243,13 @@ export function TaskPage({
           )}
           <div className="task-hero">
             <div className="task-heading">
-              <p className="eyebrow">{task.id}{task.archived ? " · Archived" : ""}</p>
-              <h1>{task.title}</h1>
+              <div className="agent-inspectable-heading">
+                <div>
+                  <p className="eyebrow">{task.id}{task.archived ? " · Archived" : ""}</p>
+                  <h1>{task.title}</h1>
+                </div>
+                {inspectableTaskFields.has("title") ? <AgentInspectableMarker /> : null}
+              </div>
             </div>
           </div>
         </section>
@@ -303,6 +310,7 @@ export function TaskPage({
                       )}
                     </>
                   )}
+                  {inspectableTaskFields.has("description") ? <AgentInspectableMarker /> : null}
                 </div>
               </div>
               <MarkdownContent source={task.description} className="description" />
@@ -350,6 +358,7 @@ export function TaskPage({
                 transcriptsAvailable={!task.archived}
                 onAttentionChanged={refresh}
                 onAttentionError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })}
+                agentInspectableContent={detail.agentInspectableContent}
                 {...(timelineSourceRequest === undefined ? {} : { sourceRequest: timelineSourceRequest })}
                 {...(task.archived ? {} : { onReplyToAgent: replyToAttentionRequest })}
               /></div>
@@ -373,6 +382,7 @@ export function TaskPage({
                   {...(currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id })}
                   pending={pendingTaskId !== undefined}
                   onMove={async (column) => move({ id: task.id, revision: task.revision }, column)}
+                  inspectable={inspectableTaskFields.has("column")}
                 />
               </div>
             )}
@@ -389,6 +399,7 @@ export function TaskPage({
                   taskId={task.id}
                   conversations={detail.conversations}
                   conversationCost={detail.conversationCost}
+                  agentInspectableContent={detail.agentInspectableContent}
                   onCommentSource={(sourceId) => setTimelineSourceRequest((current) => ({
                     sourceId,
                     sequence: (current?.sequence ?? 0) + 1,

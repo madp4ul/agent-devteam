@@ -69,6 +69,49 @@ test("task description stays prominent without competing with the dark task titl
   await expect(attentionCard).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 });
 
+test("agent-inspectable markers stay centered, quiet, and readable in both appearances", async ({ page }) => {
+  await page.goto("/tasks/T-0001");
+  const marker = page.getByRole("region", { name: "Description" })
+    .getByRole("button", { name: "Agent-inspectable information" });
+
+  for (const theme of ["dark", "light"] as const) {
+    await setAppearance(page, theme);
+    await page.mouse.move(0, 0);
+    const restingAppearance = await marker.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { borderColor: style.borderColor, color: style.color, background: style.backgroundColor };
+    });
+    await marker.hover();
+    expect(await marker.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { borderColor: style.borderColor, color: style.color, background: style.backgroundColor };
+    })).toEqual(restingAppearance);
+    expect(restingAppearance.borderColor).toBe("rgba(0, 0, 0, 0)");
+    expect(restingAppearance.background).toBe("rgba(0, 0, 0, 0)");
+    await marker.focus();
+    const tooltip = page.getByRole("region", { name: "Description" }).getByRole("tooltip");
+    await expect(tooltip).toBeVisible();
+    expect(await contrastRatio(tooltip)).toBeGreaterThanOrEqual(4.5);
+    const centers = await marker.evaluate((button) => {
+      const icon = button.querySelector("svg")!;
+      const buttonBounds = button.getBoundingClientRect();
+      const iconBounds = icon.getBoundingClientRect();
+      return {
+        size: Math.max(buttonBounds.width, buttonBounds.height),
+        x: Math.abs(
+          buttonBounds.x + buttonBounds.width / 2 - (iconBounds.x + iconBounds.width / 2),
+        ),
+        y: Math.abs(
+          buttonBounds.y + buttonBounds.height / 2 - (iconBounds.y + iconBounds.height / 2),
+        ),
+      };
+    });
+    expect(centers.size).toBeLessThanOrEqual(24);
+    expect(centers.x).toBeLessThanOrEqual(1);
+    expect(centers.y).toBeLessThanOrEqual(1);
+  }
+});
+
 test("explicit theme persists across navigation and reload and overrides the system", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");

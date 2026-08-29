@@ -105,6 +105,17 @@ test("the user task-detail projection returns complete browser-ready task contex
     completed: false,
     archived: false,
   }]);
+  assert.equal(result.agentInspectableContent.taskFields.includes("description"), true);
+  assert.equal(result.agentInspectableContent.taskFields.includes("comments"), true);
+  assert.equal(result.agentInspectableContent.taskFields.includes("workspace" as never), false);
+  assert.deepEqual(result.agentInspectableContent.commentIds, []);
+  assert.deepEqual(result.agentInspectableContent.relationshipIds, [relationship.relationship.id]);
+  assert.deepEqual(
+    result.agentInspectableContent.activityIds,
+    result.task.activity.map(({ id }) => id),
+  );
+  assert.deepEqual(result.agentInspectableContent.conversationMessageIds, []);
+  assert.deepEqual(result.agentInspectableContent.attachmentIds, []);
   assert.equal(result.conversations.length, 1);
   assert.equal(result.conversations[0]?.owningAgent.id, "implementer");
   assert.deepEqual(application.queryUserTaskDetail("missing-task"), {

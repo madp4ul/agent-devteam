@@ -142,6 +142,7 @@ test("an attachment-only follow-up submits the upload and renders its download",
   const download = dialog.getByRole("link", { name: "screen.png" });
   await expect(download).toHaveAttribute("download", "screen.png");
   await expect(download).toHaveAttribute("href", /\/attachments\/upload-screen$/);
+  await expect(download.locator("..").getByRole("button", { name: "Agent-inspectable information" })).toHaveCount(0);
 });
 
 test("an attachment upload reports progress and can be retried after transfer failure", async ({ page }) => {

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
-import type { AgentConversationView } from "../../application/browser-transport-contract.ts";
+import type { AgentConversationView, AgentInspectableTaskContentView } from "../../application/browser-transport-contract.ts";
 import { readAgentConversation, retireAgentConversation } from "./api.ts";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import { ConversationFollowUpComposer } from "./ConversationFollowUpComposer.tsx";
@@ -28,6 +28,7 @@ export function AgentConversationDialog({
   selectedPendingActivationId,
   onClose,
   onCommentSource,
+  agentInspectableContent,
 }: {
   taskId: string;
   conversationId: string;
@@ -37,6 +38,7 @@ export function AgentConversationDialog({
   selectedPendingActivationId?: string;
   onClose(): void;
   onCommentSource?(commentId: string): void;
+  agentInspectableContent: AgentInspectableTaskContentView;
 }): ReactNode {
   const [conversation, setConversation] = useState<AgentConversationView>();
   const [conversationRunning, setConversationRunning] = useState(
@@ -314,6 +316,7 @@ export function AgentConversationDialog({
           ) : (
             <ConversationHistory
               conversation={conversation}
+              agentInspectableContent={agentInspectableContent}
               {...(selectedAttemptId === undefined ? {} : { selectedAttemptId })}
               {...(selectedMessageId === undefined ? {} : { selectedMessageId })}
               {...(onCommentSource === undefined ? {} : {

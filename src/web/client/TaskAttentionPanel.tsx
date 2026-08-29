@@ -36,6 +36,7 @@ export function TaskAttentionPanel({
           <li key={attention.id} className={`attention-reason-card${highlightedReasonId === attention.id ? " highlighted" : ""}`}>
             <AttentionReasonResolution
               reason={attention}
+              inspectable
               highlighted={highlightedReasonId === attention.id}
               onOpenMention={(sourceEventId) => {
                 if (sourceEventId !== null) focusTimelineSource(sourceEventId);

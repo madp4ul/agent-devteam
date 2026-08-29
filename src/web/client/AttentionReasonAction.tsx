@@ -10,6 +10,7 @@ import {
   markUserMentionAddressed,
   recoverFailedActivation,
 } from "./api.ts";
+import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { Modal } from "./Modal.tsx";
 
 export function MarkUserMentionAddressed({
@@ -138,6 +139,7 @@ export function AttentionReasonResolution({
   onInterruptionCompleted,
   onResolved,
   onError,
+  inspectable = false,
 }: {
   reason: TaskAttentionView;
   labelPrefix?: string;
@@ -154,14 +156,18 @@ export function AttentionReasonResolution({
   onInterruptionCompleted?: (action: "continue" | "dismiss") => void;
   onResolved(): Promise<void>;
   onError(error: unknown): void;
+  inspectable?: boolean;
 }): ReactNode {
   return (
     <>
-      <span>
-        {labelPrefix}{reason.type === "automation-suspended"
-          ? "automation suspended — Continue required"
-          : reason.type.replaceAll("-", " ")}
-        {reason.recovery === undefined ? "" : ` — ${reason.recovery.summary}`}
+      <span className="agent-inspectable-content-heading">
+        <span>
+          {labelPrefix}{reason.type === "automation-suspended"
+            ? "automation suspended — Continue required"
+            : reason.type.replaceAll("-", " ")}
+          {reason.recovery === undefined ? "" : ` — ${reason.recovery.summary}`}
+        </span>
+        {inspectable ? <AgentInspectableMarker /> : null}
       </span>
       {reason.recovery?.explanation === undefined ? null : (
         <small className="recovery-explanation">{reason.recovery.explanation}</small>

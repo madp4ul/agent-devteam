@@ -324,6 +324,10 @@ without choosing the implementation yet.
 - [Disclose Agent-Inspectable Task Content](./issues/78-disclose-agent-inspectable-task-content.md)
   — Give task-detail content a consistent accessible marker when it is exposed
   through agent coordination tools, leaving user-only content unmarked.
+  **Resolved:** Task details now derive durable disclosure membership from the
+  agent-facing task, activity, and attachment projections and carry one
+  accessible marker across current state, grouped timeline records, and
+  matching conversation content while leaving user-only evidence unmarked.
 - [Filter the Timeline to Agent-Inspectable Events](./issues/79-filter-timeline-to-agent-inspectable-events.md)
   — Let users reduce long timelines to the exact coordination evidence agents
   can inspect, using the same authoritative visibility semantics as the UI.

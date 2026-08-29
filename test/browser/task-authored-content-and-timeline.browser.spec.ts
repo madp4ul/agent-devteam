@@ -300,6 +300,59 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   expect(Math.abs(timelineBounds!.y - commentBounds!.y)).toBeLessThanOrEqual(1);
 });
 
+test("task details distinguish agent-inspectable content from user-only evidence", async ({ page }) => {
+  await page.goto("/tasks/T-0001");
+
+  const description = page.getByRole("region", { name: "Description" });
+  const descriptionMarker = description.getByRole("button", { name: "Agent-inspectable information" });
+  await expect(descriptionMarker).toBeVisible();
+  await descriptionMarker.hover();
+  await expect(description.getByRole("tooltip")).toHaveText(
+    "Agents can inspect this information through their coordination tools.",
+  );
+  await descriptionMarker.focus();
+  await expect(description.getByRole("tooltip")).toBeVisible();
+
+  const relationship = page.locator(".relationship-row").first();
+  const relationshipMarker = relationship.getByRole("button", { name: "Agent-inspectable information" });
+  await expect(relationshipMarker).toBeVisible();
+  await expect(relationship.locator(":scope > :last-child"))
+    .toHaveAttribute("class", /agent-inspectable-disclosure/);
+
+  const standaloneComment = page.locator(".comment-entry").first();
+  const standaloneCommentMarker = standaloneComment.getByRole("button", { name: "Agent-inspectable information" });
+  await expect(standaloneCommentMarker).toBeVisible();
+  const movement = page.locator(".movement-entry").first();
+  const movementMarker = movement.getByRole("button", { name: "Agent-inspectable information" });
+  await expect(movementMarker).toBeVisible();
+
+  for (const width of [1280, 420]) {
+    await page.setViewportSize({ width, height: 900 });
+    const [commentBox, movementBox] = await Promise.all([
+      standaloneCommentMarker.boundingBox(),
+      movementMarker.boundingBox(),
+    ]);
+    expect(commentBox).not.toBeNull();
+    expect(movementBox).not.toBeNull();
+    expect(Math.abs((commentBox!.x + commentBox!.width) - (movementBox!.x + movementBox!.width)))
+      .toBeLessThanOrEqual(1);
+  }
+
+  const attempt = page.locator(".attempt-entry.completed-attempt").filter({ hasText: "Attempt 1" });
+  await expect(attempt.locator(":scope > article > .attempt-heading")
+    .getByRole("button", { name: "Agent-inspectable information" })).toHaveCount(0);
+  await expect(attempt.getByRole("region", { name: "Outcome" })
+    .getByRole("button", { name: "Agent-inspectable information" })).toHaveCount(0);
+  await expect(attempt.locator(".nested-comment")
+    .getByRole("button", { name: "Agent-inspectable information" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Task workspace" })
+    .getByRole("button", { name: "Agent-inspectable information" })).toHaveCount(0);
+
+  const markerCount = await page.getByRole("button", { name: "Agent-inspectable information" }).count();
+  await page.waitForTimeout(1_200);
+  await expect(page.getByRole("button", { name: "Agent-inspectable information" })).toHaveCount(markerCount);
+});
+
 
 test("collapsed timeline prose reports hidden rendered lines at desktop and narrow widths", async ({ page }) => {
   let authoredBody = "First line.  \nSecond line.  \nThird line.  \nFourth line.  \nFifth line.";

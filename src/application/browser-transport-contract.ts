@@ -70,6 +70,7 @@ export type {
   UserBoardView,
 } from "./user-board-contract.ts";
 export type {
+  AgentInspectableTaskContentView,
   UserRelatedTaskView,
   UserTimelineRelatedTaskView,
   UserTaskDetailQueryResult,

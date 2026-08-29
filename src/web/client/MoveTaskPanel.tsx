@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { BoardColumnView } from "../../application/browser-transport-contract.ts";
+import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
 
 export function MoveTaskPanel({
@@ -10,6 +11,7 @@ export function MoveTaskPanel({
   currentColumnSourceId,
   pending,
   onMove,
+  inspectable,
 }: {
   columns: BoardColumnView[];
   currentColumnId: string;
@@ -17,12 +19,16 @@ export function MoveTaskPanel({
   currentColumnSourceId?: string;
   pending: boolean;
   onMove(column: BoardColumnView): Promise<void>;
+  inspectable: boolean;
 }): ReactNode {
   return (
     <section className="detail-panel move-panel" aria-labelledby="move-heading" aria-busy={pending}>
       <h2 id="move-heading">Move task</h2>
       <label className="move-select">
-        Column
+        <span className="agent-inspectable-content-heading">
+          Column
+          {inspectable ? <AgentInspectableMarker /> : null}
+        </span>
         <select
           aria-label="Move task"
           disabled={pending}

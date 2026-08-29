@@ -86,6 +86,12 @@ test("an attachment-only follow-up binds a sanitized upload for runtime delivery
     mediaType: "text/plain",
     sizeBytes: 28,
   }]);
+  const detail = application.queryUserTaskDetail(created.task.id);
+  assert.equal(detail.available, true);
+  if (detail.available) {
+    assert.equal(detail.agentInspectableContent.conversationMessageIds.includes(continued.message.id), true);
+    assert.deepEqual(detail.agentInspectableContent.attachmentIds, []);
+  }
   const request = await runtime.waitForRequest(2);
   assert.deepEqual((request.attachments ?? []).map(({ id, fileName, currentMessage }) => ({
     id,

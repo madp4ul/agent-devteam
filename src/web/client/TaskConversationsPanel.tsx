@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 
-import type { AgentConversationIndexEntry, UserTaskDetailView } from "../../application/browser-transport-contract.ts";
+import type { AgentConversationIndexEntry, AgentInspectableTaskContentView, UserTaskDetailView } from "../../application/browser-transport-contract.ts";
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 import { CostEstimate } from "./CostEstimate.tsx";
@@ -18,11 +18,13 @@ export function TaskConversationsPanel({
   conversations,
   conversationCost,
   onCommentSource,
+  agentInspectableContent,
 }: {
   taskId: string;
   conversations: AgentConversationIndexEntry[];
   conversationCost: UserTaskDetailView["conversationCost"];
   onCommentSource(commentId: string): void;
+  agentInspectableContent: AgentInspectableTaskContentView;
 }): ReactNode {
   const [selectedConversationId, setSelectedConversationId] = useState<string>();
   if (conversations.length === 0) return null;
@@ -84,6 +86,7 @@ export function TaskConversationsPanel({
           selectedAttemptRunning={false}
           onClose={() => setSelectedConversationId(undefined)}
           onCommentSource={onCommentSource}
+          agentInspectableContent={agentInspectableContent}
         />
       )}
     </>

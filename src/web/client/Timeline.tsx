@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import type {
   ActivationView,
+  AgentInspectableTaskContentView,
   AttemptView,
   CollaboratorView,
   ProcessColumnView,
@@ -13,6 +14,7 @@ import type {
 } from "../../application/browser-transport-contract.ts";
 import { findParticipantMentions } from "../../application/participant-mentions.ts";
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
+import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { MarkUserMentionAddressed } from "./AttentionReasonAction.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
@@ -46,6 +48,7 @@ export function TaskTimeline({
   onAttentionChanged,
   onAttentionError,
   sourceRequest,
+  agentInspectableContent,
 }: {
   taskId: string;
   comments: TaskCommentView[];
@@ -60,6 +63,7 @@ export function TaskTimeline({
   onAttentionChanged(): Promise<void>;
   onAttentionError(error: unknown): void;
   sourceRequest?: { sourceId: string; sequence: number };
+  agentInspectableContent: AgentInspectableTaskContentView;
 }): ReactNode {
   const [conversationSelection, setConversationSelection] = useState<ConversationSelection>();
   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
@@ -72,6 +76,7 @@ export function TaskTimeline({
     columns,
     tasks,
     unresolvedAttention,
+    agentInspectableContent,
     onAttentionChanged,
     onAttentionError,
     ...(onReplyToAgent === undefined ? {} : { onReplyToAgent }),
@@ -132,6 +137,7 @@ export function TaskTimeline({
             : { selectedPendingActivationId: conversationSelection.pendingActivationId })}
           onClose={() => setConversationSelection(undefined)}
           onCommentSource={followSource}
+          agentInspectableContent={agentInspectableContent}
         />
       )}
     </>
@@ -146,6 +152,7 @@ interface TimelineContext {
   columns: TimelineColumn[];
   tasks: TimelineTask[];
   unresolvedAttention: TaskAttentionView[];
+  agentInspectableContent: AgentInspectableTaskContentView;
   onReplyToAgent?: (agentId: string, attentionReasonId?: string) => void | Promise<void>;
   onAttentionChanged(): Promise<void>;
   onAttentionError(error: unknown): void;
@@ -383,6 +390,7 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
         <span className="entry-meta-actions">
           <RelativeTime value={comment.occurredAt} />
           <CopyMarkdownButton source={comment.body} label="Copy comment Markdown" />
+          {context.agentInspectableContent.commentIds.includes(comment.id) ? <AgentInspectableMarker /> : null}
         </span>
       </div>
       <TextPreview
@@ -466,6 +474,7 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
           {activity.type === "conversation.continued" && activity.details.messageBody !== undefined ? (
             <CopyMarkdownButton source={activity.details.messageBody} label="Copy message Markdown" />
           ) : null}
+          {context.agentInspectableContent.activityIds.includes(activity.id) ? <AgentInspectableMarker /> : null}
         </span>
       </div>
       {(activity.type === "conversation.continued" && activity.details.messageBody !== undefined) ||

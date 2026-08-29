@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import type { TaskRelationshipView } from "../../application/browser-transport-contract.ts";
+import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import {
   addTaskDependency,
   readBoard,
@@ -157,11 +158,13 @@ export function TaskRelationshipsPanel({
                   {grouped.map((entry) => (
                     <li key={entry.relationship.id} className="relationship-row">
                       <div>
-                        <a
-                          href={`/tasks/${encodeURIComponent(entry.related.id)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >{entry.related.title}</a>
+                        <span className="relationship-title">
+                          <a
+                            href={`/tasks/${encodeURIComponent(entry.related.id)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >{entry.related.title}</a>
+                        </span>
                         <span className="relationship-context">
                           {entry.related.id} · {entry.related.boardName} / {entry.related.column.name}
                         </span>
@@ -182,6 +185,9 @@ export function TaskRelationshipsPanel({
                           </svg>
                         </button>
                       )}
+                      {detail.agentInspectableContent.relationshipIds.includes(entry.relationship.id)
+                        ? <AgentInspectableMarker />
+                        : null}
                     </li>
                   ))}
                 </ul>

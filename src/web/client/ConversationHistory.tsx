@@ -1,8 +1,9 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 
-import type { AgentConversationView } from "../../application/browser-transport-contract.ts";
+import type { AgentConversationView, AgentInspectableTaskContentView } from "../../application/browser-transport-contract.ts";
 import type { AttemptTranscriptItem, CoordinationTaskIdentity } from "../../application/runtime-contract.ts";
 import { ActivityStatusMark, isExceptionalActivityStatus } from "./ActivityStatusMark.tsx";
+import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { MarkdownContent } from "./MarkdownContent.tsx";
 import { conversationAttachmentUrl } from "./api.ts";
@@ -13,11 +14,13 @@ export function ConversationHistory({
   selectedAttemptId,
   selectedMessageId,
   onCommentSource,
+  agentInspectableContent,
 }: {
   conversation: AgentConversationView;
   selectedAttemptId?: string;
   selectedMessageId?: string;
   onCommentSource?(commentId: string): void;
+  agentInspectableContent: AgentInspectableTaskContentView;
 }): ReactNode {
   const selectedContextRef = useRef<HTMLElement>(null);
   const selectedContextPositioned = useRef(false);
@@ -75,6 +78,7 @@ export function ConversationHistory({
         >
           <header className="conversation-message-heading">
             <CopyMarkdownButton source={entry.message.body} label="Copy your message Markdown" />
+            {agentInspectableContent.conversationMessageIds.includes(entry.message.id) ? <AgentInspectableMarker /> : null}
           </header>
           <MarkdownContent source={entry.message.body} />
           {(entry.message.attachments ?? []).length === 0 ? null : (
@@ -85,6 +89,7 @@ export function ConversationHistory({
                     {attachment.fileName}
                   </a>
                   <small>{formatFileSize(attachment.sizeBytes)}</small>
+                  {agentInspectableContent.attachmentIds.includes(attachment.id) ? <AgentInspectableMarker /> : null}
                 </li>
               ))}
             </ul>
@@ -100,7 +105,12 @@ export function ConversationHistory({
         >
           <p className="eyebrow">Activation</p>
           <p><strong>{activationReasonLabel(entry.reason.type)}</strong></p>
-          {entry.source.kind === "comment" ? <MarkdownContent source={entry.source.comment.body} /> : null}
+          {entry.source.kind === "comment" ? (
+            <div className="conversation-activation-source">
+              <MarkdownContent source={entry.source.comment.body} />
+              {agentInspectableContent.commentIds.includes(entry.source.comment.id) ? <AgentInspectableMarker /> : null}
+            </div>
+          ) : null}
         </article>
       ) : (
         (() => {
@@ -136,6 +146,7 @@ export function ConversationHistory({
               id={key}
               item={item}
               body={item.presentation.body}
+              inspectable={item.presentation.commentId !== undefined && agentInspectableContent.commentIds.includes(item.presentation.commentId)}
               {...(onCommentSource === undefined ? {} : { onCommentSource })}
             />
           ) : item.kind === "coordination" ? (
@@ -208,11 +219,13 @@ function CoordinationComment({
   item,
   body,
   onCommentSource,
+  inspectable,
 }: {
   id: string;
   item: CoordinationTranscriptItem;
   body: string;
   onCommentSource?(commentId: string): void;
+  inspectable: boolean;
 }): ReactNode {
   const commentId = item.presentation?.kind === "coordination-comment"
     ? item.presentation.commentId
@@ -230,6 +243,7 @@ function CoordinationComment({
           )}
           <CopyMarkdownButton source={body} label="Copy comment Markdown" />
           <ActivityStatusMark status={item.status} subject="Coordination action" className="coordination-status" />
+          {inspectable ? <AgentInspectableMarker /> : null}
         </span>
       </header>
       <div id={`coordination-comment-${id}`} className="authored-text conversation-authored-text">
