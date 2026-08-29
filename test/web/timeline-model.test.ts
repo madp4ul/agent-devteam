@@ -3,7 +3,7 @@ import test from "node:test";
 
 import type { ActivationView } from "../../src/application/automation-contract.ts";
 import type { TaskActivityView, TaskCommentView } from "../../src/application/task-contract.ts";
-import { buildTimelineRecords } from "../../src/web/client/timeline-model.ts";
+import { buildTimelineRecords, filterTimelineRecordsForAgents } from "../../src/web/client/timeline-model.ts";
 
 test("timeline groups explicit attempt work and orders top-level records by start", () => {
   const activation = activationWithAttempts();
@@ -75,6 +75,57 @@ test("timeline leaves unprovenanced agent comments standalone rather than guessi
   const records = buildTimelineRecords([comment], [], [activationWithAttempts()]);
 
   assert.deepEqual(records.map((record) => record.kind), ["comment", "attempt"]);
+});
+
+test("agent filter derives membership from disclosure IDs and preserves mixed attempt grouping", () => {
+  const activation = activationWithAttempts();
+  const comments: TaskCommentView[] = [
+    {
+      id: "inspectable-comment",
+      body: "Shared authored context.",
+      actor: { kind: "agent", id: "implementer" },
+      occurredAt: "2026-01-01T10:07:00.000Z",
+      attemptId: "attempt-1",
+    },
+    {
+      id: "user-only-comment",
+      body: "Private UI context.",
+      actor: { kind: "user", id: "paul" },
+      occurredAt: "2026-01-01T10:09:00.000Z",
+    },
+  ];
+  const activity = [
+    activityEntry("inspectable-move", "task.moved", "2026-01-01T10:06:00.000Z", {
+      attemptId: "attempt-1",
+      fromColumnId: "implementation",
+      toColumnId: "review",
+    }),
+    activityEntry("user-only-activity", "automation.suspended", "2026-01-01T10:05:00.000Z", {
+      attemptId: "attempt-1",
+    }),
+    activityEntry("inspectable-standalone", "task.edited", "2026-01-01T10:08:00.000Z", {}),
+  ];
+
+  const filtered = filterTimelineRecordsForAgents(
+    buildTimelineRecords(comments, activity, [activation]),
+    {
+      taskFields: [],
+      commentIds: ["inspectable-comment"],
+      relationshipIds: [],
+      activityIds: ["inspectable-move", "inspectable-standalone"],
+      conversationMessageIds: [],
+      attachmentIds: [],
+    },
+  );
+
+  assert.deepEqual(filtered.map((record) => record.kind), ["activity", "attempt"]);
+  const attempt = filtered[1];
+  assert.equal(attempt?.kind, "attempt");
+  if (attempt?.kind !== "attempt") return;
+  assert.deepEqual(
+    attempt.content.map((content) => content.kind === "comment" ? content.comment.id : content.activity.id),
+    ["inspectable-comment", "inspectable-move"],
+  );
 });
 
 function activationWithAttempts(includeRetry = false): ActivationView {

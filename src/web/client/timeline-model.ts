@@ -1,6 +1,7 @@
 import type {
   ActivationStartupFailureView,
   ActivationView,
+  AgentInspectableTaskContentView,
   AttemptView,
   TaskActivityView,
   TaskCommentView,
@@ -98,6 +99,23 @@ export function buildTimelineRecords(
     ...attempts,
     ...startupFailures,
   ].sort(newestFirst);
+}
+
+export function filterTimelineRecordsForAgents(
+  records: TimelineRecord[],
+  inspectable: AgentInspectableTaskContentView,
+): TimelineRecord[] {
+  const commentIds = new Set(inspectable.commentIds);
+  const activityIds = new Set(inspectable.activityIds);
+  return records.flatMap((record): TimelineRecord[] => {
+    if (record.kind === "comment") return commentIds.has(record.comment.id) ? [record] : [];
+    if (record.kind === "activity") return activityIds.has(record.activity.id) ? [record] : [];
+    if (record.kind === "startup-failure") return [];
+    const content = record.content.filter((entry) => entry.kind === "comment"
+      ? commentIds.has(entry.comment.id)
+      : activityIds.has(entry.activity.id));
+    return content.length === 0 ? [] : [{ ...record, content }];
+  });
 }
 
 function newestFirst(left: { occurredAt: string }, right: { occurredAt: string }): number {

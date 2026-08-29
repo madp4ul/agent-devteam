@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import type {
   ActivationView,
@@ -20,8 +20,19 @@ import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 import { TextPreview } from "./TextPreview.tsx";
-import { buildTimelineRecords, type AttemptTimelineContent, type TimelineRecord } from "./timeline-model.ts";
-import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
+import {
+  buildTimelineRecords,
+  filterTimelineRecordsForAgents,
+  type AttemptTimelineContent,
+  type TimelineRecord,
+} from "./timeline-model.ts";
+import {
+  captureTimelineViewportAnchor,
+  focusTimelineSource,
+  restoreTimelineViewportAnchor,
+  timelineSourceElementId,
+  type TimelineViewportAnchor,
+} from "./timeline-scroll-anchor.ts";
 
 type TimelineAgent = Pick<CollaboratorView, "id" | "name">;
 type TimelineColumn = Pick<ProcessColumnView, "id" | "name">;
@@ -67,7 +78,12 @@ export function TaskTimeline({
 }): ReactNode {
   const [conversationSelection, setConversationSelection] = useState<ConversationSelection>();
   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
+  const [agentInspectableOnly, setAgentInspectableOnly] = useState(false);
+  const pendingFilterAnchor = useRef<TimelineViewportAnchor | null>(null);
   const records = buildTimelineRecords(comments, activity, activations);
+  const visibleRecords = agentInspectableOnly
+    ? filterTimelineRecordsForAgents(records, agentInspectableContent)
+    : records;
   const context: TimelineContext = {
     comments,
     activity,
@@ -100,14 +116,38 @@ export function TaskTimeline({
   useEffect(() => {
     if (sourceRequest !== undefined) followSource(sourceRequest.sourceId);
   }, [sourceRequest?.sequence]);
+  useLayoutEffect(() => {
+    restoreTimelineViewportAnchor(pendingFilterAnchor.current);
+    pendingFilterAnchor.current = null;
+  }, [agentInspectableOnly]);
+
+  const setInspectableFilter = (enabled: boolean): void => {
+    pendingFilterAnchor.current = captureTimelineViewportAnchor();
+    setAgentInspectableOnly(enabled);
+  };
 
   return (
     <>
       <section className="timeline-section" aria-labelledby="timeline-heading">
-        <h2 id="timeline-heading" tabIndex={-1}>Task timeline</h2>
-        {records.length === 0 ? <p className="quiet">No task history yet.</p> : (
+        <div className="timeline-heading-row">
+          <h2 id="timeline-heading" tabIndex={-1}>Task timeline</h2>
+          <fieldset className="timeline-filters" aria-label="Filter task timeline">
+            <legend>Filter</legend>
+            <label className="timeline-filter-option">
+              <input
+                type="checkbox"
+                checked={agentInspectableOnly}
+                onChange={(event) => setInspectableFilter(event.currentTarget.checked)}
+              />
+              <span>Visible to agents</span>
+            </label>
+          </fieldset>
+        </div>
+        {records.length === 0 ? <p className="quiet">No task history yet.</p> : visibleRecords.length === 0 ? (
+          <p className="quiet timeline-empty">No timeline content matches this filter.</p>
+        ) : (
           <ol className="timeline">
-            {records.map((record) => (
+            {visibleRecords.map((record) => (
               <TimelineRecordView
                 key={record.key}
                 record={record}
@@ -115,6 +155,7 @@ export function TaskTimeline({
                 expandedText={expandedText}
                 onTextExpanded={setTextExpanded}
                 onSource={followSource}
+                agentInspectableOnly={agentInspectableOnly}
                 {...(transcriptsAvailable ? { onConversation: setConversationSelection } : {})}
               />
             ))}
@@ -165,6 +206,7 @@ function TimelineRecordView({
   onTextExpanded,
   onSource,
   onConversation,
+  agentInspectableOnly,
 }: {
   record: TimelineRecord;
   context: TimelineContext;
@@ -172,6 +214,7 @@ function TimelineRecordView({
   onTextExpanded(id: string, expanded: boolean): void;
   onSource(sourceId: string): void;
   onConversation?: (selection: ConversationSelection) => void;
+  agentInspectableOnly: boolean;
 }): ReactNode {
   if (record.kind === "comment") {
     return (
@@ -235,6 +278,7 @@ function TimelineRecordView({
       expandedText={expandedText}
       onTextExpanded={onTextExpanded}
       onSource={onSource}
+      agentInspectableOnly={agentInspectableOnly}
       {...(onConversation === undefined ? {} : { onConversation })}
     />
   );
@@ -247,6 +291,7 @@ function AttemptCard({
   onTextExpanded,
   onSource,
   onConversation,
+  agentInspectableOnly,
 }: {
   record: Extract<TimelineRecord, { kind: "attempt" }>;
   context: TimelineContext;
@@ -254,6 +299,7 @@ function AttemptCard({
   onTextExpanded(id: string, expanded: boolean): void;
   onSource(sourceId: string): void;
   onConversation?: (selection: ConversationSelection) => void;
+  agentInspectableOnly: boolean;
 }): ReactNode {
   const { attempt, activation } = record;
   const agentName = nameForAgent(activation.targetAgentId, context.agents);
@@ -275,7 +321,7 @@ function AttemptCard({
             )}
           </span>
         </div>
-        {attempt.outcome === null ? null : (
+        {agentInspectableOnly || attempt.outcome === null ? null : (
           <section className="attempt-outcome" aria-label="Outcome" data-timeline-record={`outcome-${attempt.id}`}>
             <div className="entry-meta authored-heading">
               <h3>Outcome</h3>

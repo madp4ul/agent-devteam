@@ -353,6 +353,139 @@ test("task details distinguish agent-inspectable content from user-only evidence
   await expect(page.getByRole("button", { name: "Agent-inspectable information" })).toHaveCount(markerCount);
 });
 
+test("task timeline filters mixed grouped history and keeps the choice through live refresh", async ({ page }) => {
+  let publishLiveHistory = false;
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    const activation = detail.task.activations.find((candidate: { attempts: unknown[] }) => candidate.attempts.length > 0);
+    const attempt = activation?.attempts[0];
+    const occurredAt = new Date().toISOString();
+    detail.task.comments.push(
+      {
+        id: "filter-inspectable-comment",
+        body: "Inspectable standalone filter evidence.",
+        actor: { kind: "user", id: "local-user" },
+        occurredAt,
+      },
+      {
+        id: "filter-user-only-comment",
+        body: "User-only standalone filter evidence.",
+        actor: { kind: "user", id: "local-user" },
+        occurredAt,
+      },
+    );
+    detail.agentInspectableContent.commentIds.push("filter-inspectable-comment");
+    if (attempt !== undefined) {
+      detail.task.activity.push(
+        {
+          id: "filter-inspectable-nested",
+          type: "task.edited",
+          actor: { kind: "framework", id: "coordination" },
+          occurredAt,
+          details: { attemptId: attempt.id },
+        },
+        {
+          id: "filter-user-only-nested",
+          type: "automation.suspended",
+          actor: { kind: "framework", id: "coordination" },
+          occurredAt,
+          details: { attemptId: attempt.id },
+        },
+      );
+      detail.agentInspectableContent.activityIds.push("filter-inspectable-nested");
+    }
+    if (publishLiveHistory) {
+      detail.task.comments.push(
+        {
+          id: "filter-live-inspectable",
+          body: "Live inspectable filter evidence.",
+          actor: { kind: "agent", id: "implementer" },
+          occurredAt,
+        },
+        {
+          id: "filter-live-user-only",
+          body: "Live user-only filter evidence.",
+          actor: { kind: "user", id: "local-user" },
+          occurredAt,
+        },
+      );
+      detail.agentInspectableContent.commentIds.push("filter-live-inspectable");
+    }
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const timeline = page.getByRole("region", { name: "Task timeline" });
+  const filter = timeline.getByRole("checkbox", { name: "Visible to agents" });
+  await expect(filter).not.toBeChecked();
+  await expect(timeline.getByText("Inspectable standalone filter evidence.")).toBeVisible();
+  await expect(timeline.getByText("User-only standalone filter evidence.")).toBeVisible();
+
+  const authoredText = timeline.locator(".authored-prose")
+    .filter({ hasText: "This intentionally long comment explains" })
+    .locator("..");
+  const disclosure = authoredText.getByRole("button", { name: /Show \d+ more lines?/ });
+  await disclosure.click();
+  const retainedNestedComment = timeline.locator(".nested-comment")
+    .filter({ hasText: "This intentionally long comment explains" });
+  await retainedNestedComment.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const centerBeforeFilter = await retainedNestedComment.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.top + bounds.height / 2;
+  });
+  await filter.evaluate((checkbox) => {
+    (checkbox as HTMLInputElement).click();
+  });
+
+  await expect(filter).toBeChecked();
+  await expect(timeline.getByText("Inspectable standalone filter evidence.")).toBeVisible();
+  await expect(timeline.getByText("User-only standalone filter evidence.")).toHaveCount(0);
+  await expect(timeline.getByText("Task edited", { exact: true })).toBeVisible();
+  await expect(timeline.getByText("Task automation suspended", { exact: true })).toHaveCount(0);
+  await expect(timeline.getByRole("region", { name: "Outcome" })).toHaveCount(0);
+  await expect(authoredText.getByRole("button", { name: "Show less" })).toBeVisible();
+  const retainedAttempt = timeline.locator(".attempt-entry")
+    .filter({ hasText: "This intentionally long comment explains" });
+  await expect(retainedAttempt.getByText("Completed", { exact: true })).toBeVisible();
+  await expect(retainedAttempt.getByText("Attempt 1", { exact: true })).toBeVisible();
+  await expect(retainedAttempt.getByText(/Triggered by/)).toBeVisible();
+  await expect(retainedAttempt.getByRole("button", { name: "View conversation" })).toBeVisible();
+  const centerAfterFilter = await retainedNestedComment.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.top + bounds.height / 2;
+  });
+  expect(Math.abs(centerAfterFilter - centerBeforeFilter)).toBeLessThanOrEqual(2);
+
+  publishLiveHistory = true;
+  await expect(timeline.getByText("Live inspectable filter evidence.")).toBeVisible();
+  await expect(timeline.getByText("Live user-only filter evidence.")).toHaveCount(0);
+  await expect(filter).toBeChecked();
+
+  await filter.uncheck();
+  await expect(timeline.getByText("Live user-only filter evidence.")).toBeVisible();
+  await expect(timeline.getByRole("region", { name: "Outcome" }).first()).toBeVisible();
+  await expect(authoredText.getByRole("button", { name: "Show less" })).toBeVisible();
+});
+
+test("task timeline explains an empty agent-visible result", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.agentInspectableContent.commentIds = [];
+    detail.agentInspectableContent.activityIds = [];
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const timeline = page.getByRole("region", { name: "Task timeline" });
+  const filter = timeline.getByRole("checkbox", { name: "Visible to agents" });
+  await filter.check();
+  await expect(timeline.getByText("No timeline content matches this filter.")).toBeVisible();
+  await expect(timeline.locator(".timeline-entry")).toHaveCount(0);
+  await expect(filter).toBeChecked();
+});
+
 
 test("collapsed timeline prose reports hidden rendered lines at desktop and narrow widths", async ({ page }) => {
   let authoredBody = "First line.  \nSecond line.  \nThird line.  \nFourth line.  \nFifth line.";

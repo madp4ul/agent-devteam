@@ -331,6 +331,9 @@ without choosing the implementation yet.
 - [Filter the Timeline to Agent-Inspectable Events](./issues/79-filter-timeline-to-agent-inspectable-events.md)
   — Let users reduce long timelines to the exact coordination evidence agents
   can inspect, using the same authoritative visibility semantics as the UI.
+  **Resolved:** The timeline now switches between complete history and the
+  projection-derived agent-visible subset while preserving mixed attempt
+  grouping, expansion, viewport position, and the selected view across refresh.
 - [Keep Bottom-Anchored Conversation Follow-Ups Visible](./issues/80-keep-bottom-anchored-conversation-following.md)
   — Keep a conversation following its end when a user submits there while
   preserving the reading position of users who have scrolled away.

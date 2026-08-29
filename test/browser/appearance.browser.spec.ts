@@ -112,6 +112,24 @@ test("agent-inspectable markers stay centered, quiet, and readable in both appea
   }
 });
 
+test("timeline filter stays readable in both appearances", async ({ page }) => {
+  await page.goto("/tasks/T-0001");
+  const filter = page.getByRole("region", { name: "Task timeline" })
+    .getByRole("checkbox", { name: "Visible to agents" });
+  const option = filter.locator("..");
+
+  for (const theme of ["dark", "light"] as const) {
+    await setAppearance(page, theme);
+    await expect(filter).toBeVisible();
+    expect(await contrastRatio(option)).toBeGreaterThanOrEqual(4.5);
+    await filter.focus();
+    await expect(filter).toBeFocused();
+    await filter.check();
+    await expect(filter).toBeChecked();
+    await filter.uncheck();
+  }
+});
+
 test("explicit theme persists across navigation and reload and overrides the system", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");
