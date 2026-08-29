@@ -49,6 +49,14 @@ browser and host share the request and response contracts for that local
 transport, while the host maps decoding and status codes. Neither side owns
 workflow or automation policy.
 
+The local HTTP adapter remains framework-free and keeps browser and
+project-scoped agent authorization/capability boundaries explicit. Project-owned
+routing may organize transport mechanics, but it does not introduce middleware
+or another application authority. [ADR 0016](adr/0016-keep-the-local-http-adapter-framework-free-until-platform-needs-emerge.md)
+defines the observable product and maintenance conditions that justify
+reconsidering a focused router or full web framework, plus the proof required
+before adoption.
+
 ### Coordination core
 
 `CoordinationApplication` is the shared command-and-query boundary for every
@@ -256,6 +264,9 @@ coordination database.
   documents the recovery unit and operating procedure.
 - [Development setup](development-setup.md) documents the source toolchain and
   local startup procedure.
+- [ADR 0016](adr/0016-keep-the-local-http-adapter-framework-free-until-platform-needs-emerge.md)
+  records the local HTTP routing decision and its framework-reconsideration
+  boundary.
 - [Architecture decisions](adr/) explain why the product owns its board, runs
   host-native, uses React and Vite, binds state beside the project, and relocates
   state through an offline command.

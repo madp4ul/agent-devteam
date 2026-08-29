@@ -364,6 +364,44 @@ without choosing the implementation yet.
 - [Discard an Interrupted Activation](./issues/50-discard-interrupted-activation.md)
   — Decide how a user deliberately abandons preserved interrupted work, what
   happens to later queued activations, and how the decision remains auditable.
+
+## Maintainer refactoring research
+
+- [Evaluate the Web API Routing Boundary](./issues/84-evaluate-web-api-routing-boundary.md)
+  — Decide whether direct Node.js routing, a small project-owned dispatcher, a
+  focused router, or a web framework best isolates endpoints for this
+  repository's AI maintainer without moving application authority into HTTP.
+  **Resolved:** Keep stable Node HTTP and extract a dependency-free tiny typed
+  dispatcher shared mechanically by separately registered browser and agent
+  route sets; preserve raw streaming and application authority, and stop if
+  the proof cannot remain small or enable focused fake-capability tests.
+- [Evaluate TypeScript Persistence and Migration Tooling](./issues/85-evaluate-typescript-persistence-tooling.md)
+  — Decide whether an ORM, query builder, migration toolkit, or refined raw-SQL
+  boundary best supports AI-maintained persistence, while preserving issue 42's
+  released-schema upgrade and recovery guarantees.
+  **Resolved:** Keep synchronous built-in `node:sqlite` and visible
+  project-owned SQL, improve only the typed statement/row-decoding boundary,
+  and keep released-schema backup and migrations under an application-owned
+  registry; prototype Drizzle's steady-state query and migration ergonomics,
+  with stable native-driver support or a justified permanent driver change as
+  a separate production gate.
+
+## Maintainer refactoring prototypes
+
+- [Prototype Drizzle Persistence and Migration Ergonomics](./issues/87-prototype-drizzle-persistence-migrations.md)
+  — Compare a fully transitioned Drizzle slice with typed project-owned SQL for
+  routine queries, a difficult projection, and a populated released-like
+  schema upgrade, judging only steady-state maintainer value while keeping
+  issue 42's recovery envelope application-owned.
+
+## Maintainer refactoring implementation
+
+- [Isolate Web API Routes Behind a Typed Dispatcher](./issues/86-isolate-web-api-routes-behind-typed-dispatcher.md)
+  — Keep Node HTTP while replacing the browser and agent conditional chains
+  incrementally with separately registered, capability-narrowed route modules
+  behind one dependency-free typed dispatcher, preserving all transport and
+  application-authority behavior.
+
 ## Deferred release engineering
 
 - [Support Released Schema Upgrades](./issues/42-support-released-schema-upgrades.md)
