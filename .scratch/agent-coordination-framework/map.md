@@ -333,6 +333,10 @@ without choosing the implementation yet.
 - [Preselect the Most Recent Task Agent in Mention Autocomplete](./issues/81-preselect-most-recent-task-agent-mention.md)
   — Make the latest applicable task agent the active `@` suggestion so common
   replies need no name typing without inserting or submitting automatically.
+  **Resolved:** Empty mention autocomplete now selects the current-directory
+  agent owning the task's most recently started attempt, falls back without
+  retargeting when that identity is unavailable, and preserves explicit
+  selection and submission semantics.
 - [Omit Self-Authored Comments from Continuation Updates](./issues/82-omit-self-authored-comments-from-continuation-updates.md)
   — Keep resumed-agent change summaries focused on new external information by
   omitting the agent's own comments already preserved in its conversation.
@@ -340,6 +344,9 @@ without choosing the implementation yet.
   — Add a quiet read-only Settings section for the process's currently
   configured model rates and the truthful accumulated estimated cost across
   all retained tasks.
+  **Resolved:** Settings now summarizes total and per-task cost across retained
+  active and archived work, preserves historical prices and cumulative-thread
+  accounting, and lists the process's current per-million-token model rates.
 - [Show Live Task-Workspace Git State](./issues/33-show-live-task-workspace-git-state.md)
   — Evaluate a richer automatically updating branch, commit, dirty-file, and
   optional storage summary after basic workspace discovery proves useful.
