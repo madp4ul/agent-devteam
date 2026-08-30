@@ -390,10 +390,18 @@ without choosing the implementation yet.
   whether scheduling, workspace claims, interruption, attempt settlement,
   retries, transcript usage, and failure attention still belong behind one
   automation persistence interface or warrant lifecycle-focused deep modules.
+  **Resolved:** Replace the broad store with lifecycle-focused activation
+  scheduling, active-attempt, and settlement-only evidence modules over the one
+  database owner; keep asynchronous runtime control in the coordinator and stop
+  if the extraction leaks transaction choreography or duplicates policy.
 - [Evaluate the Codex Runtime Event Seam](./issues/90-evaluate-codex-runtime-event-seam.md)
   — Decide whether SDK thread execution, streamed-event state, live transcript
   evidence, outcomes, usage, and rollout context measurement should remain one
   runtime module or gain a smaller event/evidence seam for safer SDK changes.
+  **Resolved:** Keep one external Codex runtime adapter, but move whole-stream
+  event interpretation into one internal attempt projector and isolate private
+  rollout context evidence separately; preserve construction, replacement
+  provenance, coordination semantics, and persistence in their current owners.
 
 ## Maintainer refactoring prototypes
 
@@ -425,6 +433,29 @@ without choosing the implementation yet.
   or failed activation dismissal while moving their complete activation,
   attention, suspension, activity, and idempotency behavior behind one cohesive
   internal module.
+- [Extract Retained Attempt Evidence](./issues/91-extract-retained-attempt-evidence.md)
+  — Preserve transcript, cumulative-usage, pricing, and cost behavior while
+  moving truthful retained evidence behind one private settlement-only module.
+- [Localize Activation Dispatch Preparation](./issues/92-localize-activation-dispatch-preparation.md)
+  — Combine runnable selection and claiming, then hide workspace registration,
+  release, startup failure, and attempt-start persistence around coordinator-owned
+  Git preparation.
+- [Deepen the Active Attempt Lifecycle](./issues/93-deepen-active-attempt-lifecycle.md)
+  — Centralize started-attempt settlement, interruption, retry, permission,
+  recovery, attention, activity, conversation, and idempotency behavior, then
+  remove the superseded broad automation store.
+- [Project Codex Events into Attempt Evidence](./issues/94-project-codex-events-into-attempt-evidence.md)
+  — Keep one external Codex runtime adapter while moving SDK event validation,
+  live transcript state, usage decoding, and terminal precedence behind one
+  internal attempt-local whole-stream projector.
+- [Isolate Local Codex Session Evidence](./issues/95-isolate-local-codex-session-evidence.md)
+  — Hide private rollout discovery, cached backward JSONL scanning, context
+  decoding, and percentage calculation behind one fail-optional reader without
+  changing execution authority or the context meter.
+- [Recover Resumed Codex Threads from Lazy Stream Failures](./issues/96-recover-resumed-codex-threads-from-lazy-stream-failures.md)
+  — After event projection is localized, let one fresh replacement recover a
+  resumed run that fails before thread identity during lazy stream iteration,
+  without treating cancellation or observable work as safe to replay.
 
 ## Deferred release engineering
 

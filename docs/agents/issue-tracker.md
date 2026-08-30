@@ -32,3 +32,6 @@ identify it by path or ticket number.
 - Claim: set `Status: claimed` before beginning work
 - Resolve: append the result under `## Answer`, set `Status: resolved`, and add
   a link and summary to the map's `Decisions so far`
+- Follow-through: when a resolved decision requires implementation, publish its
+  dependency-aware child tickets before handing the decision back as complete,
+  and link those tickets from the decision and map

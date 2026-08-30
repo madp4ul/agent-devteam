@@ -23,6 +23,13 @@ Choose the entry point based on how clear the work is:
    apply `tdd` at agreed seams and finish with `code-review`.
 6. Hand the resulting local changes to the user for review.
 
+A research, prototype, grilling, or design ticket that concludes implementation
+work is needed is not ready to be presented as fully done until its recommended
+follow-up work has been published as dependency-aware tracker tickets. Resolve
+the decision ticket with its answer, create and link the follow-up tickets in
+the same workflow, and distinguish clearly between "the decision is resolved"
+and "the resulting delivery work is complete" in the user handoff.
+
 The short form is:
 
 `wayfinder or grill-with-docs -> to-spec -> to-tickets -> implement -> code-review -> user review`

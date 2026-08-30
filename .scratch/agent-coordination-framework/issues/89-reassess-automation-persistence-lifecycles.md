@@ -10,7 +10,7 @@ smaller set of lifecycle-focused internal modules.
 
 **Blocked by:** 88 — Localize Activation Resolution Commands.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Maintainer decision
 
@@ -55,17 +55,71 @@ performing the refactor here.
 
 ## Acceptance criteria
 
-- [ ] The complete automation persistence state model and transaction
+- [x] The complete automation persistence state model and transaction
   invariants are recorded from repository evidence.
-- [ ] Alternatives are compared on depth, leverage, locality, interface size,
+- [x] Alternatives are compared on depth, leverage, locality, interface size,
   coordinator knowledge, and testability rather than source length.
-- [ ] The recommendation preserves one database owner, workflow-owned atomic
+- [x] The recommendation preserves one database owner, workflow-owned atomic
   changes, application authority, deterministic scheduling, recovery safety,
   conversation continuity, and truthful attempt evidence.
-- [ ] Any proposed internal seam has a deletion-test justification and at least
+- [x] Any proposed internal seam has a deletion-test justification and at least
   one complete lifecycle it hides from callers.
-- [ ] The result states whether architecture documentation or an ADR would need
+- [x] The result states whether architecture documentation or an ADR would need
   updating if the recommendation is implemented.
-- [ ] The result gives a clear no-change stopping condition and splits any
+- [x] The result gives a clear no-change stopping condition and splits any
   justified implementation into independently green, fresh-context tickets.
 
+## Answer
+
+Replace `AutomationStateStore` with three lifecycle-focused internal modules
+over the existing single `CoordinationDatabase`: `ActivationSchedulingModule`
+for deterministic selection, durable dispatch claims, workspace registration,
+dispatch release, and pre-runtime failure; `ActiveAttemptModule` for started
+attempt recovery, thread association, interruption, settlement, retries,
+attention, activity, conversation state, and interruption idempotency; and a
+settlement-only `AttemptEvidenceModule` for transcript retention, cumulative
+usage isolation, pricing snapshots, and attempt-cost evidence.
+
+The complete state model, transaction inventory, source and test evidence,
+three-way design comparison, interface sketches, deletion tests, verification
+seams, migration shape, and stopping condition are recorded in
+[Automation persistence lifecycle boundaries](../research/automation-persistence-lifecycles.md).
+
+The split is justified by independent change axes rather than source length.
+Queue eligibility and claim/workspace preparation, active attempt outcomes, and
+truthful retained evidence each hide a complete policy. The coordinator should
+continue to own asynchronous Git and Codex sequencing, retry-clock wakeups,
+concurrency, abort controllers, pause/drain state, attachment projection
+lifetime, and interruption confirmation. It should no longer know provisional
+attempt/claim representation, workspace/start commit ordering, retry arithmetic,
+attention rules, thread correlation writes, usage isolation, or idempotent
+interruption settlement.
+
+Retaining the current store remains the no-change fallback because it is not a
+shallow module. A two-way dispatch/settlement split improves locality but leaves
+failure policy and evidence semantics coupled. Table repositories and a
+delegating facade are rejected because deleting them removes no policy and
+would expose transaction ordering to callers.
+
+Implement only through independently green, fresh-context tickets: 89A extracts
+the private retained-evidence collaborator; 89B combines runnable selection and
+claim while localizing workspace dispatch preparation; 89C deepens the remaining
+active-attempt lifecycle, shares normal and host-stop retry policy, hides
+run-start correlation, and removes `AutomationStateStore`. Stop and retain the
+current module if any extraction duplicates SQL policy, moves async runtime
+state into persistence, leaks transaction choreography, or weakens public-seam
+coverage.
+
+This is a code-only internal decomposition with no schema migration. A
+behavior-preserving implementation does not require an architecture update or
+ADR because the existing documentation already specifies one database owner,
+workflow-owned transactions, focused internal modules, and coordinator-owned
+runtime integration. Reinspect documentation after implementation; update it
+only if authority, startup ordering, the Git/SQLite recovery protocol, crash
+semantics, or durable schema actually changes.
+
+## Follow-up tickets
+
+- [91 — Extract Retained Attempt Evidence](./91-extract-retained-attempt-evidence.md)
+- [92 — Localize Activation Dispatch Preparation](./92-localize-activation-dispatch-preparation.md)
+- [93 — Deepen the Active Attempt Lifecycle](./93-deepen-active-attempt-lifecycle.md)

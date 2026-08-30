@@ -11,7 +11,7 @@ the project's AI maintainer.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Maintainer decision
 
@@ -59,16 +59,69 @@ implementation is justified, propose fresh-context follow-up tickets.
 
 ## Acceptance criteria
 
-- [ ] Repository responsibilities and current test seams are mapped before any
+- [x] Repository responsibilities and current test seams are mapped before any
   recommendation is made.
-- [ ] Claims about Codex SDK events, thread behavior, and local session evidence
+- [x] Claims about Codex SDK events, thread behavior, and local session evidence
   cite first-party documentation or source.
-- [ ] Alternatives are compared on depth, locality, interface size, live-state
+- [x] Alternatives are compared on depth, locality, interface size, live-state
   correctness, SDK upgrade blast radius, and test setup.
-- [ ] The recommendation does not duplicate the existing typed coordination-
+- [x] The recommendation does not duplicate the existing typed coordination-
   transcript projection or move application persistence into the runtime.
-- [ ] All terminal-outcome precedence and thread-continuity invariants have an
+- [x] All terminal-outcome precedence and thread-continuity invariants have an
   explicit preservation and verification strategy.
-- [ ] The result gives a clear no-change stopping condition and proposes only
+- [x] The result gives a clear no-change stopping condition and proposes only
   independently green, fresh-context implementation work when justified.
 
+## Answer
+
+Keep `CodexAgentRuntime` as the application's single external runtime and
+transcript adapter, but introduce one internal stateful whole-stream projector
+where the SDK's `AsyncIterable<ThreadEvent>` becomes attempt-owned transcript,
+usage, and terminal facts. Separately isolate the private local rollout reader
+behind a one-method context-evidence interface. The full repository map,
+candidate comparison, interface sketch, preservation matrix, migration shape,
+version audit, and primary-source citations are in
+[Codex Runtime Event Seam](../research/90-codex-sdk-runtime-evidence.md).
+
+The projector is justified by behavior, not by the runtime file's size. It
+owns one deep attempt-local state machine for stable live row replacement, raw
+generic-tool evidence, usage decoding, required coordination failures,
+permission blocks, incomplete streams, and terminal precedence. It must call
+the existing `coordinationTranscriptItem` for typed coordination presentation,
+so the project retains one semantic path. Client/sandbox configuration, input,
+MCP lifetime, thread start/resume/replacement, attempt-keyed storage, lifecycle
+notification, and `threadContinuity: "replaced"` provenance remain in the
+runtime. Persistence, retry, cost deltas, and conversation projections remain
+application-owned.
+
+The supported source boundary is exact: the lockfile resolves
+`@openai/codex-sdk` 0.146.0 and its bundled `@openai/codex` 0.146.0, matching
+OpenAI tag `rust-v0.146.0` at commit `be449751...`. At that boundary the SDK
+exports closed eight-variant event and item unions, but runtime JSON is only
+cast rather than validated; item IDs support stable replacement within one CLI
+invocation; `turn.completed.usage` is a cumulative thread snapshot; and local
+`token_count` rollout records are private, fail-optional evidence rather than
+a supported SDK contract. Every lockfile upgrade must re-audit those facts.
+
+No prototype is needed because 34 focused runtime tests already use literal
+async event streams and divide cleanly between construction, transcript
+evidence, and coordination presentation. Implementation should move event
+traces to the projector interface rather than layer duplicate tests, retaining
+thin runtime tests for configuration, start/resume/replacement, MCP release,
+input, lifecycle wiring, and evidence handoff.
+
+Create fresh-context follow-ups for: (1) projecting Codex events into attempt
+evidence without changing the external runtime contract; (2) isolating local
+session evidence while preserving backward scanning, cached discovery,
+percentage calculation, and fail-optional behavior; and (3) separately
+aligning replacement behavior with the SDK's lazy async generator. The source
+audit found that real spawn/resume/JSON failures usually surface during event
+iteration, while the current replacement catch surrounds only the initial
+`runStreamed()` promise; that possible behavior correction must not be hidden
+inside a refactor.
+
+Stop and retain the cohesive implementation if the projector cannot own the
+whole event state machine and final precedence, duplicates runtime event tests,
+or needs thread construction, filesystem paths, MCP release, or persistence.
+Do not add a multicast observer or version-dialect adapter until a real second
+consumer or SDK dialect exists.
