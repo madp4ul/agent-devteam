@@ -16,6 +16,8 @@ import type {
   AttemptTranscriptAccess,
   AttemptTranscriptItem,
 } from "../../src/application/runtime-contract.ts";
+import type { TaskWorkspaceView } from "../../src/application/task-contract.ts";
+import { GitTaskWorkspaceManager } from "../../src/application/internal/git-task-workspace.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -373,6 +375,94 @@ test("pause drains active attempts and preserves queued work until resume", asyn
   await application.resumeAutomation();
   await runtime.waitForRequest(3);
   runtime.completeAll({ status: "completed", summary: "Resumed in order." });
+  await application.waitForAutomationIdle();
+});
+
+test("pause after workspace preparation releases the unstarted claim with continuation intact", async (t) => {
+  const fixture = await createFixture("pause-after-workspace-preparation");
+  const runtime = new InterruptibleRuntime();
+  const application = await startApplication(fixture, runtime);
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Pause prepared continuation",
+    description: "Do not retain an attempt until runtime can actually start.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-pause-prepared-continuation",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  await application.resumeAutomation();
+  const first = await runtime.waitForRequest(1);
+  const interruption = application.interruptTask({
+    taskId: created.task.id,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "interrupt-before-prepared-pause",
+  });
+  assert.equal(interruption.accepted, true);
+  if (!interruption.accepted) return;
+  await interruption.confirmed;
+
+  const originalProvision = GitTaskWorkspaceManager.prototype.provision;
+  let markWorkspacePrepared = () => {};
+  const workspacePrepared = new Promise<void>((resolve) => {
+    markWorkspacePrepared = resolve;
+  });
+  let releaseProvision = () => {};
+  const provisionReleased = new Promise<void>((resolve) => {
+    releaseProvision = resolve;
+  });
+  t.mock.method(
+    GitTaskWorkspaceManager.prototype,
+    "provision",
+    async function (
+      this: GitTaskWorkspaceManager,
+      taskId: string,
+      startingRef: string,
+      existing: TaskWorkspaceView | undefined,
+    ): Promise<TaskWorkspaceView> {
+      const workspace = await originalProvision.call(this, taskId, startingRef, existing);
+      markWorkspacePrepared();
+      await provisionReleased;
+      return workspace;
+    },
+  );
+
+  const continued = application.continueInterruptedTask({
+    taskId: created.task.id,
+    message: "Reassess the prepared workspace before continuing.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "continue-into-prepared-pause",
+  });
+  assert.equal(continued.accepted, true);
+  await workspacePrepared;
+  assert.deepEqual(application.pauseAutomation(), {
+    accepted: true,
+    automation: { state: "paused", attemptsMayStart: false },
+  });
+  releaseProvision();
+  await application.waitForAutomationIdle();
+
+  assert.equal(runtime.requests.length, 1);
+  const paused = application.queryTask(created.task.id);
+  assert.equal(paused.available, true);
+  if (!paused.available) return;
+  assert.equal(paused.task.activations[0]?.status, "queued");
+  assert.equal(paused.task.activations[0]?.attempts.length, 1);
+  assert.equal(
+    paused.task.activity.filter((activity) => activity.type === "attempt.started").length,
+    1,
+  );
+
+  await application.resumeAutomation();
+  const resumed = await runtime.waitForRequest(2);
+  assert.equal(resumed.activationId, first.activationId);
+  assert.equal(resumed.attempt.number, 2);
+  assert.equal(resumed.attempt.continuationMessage, "Reassess the prepared workspace before continuing.");
+  assert.equal(resumed.resumeThreadId, "thread-1");
+  runtime.complete({ status: "completed", summary: "Continued after the pause.", threadId: "thread-1" });
   await application.waitForAutomationIdle();
 });
 

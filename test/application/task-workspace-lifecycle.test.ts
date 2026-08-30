@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
@@ -15,6 +16,8 @@ import type {
   AgentRunLifecycle,
   AgentRuntime,
 } from "../../src/application/runtime-contract.ts";
+import type { TaskWorkspaceView } from "../../src/application/task-contract.ts";
+import { GitTaskWorkspaceManager } from "../../src/application/internal/git-task-workspace.ts";
 
 const execFileAsync = promisify(execFile);
 import {
@@ -137,6 +140,107 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
     completed.task.activity.map((event) => event.type),
     ["task.created", "activation.created", "attempt.started", "attempt.completed"],
   );
+});
+
+test("a failed start commit leaves external workspace state unadopted and blocks restart", async (t) => {
+  const fixture = await createActivationFixture("start-commit-failure");
+  const runtime = new CompletingAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Fail the prepared start commit",
+    description: "Leave externally provisioned state for fail-closed startup validation.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-start-commit-failure",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  const originalProvision = GitTaskWorkspaceManager.prototype.provision;
+  let markWorkspacePrepared = () => {};
+  const workspacePrepared = new Promise<void>((resolve) => {
+    markWorkspacePrepared = resolve;
+  });
+  let releaseProvision = () => {};
+  const provisionReleased = new Promise<void>((resolve) => {
+    releaseProvision = resolve;
+  });
+  t.mock.method(
+    GitTaskWorkspaceManager.prototype,
+    "provision",
+    async function (
+      this: GitTaskWorkspaceManager,
+      taskId: string,
+      startingRef: string,
+      existing: TaskWorkspaceView | undefined,
+    ): Promise<TaskWorkspaceView> {
+      const workspace = await originalProvision.call(this, taskId, startingRef, existing);
+      markWorkspacePrepared();
+      await provisionReleased;
+      return workspace;
+    },
+  );
+
+  const resume = application.resumeAutomation();
+  await workspacePrepared;
+  const failureInjection = new DatabaseSync(fixture.databasePath);
+  failureInjection.exec(`
+    CREATE TRIGGER reject_attempt_start
+    BEFORE INSERT ON activity_ledger
+    WHEN NEW.type = 'attempt.started'
+    BEGIN
+      SELECT RAISE(ABORT, 'simulated attempt-start persistence failure');
+    END;
+  `);
+  failureInjection.close();
+  releaseProvision();
+  const result = await resume;
+  assert.equal(result.accepted, false);
+  if (!result.accepted) {
+    assert.equal(result.reason, "runtime-start-failed");
+    assert.match(result.diagnostic ?? "", /simulated attempt-start persistence failure/);
+  }
+  assert.equal(runtime.requests.length, 0);
+  const failedStart = application.queryTask(created.task.id);
+  assert.equal(failedStart.available, true);
+  if (failedStart.available) {
+    assert.equal(failedStart.task.activations[0]?.status, "running");
+    assert.deepEqual(failedStart.task.activations[0]?.attempts, []);
+    assert.equal(
+      failedStart.task.activity.some((activity) => activity.type === "attempt.started"),
+      false,
+    );
+  }
+  application.close();
+
+  const restarted = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => restarted.close());
+  const startup = restarted.queryStartup();
+  assert.equal(startup.mode, "configuration-error");
+  if (startup.mode === "configuration-error") {
+    assert.equal(
+      startup.diagnostics.some(({ rule }) => rule.includes("database workspace record")),
+      true,
+    );
+  }
+  assert.equal(runtime.requests.length, 0);
 });
 
 test("user task inspection exposes the lazy task workspace lifecycle", async (t) => {

@@ -1,50 +1,28 @@
-import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import type {
   ActiveRunView,
-  ActivationView,
 } from "../automation-contract.ts";
 import type {
   AgentRunAgent,
   AgentRunOutcome,
-  AttemptContextView,
   AttemptTranscriptItem,
   AttemptContextWindowUsage,
   AttemptTokenUsage,
-  RuntimeStartupBoundary,
-  RuntimeStartupDiagnostic,
 } from "../runtime-contract.ts";
 import type { ProcessModelPricingDefinition } from "./process-definition.ts";
 import type {
   Actor,
-  TaskActivityView,
-  TaskWorkspaceView,
-  TaskView,
 } from "../task-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
-import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
 import type { AttentionRecorder } from "./attention-recorder.ts";
-import type { ConversationProjectionModule } from "./conversation-projection-module.ts";
 import type { AttemptEvidenceModule } from "./attempt-evidence-module.ts";
-
-export interface RunnableActivation {
-  activation: ActivationView;
-  task: TaskView;
-  agent: AgentRunAgent;
-  sourceEvent: TaskActivityView | TaskView["comments"][number];
-  continuationMessage: string | null;
-  resumeThreadId?: string;
-  fullCompositionReason?: NonNullable<AttemptContextView["fullCompositionReason"]>;
-}
 
 export class AutomationStateStore {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
-  readonly #taskProjections: TaskProjectionStore;
-  readonly #conversationProjections: ConversationProjectionModule;
   readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
   readonly #attentionRecorder: AttentionRecorder;
@@ -52,8 +30,6 @@ export class AutomationStateStore {
 
   constructor(
     database: CoordinationDatabase,
-    taskProjections: TaskProjectionStore,
-    conversationProjections: ConversationProjectionModule,
     idempotentCommands: IdempotentCommandExecutor,
     activityJournal: ActivityJournal,
     attentionRecorder: AttentionRecorder,
@@ -61,8 +37,6 @@ export class AutomationStateStore {
   ) {
     this.#owner = database;
     this.#database = database.connection;
-    this.#taskProjections = taskProjections;
-    this.#conversationProjections = conversationProjections;
     this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
     this.#attentionRecorder = attentionRecorder;
@@ -141,241 +115,6 @@ export class AutomationStateStore {
         );
       }
       return interrupted.length;
-    });
-  }
-
-  readNextRunnableActivation(now: string): RunnableActivation | undefined {
-    const row = this.#database
-      .prepare(
-        `SELECT a.id, a.task_id, a.target_agent_id, a.source_event_id,
-                a.model, a.reasoning_effort, a.continuation_message, a.definition_version,
-                conversation.current_thread_id
-         FROM activations a
-         LEFT JOIN agent_conversations conversation ON conversation.id = a.conversation_id
-         JOIN tasks task ON task.id = a.task_id
-         JOIN mapped_tasks mapped ON mapped.id = task.id
-         JOIN agents agent ON agent.id = a.target_agent_id AND agent.applied = 1
-         WHERE a.status = 'queued'
-           AND a.stale = 0
-           AND task.automation_suspended = 0
-           AND (a.retry_due_at IS NULL OR a.retry_due_at <= ?)
-           AND NOT EXISTS (
-             SELECT 1
-             FROM task_relationships relationship
-             JOIN tasks blocker ON blocker.id = relationship.target_task_id
-             WHERE relationship.type IN ('dependency', 'parent-child')
-               AND relationship.source_task_id = a.task_id
-               AND blocker.column_id <> 'completion'
-           )
-           AND NOT EXISTS (
-             SELECT 1
-             FROM activations earlier
-             WHERE earlier.task_id = a.task_id
-               AND earlier.sequence < a.sequence
-               AND earlier.status <> 'completed'
-           )
-         ORDER BY a.sequence
-         LIMIT 1`,
-      )
-      .get(now) as
-      | {
-          id: string;
-          task_id: string;
-          target_agent_id: string;
-          source_event_id: string;
-          model: string | null;
-          reasoning_effort: NonNullable<AgentRunAgent["reasoningEffort"]> | null;
-          continuation_message: string | null;
-          definition_version: string;
-          current_thread_id: string | null;
-        }
-      | undefined;
-    if (row === undefined) return undefined;
-    const task = this.#taskProjections.readTask(row.task_id);
-    const activation = task?.activations.find((candidate) => candidate.id === row.id);
-    const agentRow = this.#database
-      .prepare(
-        `SELECT id, name, role, summary, instructions_content
-         FROM agents
-         WHERE id = ?`,
-      )
-      .get(row.target_agent_id) as
-      | {
-          id: string;
-          name: string;
-          role: string;
-          summary: string;
-          instructions_content: string;
-        }
-      | undefined;
-    const sourceEvent = this.#taskProjections.readSourceEvent(row.source_event_id)
-      ?? this.#conversationProjections.readMessage(row.source_event_id);
-    if (
-      task === undefined ||
-      activation === undefined ||
-      agentRow === undefined ||
-      sourceEvent === undefined
-    ) {
-      throw new Error(`Activation ${row.id} has incomplete durable provenance`);
-    }
-    const precedingAttemptVersion = this.#readLatestAttemptDefinitionVersion(row.task_id, row.id);
-    return {
-      activation,
-      task,
-      agent: {
-        id: agentRow.id,
-        name: agentRow.name,
-        role: agentRow.role,
-        summary: agentRow.summary,
-        instructions: agentRow.instructions_content,
-        ...(row.model === null ? {} : { model: row.model }),
-        ...(row.reasoning_effort === null
-          ? {}
-          : { reasoningEffort: row.reasoning_effort }),
-      },
-      sourceEvent,
-      continuationMessage: row.continuation_message,
-      ...(row.current_thread_id === null ? {} : { resumeThreadId: row.current_thread_id }),
-      ...(precedingAttemptVersion !== undefined && precedingAttemptVersion !== row.definition_version
-        ? { fullCompositionReason: "process-rebased" as const }
-        : {}),
-    };
-  }
-
-  #readLatestAttemptDefinitionVersion(taskId: string, activationId: string): string | undefined {
-    const runStarts = this.#database
-      .prepare(
-        `SELECT details_json
-         FROM activity_ledger
-         WHERE task_id = ? AND type = 'attempt.started'
-         ORDER BY sequence DESC`,
-      )
-      .all(taskId) as Array<{ details_json: string }>;
-    for (const runStart of runStarts) {
-      const details = JSON.parse(runStart.details_json) as Record<string, string>;
-      if (details.activationId === activationId) return details.definitionVersion;
-    }
-    return undefined;
-  }
-
-  readNextRetryDueAt(now: string): string | undefined {
-    const row = this.#database
-      .prepare(
-        `SELECT MIN(a.retry_due_at) AS retry_due_at
-         FROM activations a
-         WHERE a.status = 'queued' AND a.retry_due_at > ?
-           AND NOT EXISTS (
-             SELECT 1 FROM activations earlier
-             WHERE earlier.task_id = a.task_id
-               AND earlier.sequence < a.sequence
-               AND earlier.status <> 'completed'
-           )`,
-      )
-      .get(now) as { retry_due_at: string | null };
-    return row.retry_due_at ?? undefined;
-  }
-
-  readTaskWorkspace(taskId: string): TaskWorkspaceView | undefined {
-    const row = this.#database
-      .prepare(
-        `SELECT path, starting_ref, commit_id
-         FROM task_workspaces
-         WHERE task_id = ?`,
-      )
-      .get(taskId) as
-      | { path: string; starting_ref: string; commit_id: string }
-      | undefined;
-    return row === undefined
-      ? undefined
-      : { path: row.path, startingRef: row.starting_ref, commit: row.commit_id };
-  }
-
-  readTaskWorkspaces(): Array<{ taskId: string; workspace: TaskWorkspaceView }> {
-    const rows = this.#database
-      .prepare(
-        `SELECT task_id, path, starting_ref, commit_id
-         FROM task_workspaces
-         ORDER BY task_id`,
-      )
-      .all() as Array<{
-        task_id: string;
-        path: string;
-        starting_ref: string;
-        commit_id: string;
-      }>;
-    return rows.map((row) => ({
-      taskId: row.task_id,
-      workspace: { path: row.path, startingRef: row.starting_ref, commit: row.commit_id },
-    }));
-  }
-
-  saveTaskWorkspace(taskId: string, workspace: TaskWorkspaceView): void {
-    this.#database
-      .prepare(
-        `INSERT INTO task_workspaces (task_id, path, starting_ref, commit_id)
-         VALUES (?, ?, ?, ?)`,
-      )
-      .run(taskId, workspace.path, workspace.startingRef, workspace.commit);
-  }
-
-  tryClaimActivation(
-    activationId: string,
-    workspacePath: string,
-    agent: AgentRunAgent,
-  ): { id: string; number: number } | undefined {
-    return this.#owner.transaction(() => {
-      const result = this.#database
-        .prepare(
-          `UPDATE activations
-           SET status = 'running', retry_due_at = NULL, continuation_message = NULL
-           WHERE id = ? AND status = 'queued'`,
-        )
-        .run(activationId);
-      if (result.changes !== 1) return undefined;
-      const priorAttempts = this.#database
-        .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
-        .get(activationId) as { count: number };
-      const attemptId = randomUUID();
-      this.#database
-        .prepare(
-          `INSERT INTO attempts
-            (id, activation_id, status, workspace_path, started_at, model, reasoning_effort)
-           VALUES (?, ?, 'running', ?, ?, ?, ?)`,
-        )
-        .run(
-          attemptId,
-          activationId,
-          workspacePath,
-          new Date().toISOString(),
-          agent.model ?? null,
-          agent.reasoningEffort ?? null,
-        );
-      this.#database
-        .prepare(
-          `INSERT INTO activation_dispatch_claims (attempt_id, activation_id, claimed_at)
-           VALUES (?, ?, ?)`,
-        )
-        .run(attemptId, activationId, new Date().toISOString());
-      return { id: attemptId, number: priorAttempts.count + 1 };
-    });
-  }
-
-  releaseDispatchClaim(
-    attemptId: string,
-    activationId: string,
-    continuationMessage: string | null,
-  ): void {
-    this.#owner.transaction(() => {
-      this.#database
-        .prepare("DELETE FROM attempts WHERE id = ? AND activation_id = ?")
-        .run(attemptId, activationId);
-      this.#database
-        .prepare(
-          `UPDATE activations
-           SET status = 'queued', continuation_message = ?
-           WHERE id = ? AND status = 'running'`,
-        )
-        .run(continuationMessage, activationId);
     });
   }
 
@@ -545,90 +284,6 @@ export class AutomationStateStore {
       status: "running",
       startedAt: row.started_at,
     }));
-  }
-
-  startAttempt(attemptId: string): { runStartActivityId: string } {
-    return this.#owner.transaction(() => {
-      const activation = this.#database
-        .prepare(
-          `SELECT activation.id, activation.task_id, activation.target_agent_id,
-                  activation.definition_version
-           FROM attempts attempt
-           JOIN activations activation ON activation.id = attempt.activation_id
-           JOIN activation_dispatch_claims claim ON claim.attempt_id = attempt.id
-           WHERE attempt.id = ? AND attempt.status = 'running'
-             AND activation.status = 'running'`,
-        )
-        .get(attemptId) as
-        | { id: string; task_id: string; target_agent_id: string; definition_version: string }
-        | undefined;
-      if (activation === undefined) throw new Error(`Attempt ${attemptId} is not starting`);
-      const occurredAt = new Date().toISOString();
-      this.#database
-        .prepare("UPDATE attempts SET started_at = ? WHERE id = ?")
-        .run(occurredAt, attemptId);
-      const runStartActivityId = this.#activityJournal.append(
-        activation.task_id,
-        "attempt.started",
-        { kind: "agent", id: activation.target_agent_id },
-        { activationId: activation.id, attemptId, definitionVersion: activation.definition_version },
-        occurredAt,
-      );
-      this.updateConversationActivity(attemptId, occurredAt);
-      this.#database
-        .prepare("DELETE FROM activation_dispatch_claims WHERE attempt_id = ?")
-        .run(attemptId);
-      return { runStartActivityId };
-    });
-  }
-
-  recordActivationStartupFailure(
-    activationId: string,
-    boundary: RuntimeStartupBoundary,
-    diagnostic: string,
-  ): RuntimeStartupDiagnostic {
-    return this.#owner.transaction(() => {
-      const activation = this.#database
-        .prepare("SELECT task_id FROM activations WHERE id = ? AND status = 'running'")
-        .get(activationId) as { task_id: string } | undefined;
-      if (activation === undefined) throw new Error(`Activation ${activationId} is not starting`);
-      const occurredAt = new Date().toISOString();
-      this.#database
-        .prepare(
-          `UPDATE activations
-           SET status = 'failed', failure_kind = 'technical', failure_summary = ?
-           WHERE id = ?`,
-        )
-        .run(diagnostic, activationId);
-      this.#database
-        .prepare(
-          `DELETE FROM attempts
-           WHERE activation_id = ?
-             AND id IN (SELECT attempt_id FROM activation_dispatch_claims)`,
-        )
-        .run(activationId);
-      this.#database
-        .prepare(
-          `INSERT INTO activation_startup_failures
-            (activation_id, occurred_at, boundary, diagnostic, resolved_at)
-           VALUES (?, ?, ?, ?, NULL)`,
-        )
-        .run(activationId, occurredAt, boundary, diagnostic);
-      this.#attentionRecorder.record(
-        "failed-run",
-        activation.task_id,
-        activationId,
-        occurredAt,
-      );
-      return {
-        taskId: activation.task_id,
-        activationId,
-        occurredAt,
-        boundary,
-        diagnostic,
-        resolvedAt: null,
-      };
-    });
   }
 
   recordAttemptThreadId(attemptId: string, runStartActivityId: string, threadId: string): void {

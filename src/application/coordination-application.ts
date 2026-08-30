@@ -177,6 +177,7 @@ export class CoordinationApplication {
       process,
       taskCommands,
       taskProjections,
+      activationScheduling,
       automation,
       conversationContextDelivery,
       conversationAttachments,
@@ -193,12 +194,13 @@ export class CoordinationApplication {
         new AutomationCoordinator({
           processStore: process,
           taskProjections,
+          activationScheduling,
           automationStore: automation,
           conversationContextDelivery,
           conversationAttachments,
           startup,
         }),
-        new TaskDiscovery(process, taskProjections, automation, startup),
+        new TaskDiscovery(process, taskProjections, activationScheduling, startup),
       );
     }
 
@@ -210,7 +212,7 @@ export class CoordinationApplication {
           options.runtimeDispatch.taskWorkspaceRoot,
         );
     for (const claim of persistence.taskArchive.readInterruptedClaims()) {
-      const workspace = automation.readTaskWorkspace(claim.taskId);
+      const workspace = activationScheduling.readTaskWorkspace(claim.taskId);
       if (workspace === undefined) {
         persistence.taskArchive.releaseInterruptedClaim(claim.taskId);
         continue;
@@ -227,7 +229,7 @@ export class CoordinationApplication {
       const diagnostics = await validateTaskWorkspaceConsistency(
         options.runtimeDispatch.projectRepositoryPath,
         options.runtimeDispatch.taskWorkspaceRoot,
-        automation.readTaskWorkspaces(),
+        activationScheduling.readTaskWorkspaces(),
       );
       if (diagnostics.length > 0) {
         const startup: StartupView = {
@@ -241,12 +243,13 @@ export class CoordinationApplication {
           new AutomationCoordinator({
             processStore: process,
             taskProjections,
+            activationScheduling,
             automationStore: automation,
             conversationContextDelivery,
             conversationAttachments,
             startup,
           }),
-          new TaskDiscovery(process, taskProjections, automation, startup),
+          new TaskDiscovery(process, taskProjections, activationScheduling, startup),
         );
       }
     }
@@ -285,6 +288,7 @@ export class CoordinationApplication {
       new AutomationCoordinator({
         processStore: process,
         taskProjections,
+        activationScheduling,
         automationStore: automation,
         conversationContextDelivery,
         conversationAttachments,
@@ -302,7 +306,7 @@ export class CoordinationApplication {
           ? {}
           : { transcriptAccess: options.transcriptAccess }),
       }),
-      new TaskDiscovery(process, taskProjections, automation, startup, collaborators),
+      new TaskDiscovery(process, taskProjections, activationScheduling, startup, collaborators),
       workspaceManager,
       processContext,
     );
@@ -313,7 +317,14 @@ export class CoordinationApplication {
     transcriptAccess?: AttemptTranscriptAccess,
   ): CoordinationApplication {
     const persistence = openCoordinationPersistence(":memory:", transcriptAccess);
-    const { process, taskProjections, automation, conversationContextDelivery, conversationAttachments } = persistence;
+    const {
+      process,
+      taskProjections,
+      activationScheduling,
+      automation,
+      conversationContextDelivery,
+      conversationAttachments,
+    } = persistence;
     const startup: StartupView = {
       mode: "configuration-error",
       diagnostics,
@@ -325,12 +336,13 @@ export class CoordinationApplication {
       new AutomationCoordinator({
         processStore: process,
         taskProjections,
+        activationScheduling,
         automationStore: automation,
         conversationContextDelivery,
         conversationAttachments,
         startup,
       }),
-      new TaskDiscovery(process, taskProjections, automation, startup),
+      new TaskDiscovery(process, taskProjections, activationScheduling, startup),
     );
   }
 
@@ -950,7 +962,7 @@ export class CoordinationApplication {
     }
     const claim = this.#persistence.taskArchive.claim(command, eligibility);
     if (!claim.claimed) return claim.result;
-    const workspace = this.#persistence.automation.readTaskWorkspace(command.taskId);
+    const workspace = this.#persistence.activationScheduling.readTaskWorkspace(command.taskId);
     if (workspace !== undefined) {
       if (this.#workspaceManager === undefined) {
         const result = { accepted: false as const, reason: "runtime-unavailable" as const };

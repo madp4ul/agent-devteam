@@ -18,7 +18,11 @@ import type {
 import type { Actor } from "../task-contract.ts";
 import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-workspace.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
-import type { AutomationStateStore, RunnableActivation } from "./automation-state-store.ts";
+import type { AutomationStateStore } from "./automation-state-store.ts";
+import type {
+  ActivationSchedulingModule,
+  ClaimedActivation,
+} from "./activation-scheduling-module.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 import type { ConversationContextDeliveryModule } from "./conversation-context-delivery-module.ts";
 import type { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
@@ -36,6 +40,7 @@ export interface AutomationProcessContext {
 export interface AutomationCoordinatorOptions {
   processStore: ProcessStateStore;
   taskProjections: TaskProjectionStore;
+  activationScheduling: ActivationSchedulingModule;
   automationStore: AutomationStateStore;
   conversationContextDelivery: ConversationContextDeliveryModule;
   conversationAttachments: ConversationAttachmentStore;
@@ -62,6 +67,7 @@ interface ActiveRunControl {
 export class AutomationCoordinator {
   readonly #processStore: ProcessStateStore;
   readonly #taskProjections: TaskProjectionStore;
+  readonly #activationScheduling: ActivationSchedulingModule;
   readonly #stateStore: AutomationStateStore;
   readonly #conversationContextDelivery: ConversationContextDeliveryModule;
   readonly #conversationAttachments: ConversationAttachmentStore;
@@ -87,6 +93,7 @@ export class AutomationCoordinator {
   constructor(options: AutomationCoordinatorOptions) {
     this.#processStore = options.processStore;
     this.#taskProjections = options.taskProjections;
+    this.#activationScheduling = options.activationScheduling;
     this.#stateStore = options.automationStore;
     this.#conversationContextDelivery = options.conversationContextDelivery;
     this.#conversationAttachments = options.conversationAttachments;
@@ -230,10 +237,13 @@ export class AutomationCoordinator {
     let firstError: unknown;
     const inFlightCompletions = new Set<Promise<void>>();
     while (this.#automation.state === "running") {
-      const now = this.#clock.now().toISOString();
-      const runnable = this.#stateStore.readNextRunnableActivation(now);
-      if (runnable !== undefined) {
-        const { completion } = await this.dispatch(runnable, () => {
+      const now = this.#clock.now();
+      const claim = this.#activationScheduling.claimNextRunnable(
+        now,
+        (taskId) => this.#runtimeDispatch!.workspaceManager.pathFor(taskId),
+      );
+      if (claim !== undefined) {
+        const { completion } = await this.dispatch(claim, () => {
           if (!first) return;
           first = false;
           onFirstDispatch();
@@ -248,7 +258,7 @@ export class AutomationCoordinator {
       }
       if (inFlightCompletions.size === 0) {
         if (firstError !== undefined) throw firstError;
-        const retryDueAt = this.#stateStore.readNextRetryDueAt(now);
+        const retryDueAt = this.#activationScheduling.readNextRetryDueAt(now);
         if (retryDueAt !== undefined) {
           let wake: (() => void) | undefined;
           const nextKick = new Promise<void>((resolve) => {
@@ -277,41 +287,23 @@ export class AutomationCoordinator {
   }
 
   private async dispatch(
-    runnable: RunnableActivation,
+    claim: ClaimedActivation,
     onDispatchStarted: () => void,
   ): Promise<{ completion: Promise<void> }> {
     const runtimeDispatch = this.#runtimeDispatch;
     if (runtimeDispatch === undefined) return { completion: Promise.resolve() };
-    const priorWorkspace = this.#stateStore.readTaskWorkspace(runnable.task.id);
-    const precedingAttempt = runnable.activation.attempts.at(-1);
-    const resumeThreadId = precedingAttempt?.threadId ?? runnable.resumeThreadId;
-    const claimedAttempt = this.#stateStore.tryClaimActivation(
-      runnable.activation.id,
-      priorWorkspace?.path ?? runtimeDispatch.workspaceManager.pathFor(runnable.task.id),
-      runnable.agent,
-    );
-    if (claimedAttempt === undefined) return { completion: Promise.resolve() };
+    const precedingAttempt = claim.activation.attempts.at(-1);
+    const resumeThreadId = precedingAttempt?.threadId ?? claim.resumeThreadId;
     let workspace;
     try {
       workspace = await runtimeDispatch.workspaceManager.provision(
-        runnable.task.id,
-        this.#taskProjections.readTaskStartingRef(runnable.task.id) ?? this.#startingRef ?? "",
-        priorWorkspace,
+        claim.task.id,
+        this.#taskProjections.readTaskStartingRef(claim.task.id) ?? this.#startingRef ?? "",
+        claim.workspace,
       );
-      if (priorWorkspace === undefined) {
-        try {
-          this.#stateStore.saveTaskWorkspace(runnable.task.id, workspace);
-        } catch (error) {
-          throw new GitTaskWorkspaceError(
-            "workspace-state-persistence",
-            "Could not persist the provisioned task workspace",
-            error,
-          );
-        }
-      }
     } catch (error) {
-      const failure = this.#stateStore.recordActivationStartupFailure(
-        runnable.activation.id,
+      const failure = this.#activationScheduling.failUnstartedClaim(
+        claim,
         error instanceof GitTaskWorkspaceError ? error.boundary : "workspace-preparation",
         completeDiagnostic(error),
       );
@@ -319,17 +311,10 @@ export class AutomationCoordinator {
       throw new Error(failure.diagnostic, { cause: error });
     }
     if (this.#automation.state !== "running") {
-      this.#stateStore.releaseDispatchClaim(
-        claimedAttempt.id,
-        runnable.activation.id,
-        runnable.continuationMessage,
-      );
+      this.#activationScheduling.releaseUnstartedClaim(claim);
       return { completion: Promise.resolve() };
     }
-    const attempt = {
-      ...claimedAttempt,
-      ...this.#stateStore.startAttempt(claimedAttempt.id),
-    };
+    const attempt = this.#activationScheduling.startPreparedAttempt(claim, workspace);
     const controller = new AbortController();
     let confirmInterruption = () => {};
     let failInterruption = (_error: unknown) => {};
@@ -345,40 +330,40 @@ export class AutomationCoordinator {
       confirm: confirmInterruption,
       fail: failInterruption,
     };
-    this.#activeRuns.set(runnable.task.id, activeRun);
-    const currentTask = this.#taskProjections.readTask(runnable.task.id);
+    this.#activeRuns.set(claim.task.id, activeRun);
+    const currentTask = this.#taskProjections.readTask(claim.task.id);
     if (currentTask === undefined) throw new Error("Runnable task disappeared before dispatch");
     const process = this.#processContext;
     if (process === undefined) throw new Error("Runnable activation has no process context");
     const board = process.boards.find((candidate) => candidate.id === currentTask.boardId);
     if (board === undefined) throw new Error("Runnable task has no applied board context");
     const activationContext = this.#conversationContextDelivery.composeAndRecordActivationContext(
-      runnable.activation.id,
+      claim.activation.id,
       currentTask,
     );
     let attachments: AgentRunRequest["attachments"] = [];
     let attachmentPreparationError: unknown;
     try {
       attachments = this.#conversationAttachments.prepareRuntimeAttachments(
-        runnable.activation.conversationId,
-        runnable.activation.reason.sourceEventId,
+        claim.activation.conversationId,
+        claim.activation.reason.sourceEventId,
         attempt.id,
       );
     } catch (error) {
       attachmentPreparationError = error;
     }
-    const pricing = runnable.agent.model === undefined
+    const pricing = claim.agent.model === undefined
       ? undefined
-      : process.modelPricing.find(({ model }) => model === runnable.agent.model);
+      : process.modelPricing.find(({ model }) => model === claim.agent.model);
     onDispatchStarted();
     let outcomePromise: Promise<AgentRunOutcome>;
     try {
       if (attachmentPreparationError !== undefined) throw attachmentPreparationError;
       outcomePromise = runtimeDispatch.agentRuntime.run(
         {
-          activationId: runnable.activation.id,
+          activationId: claim.activation.id,
           attemptId: attempt.id,
-          agent: runnable.agent,
+          agent: claim.agent,
           process: {
             name: process.name,
             guidance: process.guidance,
@@ -386,8 +371,8 @@ export class AutomationCoordinator {
           },
           board,
           collaborators: process.collaborators,
-          reason: runnable.activation.reason,
-          sourceEvent: runnable.sourceEvent,
+          reason: claim.activation.reason,
+          sourceEvent: claim.sourceEvent,
           task: currentTask,
           workspace,
           activationContext,
@@ -397,10 +382,10 @@ export class AutomationCoordinator {
             number: attempt.number,
             precedingOutcome: precedingAttempt?.outcome ?? null,
             thread: resumeThreadId === null || resumeThreadId === undefined ? "fresh" : "resumed",
-            continuationMessage: runnable.continuationMessage,
-            ...(runnable.fullCompositionReason === undefined
+            continuationMessage: claim.continuationMessage,
+            ...(claim.fullCompositionReason === undefined
               ? {}
-              : { fullCompositionReason: runnable.fullCompositionReason }),
+              : { fullCompositionReason: claim.fullCompositionReason }),
           },
         },
         {
@@ -477,7 +462,7 @@ export class AutomationCoordinator {
         throw error;
       } finally {
         this.#conversationAttachments.releaseRuntimeAttachments(attempt.id);
-        this.#activeRuns.delete(runnable.task.id);
+        this.#activeRuns.delete(claim.task.id);
         if (this.#automation.state === "pausing" && this.#activeRuns.size === 0) {
           this.#automation = { state: "paused", attemptsMayStart: false };
         }

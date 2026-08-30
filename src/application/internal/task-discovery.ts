@@ -16,26 +16,26 @@ import type {
   TaskView,
 } from "../task-contract.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
-import type { AutomationStateStore } from "./automation-state-store.ts";
+import type { ActivationSchedulingModule } from "./activation-scheduling-module.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
 
 export class TaskDiscovery {
   readonly #processStore: ProcessStateStore;
   readonly #taskProjections: TaskProjectionStore;
-  readonly #automationStore: AutomationStateStore;
+  readonly #activationScheduling: ActivationSchedulingModule;
   readonly #startup: StartupView;
   readonly #collaborators: CollaboratorView[] | undefined;
 
   constructor(
     processStore: ProcessStateStore,
     taskProjections: TaskProjectionStore,
-    automationStore: AutomationStateStore,
+    activationScheduling: ActivationSchedulingModule,
     startup: StartupView,
     collaborators?: CollaboratorView[],
   ) {
     this.#processStore = processStore;
     this.#taskProjections = taskProjections;
-    this.#automationStore = automationStore;
+    this.#activationScheduling = activationScheduling;
     this.#startup = startup;
     this.#collaborators = collaborators;
   }
@@ -193,7 +193,7 @@ export class TaskDiscovery {
               },
         automationSuspended,
         ...(options.audience === "user"
-          ? { workspace: this.#automationStore.readTaskWorkspace(task.id) ?? null }
+          ? { workspace: this.#activationScheduling.readTaskWorkspace(task.id) ?? null }
           : {}),
         onDemand: { activity: true, attachments: true },
       },
