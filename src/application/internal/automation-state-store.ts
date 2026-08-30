@@ -473,48 +473,6 @@ export class AutomationStateStore {
     });
   }
 
-  continueInterruptedTask(
-    taskId: string,
-    message: string,
-    idempotencyKey: string,
-    actor: Actor & { kind: "user" },
-  ): string | undefined {
-    const result = this.#idempotentCommands.execute({
-      kind: "continue-interrupted-task",
-      idempotencyKey,
-    }, () => {
-      const row = this.#database
-        .prepare(
-          `SELECT suspended_activation_id
-           FROM tasks
-           WHERE id = ? AND automation_suspended = 1`,
-        )
-        .get(taskId) as { suspended_activation_id: string | null } | undefined;
-      if (row?.suspended_activation_id === null || row === undefined) return undefined;
-      const continuationMessage = message.trim().length === 0 ? null : message.trim();
-      this.#database
-        .prepare("UPDATE activations SET continuation_message = ? WHERE id = ?")
-        .run(continuationMessage, row.suspended_activation_id);
-      this.#database
-        .prepare(
-          `UPDATE tasks
-           SET automation_suspended = 0, suspended_activation_id = NULL
-           WHERE id = ?`,
-        )
-        .run(taskId);
-      const occurredAt = new Date().toISOString();
-      this.#activityJournal.append(
-        taskId,
-        "automation.resumed",
-        actor,
-        { activationId: row.suspended_activation_id },
-        occurredAt,
-      );
-      return { activationId: row.suspended_activation_id };
-    }, (commandResult) => commandResult !== undefined);
-    return result?.activationId;
-  }
-
   readRunningAttemptScope(attemptId: string): {
     taskId: string;
     agent: AgentRunAgent;

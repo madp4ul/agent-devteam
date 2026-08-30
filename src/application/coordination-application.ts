@@ -386,7 +386,7 @@ export class CoordinationApplication {
   dismissStaleActivation(
     command: DismissStaleActivationCommand,
   ): DismissStaleActivationResult {
-    return this.#persistence.taskCommands.dismissStaleActivation(command);
+    return this.#persistence.activationResolutions.dismissStaleActivation(command);
   }
 
   dismissActivation(command: DismissActivationCommand): DismissActivationResult {
@@ -397,7 +397,7 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const result = this.#persistence.taskCommands.dismissActivation(command);
+    const result = this.#persistence.activationResolutions.dismissActivation(command);
     if (result.accepted) this.#automation.kick();
     return result;
   }
@@ -436,18 +436,9 @@ export class CoordinationApplication {
   continueInterruptedTask(
     command: ContinueInterruptedTaskCommand,
   ): ContinueInterruptedTaskResult {
-    if (this.#persistence.taskProjections.readTask(command.taskId) === undefined) {
-      return { accepted: false, reason: "not-found" };
-    }
-    const activationId = this.#persistence.automation.continueInterruptedTask(
-      command.taskId,
-      command.message,
-      command.idempotencyKey,
-      command.actor,
-    );
-    if (activationId === undefined) return { accepted: false, reason: "not-suspended" };
-    this.#automation.kick();
-    return { accepted: true, activationId };
+    const result = this.#persistence.activationResolutions.continueInterruptedTask(command);
+    if (result.accepted) this.#automation.kick();
+    return result;
   }
 
   async waitForAutomationIdle(): Promise<void> {
@@ -927,18 +918,22 @@ export class CoordinationApplication {
   }
 
   retryFailedActivation(command: ActivationRecoveryCommand): ActivationRecoveryResult {
-    return this.recoverActivation(() => this.#persistence.taskCommands.retryFailedActivation(command));
+    return this.recoverActivation(
+      () => this.#persistence.activationResolutions.retryFailedActivation(command),
+    );
   }
 
   dismissFailedActivation(command: ActivationRecoveryCommand): ActivationRecoveryResult {
-    return this.recoverActivation(() => this.#persistence.taskCommands.dismissFailedActivation(command));
+    return this.recoverActivation(
+      () => this.#persistence.activationResolutions.dismissFailedActivation(command),
+    );
   }
 
   continuePermissionBlockedActivation(
     command: ContinuePermissionBlockedActivationCommand,
   ): ActivationRecoveryResult {
     return this.recoverActivation(
-      () => this.#persistence.taskCommands.continuePermissionBlockedActivation(command),
+      () => this.#persistence.activationResolutions.continuePermissionBlockedActivation(command),
     );
   }
 

@@ -13,10 +13,12 @@ import { ConversationCommandModule } from "./conversation-command-module.ts";
 import { ConversationContextDeliveryModule } from "./conversation-context-delivery-module.ts";
 import { ActivationCreationModule } from "./activation-creation-module.ts";
 import { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
+import { ActivationResolutionModule } from "./activation-resolution-module.ts";
 import type { AttemptTranscriptAccess } from "../runtime-contract.ts";
 
 export interface CoordinationPersistence {
   process: ProcessStateStore;
+  activationResolutions: ActivationResolutionModule;
   taskCommands: TaskCommandStore;
   taskProjections: TaskProjectionStore;
   conversationProjections: ConversationProjectionModule;
@@ -45,6 +47,11 @@ export function openCoordinationPersistence(
     activityJournal,
     notifications,
   );
+  const activationResolutions = new ActivationResolutionModule(
+    database,
+    idempotentCommands,
+    activityJournal,
+  );
   const conversationProjections = new ConversationProjectionModule(
     database,
     taskProjections,
@@ -60,6 +67,7 @@ export function openCoordinationPersistence(
   );
   return {
     process: new ProcessStateStore(database),
+    activationResolutions,
     taskCommands: new TaskCommandStore(
       database,
       taskProjections,
