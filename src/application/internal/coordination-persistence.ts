@@ -15,6 +15,7 @@ import { ActivationCreationModule } from "./activation-creation-module.ts";
 import { ConversationAttachmentStore } from "./conversation-attachment-store.ts";
 import { ActivationResolutionModule } from "./activation-resolution-module.ts";
 import type { AttemptTranscriptAccess } from "../runtime-contract.ts";
+import { AttemptEvidenceModule } from "./attempt-evidence-module.ts";
 
 export interface CoordinationPersistence {
   process: ProcessStateStore;
@@ -47,6 +48,7 @@ export function openCoordinationPersistence(
     activityJournal,
     notifications,
   );
+  const attemptEvidence = new AttemptEvidenceModule(database);
   const activationResolutions = new ActivationResolutionModule(
     database,
     idempotentCommands,
@@ -89,6 +91,7 @@ export function openCoordinationPersistence(
       idempotentCommands,
       activityJournal,
       attentionRecorder,
+      attemptEvidence,
     ),
     taskArchive: new TaskArchiveStore(
       database,

@@ -12,11 +12,9 @@ import type {
   AttemptTranscriptItem,
   AttemptContextWindowUsage,
   AttemptTokenUsage,
-  TokenCostBreakdown,
   RuntimeStartupBoundary,
   RuntimeStartupDiagnostic,
 } from "../runtime-contract.ts";
-import { calculateAttemptTokenCost } from "../token-cost.ts";
 import type { ProcessModelPricingDefinition } from "./process-definition.ts";
 import type {
   Actor,
@@ -30,7 +28,7 @@ import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts
 import type { ActivityJournal } from "./activity-journal.ts";
 import type { AttentionRecorder } from "./attention-recorder.ts";
 import type { ConversationProjectionModule } from "./conversation-projection-module.ts";
-import type { ArchivedConversationCostSnapshot } from "./archived-conversation-cost.ts";
+import type { AttemptEvidenceModule } from "./attempt-evidence-module.ts";
 
 export interface RunnableActivation {
   activation: ActivationView;
@@ -50,6 +48,7 @@ export class AutomationStateStore {
   readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
   readonly #attentionRecorder: AttentionRecorder;
+  readonly #attemptEvidence: AttemptEvidenceModule;
 
   constructor(
     database: CoordinationDatabase,
@@ -58,6 +57,7 @@ export class AutomationStateStore {
     idempotentCommands: IdempotentCommandExecutor,
     activityJournal: ActivityJournal,
     attentionRecorder: AttentionRecorder,
+    attemptEvidence: AttemptEvidenceModule,
   ) {
     this.#owner = database;
     this.#database = database.connection;
@@ -66,6 +66,7 @@ export class AutomationStateStore {
     this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
     this.#attentionRecorder = attentionRecorder;
+    this.#attemptEvidence = attemptEvidence;
   }
 
   recoverInterruptedAttempts(now = new Date()): number {
@@ -408,30 +409,26 @@ export class AutomationStateStore {
           }
         | undefined;
       if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
-      if (transcript !== undefined || usage !== undefined) {
-        this.persistAttemptTranscript(
-          attemptId,
-          transcript ?? [],
-          usage,
-          pricing,
-          resumedThreadId,
-          attempt.thread_id ?? undefined,
-        );
-      }
+      this.#attemptEvidence.recordWithinSettlement({
+        attemptId,
+        ...(transcript === undefined ? {} : { transcript }),
+        ...(usage === undefined ? {} : { reportedUsage: usage }),
+        ...(pricing === undefined ? {} : { pricing }),
+        ...(resumedThreadId === undefined ? {} : { resumedThreadId }),
+        ...(attempt.thread_id === null ? {} : { completedThreadId: attempt.thread_id }),
+      });
       const occurredAt = now.toISOString();
       const summary = "The user interrupted this attempt.";
       this.#database
         .prepare(
           `UPDATE attempts
            SET status = 'failed', completed_at = ?, outcome_status = 'failed',
-               outcome_summary = ?, outcome_kind = 'interrupted', pricing_json = ?,
-               context_window_usage_json = ?
+               outcome_summary = ?, outcome_kind = 'interrupted', context_window_usage_json = ?
            WHERE id = ?`,
         )
         .run(
           occurredAt,
           summary,
-          serializedPricing(pricing),
           serializedContextWindowUsage(contextWindowUsage),
           attemptId,
         );
@@ -689,16 +686,16 @@ export class AutomationStateStore {
           }
         | undefined;
       if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
-      if (transcript !== undefined || usage !== undefined) {
-        this.persistAttemptTranscript(
-          attemptId,
-          transcript ?? [],
-          usage,
-          pricing,
-          resumedThreadId,
-          outcome.threadId ?? attempt.thread_id ?? undefined,
-        );
-      }
+      this.#attemptEvidence.recordWithinSettlement({
+        attemptId,
+        ...(transcript === undefined ? {} : { transcript }),
+        ...(usage === undefined ? {} : { reportedUsage: usage }),
+        ...(pricing === undefined ? {} : { pricing }),
+        ...(resumedThreadId === undefined ? {} : { resumedThreadId }),
+        ...(outcome.threadId === undefined && attempt.thread_id === null
+          ? {}
+          : { completedThreadId: outcome.threadId ?? attempt.thread_id! }),
+      });
       const occurredAt = now.toISOString();
       const persistedStatus = outcome.status === "completed" ? "completed" : "failed";
       const outcomeKind = outcome.status === "permission-blocked" ? "permission" : outcome.status;
@@ -707,7 +704,7 @@ export class AutomationStateStore {
           `UPDATE attempts
            SET status = ?, completed_at = ?, outcome_status = ?, outcome_summary = ?,
                thread_id = COALESCE(?, thread_id), outcome_kind = ?, thread_continuity = ?,
-               pricing_json = ?, context_window_usage_json = ?
+               context_window_usage_json = ?
            WHERE id = ?`,
         )
         .run(
@@ -718,7 +715,6 @@ export class AutomationStateStore {
           outcome.threadId ?? null,
           outcomeKind,
           outcome.threadContinuity ?? null,
-          serializedPricing(pricing),
           serializedContextWindowUsage(contextWindowUsage),
           attemptId,
         );
@@ -806,87 +802,6 @@ export class AutomationStateStore {
     ).run(threadId ?? null, occurredAt, attemptId);
   }
 
-  private persistAttemptTranscript(
-    attemptId: string,
-    transcript: AttemptTranscriptItem[],
-    reportedUsage?: AttemptTokenUsage,
-    pricing?: ProcessModelPricingDefinition,
-    resumedThreadId?: string,
-    completedThreadId?: string,
-  ): void {
-    const usage = reportedUsage === undefined
-      ? undefined
-      : this.isolateAttemptUsage(
-          attemptId,
-          reportedUsage,
-          resumedThreadId,
-          completedThreadId,
-        );
-    this.#database
-      .prepare(
-        `INSERT INTO attempt_transcripts
-           (attempt_id, items_json, usage_json, reported_usage_json)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(attempt_id) DO UPDATE SET
-           items_json = excluded.items_json,
-           usage_json = excluded.usage_json,
-           reported_usage_json = excluded.reported_usage_json`,
-      )
-      .run(
-        attemptId,
-        JSON.stringify(transcript),
-        usage === undefined ? null : JSON.stringify(persistedUsage(usage, pricing)),
-        reportedUsage === undefined ? null : JSON.stringify(reportedUsage),
-      );
-  }
-
-  private isolateAttemptUsage(
-    attemptId: string,
-    reportedUsage: AttemptTokenUsage,
-    resumedThreadId?: string,
-    completedThreadId?: string,
-  ): AttemptTokenUsage | undefined {
-    if (resumedThreadId === undefined || completedThreadId !== resumedThreadId) {
-      return reportedUsage;
-    }
-    const archived = this.#database.prepare(
-      `SELECT conversation.archived_cost_json
-       FROM attempts current_attempt
-       JOIN activations activation ON activation.id = current_attempt.activation_id
-       JOIN agent_conversations conversation ON conversation.id = activation.conversation_id
-       WHERE current_attempt.id = ?`,
-    ).get(attemptId) as { archived_cost_json: string | null } | undefined;
-    const snapshot = archived?.archived_cost_json === null || archived?.archived_cost_json === undefined
-      ? undefined
-      : JSON.parse(archived.archived_cost_json) as ArchivedConversationCostSnapshot;
-    const prior = this.#database
-      .prepare(
-        `SELECT transcript.reported_usage_json
-         FROM attempts attempt
-         LEFT JOIN attempt_transcripts transcript ON transcript.attempt_id = attempt.id
-         WHERE attempt.thread_id = ?
-           AND attempt.id <> ?
-           AND attempt.rowid > ?
-         ORDER BY attempt.rowid DESC
-         LIMIT 1`,
-      )
-      .get(resumedThreadId, attemptId, snapshot?.throughAttemptRowId ?? 0) as
-        { reported_usage_json: string | null } | undefined;
-    if (prior?.reported_usage_json === null) return undefined;
-    const baseline = prior === undefined
-      ? snapshot?.threadUsageCheckpoints.find(({ threadId }) => threadId === resumedThreadId)?.reportedUsage
-      : JSON.parse(prior.reported_usage_json) as AttemptTokenUsage;
-    if (baseline === undefined) return undefined;
-    const delta: AttemptTokenUsage = {
-      inputTokens: reportedUsage.inputTokens - baseline.inputTokens,
-      cachedInputTokens: reportedUsage.cachedInputTokens - baseline.cachedInputTokens,
-      cacheWriteInputTokens: reportedUsage.cacheWriteInputTokens - baseline.cacheWriteInputTokens,
-      outputTokens: reportedUsage.outputTokens - baseline.outputTokens,
-      reasoningOutputTokens: reportedUsage.reasoningOutputTokens - baseline.reasoningOutputTokens,
-    };
-    return Object.values(delta).every((value) => value >= 0) ? delta : undefined;
-  }
-
   private createFailureAttention(taskId: string, activationId: string, occurredAt: string): void {
     this.#attentionRecorder.record(
       "failed-run",
@@ -896,24 +811,6 @@ export class AutomationStateStore {
     );
   }
 
-}
-
-function persistedUsage(
-  usage: AttemptTokenUsage,
-  pricing: ProcessModelPricingDefinition | undefined,
-): AttemptTokenUsage & { estimatedCostUsd?: number; estimatedCostBreakdown?: TokenCostBreakdown } {
-  const cost = calculateAttemptTokenCost(usage, pricing);
-  return {
-    ...usage,
-    ...(cost === undefined ? {} : {
-      estimatedCostUsd: cost.costEstimate.amount,
-      estimatedCostBreakdown: cost.costBreakdown,
-    }),
-  };
-}
-
-function serializedPricing(pricing: ProcessModelPricingDefinition | undefined): string | null {
-  return pricing === undefined ? null : JSON.stringify(pricing);
 }
 
 function serializedContextWindowUsage(usage: AttemptContextWindowUsage | undefined): string | null {
