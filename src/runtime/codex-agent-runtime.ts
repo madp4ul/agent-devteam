@@ -130,7 +130,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           thread = client.resumeThread(request.resumeThreadId, threadOptions);
         }
       } catch (error) {
-        if (request.resumeThreadId === undefined) throw error;
+        if (request.resumeThreadId === undefined || signal?.aborted === true) throw error;
         effectiveRequest = replacementRequest(request);
         threadReplaced = true;
         thread = client.startThread(threadOptions);
@@ -142,7 +142,11 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           signal === undefined ? {} : { signal },
         );
       } catch (error) {
-        if (request.resumeThreadId === undefined || effectiveRequest.attempt.thread === "replaced") {
+        if (
+          request.resumeThreadId === undefined ||
+          effectiveRequest.attempt.thread === "replaced" ||
+          signal?.aborted === true
+        ) {
           throw error;
         }
         effectiveRequest = replacementRequest(request);
@@ -153,13 +157,40 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           signal === undefined ? {} : { signal },
         );
       }
-      const projected = await projectCodexTurn(streamed.events, {
+      let threadIdentityEstablished = false;
+      let observableEventReceived = false;
+      const project = (events: AsyncIterable<ThreadEvent>) => projectCodexTurn(observeEvents(events, () => {
+        observableEventReceived = true;
+      }), {
         attemptId: request.attemptId,
         taskId: request.task.id,
       }, {
-        started: (threadId) => lifecycle.started(threadId),
+        started: (threadId) => {
+          threadIdentityEstablished = true;
+          lifecycle.started(threadId);
+        },
         publish: (transcript) => this.#remember(request.attemptId, transcript),
       });
+      let projected;
+      try {
+        projected = await project(streamed.events);
+      } catch (error) {
+        if (
+          request.resumeThreadId === undefined ||
+          effectiveRequest.attempt.thread === "replaced" ||
+          threadIdentityEstablished ||
+          observableEventReceived ||
+          signal?.aborted === true
+        ) throw error;
+        effectiveRequest = replacementRequest(request);
+        threadReplaced = true;
+        thread = client.startThread(threadOptions);
+        streamed = await thread.runStreamed(
+          codexInput(effectiveRequest),
+          signal === undefined ? {} : { signal },
+        );
+        projected = await project(streamed.events);
+      }
       this.#remember(request.attemptId, projected.transcript);
       if (projected.usage !== undefined) this.#usage.set(request.attemptId, projected.usage);
       if (
@@ -246,6 +277,16 @@ function replacementRequest(request: AgentRunRequest): AgentRunRequest {
     ...withoutResumeThread,
     attempt: { ...request.attempt, thread: "replaced" },
   };
+}
+
+async function* observeEvents(
+  events: AsyncIterable<ThreadEvent>,
+  observed: () => void,
+): AsyncGenerator<ThreadEvent> {
+  for await (const event of events) {
+    observed();
+    yield event;
+  }
 }
 
 function createCodexClient(options: CodexClientOptionsLike): CodexClientLike {

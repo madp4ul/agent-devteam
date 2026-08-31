@@ -12,6 +12,7 @@ import {
   type CodexThreadOptionsLike,
 } from "../../src/runtime/codex-agent-runtime.ts";
 import {
+  type CodexEventLike,
   createRuntime,
   events,
   FakeCodexClient,
@@ -265,6 +266,425 @@ test("an unusable interrupted thread falls back to a fresh thread with honest co
   assert.match(prompt, /Thread: replaced/);
   assert.match(prompt, /previous host stopped/i);
   assert.match(prompt, /Self-authored context must return after thread replacement\./);
+});
+
+test("a resumed stream that fails before identity falls back to one fresh thread", async () => {
+  let prompt = "";
+  let freshStarts = 0;
+  let startedThreadId: string | undefined;
+  let releases = 0;
+  const runtime = createRuntime({
+    mcpServer: {
+      command: "node",
+      args: () => ["coordination-mcp.ts"],
+      release: () => { releases += 1; },
+    },
+    createClient: () => ({
+      resumeThread: () => ({
+        runStreamed: async () => ({
+          events: (async function* () {
+            throw new Error("persisted stream is unavailable");
+          })(),
+        }),
+      }),
+      startThread: () => {
+        freshStarts += 1;
+        return {
+          runStreamed: async (value) => {
+            prompt = typeof value === "string"
+              ? value
+              : value.find((item) => item.type === "text")?.text ?? "";
+            return {
+              events: events(
+                { type: "thread.started", thread_id: "thread-lazy-replacement" },
+                { type: "item.completed", item: { type: "agent_message", text: "Recovered lazily." } },
+                { type: "turn.completed" },
+              ),
+            };
+          },
+        };
+      },
+    }),
+  });
+  const recovering = request("activation-lazy-recovery", "T-0096");
+  recovering.resumeThreadId = "thread-before-lazy-failure";
+  recovering.attempt = {
+    number: 2,
+    precedingOutcome: { status: "failed", summary: "The previous run stopped." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+  recovering.task.comments.push({
+    id: "comment-known-before-lazy-replacement",
+    body: "Restore this self-authored context after lazy replacement.",
+    actor: { kind: "agent", id: recovering.agent.id },
+    occurredAt: "2026-08-31T09:10:00.000Z",
+    attemptId: "attempt-before-lazy-replacement",
+  });
+  recovering.activationContext = {
+    kind: "resumed",
+    comments: [],
+    activity: [],
+    sourceDelivery: "conversation-history",
+  };
+
+  const outcome = await runtime.run(recovering, {
+    started: (threadId) => { startedThreadId = threadId; },
+  });
+
+  assert.deepEqual(outcome, {
+    status: "completed",
+    summary: "Recovered lazily.",
+    threadId: "thread-lazy-replacement",
+    threadContinuity: "replaced",
+  });
+  assert.equal(freshStarts, 1);
+  assert.equal(startedThreadId, "thread-lazy-replacement");
+  assert.match(prompt, /Thread: replaced/);
+  assert.match(prompt, /FULL-DESCRIPTION-END/);
+  assert.match(prompt, /Earlier authored comment\./);
+  assert.match(prompt, /Restore this self-authored context after lazy replacement\./);
+  assert.deepEqual(await runtime.read(recovering.attemptId), [
+    { kind: "message", role: "agent", text: "Recovered lazily." },
+  ]);
+  assert.equal(releases, 1);
+});
+
+test("an eager resumed run rejection falls back to one fresh thread", async () => {
+  let freshStarts = 0;
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      resumeThread: () => ({
+        runStreamed: async () => { throw new Error("resume launch failed"); },
+      }),
+      startThread: () => {
+        freshStarts += 1;
+        return {
+          runStreamed: async () => ({
+            events: events(
+              { type: "thread.started", thread_id: "thread-eager-replacement" },
+              { type: "turn.completed" },
+            ),
+          }),
+        };
+      },
+    }),
+  });
+  const recovering = request("activation-eager-run-recovery", "T-0096");
+  recovering.resumeThreadId = "thread-eager-unavailable";
+  recovering.attempt = {
+    number: 2,
+    precedingOutcome: { status: "failed", summary: "The previous run stopped." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+
+  assert.deepEqual(await runtime.run(recovering, { started() {} }), {
+    status: "completed",
+    summary: "",
+    threadId: "thread-eager-replacement",
+    threadContinuity: "replaced",
+  });
+  assert.equal(freshStarts, 1);
+});
+
+test("an eager cancellation of a resumed run does not replace its thread", async () => {
+  const controller = new AbortController();
+  let freshStarts = 0;
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      resumeThread: () => ({
+        runStreamed: async () => {
+          controller.abort();
+          throw new DOMException("The operation was aborted", "AbortError");
+        },
+      }),
+      startThread: () => {
+        freshStarts += 1;
+        throw new Error("a cancelled resume must not start a replacement");
+      },
+    }),
+  });
+  const recovering = request("activation-eager-cancelled-resume", "T-0096");
+  recovering.resumeThreadId = "thread-eager-cancelled-resume";
+  recovering.attempt = {
+    number: 2,
+    precedingOutcome: { status: "user-interrupted", summary: "The user interrupted the run." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+
+  await assert.rejects(
+    runtime.run(recovering, { started() {} }, controller.signal),
+    (error: unknown) => error instanceof DOMException && error.name === "AbortError",
+  );
+  assert.equal(freshStarts, 0);
+});
+
+test("an already-cancelled resume construction does not replace its thread", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let freshStarts = 0;
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      resumeThread: () => { throw new DOMException("The operation was aborted", "AbortError"); },
+      startThread: () => {
+        freshStarts += 1;
+        throw new Error("a cancelled resume must not start a replacement");
+      },
+    }),
+  });
+  const recovering = request("activation-cancelled-resume-construction", "T-0096");
+  recovering.resumeThreadId = "thread-cancelled-before-construction";
+  recovering.attempt = {
+    number: 2,
+    precedingOutcome: { status: "user-interrupted", summary: "The user interrupted the run." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+
+  await assert.rejects(
+    runtime.run(recovering, { started() {} }, controller.signal),
+    (error: unknown) => error instanceof DOMException && error.name === "AbortError",
+  );
+  assert.equal(freshStarts, 0);
+});
+
+test("cancelling a resumed stream before identity does not replace its thread", async () => {
+  const controller = new AbortController();
+  let freshStarts = 0;
+  let releases = 0;
+  const runtime = createRuntime({
+    mcpServer: {
+      command: "node",
+      args: () => ["coordination-mcp.ts"],
+      release: () => { releases += 1; },
+    },
+    createClient: () => ({
+      resumeThread: () => ({
+        runStreamed: async () => ({
+          events: (async function* () {
+            controller.abort();
+            throw new DOMException("The operation was aborted", "AbortError");
+          })(),
+        }),
+      }),
+      startThread: () => {
+        freshStarts += 1;
+        throw new Error("a cancelled resume must not start a replacement");
+      },
+    }),
+  });
+  const recovering = request("activation-cancelled-resume", "T-0096");
+  recovering.resumeThreadId = "thread-cancelled-resume";
+  recovering.attempt = {
+    number: 2,
+    precedingOutcome: { status: "user-interrupted", summary: "The user interrupted the run." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+
+  await assert.rejects(
+    runtime.run(recovering, { started() {} }, controller.signal),
+    (error: unknown) => error instanceof DOMException && error.name === "AbortError",
+  );
+  assert.equal(freshStarts, 0);
+  assert.equal(releases, 1);
+});
+
+test("resumed evidence before thread identity fails safely without replay", async () => {
+  let freshStarts = 0;
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      resumeThread: () => ({
+        runStreamed: async () => ({
+          events: (async function* (): AsyncGenerator<CodexEventLike> {
+            yield {
+              type: "item.completed",
+              item: {
+                id: "coordination-before-identity",
+                type: "mcp_tool_call",
+                server: "coordination",
+                tool: "list_tasks",
+                status: "completed",
+                arguments: {},
+                result: { content: [{ type: "text", text: "{}" }] },
+              },
+            };
+            throw new Error("stream failed after observable evidence");
+          })(),
+        }),
+      }),
+      startThread: () => {
+        freshStarts += 1;
+        throw new Error("observable evidence must not be replayed");
+      },
+    }),
+  });
+  const recovering = request("activation-evidence-before-identity", "T-0096");
+  recovering.resumeThreadId = "thread-with-malformed-ordering";
+  recovering.attempt = {
+    number: 2,
+    precedingOutcome: { status: "failed", summary: "The previous run stopped." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+
+  await assert.rejects(
+    runtime.run(recovering, { started() {} }),
+    /stream failed after observable evidence/,
+  );
+  assert.equal(freshStarts, 0);
+  assert.equal(await runtime.read(recovering.attemptId), null);
+});
+
+test("a replacement failure before identity remains an actionable startup failure", async () => {
+  let freshStarts = 0;
+  let releases = 0;
+  const runtime = createRuntime({
+    mcpServer: {
+      command: "node",
+      args: () => ["coordination-mcp.ts"],
+      release: () => { releases += 1; },
+    },
+    createClient: () => ({
+      resumeThread: () => ({
+        runStreamed: async () => ({
+          events: (async function* () {
+            throw new Error("persisted stream is unavailable");
+          })(),
+        }),
+      }),
+      startThread: () => {
+        freshStarts += 1;
+        return {
+          runStreamed: async () => ({
+            events: (async function* () {
+              throw new Error("replacement could not start");
+            })(),
+          }),
+        };
+      },
+    }),
+  });
+  const recovering = request("activation-replacement-start-failure", "T-0096");
+  recovering.resumeThreadId = "thread-unavailable-before-replacement-failure";
+  recovering.attempt = {
+    number: 2,
+    precedingOutcome: { status: "failed", summary: "The previous run stopped." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+
+  await assert.rejects(
+    runtime.run(recovering, { started() {} }),
+    /replacement could not start/,
+  );
+  assert.equal(freshStarts, 1);
+  assert.equal(releases, 1);
+});
+
+test("a replacement failure after identity keeps its thread and replaced continuity", async () => {
+  let freshStarts = 0;
+  const startedThreadIds: string[] = [];
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      resumeThread: () => ({
+        runStreamed: async () => ({
+          events: (async function* () {
+            throw new Error("persisted stream is unavailable");
+          })(),
+        }),
+      }),
+      startThread: () => {
+        freshStarts += 1;
+        return {
+          runStreamed: async () => ({
+            events: (async function* () {
+              yield { type: "thread.started", thread_id: "thread-replacement-failed" };
+              throw new Error("replacement stream disconnected");
+            })(),
+          }),
+        };
+      },
+    }),
+  });
+  const recovering = request("activation-replacement-stream-failure", "T-0096");
+  recovering.resumeThreadId = "thread-unavailable-before-stream-failure";
+  recovering.attempt = {
+    number: 2,
+    precedingOutcome: { status: "failed", summary: "The previous run stopped." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+
+  assert.deepEqual(await runtime.run(recovering, {
+    started: (threadId) => {
+      assert.ok(threadId !== undefined);
+      startedThreadIds.push(threadId);
+    },
+  }), {
+    status: "failed",
+    summary: "Codex could not complete the activation: replacement stream disconnected",
+    threadId: "thread-replacement-failed",
+    threadContinuity: "replaced",
+  });
+  assert.equal(freshStarts, 1);
+  assert.deepEqual(startedThreadIds, ["thread-replacement-failed"]);
+  assert.deepEqual(await runtime.read(recovering.attemptId), [
+    { kind: "diagnostic", text: "replacement stream disconnected" },
+  ]);
+});
+
+test("a resumed stream failure after identity stays on the resumed thread", async () => {
+  let freshStarts = 0;
+  const startedThreadIds: string[] = [];
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      resumeThread: () => ({
+        runStreamed: async () => ({
+          events: (async function* () {
+            yield { type: "thread.started", thread_id: "thread-resumed-identified" };
+            throw new Error("identified resume disconnected");
+          })(),
+        }),
+      }),
+      startThread: () => {
+        freshStarts += 1;
+        throw new Error("an identified resumed thread must not be replaced");
+      },
+    }),
+  });
+  const recovering = request("activation-identified-resume-failure", "T-0096");
+  recovering.resumeThreadId = "thread-resumed-identified";
+  recovering.attempt = {
+    number: 2,
+    precedingOutcome: { status: "failed", summary: "The previous run stopped." },
+    thread: "resumed",
+    continuationMessage: null,
+  };
+
+  assert.deepEqual(await runtime.run(recovering, {
+    started: (threadId) => {
+      assert.ok(threadId !== undefined);
+      startedThreadIds.push(threadId);
+    },
+  }), {
+    status: "failed",
+    summary: "Codex could not complete the activation: identified resume disconnected",
+    threadId: "thread-resumed-identified",
+  });
+  assert.equal(freshStarts, 0);
+  assert.deepEqual(startedThreadIds, ["thread-resumed-identified"]);
+  assert.deepEqual(await runtime.read(recovering.attemptId), [
+    { kind: "diagnostic", text: "identified resume disconnected" },
+  ]);
 });
 
 test("explicit agent execution profiles become SDK thread options", async () => {

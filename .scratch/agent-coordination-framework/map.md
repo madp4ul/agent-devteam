@@ -466,6 +466,10 @@ without choosing the implementation yet.
   — After event projection is localized, let one fresh replacement recover a
   resumed run that fails before thread identity during lazy stream iteration,
   without treating cancellation or observable work as safe to replay.
+  **Resolved:** One event-aware replacement gate now covers resume construction,
+  eager startup, and lazy pre-event iterator failures while cancellation,
+  emitted evidence, established identity, and the replacement attempt itself
+  all close the gate against replay or replacement loops.
 
 ## Deferred release engineering
 

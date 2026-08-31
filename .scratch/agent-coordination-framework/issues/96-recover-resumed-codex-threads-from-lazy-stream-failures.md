@@ -9,7 +9,7 @@ single-replacement, and thread-continuity guarantees.
 
 **Blocked by:** 94 — Project Codex Events into Attempt Evidence.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Decision source
 
@@ -84,3 +84,28 @@ distinguish pre-identity unusable-resume failure from cancellation or from a
 stream that may already have caused work, fail safely with retained evidence
 and leave recovery to the existing explicit application workflow.
 
+## Answer
+
+Implemented one best-effort replacement gate around resumed Codex startup and
+whole-stream projection. Synchronous resume construction failures, eager
+`runStreamed()` rejections, and lazy iterator failures before the first emitted
+event now recompose the attempt as `thread: "replaced"` and start exactly one
+fresh thread with the complete honest context. Any emitted event closes the
+lazy replay gate, established thread identity keeps later failures inspectable
+on that thread, and a replacement cannot recursively replace itself.
+
+Cancellation now suppresses replacement across construction, eager startup,
+and lazy iteration. The attempt-scoped MCP configuration remains attached once
+and released once by the existing outer lifecycle, while replacement outcomes
+retain `threadContinuity: "replaced"`, the effective thread ID, one lifecycle
+notification, and attempt-local transcript evidence.
+
+Focused runtime coverage passes 25 tests, including eager and lazy recovery,
+cancellation, evidence-before-identity, both replacement failure positions,
+post-identity resumed failure, prompt restoration, lifecycle, transcript, and
+release invariants. TypeScript typechecking passes. The full Node suite reports
+285 passing tests and 4 expected skips; its 2 failures are the pre-existing
+activation-prompt assertions already documented by issues 94 and 95 and are
+outside this ticket's files and behavior. `docs/architecture.md` remains
+accurate because the implementation preserves its existing replacement-thread
+authority and continuity description.
