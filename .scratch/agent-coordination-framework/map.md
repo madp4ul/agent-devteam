@@ -448,6 +448,11 @@ without choosing the implementation yet.
   — Keep one external Codex runtime adapter while moving SDK event validation,
   live transcript state, usage decoding, and terminal precedence behind one
   internal attempt-local whole-stream projector.
+  **Resolved:** One SDK-typed whole-stream projector now owns attempt-local
+  transcript replacement, live defensive snapshots, usage decoding, event
+  guards, coordination failure tracking, permission reporting, and terminal
+  precedence; the external runtime retains construction, lifecycle, evidence
+  storage, context measurement, MCP release, and replacement provenance.
 - [Isolate Local Codex Session Evidence](./issues/95-isolate-local-codex-session-evidence.md)
   — Hide private rollout discovery, cached backward JSONL scanning, context
   decoding, and percentage calculation behind one fail-optional reader without

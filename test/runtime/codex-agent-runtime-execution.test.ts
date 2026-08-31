@@ -11,7 +11,6 @@ import {
   type CodexAgentRuntimeOptions,
   type CodexClientLike,
   type CodexClientOptionsLike,
-  type CodexEventLike,
   type CodexThreadLike,
   type CodexThreadOptionsLike,
 } from "../../src/runtime/codex-agent-runtime.ts";
@@ -297,8 +296,13 @@ test("explicit agent execution profiles become SDK thread options", async () => 
 });
 
 test("an unavailable requested model remains an actionable runtime-start failure", async () => {
+  let releases = 0;
   const runtime = createRuntime({
-    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    mcpServer: {
+      command: "node",
+      args: () => ["coordination-mcp.ts"],
+      release: () => { releases += 1; },
+    },
     createClient: () => ({
       startThread: () => {
         throw new Error('Requested model "gpt-unavailable" is not available for this account');
@@ -312,6 +316,38 @@ test("an unavailable requested model remains an actionable runtime-start failure
     runtime.run(profiled, { started() {} }),
     /Requested model "gpt-unavailable" is not available for this account/,
   );
+  assert.equal(releases, 1);
+});
+
+test("signal forwarding and MCP release remain runtime-owned around projection", async () => {
+  const controller = new AbortController();
+  let receivedSignal: AbortSignal | undefined;
+  let releases = 0;
+  const runtime = createRuntime({
+    mcpServer: {
+      command: "node",
+      args: () => ["coordination-mcp.ts"],
+      release: () => { releases += 1; },
+    },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async (_input, options) => {
+          receivedSignal = options?.signal;
+          return {
+            events: events(
+              { type: "thread.started", thread_id: "thread-signal" },
+              { type: "turn.completed" },
+            ),
+          };
+        },
+      }),
+    }),
+  });
+
+  await runtime.run(request("activation-signal", "T-0094"), { started() {} }, controller.signal);
+
+  assert.equal(receivedSignal, controller.signal);
+  assert.equal(releases, 1);
 });
 
 test("streamed Codex failures become failed attempt outcomes with retained thread identity", async () => {

@@ -1,4 +1,4 @@
-import { Codex, type CodexOptions, type Input, type ThreadOptions } from "@openai/codex-sdk";
+import { Codex, type CodexOptions, type Input, type ThreadEvent, type ThreadOptions } from "@openai/codex-sdk";
 import { open, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, extname, join } from "node:path";
@@ -13,10 +13,8 @@ import type {
   AttemptContextWindowUsage,
   AttemptTokenUsage,
 } from "../application/runtime-contract.ts";
-import {
-  coordinationTranscriptItem,
-} from "./coordination-tool-transcript.ts";
 import { composeActivationPrompt } from "../application/activation-prompt.ts";
+import { projectCodexTurn } from "./codex-turn-projector.ts";
 
 export { composeActivationPrompt } from "../application/activation-prompt.ts";
 
@@ -37,22 +35,11 @@ export type CodexThreadOptionsLike = Pick<
   | "modelReasoningEffort"
 >;
 
-export type CodexEventLike =
-  | { type: "thread.started"; thread_id: string }
-  | { type: "turn.started" }
-  | { type: "turn.completed"; usage?: unknown }
-  | { type: "turn.failed"; error: { message: string } }
-  | { type: "error"; message: string }
-  | {
-      type: "item.started" | "item.updated" | "item.completed";
-      item: { type: string; [key: string]: unknown };
-    };
-
 export interface CodexThreadLike {
   runStreamed(
     prompt: Input,
     options?: { signal?: AbortSignal },
-  ): Promise<{ events: AsyncGenerator<CodexEventLike> }>;
+  ): Promise<{ events: AsyncIterable<ThreadEvent> }>;
 }
 
 export interface CodexClientLike {
@@ -117,9 +104,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
         },
       },
     };
-    let threadId: string | undefined;
     let threadReplaced = false;
-    const transcript: AttemptTranscriptItem[] = [];
     try {
       const client = (this.#options.createClient ?? createCodexClient)(clientOptions);
       const threadOptions: CodexThreadOptionsLike = {
@@ -165,109 +150,40 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           signal === undefined ? {} : { signal },
         );
       }
-      const { events } = streamed;
-      let finalResponse = "";
-      let turnCompleted = false;
-      let permissionBlockSummary: string | undefined;
-      const failedCoordinationTools = new Map<string, string>();
-      for await (const event of events) {
-        if (event.type === "thread.started") {
-          threadId = event.thread_id;
-          lifecycle.started(threadId);
-        } else if (
-          event.type === "item.completed" &&
-          event.item.type === "agent_message" &&
-          typeof event.item.text === "string"
-        ) {
-          finalResponse = event.item.text;
-          transcript.push({
-            ...(typeof event.item.id === "string" ? { id: event.item.id } : {}),
-            kind: "message",
-            role: "agent",
-            text: event.item.text,
-          });
-          this.#remember(request.attemptId, transcript);
-        } else if (
-          event.type === "item.started" ||
-          event.type === "item.updated" ||
-          event.type === "item.completed"
-        ) {
-          upsertToolTranscriptItem(transcript, event.item, event.type, {
-            attemptId: request.attemptId,
-            taskId: request.task.id,
-          });
-          this.#remember(request.attemptId, transcript);
-          const coordinationCall = coordinationToolCall(event.item);
-          if (coordinationCall?.status === "failed") {
-            failedCoordinationTools.set(coordinationCall.name, coordinationCall.diagnostic);
-          } else if (coordinationCall?.status === "completed") {
-            failedCoordinationTools.delete(coordinationCall.name);
+      const projected = await projectCodexTurn(streamed.events, {
+        attemptId: request.attemptId,
+        taskId: request.task.id,
+      }, {
+        started: (threadId) => lifecycle.started(threadId),
+        publish: (transcript) => this.#remember(request.attemptId, transcript),
+      });
+      this.#remember(request.attemptId, projected.transcript);
+      if (projected.usage !== undefined) this.#usage.set(request.attemptId, projected.usage);
+      if (
+        projected.threadId !== undefined &&
+        (projected.terminal.kind === "completed" || projected.terminal.kind === "permission-blocked")
+      ) {
+        const contextUsage = await this.#readCodexContextWindowUsage(projected.threadId);
+        if (contextUsage !== null) this.#contextWindowUsage.set(request.attemptId, contextUsage);
+      }
+      const outcome = projected.terminal.kind === "completed"
+        ? {
+            status: "completed" as const,
+            summary: projected.terminal.summary,
+            ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
           }
-          if (
-            coordinationCall?.name === "coordination.report_permission_block" &&
-            coordinationCall.status === "completed"
-          ) {
-            permissionBlockSummary = permissionBlockFrom(event.item);
-          }
-        } else if (event.type === "turn.completed") {
-          turnCompleted = true;
-          const usage = tokenUsageFrom(event.usage);
-          if (usage !== undefined) this.#usage.set(request.attemptId, usage);
-          if (threadId !== undefined) {
-            const contextUsage = await this.#readCodexContextWindowUsage(threadId);
-            if (contextUsage !== null) this.#contextWindowUsage.set(request.attemptId, contextUsage);
-          }
-        } else if (event.type === "turn.failed" || event.type === "error") {
-          const diagnostic = event.type === "turn.failed" ? event.error.message : event.message;
-          if (threadId !== undefined) {
-            this.#remember(request.attemptId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
-          }
-          return withThreadContinuity(runtimeFailure(diagnostic, threadId), threadReplaced);
-        }
-      }
-      if (threadId === undefined) {
-        return withThreadContinuity({
-          status: "failed",
-          summary: "Codex could not complete the activation: no thread identity was received",
-        }, threadReplaced);
-      }
-      if (!turnCompleted) {
-        this.#remember(request.attemptId, [
-          ...transcript,
-          { kind: "diagnostic", text: "The Codex stream ended before turn.completed." },
-        ]);
-        return withThreadContinuity({
-          status: "failed",
-          summary: "Codex could not complete the activation: the stream ended before turn.completed",
-          threadId,
-        }, threadReplaced);
-      }
-      if (failedCoordinationTools.size > 0) {
-        const diagnostic = [...failedCoordinationTools]
-          .map(([name, cause]) => `Required coordination tool ${name} failed: ${cause}`)
-          .join("; ");
-        this.#remember(request.attemptId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
-        return withThreadContinuity({ status: "failed", summary: diagnostic, threadId }, threadReplaced);
-      }
-      if (permissionBlockSummary !== undefined) {
-        this.#remember(request.attemptId, transcript);
-        return withThreadContinuity({
-          status: "permission-blocked",
-          summary: permissionBlockSummary,
-          threadId,
-        }, threadReplaced);
-      }
-      this.#remember(request.attemptId, transcript);
-      return withThreadContinuity({
-        status: "completed",
-        summary: finalResponse,
-        threadId,
-      }, threadReplaced);
-    } catch (error) {
-      if (threadId === undefined) throw error;
-      const diagnostic = error instanceof Error ? error.message : "the streamed run failed";
-      this.#remember(request.attemptId, [...transcript, { kind: "diagnostic", text: diagnostic }]);
-      return withThreadContinuity(runtimeFailure(diagnostic, threadId), threadReplaced);
+        : projected.terminal.kind === "permission-blocked"
+          ? {
+              status: "permission-blocked" as const,
+              summary: projected.terminal.summary,
+              ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
+            }
+          : {
+              status: "failed" as const,
+              summary: projected.terminal.summary,
+              ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
+            };
+      return withThreadContinuity(outcome, threadReplaced);
     } finally {
       this.#options.mcpServer.release?.(request);
     }
@@ -297,8 +213,8 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     return readLatestCodexContextWindowUsage(sessionPath);
   }
 
-  #remember(attemptId: string, transcript: AttemptTranscriptItem[]): void {
-    this.#transcripts.set(attemptId, structuredClone(transcript));
+  #remember(attemptId: string, transcript: readonly AttemptTranscriptItem[]): void {
+    this.#transcripts.set(attemptId, [...structuredClone(transcript)]);
   }
 }
 
@@ -311,30 +227,6 @@ function codexInput(request: AgentRunRequest): Input {
   return images.length === 0
     ? prompt
     : [{ type: "text", text: prompt }, ...images.map(({ path }) => ({ type: "local_image" as const, path }))];
-}
-
-function tokenUsageFrom(value: unknown): AttemptTokenUsage | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  const usage = value as Record<string, unknown>;
-  const inputTokens = tokenCount(usage.input_tokens);
-  const cachedInputTokens = tokenCount(usage.cached_input_tokens);
-  const cacheWriteInputTokens = tokenCount(usage.cache_write_input_tokens);
-  const outputTokens = tokenCount(usage.output_tokens);
-  const reasoningOutputTokens = tokenCount(usage.reasoning_output_tokens);
-  if (
-    inputTokens === undefined ||
-    cachedInputTokens === undefined ||
-    cacheWriteInputTokens === undefined ||
-    outputTokens === undefined ||
-    reasoningOutputTokens === undefined
-  ) return undefined;
-  return {
-    inputTokens,
-    cachedInputTokens,
-    cacheWriteInputTokens,
-    outputTokens,
-    reasoningOutputTokens,
-  };
 }
 
 function tokenCount(value: unknown): number | undefined {
@@ -450,30 +342,8 @@ function gitSafeDirectoryPath(path: string): string {
   return /^(?:[A-Za-z]:\\|\\\\)/u.test(path) ? path.replaceAll("\\", "/") : path;
 }
 
-function runtimeFailure(diagnostic: string, threadId?: string): AgentRunOutcome {
-  return {
-    status: "failed",
-    summary: `Codex could not complete the activation: ${diagnostic}`,
-    ...(threadId === undefined ? {} : { threadId }),
-  };
-}
-
 function withThreadContinuity(outcome: AgentRunOutcome, replaced: boolean): AgentRunOutcome {
   return replaced ? { ...outcome, threadContinuity: "replaced" } : outcome;
-}
-
-function permissionBlockFrom(item: { type: string; [key: string]: unknown }): string {
-  const arguments_ = item.arguments;
-  if (
-    typeof arguments_ === "object" &&
-    arguments_ !== null &&
-    "summary" in arguments_ &&
-    typeof arguments_.summary === "string" &&
-    arguments_.summary.trim().length > 0
-  ) {
-    return arguments_.summary.trim();
-  }
-  return "A required action was blocked by the Codex permission policy.";
 }
 
 function replacementRequest(request: AgentRunRequest): AgentRunRequest {
@@ -482,121 +352,6 @@ function replacementRequest(request: AgentRunRequest): AgentRunRequest {
     ...withoutResumeThread,
     attempt: { ...request.attempt, thread: "replaced" },
   };
-}
-
-function toolTranscriptItem(
-  item: { type: string; [key: string]: unknown },
-  eventType: "item.started" | "item.updated" | "item.completed",
-  run: { attemptId: string; taskId: string },
-): AttemptTranscriptItem {
-  if (item.type === "error") {
-    const text = typeof item.message === "string"
-      ? item.message
-      : typeof item.text === "string"
-        ? item.text
-        : "Codex reported an item-level error without a diagnostic message.";
-    return { kind: "diagnostic", text };
-  }
-  const status = eventType === "item.started" || item.status === "in_progress"
-    ? "running"
-    : typeof item.status === "string"
-      ? item.status
-      : eventType === "item.completed"
-        ? "completed"
-        : "running";
-  const command = typeof item.command === "string" ? item.command : undefined;
-  const rawOutput = [item.aggregated_output, item.output, item.result, errorMessage(item.error)]
-    .find((value) => typeof value === "string") as string | undefined;
-  if (command !== undefined) {
-    return {
-      ...(typeof item.id === "string" ? { id: item.id } : {}),
-      kind: "command",
-      command,
-      status,
-      ...(rawOutput === undefined ? {} : { output: truncateOutput(rawOutput) }),
-    };
-  }
-  if (item.type === "mcp_tool_call" && typeof item.server === "string" && typeof item.tool === "string") {
-    const coordinationItem = coordinationTranscriptItem(item, status, run);
-    if (coordinationItem !== undefined) return coordinationItem;
-    return {
-      ...(typeof item.id === "string" ? { id: item.id } : {}),
-      kind: "mcp",
-      server: item.server,
-      tool: item.tool,
-      status: status === "running" ? "running" : status === "completed" ? "succeeded" : "failed",
-      ...(typeof item.status === "string" ? { rawStatus: item.status } : {}),
-      ...(item.arguments === undefined ? {} : { arguments: item.arguments }),
-      ...(item.result === undefined ? {} : { result: item.result }),
-      ...(item.error === undefined ? {} : { error: item.error }),
-    };
-  }
-  const summary = readableToolSummary(item);
-  return {
-    ...(typeof item.id === "string" ? { id: item.id } : {}),
-    kind: "tool",
-    name: item.type,
-    status,
-    summary,
-    ...(rawOutput === undefined ? {} : { output: truncateOutput(rawOutput) }),
-  };
-}
-
-function upsertToolTranscriptItem(
-  transcript: AttemptTranscriptItem[],
-  item: { type: string; [key: string]: unknown },
-  eventType: "item.started" | "item.updated" | "item.completed",
-  run: { attemptId: string; taskId: string },
-): void {
-  const next = toolTranscriptItem(item, eventType, run);
-  const itemId = "id" in next ? next.id : undefined;
-  const existingIndex = itemId === undefined
-    ? -1
-    : transcript.findIndex((entry) => "id" in entry && entry.id === itemId);
-  if (existingIndex === -1) transcript.push(next);
-  else transcript[existingIndex] = next;
-}
-
-function coordinationToolCall(item: { type: string; [key: string]: unknown }):
-  | { name: string; status: string; diagnostic: string }
-  | undefined {
-  if (
-    item.type !== "mcp_tool_call" ||
-    item.server !== "coordination" ||
-    typeof item.tool !== "string" ||
-    typeof item.status !== "string"
-  ) {
-    return undefined;
-  }
-  return {
-    name: `coordination.${item.tool}`,
-    status: item.status,
-    diagnostic: actionableCoordinationDiagnostic(errorMessage(item.error)),
-  };
-}
-
-function actionableCoordinationDiagnostic(message: string | undefined): string {
-  if (message === undefined) return "Codex reported no underlying cause";
-  if (/cancelled mcp tool call|mcp tool call cancelled|tool call cancelled/i.test(message)) {
-    return `${message}; the coordination server was configured with approval mode "approve", but Codex supplied no deeper cancellation cause—inspect the retained session and host lifecycle evidence`;
-  }
-  return message;
-}
-
-function errorMessage(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null || !("message" in error)) return undefined;
-  return typeof error.message === "string" ? error.message : undefined;
-}
-
-function readableToolSummary(item: { type: string; [key: string]: unknown }): string {
-  const tool = typeof item.tool === "string" ? item.tool : typeof item.name === "string" ? item.name : undefined;
-  const server = typeof item.server === "string" ? item.server : undefined;
-  if (tool !== undefined && server !== undefined) return `${server}.${tool}`;
-  return tool ?? item.type.replaceAll("_", " ");
-}
-
-function truncateOutput(output: string): string {
-  return output.length <= 4_000 ? output : `${output.slice(0, 4_000)}\n… output truncated`;
 }
 
 function createCodexClient(options: CodexClientOptionsLike): CodexClientLike {

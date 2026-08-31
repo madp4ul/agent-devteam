@@ -9,7 +9,7 @@ live transcript, usage, and terminal facts.
 
 **Blocked by:** 90 — Evaluate the Codex Runtime Event Seam.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Decision source
 
@@ -142,3 +142,21 @@ thread construction, filesystem layout, MCP release, or application
 persistence. Do not keep a pass-through module merely to shorten the runtime
 file.
 
+## Answer
+
+Implemented one internal attempt-local whole-stream projector in
+`src/runtime/codex-turn-projector.ts`. It consumes the SDK-exported
+`ThreadEvent` and `ThreadItem` boundary, guards runtime event envelopes,
+publishes defensive live transcript snapshots, replaces stable item rows in
+first-seen order, retains generic and typed coordination evidence, decodes only
+complete safe cumulative usage, and owns required-tool, permission-block, and
+terminal precedence through one result.
+
+`CodexAgentRuntime` remains the sole external adapter and still owns Codex
+configuration, input and attachments, start/resume/eager replacement, signal
+forwarding, MCP release, context-window evidence, attempt-keyed storage, and
+thread-replacement provenance. Existing transcript event traces now exercise
+the projector seam; focused projector/runtime verification passes 37 tests and
+TypeScript typechecking passes. The full Node run completed with 266 passing,
+3 credentialed skips, and 2 pre-existing activation-prompt assertion failures
+outside this ticket's files and behavior.

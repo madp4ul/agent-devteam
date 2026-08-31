@@ -22,11 +22,11 @@ import { AgentToolScopeRegistry } from "../../src/mcp/agent-tool-scope.ts";
 import {
   CodexAgentRuntime,
   type CodexClientOptionsLike,
-  type CodexEventLike,
 } from "../../src/runtime/codex-agent-runtime.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
 
 const execFileAsync = promisify(execFile);
+type CodexEventLike = any;
 
 test("the project MCP exposes bounded discovery while mutations stay current-task scoped", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "coordination-mcp-"));

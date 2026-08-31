@@ -1,24 +1,57 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { AgentRunRequest } from "../../src/application/runtime-contract.ts";
+import type {
+  AgentRunLifecycle,
+  AgentRunOutcome,
+  AgentRunRequest,
+  AttemptTranscriptItem,
+} from "../../src/application/runtime-contract.ts";
 import {
-  CodexAgentRuntime,
-  composeActivationPrompt,
   type CodexAgentRuntimeOptions,
-  type CodexClientLike,
   type CodexClientOptionsLike,
-  type CodexEventLike,
   type CodexThreadLike,
   type CodexThreadOptionsLike,
 } from "../../src/runtime/codex-agent-runtime.ts";
+import { projectCodexTurn } from "../../src/runtime/codex-turn-projector.ts";
 import {
-  createRuntime,
+  createRuntime as createCodexRuntime,
+  type CodexEventLike,
   events,
   liveMessageEvents,
   liveToolEvents,
   request,
 } from "../support/codex-runtime-fixture.ts";
+
+function createRuntime(options: CodexAgentRuntimeOptions) {
+  const transcripts = new Map<string, AttemptTranscriptItem[]>();
+  return {
+    async run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
+      assert.ok(options.createClient);
+      const client = options.createClient({});
+      const thread = request.resumeThreadId === undefined
+        ? client.startThread({})
+        : client.resumeThread?.(request.resumeThreadId, {}) ?? client.startThread({});
+      const streamed = await thread.runStreamed("");
+      const projected = await projectCodexTurn(streamed.events, {
+        attemptId: request.attemptId,
+        taskId: request.task.id,
+      }, {
+        started: (threadId) => lifecycle.started(threadId),
+        publish: (transcript) => transcripts.set(request.attemptId, [...structuredClone(transcript)]),
+      });
+      transcripts.set(request.attemptId, [...structuredClone(projected.transcript)]);
+      return {
+        status: projected.terminal.kind,
+        summary: projected.terminal.summary,
+        ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
+      };
+    },
+    async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {
+      return structuredClone(transcripts.get(attemptId) ?? null);
+    },
+  };
+}
 
 test("a failed required coordination call makes the attempt fail with actionable evidence", async () => {
   const runtime = createRuntime({
@@ -1054,7 +1087,7 @@ test("continued attempts sharing one Codex thread retain isolated transcripts", 
       };
     },
   });
-  const runtime = createRuntime({
+  const runtime = createCodexRuntime({
     mcpServer: {
       command: "node",
       args: (request) => {

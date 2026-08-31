@@ -8,7 +8,6 @@ import {
   type CodexAgentRuntimeOptions,
   type CodexClientLike,
   type CodexClientOptionsLike,
-  type CodexEventLike,
   type CodexThreadLike,
   type CodexThreadOptionsLike,
 } from "../../src/runtime/codex-agent-runtime.ts";

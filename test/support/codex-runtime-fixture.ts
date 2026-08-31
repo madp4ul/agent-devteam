@@ -8,10 +8,12 @@ import {
   type CodexAgentRuntimeOptions,
   type CodexClientLike,
   type CodexClientOptionsLike,
-  type CodexEventLike,
   type CodexThreadLike,
   type CodexThreadOptionsLike,
 } from "../../src/runtime/codex-agent-runtime.ts";
+
+// Deliberately loose so tests can exercise malformed runtime JSON that the SDK casts to ThreadEvent.
+export type CodexEventLike = any;
 
 export function createRuntime(options: CodexAgentRuntimeOptions): CodexAgentRuntime {
   return new CodexAgentRuntime({
