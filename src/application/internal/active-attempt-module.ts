@@ -20,7 +20,28 @@ import type { ActivityJournal } from "./activity-journal.ts";
 import type { AttentionRecorder } from "./attention-recorder.ts";
 import type { AttemptEvidenceModule } from "./attempt-evidence-module.ts";
 
-export class AutomationStateStore {
+interface AttemptSettlementEvidence {
+  transcript?: AttemptTranscriptItem[];
+  usage?: AttemptTokenUsage;
+  contextWindowUsage?: AttemptContextWindowUsage;
+  pricing?: ProcessModelPricingDefinition;
+  resumedThreadId?: string;
+}
+
+interface SettleAttempt extends AttemptSettlementEvidence {
+  attemptId: string;
+  outcome: AgentRunOutcome;
+  now: Date;
+}
+
+interface InterruptAttempt extends AttemptSettlementEvidence {
+  attemptId: string;
+  now: Date;
+  actor: Actor & { kind: "user" };
+  idempotencyKey: string;
+}
+
+export class ActiveAttemptModule {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
   readonly #idempotentCommands: IdempotentCommandExecutor;
@@ -48,9 +69,7 @@ export class AutomationStateStore {
       const interrupted = this.#database
         .prepare(
           `SELECT attempt.id, attempt.activation_id, activation.task_id,
-                  activation.target_agent_id, activation.retry_cycle_start,
-                  (SELECT COUNT(*) FROM attempts counted
-                   WHERE counted.activation_id = activation.id) AS attempt_count
+                  activation.target_agent_id, activation.retry_cycle_start
            FROM attempts attempt
            JOIN activations activation ON activation.id = attempt.activation_id
            WHERE attempt.status = 'running' AND activation.status = 'running'
@@ -62,7 +81,6 @@ export class AutomationStateStore {
           task_id: string;
           target_agent_id: string;
           retry_cycle_start: number;
-          attempt_count: number;
         }>;
       for (const attempt of interrupted) {
         const occurredAt = now.toISOString();
@@ -77,31 +95,13 @@ export class AutomationStateStore {
         this.#database
           .prepare("DELETE FROM activation_dispatch_claims WHERE attempt_id = ?")
           .run(attempt.id);
-        const cycleAttempt = attempt.attempt_count - attempt.retry_cycle_start;
-        if (cycleAttempt < 3) {
-          this.#database
-            .prepare(
-              `UPDATE activations
-               SET status = 'queued', retry_due_at = ?,
-                   failure_kind = 'technical', failure_summary = ?
-               WHERE id = ?`,
-            )
-            .run(
-              retryDueAt(now, cycleAttempt),
-              summary,
-              attempt.activation_id,
-            );
-        } else {
-          this.#database
-            .prepare(
-              `UPDATE activations
-               SET status = 'failed', retry_due_at = NULL,
-                   failure_kind = 'technical', failure_summary = ?
-               WHERE id = ?`,
-            )
-            .run(summary, attempt.activation_id);
-          this.createFailureAttention(attempt.task_id, attempt.activation_id, occurredAt);
-        }
+        this.settleTechnicalFailure(
+          attempt.activation_id,
+          attempt.task_id,
+          attempt.retry_cycle_start,
+          summary,
+          now,
+        );
         this.#activityJournal.append(
           attempt.task_id,
           "attempt.completed",
@@ -118,17 +118,7 @@ export class AutomationStateStore {
     });
   }
 
-  interruptAttempt(
-    attemptId: string,
-    now: Date,
-    actor: Actor & { kind: "user" },
-    idempotencyKey: string,
-    transcript?: AttemptTranscriptItem[],
-    usage?: AttemptTokenUsage,
-    contextWindowUsage?: AttemptContextWindowUsage,
-    pricing?: ProcessModelPricingDefinition,
-    resumedThreadId?: string,
-  ): void {
+  interrupt(input: InterruptAttempt): void {
     this.#owner.transaction(() => {
       const attempt = this.#database
         .prepare(
@@ -139,7 +129,7 @@ export class AutomationStateStore {
            WHERE attempt.id = ? AND attempt.status = 'running'
              AND activation.status = 'running'`,
         )
-        .get(attemptId) as
+        .get(input.attemptId) as
         | {
             activation_id: string;
             thread_id: string | null;
@@ -147,16 +137,16 @@ export class AutomationStateStore {
             target_agent_id: string;
           }
         | undefined;
-      if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
+      if (attempt === undefined) throw new Error(`Attempt ${input.attemptId} is not running`);
       this.#attemptEvidence.recordWithinSettlement({
-        attemptId,
-        ...(transcript === undefined ? {} : { transcript }),
-        ...(usage === undefined ? {} : { reportedUsage: usage }),
-        ...(pricing === undefined ? {} : { pricing }),
-        ...(resumedThreadId === undefined ? {} : { resumedThreadId }),
+        attemptId: input.attemptId,
+        ...(input.transcript === undefined ? {} : { transcript: input.transcript }),
+        ...(input.usage === undefined ? {} : { reportedUsage: input.usage }),
+        ...(input.pricing === undefined ? {} : { pricing: input.pricing }),
+        ...(input.resumedThreadId === undefined ? {} : { resumedThreadId: input.resumedThreadId }),
         ...(attempt.thread_id === null ? {} : { completedThreadId: attempt.thread_id }),
       });
-      const occurredAt = now.toISOString();
+      const occurredAt = input.now.toISOString();
       const summary = "The user interrupted this attempt.";
       this.#database
         .prepare(
@@ -168,8 +158,8 @@ export class AutomationStateStore {
         .run(
           occurredAt,
           summary,
-          serializedContextWindowUsage(contextWindowUsage),
-          attemptId,
+          serializedContextWindowUsage(input.contextWindowUsage),
+          input.attemptId,
         );
       this.#database
         .prepare(
@@ -189,20 +179,20 @@ export class AutomationStateStore {
       this.#activityJournal.append(
         attempt.task_id,
         "attempt.completed",
-        actor,
-        { activationId: attempt.activation_id, attemptId, interruption: "user" },
+        input.actor,
+        { activationId: attempt.activation_id, attemptId: input.attemptId, interruption: "user" },
         occurredAt,
       );
       this.#activityJournal.append(
         attempt.task_id,
         "automation.suspended",
-        actor,
-        { activationId: attempt.activation_id, attemptId },
+        input.actor,
+        { activationId: attempt.activation_id, attemptId: input.attemptId },
         occurredAt,
       );
       this.#idempotentCommands.retain({
         kind: "interrupt-task",
-        idempotencyKey,
+        idempotencyKey: input.idempotencyKey,
       }, {
         taskId: attempt.task_id,
       });
@@ -286,7 +276,7 @@ export class AutomationStateStore {
     }));
   }
 
-  recordAttemptThreadId(attemptId: string, runStartActivityId: string, threadId: string): void {
+  recordThreadStarted(attemptId: string, threadId: string): void {
     this.#owner.transaction(() => {
       const result = this.#database
         .prepare("UPDATE attempts SET thread_id = ? WHERE id = ? AND status = 'running'")
@@ -294,33 +284,24 @@ export class AutomationStateStore {
       if (result.changes !== 1) throw new Error(`Attempt ${attemptId} is not running`);
       const activity = this.#database
         .prepare(
-          `SELECT details_json
+          `SELECT id, details_json
            FROM activity_ledger
-           WHERE id = ? AND type = 'attempt.started'`,
+           WHERE type = 'attempt.started'
+             AND json_extract(details_json, '$.attemptId') = ?`,
         )
-        .get(runStartActivityId) as { details_json: string } | undefined;
+        .get(attemptId) as { id: string; details_json: string } | undefined;
       if (activity === undefined) {
-        throw new Error(`Run-start activity ${runStartActivityId} is missing`);
+        throw new Error(`Run-start activity for attempt ${attemptId} is missing`);
       }
       const details = JSON.parse(activity.details_json) as Record<string, string>;
       this.#database
         .prepare("UPDATE activity_ledger SET details_json = ? WHERE id = ?")
-        .run(JSON.stringify({ ...details, threadId }), runStartActivityId);
+        .run(JSON.stringify({ ...details, threadId }), activity.id);
       this.updateConversationActivity(attemptId, new Date().toISOString(), threadId);
     });
   }
 
-  completeAttempt(
-    attemptId: string,
-    outcome: AgentRunOutcome,
-    now: Date,
-    automaticRetry = true,
-    transcript?: AttemptTranscriptItem[],
-    usage?: AttemptTokenUsage,
-    contextWindowUsage?: AttemptContextWindowUsage,
-    pricing?: ProcessModelPricingDefinition,
-    resumedThreadId?: string,
-  ): void {
+  settle(input: SettleAttempt): void {
     this.#owner.transaction(() => {
       const attempt = this.#database
         .prepare(
@@ -331,7 +312,7 @@ export class AutomationStateStore {
            JOIN activations a ON a.id = attempt.activation_id
            WHERE attempt.id = ? AND attempt.status = 'running'`,
         )
-        .get(attemptId) as
+        .get(input.attemptId) as
         | {
             activation_id: string;
             thread_id: string | null;
@@ -340,20 +321,20 @@ export class AutomationStateStore {
             retry_cycle_start: number;
           }
         | undefined;
-      if (attempt === undefined) throw new Error(`Attempt ${attemptId} is not running`);
+      if (attempt === undefined) throw new Error(`Attempt ${input.attemptId} is not running`);
       this.#attemptEvidence.recordWithinSettlement({
-        attemptId,
-        ...(transcript === undefined ? {} : { transcript }),
-        ...(usage === undefined ? {} : { reportedUsage: usage }),
-        ...(pricing === undefined ? {} : { pricing }),
-        ...(resumedThreadId === undefined ? {} : { resumedThreadId }),
-        ...(outcome.threadId === undefined && attempt.thread_id === null
+        attemptId: input.attemptId,
+        ...(input.transcript === undefined ? {} : { transcript: input.transcript }),
+        ...(input.usage === undefined ? {} : { reportedUsage: input.usage }),
+        ...(input.pricing === undefined ? {} : { pricing: input.pricing }),
+        ...(input.resumedThreadId === undefined ? {} : { resumedThreadId: input.resumedThreadId }),
+        ...(input.outcome.threadId === undefined && attempt.thread_id === null
           ? {}
-          : { completedThreadId: outcome.threadId ?? attempt.thread_id! }),
+          : { completedThreadId: input.outcome.threadId ?? attempt.thread_id! }),
       });
-      const occurredAt = now.toISOString();
-      const persistedStatus = outcome.status === "completed" ? "completed" : "failed";
-      const outcomeKind = outcome.status === "permission-blocked" ? "permission" : outcome.status;
+      const occurredAt = input.now.toISOString();
+      const persistedStatus = input.outcome.status === "completed" ? "completed" : "failed";
+      const outcomeKind = input.outcome.status === "permission-blocked" ? "permission" : input.outcome.status;
       this.#database
         .prepare(
           `UPDATE attempts
@@ -366,14 +347,14 @@ export class AutomationStateStore {
           persistedStatus,
           occurredAt,
           persistedStatus,
-          outcome.summary,
-          outcome.threadId ?? null,
+          input.outcome.summary,
+          input.outcome.threadId ?? null,
           outcomeKind,
-          outcome.threadContinuity ?? null,
-          serializedContextWindowUsage(contextWindowUsage),
-          attemptId,
+          input.outcome.threadContinuity ?? null,
+          serializedContextWindowUsage(input.contextWindowUsage),
+          input.attemptId,
         );
-      if (outcome.status === "completed") {
+      if (input.outcome.status === "completed") {
         this.#database
           .prepare(
             `UPDATE activations
@@ -382,7 +363,7 @@ export class AutomationStateStore {
              WHERE id = ?`,
           )
           .run(attempt.activation_id);
-      } else if (outcome.status === "permission-blocked") {
+      } else if (input.outcome.status === "permission-blocked") {
         this.#database
           .prepare(
             `UPDATE activations
@@ -390,54 +371,28 @@ export class AutomationStateStore {
                  failure_kind = 'permission', failure_summary = ?
              WHERE id = ?`,
           )
-          .run(outcome.summary, attempt.activation_id);
+          .run(input.outcome.summary, attempt.activation_id);
         this.createFailureAttention(attempt.task_id, attempt.activation_id, occurredAt);
-      } else if (!automaticRetry) {
-        this.#database
-          .prepare(
-            `UPDATE activations
-             SET status = 'failed', retry_due_at = NULL,
-                 failure_kind = 'technical', failure_summary = ?
-             WHERE id = ?`,
-          )
-          .run(outcome.summary, attempt.activation_id);
       } else {
-        const attempts = this.#database
-          .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
-          .get(attempt.activation_id) as { count: number };
-        const cycleAttempt = attempts.count - attempt.retry_cycle_start;
-        if (cycleAttempt < 3) {
-          this.#database
-            .prepare(
-              `UPDATE activations
-               SET status = 'queued', retry_due_at = ?,
-                   failure_kind = 'technical', failure_summary = ?
-               WHERE id = ?`,
-            )
-            .run(retryDueAt(now, cycleAttempt), outcome.summary, attempt.activation_id);
-        } else {
-          this.#database
-            .prepare(
-              `UPDATE activations
-               SET status = 'failed', retry_due_at = NULL,
-                   failure_kind = 'technical', failure_summary = ?
-               WHERE id = ?`,
-            )
-            .run(outcome.summary, attempt.activation_id);
-          this.createFailureAttention(attempt.task_id, attempt.activation_id, occurredAt);
-        }
+        this.settleTechnicalFailure(
+          attempt.activation_id,
+          attempt.task_id,
+          attempt.retry_cycle_start,
+          input.outcome.summary,
+          input.now,
+        );
       }
       this.#activityJournal.append(
         attempt.task_id,
         "attempt.completed",
         { kind: "agent", id: attempt.target_agent_id },
-        { activationId: attempt.activation_id, attemptId },
+        { activationId: attempt.activation_id, attemptId: input.attemptId },
         occurredAt,
       );
-      if (outcome.threadId !== undefined) {
-        this.updateConversationActivity(attemptId, occurredAt, outcome.threadId);
+      if (input.outcome.threadId !== undefined) {
+        this.updateConversationActivity(input.attemptId, occurredAt, input.outcome.threadId);
       } else {
-        this.updateConversationActivity(attemptId, occurredAt);
+        this.updateConversationActivity(input.attemptId, occurredAt);
       }
     });
   }
@@ -464,6 +419,39 @@ export class AutomationStateStore {
       activationId,
       occurredAt,
     );
+  }
+
+  private settleTechnicalFailure(
+    activationId: string,
+    taskId: string,
+    retryCycleStart: number,
+    summary: string,
+    now: Date,
+  ): void {
+    const attempts = this.#database
+      .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
+      .get(activationId) as { count: number };
+    const cycleAttempt = attempts.count - retryCycleStart;
+    if (cycleAttempt < 3) {
+      this.#database
+        .prepare(
+          `UPDATE activations
+           SET status = 'queued', retry_due_at = ?,
+               failure_kind = 'technical', failure_summary = ?
+           WHERE id = ?`,
+        )
+        .run(retryDueAt(now, cycleAttempt), summary, activationId);
+      return;
+    }
+    this.#database
+      .prepare(
+        `UPDATE activations
+         SET status = 'failed', retry_due_at = NULL,
+             failure_kind = 'technical', failure_summary = ?
+         WHERE id = ?`,
+      )
+      .run(summary, activationId);
+    this.createFailureAttention(taskId, activationId, now.toISOString());
   }
 
 }

@@ -30,7 +30,6 @@ export interface ClaimedActivation {
 export interface StartedAttempt {
   id: string;
   number: number;
-  runStartActivityId: string;
 }
 
 export class ActivationSchedulingModule {
@@ -207,7 +206,7 @@ export class ActivationSchedulingModule {
       const occurredAt = new Date().toISOString();
       this.#database.prepare("UPDATE attempts SET started_at = ? WHERE id = ?")
         .run(occurredAt, claim.attempt.id);
-      const runStartActivityId = this.#activityJournal.append(
+      this.#activityJournal.append(
         prepared.task_id,
         "attempt.started",
         { kind: "agent", id: prepared.target_agent_id },
@@ -223,7 +222,7 @@ export class ActivationSchedulingModule {
         "DELETE FROM activation_dispatch_claims WHERE attempt_id = ? AND activation_id = ?",
       ).run(claim.attempt.id, claim.activation.id);
       if (consumed.changes !== 1) throw new Error(`Attempt ${claim.attempt.id} lost its dispatch claim`);
-      return { ...claim.attempt, runStartActivityId };
+      return claim.attempt;
     });
   }
 

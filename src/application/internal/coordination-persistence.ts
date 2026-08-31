@@ -2,7 +2,7 @@ import { CoordinationDatabase } from "./coordination-database.ts";
 import { TaskCommandStore } from "./task-command-store.ts";
 import { TaskProjectionStore } from "./task-projection-store.ts";
 import { ProcessStateStore } from "./process-state-store.ts";
-import { AutomationStateStore } from "./automation-state-store.ts";
+import { ActiveAttemptModule } from "./active-attempt-module.ts";
 import { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import { TaskArchiveStore } from "./task-archive-store.ts";
 import { NotificationStore } from "./notification-store.ts";
@@ -28,7 +28,7 @@ export interface CoordinationPersistence {
   conversationCommands: ConversationCommandModule;
   conversationAttachments: ConversationAttachmentStore;
   conversationContextDelivery: ConversationContextDeliveryModule;
-  automation: AutomationStateStore;
+  activeAttempts: ActiveAttemptModule;
   taskArchive: TaskArchiveStore;
   notifications: NotificationStore;
   close(): void;
@@ -94,7 +94,7 @@ export function openCoordinationPersistence(
     conversationCommands,
     conversationAttachments,
     conversationContextDelivery: new ConversationContextDeliveryModule(database),
-    automation: new AutomationStateStore(
+    activeAttempts: new ActiveAttemptModule(
       database,
       idempotentCommands,
       activityJournal,

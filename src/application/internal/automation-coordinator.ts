@@ -18,7 +18,7 @@ import type {
 import type { Actor } from "../task-contract.ts";
 import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-workspace.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
-import type { AutomationStateStore } from "./automation-state-store.ts";
+import type { ActiveAttemptModule } from "./active-attempt-module.ts";
 import type {
   ActivationSchedulingModule,
   ClaimedActivation,
@@ -41,7 +41,7 @@ export interface AutomationCoordinatorOptions {
   processStore: ProcessStateStore;
   taskProjections: TaskProjectionStore;
   activationScheduling: ActivationSchedulingModule;
-  automationStore: AutomationStateStore;
+  activeAttempts: ActiveAttemptModule;
   conversationContextDelivery: ConversationContextDeliveryModule;
   conversationAttachments: ConversationAttachmentStore;
   startup: StartupView;
@@ -68,7 +68,7 @@ export class AutomationCoordinator {
   readonly #processStore: ProcessStateStore;
   readonly #taskProjections: TaskProjectionStore;
   readonly #activationScheduling: ActivationSchedulingModule;
-  readonly #stateStore: AutomationStateStore;
+  readonly #activeAttempts: ActiveAttemptModule;
   readonly #conversationContextDelivery: ConversationContextDeliveryModule;
   readonly #conversationAttachments: ConversationAttachmentStore;
   readonly #startup: StartupView;
@@ -94,7 +94,7 @@ export class AutomationCoordinator {
     this.#processStore = options.processStore;
     this.#taskProjections = options.taskProjections;
     this.#activationScheduling = options.activationScheduling;
-    this.#stateStore = options.automationStore;
+    this.#activeAttempts = options.activeAttempts;
     this.#conversationContextDelivery = options.conversationContextDelivery;
     this.#conversationAttachments = options.conversationAttachments;
     this.#startup = options.startup;
@@ -121,7 +121,7 @@ export class AutomationCoordinator {
   }
 
   queryActiveRuns(): ActiveRunView[] {
-    return this.#stateStore.readActiveRuns().map((run) => ({
+    return this.#activeAttempts.readActiveRuns().map((run) => ({
       ...run,
       status: this.#activeRuns.get(run.taskId)?.state ?? "running",
     }));
@@ -391,11 +391,7 @@ export class AutomationCoordinator {
         {
           started: (threadId) => {
             if (threadId !== undefined) {
-              this.#stateStore.recordAttemptThreadId(
-                attempt.id,
-                attempt.runStartActivityId,
-                threadId,
-              );
+              this.#activeAttempts.recordThreadStarted(attempt.id, threadId);
             }
           },
         },
@@ -431,29 +427,32 @@ export class AutomationCoordinator {
           ) {
             throw new Error("Interrupting attempt has incomplete initiating command context");
           }
-          this.#stateStore.interruptAttempt(
-            attempt.id,
-            this.#clock.now(),
-            activeRun.interruptedBy,
-            activeRun.interruptIdempotencyKey,
-            transcript,
-            usage,
-            contextWindowUsage,
-            pricing,
-            resumeThreadId ?? undefined,
-          );
+          this.#activeAttempts.interrupt({
+            attemptId: attempt.id,
+            now: this.#clock.now(),
+            actor: activeRun.interruptedBy,
+            idempotencyKey: activeRun.interruptIdempotencyKey,
+            ...(transcript === undefined ? {} : { transcript }),
+            ...(usage === undefined ? {} : { usage }),
+            ...(contextWindowUsage === undefined ? {} : { contextWindowUsage }),
+            ...(pricing === undefined ? {} : { pricing }),
+            ...(resumeThreadId === null || resumeThreadId === undefined
+              ? {}
+              : { resumedThreadId: resumeThreadId }),
+          });
         } else {
-          this.#stateStore.completeAttempt(
-            attempt.id,
+          this.#activeAttempts.settle({
+            attemptId: attempt.id,
             outcome,
-            this.#clock.now(),
-            true,
-            transcript,
-            usage,
-            contextWindowUsage,
-            pricing,
-            resumeThreadId ?? undefined,
-          );
+            now: this.#clock.now(),
+            ...(transcript === undefined ? {} : { transcript }),
+            ...(usage === undefined ? {} : { usage }),
+            ...(contextWindowUsage === undefined ? {} : { contextWindowUsage }),
+            ...(pricing === undefined ? {} : { pricing }),
+            ...(resumeThreadId === null || resumeThreadId === undefined
+              ? {}
+              : { resumedThreadId: resumeThreadId }),
+          });
         }
         activeRun.confirm();
       } catch (error) {

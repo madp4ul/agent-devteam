@@ -178,7 +178,7 @@ export class CoordinationApplication {
       taskCommands,
       taskProjections,
       activationScheduling,
-      automation,
+      activeAttempts,
       conversationContextDelivery,
       conversationAttachments,
     } = persistence;
@@ -195,7 +195,7 @@ export class CoordinationApplication {
           processStore: process,
           taskProjections,
           activationScheduling,
-          automationStore: automation,
+          activeAttempts,
           conversationContextDelivery,
           conversationAttachments,
           startup,
@@ -244,7 +244,7 @@ export class CoordinationApplication {
             processStore: process,
             taskProjections,
             activationScheduling,
-            automationStore: automation,
+            activeAttempts,
             conversationContextDelivery,
             conversationAttachments,
             startup,
@@ -253,7 +253,7 @@ export class CoordinationApplication {
         );
       }
     }
-    automation.recoverInterruptedAttempts(options.automationClock?.now() ?? new Date());
+    activeAttempts.recoverInterruptedAttempts(options.automationClock?.now() ?? new Date());
     const processImpact = process.applyDefinition(definition, instructionContents, version);
     const boards = process.readBoards();
     const startup: StartupView = {
@@ -289,7 +289,7 @@ export class CoordinationApplication {
         processStore: process,
         taskProjections,
         activationScheduling,
-        automationStore: automation,
+        activeAttempts,
         conversationContextDelivery,
         conversationAttachments,
         startup,
@@ -321,7 +321,7 @@ export class CoordinationApplication {
       process,
       taskProjections,
       activationScheduling,
-      automation,
+      activeAttempts,
       conversationContextDelivery,
       conversationAttachments,
     } = persistence;
@@ -337,7 +337,7 @@ export class CoordinationApplication {
         processStore: process,
         taskProjections,
         activationScheduling,
-        automationStore: automation,
+        activeAttempts,
         conversationContextDelivery,
         conversationAttachments,
         startup,
@@ -419,7 +419,7 @@ export class CoordinationApplication {
   }
 
   interruptTask(command: InterruptTaskCommand): InterruptTaskResult {
-    const replay = this.#persistence.automation.readInterruptedCommand(command.idempotencyKey);
+    const replay = this.#persistence.activeAttempts.readInterruptedCommand(command.idempotencyKey);
     if (replay !== undefined) {
       return { accepted: true, state: "interrupted", confirmed: Promise.resolve() };
     }
@@ -770,7 +770,7 @@ export class CoordinationApplication {
       };
     }
     if (scope.attemptId === undefined) return { available: false, reason: "invalid-attempt-scope" };
-    const current = this.#persistence.automation.readRunningAttemptScope(scope.attemptId);
+    const current = this.#persistence.activeAttempts.readRunningAttemptScope(scope.attemptId);
     if (
       current === undefined ||
       current.taskId !== scope.taskId ||
