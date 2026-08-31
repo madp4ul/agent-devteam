@@ -22,10 +22,34 @@ that store as a backup if its development data is still useful, then configure
 a new database path. Do not add a ledger manually or copy tables into a
 released database.
 
-Later supported released histories will be upgraded through ordered,
-transactional migrations with a verified recovery backup. Unknown, malformed,
-or future histories fail closed rather than being deleted or inferred from
-table shape.
+Every released migration remains supported indefinitely. When the ledger is an
+older exact prefix of the running application's registry, startup creates one
+uniquely named `coordination.sqlite3.pre-migration-*.sqlite3` recovery file
+beside the live database through SQLite's online backup facility. It
+independently verifies the copied ledger, SQLite integrity, and foreign keys,
+including committed data still resident in WAL, before changing the source.
+All pending migrations and ledger entries then run in one immediate transaction
+and the resulting schema, integrity, and foreign keys verify before commit.
+
+Unknown, malformed, divergent, or future histories fail closed without
+migration. Backup creation, migration, and post-migration verification failures
+are distinct blocking startup diagnostics. A failed migration or verification
+rolls back the complete pending sequence and identifies the verified recovery
+file; process application, restart and workspace recovery, board changes, and
+agent dispatch have not run.
+
+To recover after a reported upgrade failure, stop the application, retain the
+failed source and its reported recovery file, independently open the recovery
+file read-only and run `PRAGMA integrity_check` and `PRAGMA foreign_key_check`,
+then copy that recovery file to the configured database path. Keep the original
+until the restored application starts paused and retained data is confirmed.
+Do not copy a WAL or shared-memory file from the failed source over the recovered
+database.
+
+The automatic migration backup is database-only. It does not contain
+conversation attachment bytes, task worktrees, Git registrations, or repository
+binding metadata, so it is not a substitute for the complete project-state
+operational backup below.
 
 ## Back up
 

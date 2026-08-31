@@ -22,6 +22,15 @@ error and does not delete, adopt, or rewrite its database, WAL, or shared-memory
 files. Compatibility inspection uses a temporary copy because opening SQLite
 read-only can still change a shared-memory file.
 
+Before changing an older compatible database, startup creates one uniquely
+named database-only recovery file beside it through SQLite's online backup
+facility. Startup independently opens that copy and verifies its original
+ledger, SQLite integrity, and foreign keys, which also proves that committed
+pages resident in WAL reached the backup. The complete pending sequence and
+ledger writes then run in one immediate transaction. Expected-schema, integrity,
+and foreign-key checks occur before commit; a migration or verification failure
+rolls back the whole sequence and reports the verified recovery path.
+
 The checked-in `current-schema.sql` snapshot is generated from an in-memory
 database created by the complete registry. It describes every application
 table, index, trigger, and view for inspection and drift review, but startup
@@ -37,3 +46,6 @@ never executes it.
   promise and require a new database path or a supported released backup.
 - Future schema changes append migrations; they do not edit the initial
   migration or introduce another executable schema definition.
+- Automatic migration backups recover the database at its pre-upgrade history;
+  they do not replace an operational backup of attachment bytes, task worktrees,
+  repository metadata, and the rest of the bound project-state recovery unit.

@@ -1,4 +1,7 @@
-import { CoordinationDatabase } from "./coordination-database.ts";
+import {
+  CoordinationDatabase,
+  type CoordinationDatabaseOpenOptions,
+} from "./coordination-database.ts";
 import { TaskCommandStore } from "./task-command-store.ts";
 import { TaskProjectionStore } from "./task-projection-store.ts";
 import { ProcessStateStore } from "./process-state-store.ts";
@@ -34,11 +37,39 @@ export interface CoordinationPersistence {
   close(): void;
 }
 
-export function openCoordinationPersistence(
+export async function openCoordinationPersistence(
+  path: string,
+  transcriptAccess?: AttemptTranscriptAccess,
+): Promise<CoordinationPersistence> {
+  const database = await CoordinationDatabase.open(path);
+  return composeCoordinationPersistence(database, path, transcriptAccess);
+}
+
+/** @internal Test harness for migration startup scenarios not yet in the production registry. */
+export async function openCoordinationPersistenceForMigrationTest(
+  path: string,
+  databaseOptions: CoordinationDatabaseOpenOptions,
+  transcriptAccess?: AttemptTranscriptAccess,
+): Promise<CoordinationPersistence> {
+  const database = await CoordinationDatabase.openForMigrationTest(path, databaseOptions);
+  return composeCoordinationPersistence(database, path, transcriptAccess);
+}
+
+export function openEphemeralCoordinationPersistence(
+  transcriptAccess?: AttemptTranscriptAccess,
+): CoordinationPersistence {
+  return composeCoordinationPersistence(
+    CoordinationDatabase.openEphemeral(),
+    ":memory:",
+    transcriptAccess,
+  );
+}
+
+function composeCoordinationPersistence(
+  database: CoordinationDatabase,
   path: string,
   transcriptAccess?: AttemptTranscriptAccess,
 ): CoordinationPersistence {
-  const database = CoordinationDatabase.open(path);
   const conversationAttachments = new ConversationAttachmentStore(database, path);
   const taskProjections = new TaskProjectionStore(database);
   const idempotentCommands = new IdempotentCommandExecutor(database);

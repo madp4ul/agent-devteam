@@ -477,6 +477,10 @@ without choosing the implementation yet.
   — Keep pre-release schemas disposable, then require verified transactional
   migrations and recovery backups before shipping a schema-changing release
   after user-retained state exists.
+  **Resolved:** The released-schema specification and its two delivery tickets
+  now provide immutable exact-prefix history, verified WAL-complete recovery
+  backups, atomic forward upgrades with precommit verification, fail-closed
+  startup ordering, retained-data fixtures, and indefinite released support.
 
 ## Out of scope
 

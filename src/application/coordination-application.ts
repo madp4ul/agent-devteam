@@ -1,7 +1,13 @@
 import {
+  openEphemeralCoordinationPersistence,
   openCoordinationPersistence,
+  openCoordinationPersistenceForMigrationTest,
   type CoordinationPersistence,
 } from "./internal/coordination-persistence.ts";
+import {
+  CoordinationDatabaseStartupError,
+  type CoordinationDatabaseOpenOptions,
+} from "./internal/coordination-database.ts";
 import { AutomationCoordinator } from "./internal/automation-coordinator.ts";
 import type { AutomationProcessContext } from "./internal/automation-coordinator.ts";
 import { FRAMEWORK_GUIDANCE } from "./activation-prompt.ts";
@@ -158,19 +164,35 @@ export class CoordinationApplication {
   }
 
   static async start(options: StartApplicationOptions): Promise<CoordinationApplication> {
+    return CoordinationApplication.startWithPersistence(options, openCoordinationPersistence);
+  }
+
+  /** @internal Test harness for future migration chains and startup failure injection. */
+  static async startForMigrationTest(
+    options: StartApplicationOptions,
+    databaseOptions: CoordinationDatabaseOpenOptions,
+  ): Promise<CoordinationApplication> {
+    return CoordinationApplication.startWithPersistence(
+      options,
+      (path, transcriptAccess) =>
+        openCoordinationPersistenceForMigrationTest(path, databaseOptions, transcriptAccess),
+    );
+  }
+
+  private static async startWithPersistence(
+    options: StartApplicationOptions,
+    openPersistence: (
+      path: string,
+      transcriptAccess?: AttemptTranscriptAccess,
+    ) => Promise<CoordinationPersistence>,
+  ): Promise<CoordinationApplication> {
     const validation = await loadProcessDefinition(options.processDefinitionPath);
     let persistence: CoordinationPersistence;
     try {
-      persistence = openCoordinationPersistence(options.databasePath, options.transcriptAccess);
+      persistence = await openPersistence(options.databasePath, options.transcriptAccess);
     } catch (error) {
       return CoordinationApplication.configurationError([
-        operationalDiagnostic(
-          options.databasePath,
-          error,
-          "Durable coordination storage must have a supported released migration ledger and be writable",
-          "Startup is blocked rather than deleting or guessing how to adopt an unsupported database.",
-          "Keep the reported database untouched; restore a supported released backup or start with a new database path.",
-        ),
+        databaseStartupDiagnostic(options.databasePath, error),
       ], options.transcriptAccess);
     }
     const {
@@ -316,7 +338,7 @@ export class CoordinationApplication {
     diagnostics: ProcessDiagnostic[],
     transcriptAccess?: AttemptTranscriptAccess,
   ): CoordinationApplication {
-    const persistence = openCoordinationPersistence(":memory:", transcriptAccess);
+    const persistence = openEphemeralCoordinationPersistence(transcriptAccess);
     const {
       process,
       taskProjections,
@@ -1050,20 +1072,54 @@ export class CoordinationApplication {
   }
 }
 
-function operationalDiagnostic(
-  file: string,
-  error: unknown,
-  rule: string,
-  consequence: string,
-  correction: string,
-): ProcessDiagnostic {
+function databaseStartupDiagnostic(file: string, error: unknown): ProcessDiagnostic {
+  if (error instanceof CoordinationDatabaseStartupError) {
+    const migration = error.migrationId === undefined ? "" : ` Migration: ${error.migrationId}.`;
+    const recovery = error.recoveryBackupPath === undefined
+      ? ""
+      : ` Verified recovery backup: ${error.recoveryBackupPath}.`;
+    const descriptions = {
+      "incompatible-history": {
+        rule: "The complete released migration ledger must be an exact prefix of this application's immutable registry",
+        consequence: "Startup is blocked before the coordination database or its SQLite sidecars are changed.",
+        correction: "Keep the database untouched; use an application that supports this released history, restore a supported backup, or start with a new database path.",
+      },
+      "backup-failure": {
+        rule: "A pre-upgrade database-only recovery backup must be created with SQLite online backup and independently verified",
+        consequence: "Startup is blocked before any pending migration is applied.",
+        correction: "Correct the reported storage or access problem and retry; do not modify the released database or manufacture a migration ledger.",
+      },
+      "migration-failure": {
+        rule: "Every pending released migration and ledger entry must complete in one immediate transaction",
+        consequence: `Startup is blocked and the pending migration sequence was rolled back.${migration}${recovery}`,
+        correction: error.recoveryBackupPath === undefined
+          ? "Keep the database untouched and correct the reported migration failure before retrying."
+          : `Keep both files. Correct the migration failure before retrying, or restore ${error.recoveryBackupPath} as the database after stopping the application.`,
+      },
+      "verification-failure": {
+        rule: "The expected schema, SQLite integrity, and foreign keys must verify before a released upgrade commits",
+        consequence: `Startup is blocked and an uncommitted upgrade was rolled back.${recovery}`,
+        correction: error.recoveryBackupPath === undefined
+          ? "Restore a supported released backup or correct the database before retrying."
+          : `Keep both files. Investigate the verification failure, or restore ${error.recoveryBackupPath} as the database after stopping the application.`,
+      },
+    } as const;
+    const description = descriptions[error.kind];
+    return {
+      file: error.databasePath,
+      line: 1,
+      column: 1,
+      invalidValue: error.message,
+      ...description,
+    };
+  }
   return {
     file,
     line: 1,
     column: 1,
     invalidValue: error instanceof Error ? error.message : String(error),
-    rule,
-    consequence,
-    correction,
+    rule: "Durable coordination storage must be readable, writable, and migration-compatible",
+    consequence: "Startup is blocked before process application, recovery, board mutation, or agent dispatch.",
+    correction: "Correct the reported database access problem, restore a supported released backup, or start with a new database path.",
   };
 }

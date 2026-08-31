@@ -121,8 +121,12 @@ Database startup uses one application-owned ordered released-migration
 registry as the sole executable schema path. The ledger's stable migration IDs
 are the database compatibility authority; package versions and the former
 pre-release `user_version` counter are not. Fresh databases apply the complete
-registry transactionally, while an existing ledger-less pre-release database
-blocks startup without changing its database or sidecar files. Process
+registry transactionally. An older exact prefix is backed up through SQLite's
+online backup facility, the database-only recovery copy is independently
+verified, and the complete pending sequence plus its ledger entries run in one
+immediate transaction whose schema, integrity, and foreign keys verify before
+commit. Divergent, malformed, newer, or ledger-less histories block startup
+without migration. Process
 application, restart recovery, workspace recovery, board mutation, and agent
 dispatch begin only after the database has opened at the current released
 history. The generated current-schema snapshot is review evidence rather than
