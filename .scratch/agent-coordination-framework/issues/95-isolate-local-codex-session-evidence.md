@@ -8,7 +8,7 @@ the runtime's existing attempt-facing context evidence and execution outcomes.
 
 **Blocked by:** 90 — Evaluate the Codex Runtime Event Seam.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Decision source
 
@@ -81,3 +81,27 @@ cannot hide discovery, decoding, caching, and fail-optional behavior behind the
 one-method interface. Do not retain a pass-through wrapper or claim that local
 rollout JSONL is a stable OpenAI SDK interface.
 
+## Answer
+
+Implemented `CodexSessionEvidenceReader` as a one-method private runtime seam
+backed by `LocalCodexSessionEvidenceReader`. The local reader now exclusively
+owns default and configured session-root resolution, recursive matching,
+thread-to-file caching, backward chunked JSONL scanning, pinned 0.146.0 record
+decoding, the 12,000-token percentage calculation, and fail-optional local I/O.
+
+`CodexAgentRuntime` remains the attempt-keyed adapter: it requests evidence only
+after completed or permission-blocked turns, stores a successful measurement
+under the attempt, and suppresses both `null` and rejected evidence reads so
+local rollout behavior cannot change the terminal outcome. Cumulative
+`turn.completed` usage remains in the event projector and application-owned
+cost behavior is unchanged.
+
+Focused temporary-directory contract tests cover nested discovery, cached
+paths, newest-valid fallback, chunk and partial-line boundaries, missing and
+unreadable evidence, strict token fields, root precedence, and percentage
+edges. Thin runtime tests cover correct thread/attempt handoff plus missing and
+rejected evidence. Typechecking and all focused tests pass; the full Node suite
+retains the two pre-existing activation-prompt assertion failures documented by
+issue 94, with no session-evidence failures. `docs/architecture.md` remains
+accurate because no authoritative flow, state owner, or runtime integration
+changed.

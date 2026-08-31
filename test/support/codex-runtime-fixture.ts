@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import type { AgentRunRequest } from "../../src/application/runtime-contract.ts";
 import {
   CodexAgentRuntime,
@@ -17,7 +14,7 @@ export type CodexEventLike = any;
 
 export function createRuntime(options: CodexAgentRuntimeOptions): CodexAgentRuntime {
   return new CodexAgentRuntime({
-    codexSessionsRoot: join(tmpdir(), "coordination-missing-codex-sessions"),
+    sessionEvidenceReader: { readLatestContextWindowUsage: async () => null },
     ...options,
   });
 }

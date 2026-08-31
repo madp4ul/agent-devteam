@@ -1,7 +1,5 @@
 import { Codex, type CodexOptions, type Input, type ThreadEvent, type ThreadOptions } from "@openai/codex-sdk";
-import { open, readdir } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, extname, join } from "node:path";
+import { dirname, extname } from "node:path";
 
 import type {
   AgentRunOutcome,
@@ -14,6 +12,10 @@ import type {
   AttemptTokenUsage,
 } from "../application/runtime-contract.ts";
 import { composeActivationPrompt } from "../application/activation-prompt.ts";
+import {
+  type CodexSessionEvidenceReader,
+  LocalCodexSessionEvidenceReader,
+} from "./codex-session-evidence-reader.ts";
 import { projectCodexTurn } from "./codex-turn-projector.ts";
 
 export { composeActivationPrompt } from "../application/activation-prompt.ts";
@@ -55,7 +57,7 @@ export interface CodexAgentRuntimeOptions {
     release?(request: AgentRunRequest): void;
   };
   createClient?: (options: CodexClientOptionsLike) => CodexClientLike;
-  codexSessionsRoot?: string;
+  sessionEvidenceReader?: CodexSessionEvidenceReader;
 }
 
 export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess {
@@ -63,10 +65,11 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
   readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
   readonly #usage = new Map<string, AttemptTokenUsage>();
   readonly #contextWindowUsage = new Map<string, AttemptContextWindowUsage>();
-  readonly #sessionFiles = new Map<string, string>();
+  readonly #sessionEvidenceReader: CodexSessionEvidenceReader;
 
   constructor(options: CodexAgentRuntimeOptions) {
     this.#options = options;
+    this.#sessionEvidenceReader = options.sessionEvidenceReader ?? new LocalCodexSessionEvidenceReader();
   }
 
   async run(
@@ -163,7 +166,9 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
         projected.threadId !== undefined &&
         (projected.terminal.kind === "completed" || projected.terminal.kind === "permission-blocked")
       ) {
-        const contextUsage = await this.#readCodexContextWindowUsage(projected.threadId);
+        const contextUsage = await this.#sessionEvidenceReader
+          .readLatestContextWindowUsage(projected.threadId)
+          .catch(() => null);
         if (contextUsage !== null) this.#contextWindowUsage.set(request.attemptId, contextUsage);
       }
       const outcome = projected.terminal.kind === "completed"
@@ -202,17 +207,6 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     return this.#contextWindowUsage.get(attemptId) ?? null;
   }
 
-  async #readCodexContextWindowUsage(threadId: string): Promise<AttemptContextWindowUsage | null> {
-    const cached = this.#sessionFiles.get(threadId);
-    const sessionPath = cached ?? await findCodexSessionFile(
-      this.#options.codexSessionsRoot ?? defaultCodexSessionsRoot(),
-      threadId,
-    );
-    if (sessionPath === undefined) return null;
-    this.#sessionFiles.set(threadId, sessionPath);
-    return readLatestCodexContextWindowUsage(sessionPath);
-  }
-
   #remember(attemptId: string, transcript: readonly AttemptTranscriptItem[]): void {
     this.#transcripts.set(attemptId, [...structuredClone(transcript)]);
   }
@@ -227,106 +221,6 @@ function codexInput(request: AgentRunRequest): Input {
   return images.length === 0
     ? prompt
     : [{ type: "text", text: prompt }, ...images.map(({ path }) => ({ type: "local_image" as const, path }))];
-}
-
-function tokenCount(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
-}
-
-const codexContextBaselineTokens = 12_000;
-
-async function readLatestCodexContextWindowUsage(sessionPath: string): Promise<AttemptContextWindowUsage | null> {
-  let handle;
-  try {
-    handle = await open(sessionPath, "r");
-  } catch {
-    return null;
-  }
-  try {
-    const size = (await handle.stat()).size;
-    const chunkSize = 64 * 1024;
-    let position = size;
-    let leadingFragment = "";
-    while (position > 0) {
-      const length = Math.min(chunkSize, position);
-      position -= length;
-      const buffer = Buffer.allocUnsafe(length);
-      await handle.read(buffer, 0, length, position);
-      const lines = `${buffer.toString("utf8")}${leadingFragment}`.split(/\r?\n/u);
-      leadingFragment = lines.shift() ?? "";
-      const measurement = contextWindowUsageFromNewestLine(lines);
-      if (measurement !== undefined) return measurement;
-    }
-    return contextWindowUsageFromNewestLine([leadingFragment]) ?? null;
-  } finally {
-    await handle.close();
-  }
-}
-
-function contextWindowUsageFromNewestLine(lines: string[]): AttemptContextWindowUsage | undefined {
-  for (const line of lines.reverse()) {
-    if (line.length === 0) continue;
-    try {
-      const measurement = contextWindowUsageFromRolloutRecord(JSON.parse(line));
-      if (measurement !== undefined) return measurement;
-    } catch {
-      // A partial or unrelated malformed record cannot invalidate earlier token-count evidence.
-    }
-  }
-  return undefined;
-}
-
-async function findCodexSessionFile(directory: string, threadId: string): Promise<string | undefined> {
-  let entries;
-  try {
-    entries = await readdir(directory, { withFileTypes: true });
-  } catch {
-    return undefined;
-  }
-  for (const entry of entries) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      const nested = await findCodexSessionFile(path, threadId);
-      if (nested !== undefined) return nested;
-    } else if (entry.name.includes(threadId) && entry.name.endsWith(".jsonl")) {
-      return path;
-    }
-  }
-  return undefined;
-}
-
-function contextWindowUsageFromRolloutRecord(value: unknown): AttemptContextWindowUsage | undefined {
-  if (!isRecord(value) || value.type !== "event_msg" || !isRecord(value.payload)) return undefined;
-  if (value.payload.type !== "token_count" || !isRecord(value.payload.info)) return undefined;
-  const info = value.payload.info;
-  if (!isRecord(info.last_token_usage)) return undefined;
-  const usedTokens = tokenCount(info.last_token_usage.total_tokens);
-  const contextWindowTokens = tokenCount(info.model_context_window);
-  if (usedTokens === undefined || contextWindowTokens === undefined || contextWindowTokens === 0) return undefined;
-  return {
-    usedTokens,
-    contextWindowTokens,
-    usedPercent: codexContextUsedPercent(usedTokens, contextWindowTokens),
-  };
-}
-
-function codexContextUsedPercent(usedTokens: number, contextWindowTokens: number): number {
-  if (contextWindowTokens <= codexContextBaselineTokens) return 100;
-  const effectiveWindow = contextWindowTokens - codexContextBaselineTokens;
-  const used = Math.max(usedTokens - codexContextBaselineTokens, 0);
-  const remaining = Math.max(effectiveWindow - used, 0);
-  const remainingPercent = Math.round(Math.min(Math.max(remaining / effectiveWindow * 100, 0), 100));
-  return 100 - remainingPercent;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function defaultCodexSessionsRoot(): string {
-  const codexHome = process.env.CODEX_HOME ??
-    (process.env.USERPROFILE === undefined ? join(homedir(), ".codex") : join(process.env.USERPROFILE, ".codex"));
-  return join(codexHome, "sessions");
 }
 
 function definedProcessEnvironment(): Record<string, string> {

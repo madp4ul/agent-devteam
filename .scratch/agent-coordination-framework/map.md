@@ -457,6 +457,11 @@ without choosing the implementation yet.
   — Hide private rollout discovery, cached backward JSONL scanning, context
   decoding, and percentage calculation behind one fail-optional reader without
   changing execution authority or the context meter.
+  **Resolved:** One pinned private reader now owns default-root resolution,
+  recursive cached discovery, backward JSONL scanning, strict context decoding,
+  percentage calculation, and fail-optional local I/O; the runtime retains only
+  attempt-keyed evidence storage and cannot let a missing or rejected read alter
+  the run outcome.
 - [Recover Resumed Codex Threads from Lazy Stream Failures](./issues/96-recover-resumed-codex-threads-from-lazy-stream-failures.md)
   — After event projection is localized, let one fresh replacement recover a
   resumed run that fails before thread identity during lazy stream iteration,
