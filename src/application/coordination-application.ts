@@ -167,9 +167,9 @@ export class CoordinationApplication {
         operationalDiagnostic(
           options.databasePath,
           error,
-          "Durable coordination storage must be available and writable",
-          "Startup is blocked when the current pre-release store cannot be opened or recreated.",
-          "Fix storage access, then restart so the current schema can be created.",
+          "Durable coordination storage must have a supported released migration ledger and be writable",
+          "Startup is blocked rather than deleting or guessing how to adopt an unsupported database.",
+          "Keep the reported database untouched; restore a supported released backup or start with a new database path.",
         ),
       ], options.transcriptAccess);
     }

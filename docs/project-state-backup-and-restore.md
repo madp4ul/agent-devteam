@@ -9,16 +9,23 @@ stopped.
 
 ## Schema lifecycle
 
-Before the first release, coordination databases contain disposable development
-state. Startup replaces a version-mismatched or structurally incomplete database
-with the current schema; no pre-release migration paths are maintained.
+Released coordination databases identify their schema through the ordered
+`coordination_migrations` ledger. The first supported history contains
+`0001_initial_released_schema`; package versions and SQLite `user_version` are
+not compatibility identities. Fresh databases are created through that
+migration path and start paused.
 
-After the first release, databases produced by supported released versions are
-user-retained state. Before shipping a later schema-changing release, the
-application must provide verified, transactional migrations and a recovery
-backup. A failed migration or unknown future schema must preserve the original
-store and block startup. The pre-release replacement behavior must not be used
-for a database created by a supported released version.
+Databases created before this released boundary have no supported adoption or
+migration path. Startup leaves a ledger-less database and its WAL and
+shared-memory files untouched and reports a blocking configuration error. Keep
+that store as a backup if its development data is still useful, then configure
+a new database path. Do not add a ledger manually or copy tables into a
+released database.
+
+Later supported released histories will be upgraded through ordered,
+transactional migrations with a verified recovery backup. Unknown, malformed,
+or future histories fail closed rather than being deleted or inferred from
+table shape.
 
 ## Back up
 

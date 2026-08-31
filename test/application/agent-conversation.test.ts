@@ -981,9 +981,6 @@ agents:
     reason: "not-found",
   });
   application.close();
-  const legacyDatabase = new DatabaseSync(fixture.databasePath);
-  legacyDatabase.exec("DROP TABLE model_pricing; PRAGMA user_version = 16");
-  legacyDatabase.close();
   await writeFile(
     fixture.definitionPath,
     (await readFile(fixture.definitionPath, "utf8")).replace("      input: 5\n", "      input: 50\n"),

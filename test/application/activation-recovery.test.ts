@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -184,7 +184,7 @@ test("a pre-attempt workspace failure is durable, correlated, and visible after 
   );
 });
 
-test("startup recreates populated current coordination state when it is incomplete", async (t) => {
+test("startup refuses populated pre-release coordination state when it is incomplete", async (t) => {
   const fixture = await createActivationFixture("dispatch-claim-initialization");
   const initialApplication = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
@@ -202,6 +202,7 @@ test("startup recreates populated current coordination state when it is incomple
   if (!disposable.accepted) return;
   initialApplication.close();
   await replacePersistedCoordinationStateWithIncompleteFixture(fixture.databasePath);
+  const before = await readFile(fixture.databasePath);
 
   const runtime = new CompletingAgentRuntime();
   const application = await CoordinationApplication.start({
@@ -214,19 +215,20 @@ test("startup recreates populated current coordination state when it is incomple
     },
   });
   t.after(() => application.close());
+  assert.equal(application.queryStartup().mode, "configuration-error");
+  assert.deepEqual(await readFile(fixture.databasePath), before);
   assert.equal(application.queryTask(disposable.task.id).available, false);
   const created = application.createTask({
     boardId: "delivery",
     columnId: "implementation",
-    title: "Use recreated coordination state",
-    description: "The recreated state supports ordinary activation dispatch.",
+    title: "Do not use unsupported coordination state",
+    description: "The unsupported store blocks ordinary activation dispatch.",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "create-after-claim-initialization",
   });
-  assert.equal(created.accepted, true);
-  await application.resumeAutomation();
-  await application.waitForAutomationIdle();
-  assert.equal(runtime.requests.length, 1);
+  assert.equal(created.accepted, false);
+  assert.equal((await application.resumeAutomation()).accepted, false);
+  assert.equal(runtime.requests.length, 0);
 });
 
 test("a queued activation survives application restart and remains paused", async (t) => {

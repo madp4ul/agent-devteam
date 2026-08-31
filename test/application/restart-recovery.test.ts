@@ -257,7 +257,7 @@ test("startup reports every durable workspace mismatch before allowing mutation"
   );
 });
 
-test("startup recreates an incompatible pre-release database", async () => {
+test("the released migration ledger remains authoritative when user_version changes", async () => {
   const fixture = await createFixture();
   const first = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
@@ -266,8 +266,8 @@ test("startup recreates an incompatible pre-release database", async () => {
   const created = first.createTask({
     boardId: "delivery",
     columnId: "backlog",
-    title: "Disposable pre-release state",
-    description: "This task must not survive a schema mismatch.",
+    title: "Retained released state",
+    description: "This task survives because the released ledger is authoritative.",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "create-disposable-state",
   });
@@ -278,15 +278,20 @@ test("startup recreates an incompatible pre-release database", async () => {
   before.exec("PRAGMA user_version = 0");
   before.close();
 
-  const recreated = await CoordinationApplication.start({
+  const restarted = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
   });
-  assert.equal(recreated.queryStartup().mode, "paused");
-  assert.equal(recreated.queryTask(created.task.id).available, false);
-  recreated.close();
+  assert.equal(restarted.queryStartup().mode, "paused");
+  assert.equal(restarted.queryTask(created.task.id).available, true);
+  restarted.close();
   const current = new DatabaseSync(fixture.databasePath, { readOnly: true });
-  assert.equal((current.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 21);
+  assert.equal((current.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 0);
+  assert.deepEqual(
+    current.prepare("SELECT migration_id FROM coordination_migrations ORDER BY position").all()
+      .map((row) => ({ ...row })),
+    [{ migration_id: "0001_initial_released_schema" }],
+  );
   current.close();
 });
 

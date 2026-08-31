@@ -10,6 +10,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit",
     "build": "vite build",
+    "generate:schema-snapshot": "node --experimental-strip-types scripts/generate-coordination-schema-snapshot.ts",
     "test": "node --experimental-strip-types --test --test-reporter=spec \"test/**/*.test.ts\"",
     "test:application": "node --experimental-strip-types --test --test-reporter=spec test/application/coordination-application.test.ts",
     "test:application:conversation-attachments": "node --experimental-strip-types --test --test-reporter=spec test/application/conversation-attachment.test.ts",

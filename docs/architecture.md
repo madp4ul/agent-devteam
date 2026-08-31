@@ -117,6 +117,18 @@ defines the observable native-adapter and strict-type conditions that trigger a
 fresh Drizzle proof, and the application-owned transaction and migration-safety
 properties that proof must preserve before adoption.
 
+Database startup uses one application-owned ordered released-migration
+registry as the sole executable schema path. The ledger's stable migration IDs
+are the database compatibility authority; package versions and the former
+pre-release `user_version` counter are not. Fresh databases apply the complete
+registry transactionally, while an existing ledger-less pre-release database
+blocks startup without changing its database or sidecar files. Process
+application, restart recovery, workspace recovery, board mutation, and agent
+dispatch begin only after the database has opened at the current released
+history. The generated current-schema snapshot is review evidence rather than
+a second initializer. [ADR 0018](adr/0018-make-released-migrations-the-coordination-schema-authority.md)
+records this boundary.
+
 ### Automation and agent runtime
 
 Automation turns committed activation records into agent runs. It preserves the
@@ -279,6 +291,8 @@ coordination database.
 - [ADR 0017](adr/0017-reconsider-drizzle-when-native-node-sqlite-and-strict-types-are-stable.md)
   records the persistence-tooling decision and the exact conditions that
   justify reconsidering Drizzle.
+- [ADR 0018](adr/0018-make-released-migrations-the-coordination-schema-authority.md)
+  records the released migration ledger and sole executable schema path.
 - [Architecture decisions](adr/) explain why the product owns its board, runs
   host-native, uses React and Vite, binds state beside the project, and relocates
   state through an offline command.
