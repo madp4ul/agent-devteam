@@ -291,7 +291,7 @@ test("task interruption waits for confirmation and offers contextual continuatio
 
   await page.route("**/api/tasks/T-0002/conversations/*", async (route) => {
     const result = runningConversationScenario([{ kind: "message", role: "agent", text: "The live run is inspectable." }]);
-    const conversation = result.conversation as Record<string, unknown>;
+    const conversation = result.conversation;
     conversation.taskId = "T-0002";
     conversation.owningAgent = {
       id: "consulting-agent",

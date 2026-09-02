@@ -1,8 +1,12 @@
 import type { Locator, Page } from "@playwright/test";
 
+import type {
+  AgentConversationHistoryEntry,
+  AgentConversationMessageView,
+} from "../../src/application/conversation-contract.ts";
 import { expect, runningConversationScenario, test } from "./browser-fixture.ts";
 
-function longConversation(): Record<string, unknown> {
+function longConversation(): ReturnType<typeof runningConversationScenario> {
   return runningConversationScenario(Array.from({ length: 18 }, (_, index) => ({
     id: `conversation-following-${index}`,
     kind: "message",
@@ -13,17 +17,20 @@ function longConversation(): Record<string, unknown> {
 
 const followUpBody = "Keep this new follow-up visible.";
 
-function followUpMessage(): Record<string, unknown> {
+function followUpMessage(): AgentConversationMessageView {
   return {
     id: "bottom-follow-up-message",
     conversationId: "browser-conversation",
     body: followUpBody,
     actor: { kind: "user", id: "local-user" },
     occurredAt: "2026-08-26T08:00:00.000Z",
+    attachments: [],
   };
 }
 
-function authoredFollowUp(status: "queued" | "running" = "queued"): Record<string, unknown> {
+function authoredFollowUp(
+  status: "queued" | "running" = "queued",
+): Extract<AgentConversationHistoryEntry, { kind: "message" }> {
   return {
     kind: "message",
     activationId: "bottom-follow-up-activation",
@@ -57,7 +64,7 @@ async function installAcceptedFollowUp(page: Page, options: {
     const result = longConversation();
     if (submitted) readsAfterSubmission += 1;
     if (readsAfterSubmission >= (options.authoritativeAfterReads ?? 1)) {
-      const history = (result.conversation as Record<string, any>).history;
+      const history = result.conversation.history;
       history.push(authoredFollowUp(options.appendDelayedAnswer === true ? "running" : "queued"));
       if (options.appendDelayedAnswer === true) history.push({
         kind: "item",

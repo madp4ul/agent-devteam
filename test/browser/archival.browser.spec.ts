@@ -1,5 +1,5 @@
 import { expect, test } from "./browser-fixture.ts";
-import { cleanWorkspaceGitScenario, runningConversationScenario } from "./browser-fixture.ts";
+import { cleanWorkspaceGitScenario } from "./browser-fixture.ts";
 
 test("archived visibility follows the latest toggle intent while archive data loads", async ({ page }) => {
   await page.route("**/api/archive", async (route) => {

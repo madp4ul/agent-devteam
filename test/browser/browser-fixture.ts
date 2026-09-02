@@ -1,5 +1,17 @@
-import { expect, test as base, type Locator, type Page, type Route } from "@playwright/test";
+import {
+  expect,
+  test as base,
+  type APIResponse,
+  type Locator,
+  type Page,
+  type Route,
+} from "@playwright/test";
 
+import type {
+  AgentConversationHistoryEntry,
+  AgentConversationQueryResult,
+} from "../../src/application/conversation-contract.ts";
+import type { AttemptTranscriptItem } from "../../src/application/runtime-contract.ts";
 import { startBrowserFixture } from "./fixture-server.ts";
 
 export { expect };
@@ -48,7 +60,17 @@ export function cleanWorkspaceGitScenario(): object {
   };
 }
 
-export function runningConversationScenario(items: Array<Record<string, unknown>>): Record<string, unknown> {
+export type AvailableConversationQueryResult = Extract<AgentConversationQueryResult, { available: true }>;
+
+export async function availableConversationResponse(
+  response: APIResponse,
+): Promise<AvailableConversationQueryResult> {
+  const result: AgentConversationQueryResult = await response.json();
+  if (!result.available) throw new Error("Expected an available conversation response.");
+  return result;
+}
+
+export function runningConversationScenario(items: AttemptTranscriptItem[]): AvailableConversationQueryResult {
   return {
     available: true,
     conversation: {
@@ -78,6 +100,8 @@ export function runningConversationScenario(items: Array<Record<string, unknown>
       currentThreadId: "thread-browser-123",
       createdAt: "2026-08-09T12:00:00.000Z",
       latestActivityAt: "2026-08-09T12:05:00.000Z",
+      hasUnpricedSettledRuns: false,
+      costPending: true,
       retirement: null,
       replacesConversationId: null,
       replacementReason: null,
@@ -102,7 +126,12 @@ export function runningConversationScenario(items: Array<Record<string, unknown>
             },
           },
         },
-        ...items.map((item) => ({ kind: "item", activationId: "browser-activation", attemptId: "browser-attempt", item })),
+        ...items.map<AgentConversationHistoryEntry>((item) => ({
+          kind: "item",
+          activationId: "browser-activation",
+          attemptId: "browser-attempt",
+          item,
+        })),
       ],
     },
   };
@@ -110,13 +139,13 @@ export function runningConversationScenario(items: Array<Record<string, unknown>
 
 export async function fulfillConversationTranscript(
   route: Route,
-  items: Array<Record<string, unknown>>,
+  items: AttemptTranscriptItem[],
   options: { append?: boolean } = {},
 ): Promise<void> {
   const response = await route.fetch();
-  const result = await response.json();
-  const history = result.conversation.history as Array<Record<string, any>>;
-  const additions = items.map((item) => ({
+  const result = await availableConversationResponse(response);
+  const history = result.conversation.history;
+  const additions = items.map<AgentConversationHistoryEntry>((item) => ({
     kind: "item",
     activationId: "browser-activation",
     attemptId: "browser-attempt",

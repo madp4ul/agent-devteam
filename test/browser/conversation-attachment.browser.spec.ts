@@ -1,6 +1,11 @@
 import type { Page } from "@playwright/test";
 
+import type {
+  AgentConversationMessageView,
+  ContinueAgentConversationResult,
+} from "../../src/application/conversation-contract.ts";
 import {
+  availableConversationResponse,
   contrastRatio,
   expect,
   runningConversationScenario,
@@ -30,26 +35,27 @@ async function installAttachmentFollowUpScenario(page: Page) {
     }
     if (request.method() === "POST") {
       submission = request.postDataJSON() as { body: string; attachmentIds: string[] };
+      const accepted: ContinueAgentConversationResult = {
+        accepted: true,
+        activationId: "attachment-follow-up",
+        message: {
+          id: "attachment-message",
+          conversationId: upload.conversationId,
+          body: submission.body,
+          actor: { kind: "user", id: "local-user" },
+          occurredAt: "2026-08-09T12:06:00.000Z",
+          attachments: [upload],
+        },
+      };
       await route.fulfill({
         status: 200,
-        json: {
-          accepted: true,
-          activationId: "attachment-follow-up",
-          message: {
-            id: "attachment-message",
-            conversationId: upload.conversationId,
-            body: submission.body,
-            actor: { kind: "user", id: "local-user" },
-            occurredAt: "2026-08-09T12:06:00.000Z",
-            attachments: [upload],
-          },
-        },
+        json: accepted,
       });
       return;
     }
     const result = runningConversationScenario([]);
     if (submission !== undefined) {
-      (result.conversation as Record<string, any>).history.push({
+      result.conversation.history.push({
         kind: "message",
         activationId: "attachment-follow-up",
         status: "queued",
@@ -273,18 +279,20 @@ test("a conversation follow-up retains its draft on failure and refreshes in pla
         return;
       }
       submitted = true;
+      const responseMessage: AgentConversationMessageView = {
+        id: "browser-follow-up-message",
+        conversationId: "browser-conversation",
+        body: submissions.at(-1)?.body ?? "",
+        actor: { kind: "user", id: "local-user" },
+        occurredAt: "2026-08-09T12:06:00.000Z",
+        attachments: [],
+      };
       await route.fulfill({
         status: 200,
         json: {
           accepted: true,
           activationId: "browser-follow-up-activation",
-          message: {
-            id: "browser-follow-up-message",
-            conversationId: "browser-conversation",
-            body: submissions.at(-1)?.body,
-            actor: { kind: "user", id: "local-user" },
-            occurredAt: "2026-08-09T12:06:00.000Z",
-          },
+          message: responseMessage,
         },
       });
       return;
@@ -292,14 +300,15 @@ test("a conversation follow-up retains its draft on failure and refreshes in pla
     const result = runningConversationScenario([]);
     if (submitted) {
       followUpReads += 1;
-      const message = {
+      const message: AgentConversationMessageView = {
         id: "browser-follow-up-message",
         conversationId: "browser-conversation",
         body: "Please check this edge case.\nIt affects retries.",
         actor: { kind: "user", id: "local-user" },
         occurredAt: "2026-08-09T12:06:00.000Z",
+        attachments: [],
       };
-      (result.conversation as Record<string, any>).history.push({
+      result.conversation.history.push({
         kind: "message",
         activationId: "browser-follow-up-activation",
         status: followUpReads > 1 ? "completed" : "queued",
@@ -307,9 +316,11 @@ test("a conversation follow-up retains its draft on failure and refreshes in pla
         message,
       });
       if (followUpReads > 1) {
-        (result.conversation as { originatingActivation: { status: string } }).originatingActivation.status = "completed";
-        const history = (result.conversation as Record<string, any>).history;
-        history.find((entry: any) => entry.kind === "activation").status = "completed";
+        result.conversation.originatingActivation.status = "completed";
+        const history = result.conversation.history;
+        const originatingCause = history.find((entry) => entry.kind === "activation");
+        if (originatingCause === undefined) throw new Error("Expected the originating activation cause.");
+        originatingCause.status = "completed";
         history.push({
           kind: "item",
           activationId: "browser-follow-up-activation",
@@ -354,13 +365,14 @@ test("conversation follow-up composer remains readable and operable in both appe
       return;
     }
     const response = await route.fetch();
-    const result = await response.json();
-    const message = {
+    const result = await availableConversationResponse(response);
+    const message: AgentConversationMessageView = {
       id: "appearance-queued-message",
       conversationId: result.conversation.id,
       body: "Please verify this queued turn.",
       actor: { kind: "user", id: "local-user" },
       occurredAt: "2026-08-15T12:00:00.000Z",
+      attachments: [],
     };
     result.conversation.history.push({
       kind: "message",

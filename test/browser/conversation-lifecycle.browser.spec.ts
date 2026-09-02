@@ -1,3 +1,9 @@
+import type {
+  AgentConversationHistoryEntry,
+  AgentConversationMessageView,
+} from "../../src/application/conversation-contract.ts";
+import type { AttemptTranscriptItem } from "../../src/application/runtime-contract.ts";
+
 import {
   cleanWorkspaceGitScenario,
   clearTextSelection,
@@ -230,21 +236,22 @@ test("conversation continuation navigation focuses and scrolls to its authored m
     await route.fulfill({ response, json: detail });
   });
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
-    const items = Array.from({ length: 40 }, (_, index) => ({
+    const items: AttemptTranscriptItem[] = Array.from({ length: 40 }, (_, index) => ({
       id: `selected-history-${index}`,
       kind: "message",
       role: "agent",
       text: `Prior conversation evidence ${index + 1}.`,
     }));
     const result = runningConversationScenario(items);
-    const message = {
+    const message: AgentConversationMessageView = {
       id: "selected-conversation-message",
       conversationId: "browser-conversation",
       body: "Focus this exact authored follow-up.",
       actor: { kind: "user", id: "local-user" },
       occurredAt: "2026-08-15T12:00:00.000Z",
+      attachments: [],
     };
-    (result.conversation as Record<string, any>).history.push({
+    result.conversation.history.push({
       kind: "message",
       activationId: "selected-message-activation",
       status: "completed",
@@ -284,23 +291,30 @@ test("attempt and retry navigation scroll to their shared later activation cause
   });
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     if (selectedAttemptIds.length !== 2) throw new Error("Expected an attempt and retry before opening their conversation.");
-    const before = Array.from({ length: 24 }, (_, index) => ({
+    const before: AttemptTranscriptItem[] = Array.from({ length: 24 }, (_, index) => ({
       id: `before-selected-activation-${index}`,
       kind: "message",
       role: "agent",
       text: `Evidence before selected activation ${index + 1}.`,
     }));
-    const after = Array.from({ length: 24 }, (_, index) => ({
+    const after: AttemptTranscriptItem[] = Array.from({ length: 24 }, (_, index) => ({
       id: `after-selected-activation-${index}`,
       kind: "message",
       role: "agent",
       text: `Evidence after selected activation ${index + 1}.`,
     }));
     const result = runningConversationScenario([]);
-    const conversation = result.conversation as Record<string, any>;
-    conversation.history[0].attemptIds = [];
+    const conversation = result.conversation;
+    const originatingCause = conversation.history[0];
+    if (originatingCause?.kind !== "activation") throw new Error("Expected the originating activation cause.");
+    originatingCause.attemptIds = [];
     conversation.history.push(
-      ...before.map((item) => ({ kind: "item", activationId: "browser-activation", attemptId: "browser-attempt", item })),
+      ...before.map<AgentConversationHistoryEntry>((item) => ({
+        kind: "item",
+        activationId: "browser-activation",
+        attemptId: "browser-attempt",
+        item,
+      })),
       {
         kind: "activation",
         activationId: "selected-later-activation",
@@ -319,7 +333,12 @@ test("attempt and retry navigation scroll to their shared later activation cause
           },
         },
       },
-      ...after.map((item) => ({ kind: "item", activationId: "selected-later-activation", attemptId: selectedAttemptIds[1], item })),
+      ...after.map<AgentConversationHistoryEntry>((item) => ({
+        kind: "item",
+        activationId: "selected-later-activation",
+        attemptId: selectedAttemptIds[1]!,
+        item,
+      })),
     );
     await route.fulfill({ status: 200, json: result });
   });
@@ -356,7 +375,7 @@ test("an open conversation replaces one running tool entry with its terminal evi
   });
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     reads += 1;
-    const retainedMessages = Array.from({ length: 30 }, (_, index) => ({
+    const retainedMessages: AttemptTranscriptItem[] = Array.from({ length: 30 }, (_, index) => ({
       id: `retained-message-${index}`,
       kind: "message",
       role: "agent",
@@ -429,13 +448,13 @@ test("polling replaces one live MCP row without closing its disclosure or moving
   });
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     reads += 1;
-    const retainedMessages = Array.from({ length: 30 }, (_, index) => ({
+    const retainedMessages: AttemptTranscriptItem[] = Array.from({ length: 30 }, (_, index) => ({
       id: `mcp-retained-message-${index}`,
       kind: "message",
       role: "agent",
       text: `MCP retained transcript message ${index + 1}.`,
     }));
-    const call = reads === 1
+    const call: AttemptTranscriptItem = reads === 1
       ? {
           id: "live-browser-mcp",
           kind: "mcp",
@@ -497,19 +516,20 @@ test("polling replaces one running coordination action with authoritative result
   let reads = 0;
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     reads += 1;
-    const retainedMessages = Array.from({ length: 30 }, (_, index) => ({
+    const retainedMessages: AttemptTranscriptItem[] = Array.from({ length: 30 }, (_, index) => ({
       id: `coordination-retained-message-${index}`,
       kind: "message",
       role: "agent",
       text: `Coordination retained transcript message ${index + 1}.`,
     }));
-    const move = reads === 1
+    const move: AttemptTranscriptItem = reads === 1
       ? {
           id: "live-coordination-move",
           kind: "coordination",
           tool: "move_current_task",
           status: "running",
           presentation: { kind: "coordination-task-move", toColumnId: "requested-review" },
+          evidence: {},
         }
       : {
           id: "live-coordination-move",
@@ -521,6 +541,7 @@ test("polling replaces one running coordination action with authoritative result
             fromColumnId: "implementation",
             toColumnId: "code-review",
           },
+          evidence: {},
         };
     await route.fulfill({ status: 200, json: runningConversationScenario([move, ...retainedMessages]) });
   });
@@ -558,10 +579,7 @@ test("an idle open conversation discovers externally added evidence within two s
       role: "agent",
       text: reads === 1 ? "No external follow-up yet." : "An external follow-up is now visible.",
     }]);
-    const conversation = result.conversation as {
-      originatingActivation: { status: string };
-      history: Array<Record<string, any>>;
-    };
+    const conversation = result.conversation;
     conversation.originatingActivation.status = "completed";
     const cause = conversation.history.find((entry) => entry.kind === "activation");
     if (cause === undefined) throw new Error("Expected the originating activation cause.");
@@ -596,7 +614,7 @@ test("a live conversation follows appended items only while the reader is at the
   let reads = 0;
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     reads += 1;
-    const items = Array.from({ length: 40 }, (_, index) => ({
+    const items: AttemptTranscriptItem[] = Array.from({ length: 40 }, (_, index) => ({
       id: `follow-message-${index}`,
       kind: "message",
       role: "agent",

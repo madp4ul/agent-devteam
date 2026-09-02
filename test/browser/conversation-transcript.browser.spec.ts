@@ -1,4 +1,16 @@
-import { contrastRatio, expect, fulfillConversationTranscript, setAppearance, test } from "./browser-fixture.ts";
+import type {
+  AgentConversationHistoryEntry,
+  AgentConversationMessageView,
+} from "../../src/application/conversation-contract.ts";
+import type { AttemptTranscriptItem } from "../../src/application/runtime-contract.ts";
+import {
+  availableConversationResponse,
+  contrastRatio,
+  expect,
+  fulfillConversationTranscript,
+  setAppearance,
+  test,
+} from "./browser-fixture.ts";
 
 test("conversation messages render Markdown and commands remain quiet but inspectable", async ({ page }) => {
   const codexMarkdown = "Reviewed **two risks**.\n\n- Preserve source\n- Keep [evidence](https://example.com/evidence)";
@@ -8,24 +20,31 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
-    const result = await response.json();
-    const activation = result.conversation.history.find((entry: any) => entry.kind === "activation");
-    const items = [
+    const result = await availableConversationResponse(response);
+    const activation = result.conversation.history.find((entry) => entry.kind === "activation");
+    if (activation === undefined) throw new Error("Expected an activation history entry.");
+    const items: AttemptTranscriptItem[] = [
       { id: "message-markdown", kind: "message", role: "agent", text: codexMarkdown },
       { id: "command-success", kind: "command", command, status: "completed", output: "All tests passed." },
       { id: "command-running", kind: "command", command: "pnpm typecheck", status: "running" },
       { id: "command-failed", kind: "command", command: "pnpm lint", status: "failed", output: "Lint failed." },
     ];
-    const message = {
+    const message: AgentConversationMessageView = {
       id: "conversation-display-follow-up",
       conversationId: result.conversation.id,
       body: userMarkdown,
       actor: { kind: "user", id: "local-user" },
       occurredAt: "2026-08-09T12:00:00.000Z",
+      attachments: [],
     };
     result.conversation.history = [
       { kind: "message", activationId: activation.activationId, status: "running", attemptIds: ["browser-attempt"], message },
-      ...items.map((item) => ({ kind: "item", activationId: activation.activationId, attemptId: "browser-attempt", item })),
+      ...items.map<AgentConversationHistoryEntry>((item) => ({
+        kind: "item",
+        activationId: activation.activationId,
+        attemptId: "browser-attempt",
+        item,
+      })),
     ];
     await route.fulfill({ response, json: result });
   });
@@ -320,42 +339,50 @@ test("coordination inspections present authoritative scopes and navigable task r
         kind: "coordination", tool: "inspect_current_task", status: "succeeded",
         summary: "T-0001: current task inspection",
         presentation: { kind: "coordination-inspection", scope: "current-task", taskTitle: "Current delivery task", columnName: "Implementation" },
+        evidence: {},
       },
       {
         kind: "coordination", tool: "inspect_operating_context", status: "succeeded",
         presentation: { kind: "coordination-inspection", scope: "operating-context", attemptId: "attempt-authoritative", taskId: "T-0042", processName: "Release train", boardName: "Delivery", owningAgentName: "Code Reviewer" },
+        evidence: {},
       },
       {
         kind: "coordination", tool: "list_collaborators", status: "succeeded", summary: "Collaborator directory",
         presentation: { kind: "coordination-inspection", scope: "collaborators", collaboratorCount: 2 },
+        evidence: {},
       },
       {
         kind: "coordination", tool: "summarize_boards", status: "succeeded", summary: "Board summaries",
         presentation: { kind: "coordination-inspection", scope: "board-summaries", boards: [{ id: "delivery", name: "API Delivery" }, { id: "maintenance", name: "Maintenance" }] },
+        evidence: {},
       },
       {
         kind: "coordination", tool: "list_archived_tasks", status: "succeeded",
         presentation: { kind: "coordination-inspection", scope: "archived-tasks", taskCount: 3 },
+        evidence: {},
       },
       {
         kind: "coordination", tool: "inspect_task", status: "succeeded",
-        arguments: { taskId: "T-requested" }, summary: "T-requested: inspect task",
+        summary: "T-requested: inspect task",
         presentation: { kind: "coordination-inspection", scope: "task", taskId: "T-0042", taskTitle: "Authoritative task" },
+        evidence: { arguments: { taskId: "T-requested" } },
       },
       {
         kind: "coordination", tool: "list_task_activity", status: "running",
-        arguments: { taskId: "T-0043" }, summary: "T-0043: list task activity",
+        summary: "T-0043: list task activity",
         presentation: { kind: "coordination-inspection", scope: "task-activity", taskId: "T-0043" },
+        evidence: { arguments: { taskId: "T-0043" } },
       },
       {
         kind: "coordination", tool: "list_task_attachments", status: "failed",
         diagnostic: { kind: "failure", message: "Attachment store unavailable" },
         presentation: { kind: "coordination-inspection", scope: "task-attachments", taskId: "T-0044" },
+        evidence: {},
       },
       {
         kind: "coordination", tool: "list_tasks", status: "succeeded",
-        arguments: { boardId: "requested-board", columnIds: ["requested-column"] },
         presentation: { kind: "coordination-inspection", scope: "tasks", board: { id: "requested-board" }, columns: [{ id: "requested-column" }] },
+        evidence: { arguments: { boardId: "requested-board", columnIds: ["requested-column"] } },
       },
     ]);
   });
@@ -417,6 +444,7 @@ test("coordination task actions link complete task identities and separate failu
       {
         kind: "coordination", tool: "create_child_task", status: "succeeded",
         presentation: { kind: "coordination-child-task", task: { id: "T-0099", title: "Review API" }, columnId: "code-review" },
+        evidence: {},
       },
       {
         kind: "coordination", tool: "add_dependency", status: "succeeded",
@@ -425,6 +453,7 @@ test("coordination task actions link complete task identities and separate failu
           sourceTask: { id: "T-0001", title: "Current delivery task" },
           targetTask: { id: "T-0088", title: "Review the API" },
         },
+        evidence: {},
       },
       {
         kind: "coordination", tool: "report_permission_block", status: "succeeded",
@@ -432,11 +461,13 @@ test("coordination task actions link complete task identities and separate failu
           kind: "coordination-permission-block",
           reason: "Writing the protected release file requires user approval.",
         },
+        evidence: {},
       },
       {
         kind: "coordination", tool: "list_tasks", status: "failed",
         diagnostic: { kind: "failure", message: "The coordination call did not complete." },
         presentation: { kind: "coordination-inspection", scope: "tasks", board: { id: "delivery" }, columns: [{ id: "awaiting-user-approval" }] },
+        evidence: {},
       },
     ]);
   });
@@ -484,6 +515,7 @@ test("long coordination inspection scopes stay contained at a narrow viewport", 
         boardName: "API Delivery",
         owningAgentName: "Code Reviewer",
       },
+      evidence: {},
     }]);
   });
 
@@ -522,7 +554,7 @@ test("a coordination comment renders its Markdown with the timeline disclosure",
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     await fulfillConversationTranscript(route, [
-      ...Array.from({ length: 12 }, (_, index) => ({
+      ...Array.from({ length: 12 }, (_, index): AttemptTranscriptItem => ({
         id: `coordination-comment-lead-in-${index}`,
         kind: "message",
         role: "agent",
@@ -687,7 +719,7 @@ test("attempt outcomes show canonical-looking participant text without executabl
 test("a conversation discloses when Codex replaced an unusable resumed thread", async ({ page }) => {
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
-    const result = await response.json();
+    const result = await availableConversationResponse(response);
     result.conversation.history.splice(1, 0, {
       kind: "continuity-loss",
       occurredAt: "2026-08-09T12:00:00.000Z",
@@ -706,8 +738,9 @@ test("a conversation discloses when Codex replaced an unusable resumed thread", 
 test("one conversation presents several ordinary activations without run boundaries", async ({ page }) => {
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const response = await route.fetch();
-    const result = await response.json();
-    const firstCause = result.conversation.history.find((entry: any) => entry.kind === "activation");
+    const result = await availableConversationResponse(response);
+    const firstCause = result.conversation.history.find((entry) => entry.kind === "activation");
+    if (firstCause === undefined) throw new Error("Expected the originating activation cause.");
     firstCause.status = "completed";
     result.conversation.history.push({
       kind: "activation",
@@ -788,6 +821,7 @@ test("conversation message, command, and MCP stream remains readable in both app
           taskId: "T-0002",
           taskTitle: "Inspect linked evidence",
         },
+        evidence: {},
       },
       {
         id: "appearance-coordination-comment",
@@ -799,6 +833,7 @@ test("conversation message, command, and MCP stream remains readable in both app
           body: "Recorded **appearance evidence**.",
           commentId: "appearance-comment-source",
         },
+        evidence: {},
       },
     ], { append: true });
   });
