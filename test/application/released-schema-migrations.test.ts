@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
 import { describeCoordinationSchema } from "../../src/application/internal/coordination-schema-snapshot.ts";
@@ -197,6 +199,7 @@ test("a skipped-release upgrade preserves representative retained state and back
     },
     {
       migrations: syntheticThreeVersionRegistry(),
+      expectedSchema: await syntheticUpgradeSchema(),
       backupPath: () => backupPath,
     },
   );
@@ -266,6 +269,7 @@ test("a direct one-step upgrade preserves released identities and values through
     { processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath },
     {
       migrations: syntheticThreeVersionRegistry().slice(0, 2),
+      expectedSchema: await syntheticUpgradeSchema(),
       backupPath: () => backupPath,
     },
   );
@@ -405,6 +409,242 @@ test("a late migration failure rolls back the whole pending sequence, reports it
   }
 });
 
+test("an upgrade that omits coordination-enforcing indexes and triggers rolls back before startup", async (t) => {
+  const fixture = await createReleasedDatabase("omitted-invariants");
+  const repository = await createCommittedTestRepository("released-schema-verification-repository-");
+  const runtime = new CompletingAgentRuntime();
+  const retained = new DatabaseSync(fixture.databasePath);
+  retained.exec(await readFile(
+    join(import.meta.dirname, "../fixtures/released-schema/0001-initial-released-schema-data.sql"),
+    "utf8",
+  ));
+  retained.exec(`
+    UPDATE tasks SET archival_pending = 1, archival_actor_id = 'user', archival_idempotency_key = 'pending-archive'
+    WHERE id = 'released-task';
+    UPDATE activations SET status = 'running' WHERE id = 'released-activation';
+    UPDATE attempts SET status = 'running', completed_at = NULL WHERE id = 'released-attempt';
+  `);
+  retained.close();
+  const before = inspectReleasedDatabase(fixture.databasePath);
+  const beforeRuntimeName = readRuntimeProcessName(fixture.databasePath);
+  await writeFile(fixture.definitionPath, (await readFile(fixture.definitionPath, "utf8"))
+    .replace("name: Released schema process", "name: Must not apply before verification"));
+  const backupPath = join(fixture.directory, "invariant-recovery.sqlite3");
+  const application = await CoordinationApplication.startForMigrationTest(
+    {
+      processDefinitionPath: fixture.definitionPath,
+      databasePath: fixture.databasePath,
+      runtimeDispatch: {
+        projectRepositoryPath: repository.repositoryPath,
+        taskWorkspaceRoot: join(repository.directory, "task-workspaces"),
+        agentRuntime: runtime,
+      },
+    },
+    {
+      migrations: [...coordinationMigrations, {
+        id: "test_0002_omitted_invariants",
+        apply(database: DatabaseSync) {
+          database.exec(`
+            DROP INDEX one_running_activation_per_task;
+            DROP INDEX one_current_agent_conversation_per_task_agent;
+            DROP TRIGGER activations_start_in_task_order;
+          `);
+        },
+      }],
+      backupPath: () => backupPath,
+    },
+  );
+  t.after(async () => {
+    application.close();
+    await rm(fixture.directory, { recursive: true, force: true });
+    await rm(repository.directory, { recursive: true, force: true });
+  });
+  const startup = application.queryStartup();
+  assert.equal(startup.mode, "configuration-error");
+  if (startup.mode === "configuration-error") {
+    assert.equal(startup.automation.attemptsMayStart, false);
+    assert.match(startup.diagnostics[0]?.consequence ?? "", /invariant-recovery\.sqlite3/);
+  }
+  assert.deepEqual(inspectReleasedDatabase(fixture.databasePath), before);
+  assert.deepEqual(inspectReleasedDatabase(backupPath), before);
+  assert.equal(readRuntimeProcessName(fixture.databasePath), beforeRuntimeName);
+  assert.equal(runtime.requests.length, 0);
+  const rejected = application.createTask({
+    boardId: "delivery", columnId: "backlog", title: "Must remain blocked", description: "",
+    actor: { kind: "user", id: "user" }, idempotencyKey: "verification-blocks-mutation",
+  });
+  assert.equal(rejected.accepted, false);
+  if (!rejected.accepted) assert.equal(rejected.reason, "configuration-error");
+  for (const path of [fixture.databasePath, backupPath]) {
+    const inspection = new DatabaseSync(path, { readOnly: true });
+    try {
+      assert.equal(inspection.prepare("SELECT status FROM attempts WHERE id = 'released-attempt'").get()?.status, "running");
+      assert.equal(inspection.prepare("SELECT archival_pending FROM tasks WHERE id = 'released-task'").get()?.archival_pending, 1);
+      assert.equal(inspection.prepare("PRAGMA integrity_check").get()?.integrity_check, "ok");
+      assert.deepEqual(inspection.prepare("PRAGMA foreign_key_check").all(), []);
+    } finally {
+      inspection.close();
+    }
+  }
+});
+
+test("startup rejects changed schema behavior even when required object names still exist", async (t) => {
+  const changes = [
+    { object: "index one_running_activation_per_task", sql: "DROP INDEX one_running_activation_per_task; CREATE INDEX one_running_activation_per_task ON activations(task_id) WHERE status = 'running'" },
+    { object: "index one_current_agent_conversation_per_task_agent", sql: "DROP INDEX one_current_agent_conversation_per_task_agent; CREATE UNIQUE INDEX one_current_agent_conversation_per_task_agent ON agent_conversations(task_id, owning_agent_id) WHERE retired_at IS NOT NULL" },
+    { object: "trigger activations_start_in_task_order", sql: "DROP TRIGGER activations_start_in_task_order; CREATE TRIGGER activations_start_in_task_order BEFORE UPDATE OF status ON activations BEGIN SELECT RAISE(IGNORE); END" },
+    { object: "table task_starting_refs", sql: "DROP TABLE task_starting_refs; CREATE TABLE task_starting_refs (task_id TEXT PRIMARY KEY, starting_ref TEXT)" },
+    { object: "table task_relationships", sql: "DROP TABLE task_relationships; CREATE TABLE task_relationships (id TEXT PRIMARY KEY, type TEXT NOT NULL CHECK (type IN ('parent-child', 'dependency')), source_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, target_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE)" },
+    { object: "view mapped_tasks", sql: "DROP VIEW mapped_tasks; CREATE VIEW mapped_tasks AS SELECT id FROM tasks" },
+    { object: "table forgotten_probe", sql: "CREATE TABLE forgotten_probe (value TEXT)" },
+    { object: "table sqliteProbe", sql: "CREATE TABLE sqliteProbe (value TEXT)" },
+  ];
+  for (const [index, change] of changes.entries()) {
+    await t.test(change.object, async (t) => {
+      const fixture = await createReleasedDatabase(`changed-object-${index}`);
+      const before = inspectReleasedDatabase(fixture.databasePath);
+      const application = await CoordinationApplication.startForMigrationTest(
+        { processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath },
+        { migrations: [...coordinationMigrations, {
+          id: "test_0002_changed_schema",
+          apply(database: DatabaseSync) { database.exec(change.sql); },
+        }] },
+      );
+      t.after(async () => {
+        application.close();
+        await rm(fixture.directory, { recursive: true, force: true });
+      });
+      const startup = application.queryStartup();
+      assert.equal(startup.mode, "configuration-error");
+      if (startup.mode === "configuration-error") {
+        assert.ok(String(startup.diagnostics[0]?.invalidValue).includes(change.object));
+      }
+      assert.deepEqual(inspectReleasedDatabase(fixture.databasePath), before);
+    });
+  }
+});
+
+test("an already-current database with an omitted invariant does not bypass verification", async (t) => {
+  const fixture = await createReleasedDatabase("current-drift");
+  const database = new DatabaseSync(fixture.databasePath);
+  database.exec("DROP INDEX one_running_activation_per_task");
+  database.close();
+  const before = inspectReleasedDatabase(fixture.databasePath);
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
+  });
+  t.after(async () => {
+    application.close();
+    await rm(fixture.directory, { recursive: true, force: true });
+  });
+  assert.equal(application.queryStartup().mode, "configuration-error");
+  assert.deepEqual(inspectReleasedDatabase(fixture.databasePath), before);
+});
+
+test("schema verification preserves exact string literals even when they contain line endings", async (t) => {
+  const fixture = await createReleasedDatabase("literal-line-endings");
+  const reviewedSchema = await readFile(
+    join(import.meta.dirname, "../../src/application/internal/migrations/current-schema.sql"), "utf8",
+  );
+  const expected = reviewedSchema.replace(
+    /starting_ref TEXT NOT NULL\r?\n    \);/,
+    "starting_ref TEXT NOT NULL CHECK (starting_ref <> 'line one\nline two')\n    );",
+  );
+  assert.notEqual(expected, reviewedSchema, "The independent expected CHECK must be present regardless of checkout line endings.");
+  const before = inspectReleasedDatabase(fixture.databasePath);
+  const application = await CoordinationApplication.startForMigrationTest(
+    { processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath },
+    {
+      expectedSchema: expected,
+      migrations: [...coordinationMigrations, {
+        id: "test_0002_wrong_literal",
+        apply(database: DatabaseSync) {
+          database.exec("DROP TABLE task_starting_refs; CREATE TABLE task_starting_refs (task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE, starting_ref TEXT NOT NULL CHECK (starting_ref <> 'line one\r\nline two'))");
+        },
+      }],
+    },
+  );
+  t.after(async () => {
+    application.close();
+    await rm(fixture.directory, { recursive: true, force: true });
+  });
+  assert.equal(application.queryStartup().mode, "configuration-error");
+  assert.deepEqual(inspectReleasedDatabase(fixture.databasePath), before);
+});
+
+test("harmless SQLite ALTER TABLE quoting and DDL formatting remain valid on upgrade and restart", async (t) => {
+  const fixture = await createReleasedDatabase("schema-formatting");
+  const migrations = [...coordinationMigrations, {
+    id: "test_0002_equivalent_schema",
+    apply(database: DatabaseSync) {
+      database.exec(`
+        ALTER TABLE runtime ADD COLUMN review_probe TEXT;
+        ALTER TABLE runtime DROP COLUMN review_probe;
+        ALTER TABLE runtime RENAME TO temporary_runtime;
+        ALTER TABLE temporary_runtime RENAME TO runtime;
+        DROP TABLE task_starting_refs;
+        create table "task_starting_refs" (
+          task_id text primary key references "tasks" (id) on delete cascade,
+          starting_ref text /* harmless formatting */ not null
+        );
+        DROP INDEX one_running_activation_per_task;
+        create unique index if not exists "one_running_activation_per_task"
+          on "activations" (task_id) where status='running';
+      `);
+    },
+  }];
+  t.after(async () => rm(fixture.directory, { recursive: true, force: true }));
+  for (const stage of ["upgrade", "restart"]) {
+    const application = await CoordinationApplication.startForMigrationTest(
+      { processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath },
+      { migrations },
+    );
+    try {
+      assert.equal(application.queryStartup().mode, "paused", `${stage}: ${JSON.stringify(application.queryStartup())}`);
+    } finally {
+      application.close();
+    }
+  }
+});
+
+test("an unavailable reviewed snapshot produces a blocking diagnostic without recursively failing the error shell", async (t) => {
+  const fixture = await createStartupFixture("snapshot-unavailable");
+  t.after(async () => rm(fixture.directory, { recursive: true, force: true }));
+  // Inject only external file unavailability in a subprocess. Never move or edit
+  // the shared checkout's artifact while other tests/agents can be reading it.
+  const { stdout } = await promisify(execFile)(process.execPath, [
+    "--experimental-strip-types", "--input-type=module", "--eval", `
+      import fs from 'node:fs';
+      import { syncBuiltinESMExports } from 'node:module';
+      const originalRead = fs.readFileSync;
+      fs.readFileSync = (...args) => {
+        if (String(args[0]).replaceAll('\\\\', '/').endsWith('/migrations/current-schema.sql')) {
+          throw new Error('Reviewed schema artifact is unavailable');
+        }
+        return originalRead(...args);
+      };
+      syncBuiltinESMExports();
+      const { CoordinationApplication } = await import(${JSON.stringify(new URL("../../src/application/coordination-application.ts", import.meta.url).href)});
+      const application = await CoordinationApplication.start(${JSON.stringify({
+        processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
+      })});
+      console.log(JSON.stringify(application.queryStartup()));
+      application.close();
+    `,
+  ]);
+  const startup = JSON.parse(stdout);
+  assert.equal(startup.mode, "configuration-error");
+  assert.equal(startup.automation.attemptsMayStart, false);
+  assert.match(startup.diagnostics[0].invalidValue, /Reviewed schema artifact is unavailable/);
+  assert.match(startup.diagnostics[0].correction, /application.*snapshot/i);
+  const inspection = new DatabaseSync(fixture.databasePath, { readOnly: true });
+  try {
+    assert.equal(inspection.prepare("SELECT 1 FROM sqlite_schema WHERE name = 'coordination_migrations'").get(), undefined);
+  } finally {
+    inspection.close();
+  }
+});
+
 test("backup and post-migration verification failures block startup before accepting an upgrade", async (t) => {
   const backupFailure = await createReleasedDatabase("backup-failure");
   const verificationFailure = await createReleasedDatabase("verification-failure");
@@ -522,6 +762,18 @@ function syntheticThreeVersionRegistry() {
       },
     },
   ] as const;
+}
+
+async function syntheticUpgradeSchema(): Promise<string> {
+  const releasedSchema = await readFile(
+    join(import.meta.dirname, "../../src/application/internal/migrations/current-schema.sql"),
+    "utf8",
+  );
+  // Explicit independent expectation, never computed by running the tested chain.
+  return releasedSchema + `
+-- table migration_upgrade_probe on migration_upgrade_probe
+CREATE TABLE migration_upgrade_probe (value TEXT NOT NULL);
+`;
 }
 
 function assertRepresentativeReleasedData(database: DatabaseSync): void {

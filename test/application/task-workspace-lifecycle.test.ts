@@ -222,6 +222,15 @@ test("a failed start commit leaves external workspace state unadopted and blocks
   }
   application.close();
 
+  // The fault has been observed. Remove only the test-owned injection so schema
+  // verification can pass and restart reaches the workspace-consistency gate.
+  const injectionCleanup = new DatabaseSync(fixture.databasePath);
+  try {
+    injectionCleanup.exec("DROP TRIGGER reject_attempt_start");
+  } finally {
+    injectionCleanup.close();
+  }
+
   const restarted = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,

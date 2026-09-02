@@ -1100,8 +1100,8 @@ function databaseStartupDiagnostic(file: string, error: unknown): ProcessDiagnos
         rule: "The expected schema, SQLite integrity, and foreign keys must verify before a released upgrade commits",
         consequence: `Startup is blocked and an uncommitted upgrade was rolled back.${recovery}`,
         correction: error.recoveryBackupPath === undefined
-          ? "Restore a supported released backup or correct the database before retrying."
-          : `Keep both files. Investigate the verification failure, or restore ${error.recoveryBackupPath} as the database after stopping the application.`,
+          ? "Keep the database untouched. Check the application, its approved schema snapshot, and the reported migration or SQLite failure before retrying; restore a supported released backup only if needed."
+          : `Keep both files. Check the application, its approved schema snapshot, and the reported migration or SQLite failure before retrying; if recovery is needed, restore ${error.recoveryBackupPath} as the database after stopping the application.`,
       },
     } as const;
     const description = descriptions[error.kind];

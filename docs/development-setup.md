@@ -140,6 +140,43 @@ a file, stage, commit, and finish clean. It asserts that branch, stage, and
 commit first encounter protected Git metadata and then succeed through scoped
 Auto-reviewed retries.
 
+## Changing the coordination schema
+
+The ordered released-migration registry is the only executable schema source.
+Never edit a released migration (including the initial migration), execute the
+snapshot as an initializer, or relax verification to make an upgrade pass.
+
+1. Add a migration with a new immutable ID to
+   `src/application/internal/migrations/registry.ts`. Establish behavior at the
+   application-startup seam using a real retained database and independently
+   inspect its recovery backup. Include a direct and a skipped upgrade when
+   applicable, plus the invariant behavior the schema change is intended to
+   preserve or introduce.
+2. Run `pnpm generate:schema-snapshot` explicitly. This executes the registry in
+   memory and replaces `src/application/internal/migrations/current-schema.sql`
+   with generated review evidence. It does not inspect or modify retained
+   project state. Normal startup and tests never regenerate this file.
+3. Review the generated diff independently of the migration implementation and
+   against requirements/behavior tests. Every disappearing index, constraint,
+   trigger, or view condition needs justification; do not simply accept the
+   output because it was generated. The snapshot detects unreviewed omissions,
+   but blindly regenerating and accepting one would bless the same mistake.
+4. Run `node --experimental-strip-types --test test/application/released-schema-migrations.test.ts test/application/restart-recovery.test.ts`,
+   then typechecking and the complete non-browser suite. Leave migration,
+   snapshot, tests, and any contract documentation together for user review.
+
+Startup requires this checked-in SQL artifact beside the migration registry,
+including when packaging/distributing the host. It is read lazily as read-only
+expectations, never executed. Missing or differing objects/definitions block
+startup before migrations commit or application recovery/dispatch begins, with
+a recovery-backup path when an upgrade was attempted. Current stores are also
+verified on restart. Comparison ignores layout, comments, keyword case, and
+simple object/table-name quoting introduced by SQLite; literals and expression
+tokens remain significant. Semantically equivalent but differently expressed
+constraints are intentionally not automatically accepted. Synthetic future-chain
+tests supply explicitly authored expectations, never expectations produced by
+executing the same tested migration chain.
+
 ## Troubleshooting
 
 ### `pnpm` is not recognized

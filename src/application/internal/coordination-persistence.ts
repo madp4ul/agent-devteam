@@ -59,7 +59,7 @@ export function openEphemeralCoordinationPersistence(
   transcriptAccess?: AttemptTranscriptAccess,
 ): CoordinationPersistence {
   return composeCoordinationPersistence(
-    CoordinationDatabase.openEphemeral(),
+    CoordinationDatabase.openConfigurationError(),
     ":memory:",
     transcriptAccess,
   );

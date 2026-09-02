@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { execFile, spawn, type ChildProcessByStdio } from "node:child_process";
-import { once } from "node:events";
 import { access, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Readable } from "node:stream";
 import test from "node:test";
 import { promisify } from "node:util";
+import { stopHost } from "../support/cli-host-lifecycle.ts";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve("src/cli.ts");
@@ -51,6 +51,13 @@ boards:
     repositoryPath: string;
   };
   assert.equal(identity.repositoryPath, repositoryPath);
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      "--experimental-strip-types", cliPath, "start", "--process", definitionPath,
+      "--project", repositoryPath, "--port", "0",
+    ], { timeout: 10_000 }),
+    /Project state is in use by application start/,
+  );
   await stopHost(child);
 
   await expectConfigurationError(
@@ -95,20 +102,6 @@ function spawnHost(
     env: { ...process.env, ...environment },
     stdio: ["ignore", "pipe", "pipe"],
   });
-}
-
-async function stopHost(child: ChildProcessByStdio<null, Readable, Readable>): Promise<void> {
-  if (child.exitCode !== null) return;
-  child.kill();
-  await Promise.race([
-    once(child, "exit"),
-    new Promise<void>((resolvePromise) => {
-      setTimeout(() => {
-        if (child.exitCode === null) child.kill("SIGKILL");
-        resolvePromise();
-      }, 1_000);
-    }),
-  ]);
 }
 
 function waitForOutput(

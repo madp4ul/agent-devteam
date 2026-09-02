@@ -33,8 +33,41 @@ rolls back the whole sequence and reports the verified recovery path.
 
 The checked-in `current-schema.sql` snapshot is generated from an in-memory
 database created by the complete registry. It describes every application
-table, index, trigger, and view for inspection and drift review, but startup
-never executes it.
+table, index, trigger, and view for inspection and drift review. Startup reads
+it as independently reviewed acceptance evidence, but never executes it.
+
+## Verification refinement — September 2026
+
+The former selected-table/column checklist could accept an upgrade that lost
+coordination-enforcing indexes or triggers. Acceptance now compares the complete
+application object inventory and tokenized definitions against the checked-in
+snapshot, including table constraints, index uniqueness and predicates, trigger
+bodies, and view queries. Implicit SQLite indexes are represented by the table
+constraints that create them; SQLite-managed objects are excluded. Literal
+values and expression tokens remain significant. Layout, SQL keyword case,
+comments, and simple object/table-name quoting introduced by SQLite are not.
+This is deliberately conservative structural comparison, not a general SQL
+semantic-equivalence prover; different constraint order or expression spelling
+requires explicit authoring/review rather than guessing equivalence at startup.
+
+Replaying the same current migration chain to compute both expected and actual
+schema would validate a maintainer's omission against itself. Keeping generated
+expectations checked in makes that omission visible as a blocking mismatch and
+a review diff. Regeneration is an explicit authoring operation, never part of
+startup or tests. Review must justify every removed/changed invariant against
+requirements and independent behavior tests: regenerating and accepting a
+defective schema would still bless the defect. The snapshot is a safety net,
+not an independent specification of intended product behavior.
+
+A missing/unreadable snapshot blocks normal startup inside the handled
+verification gate. The disposable configuration-error shell alone skips this
+comparison while retaining registry-based construction and SQLite health
+checks, so it can report a schema-artifact failure without recursively failing
+the same gate. It cannot open retained state or enable commands/dispatch. The
+explicit generator similarly applies only the registry to an in-memory store,
+without requiring new schema output to match old expectations. The registry
+remains the only executable schema definition in both cases. See the
+[authoring workflow](../development-setup.md#changing-the-coordination-schema).
 
 ## Consequences
 

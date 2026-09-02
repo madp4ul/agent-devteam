@@ -129,8 +129,14 @@ commit. Divergent, malformed, newer, or ledger-less histories block startup
 without migration. Process
 application, restart recovery, workspace recovery, board mutation, and agent
 dispatch begin only after the database has opened at the current released
-history. The generated current-schema snapshot is review evidence rather than
-a second initializer. [ADR 0018](adr/0018-make-released-migrations-the-coordination-schema-authority.md)
+history. Startup compares every application table, index, trigger, and view
+against the checked-in, independently reviewed current-schema snapshot, including
+constraint and executable-body definitions. Comparison tolerates layout and
+SQLite's table-name quoting, not arbitrary semantic SQL rewrites. The snapshot
+is read-only acceptance evidence, never a second initializer; only explicit
+authoring regenerates it. The blocked configuration-error shell uses disposable
+registry-created state without repeating that snapshot gate, so a missing or
+outdated artifact can still be reported. [ADR 0018](adr/0018-make-released-migrations-the-coordination-schema-authority.md)
 records this boundary.
 
 ### Automation and agent runtime

@@ -5,6 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 
 import { coordinationMigrations } from "./migrations/registry.ts";
+import { readExpectedCoordinationSchema, verifyCoordinationSchema } from "./coordination-schema-snapshot.ts";
 
 export interface CoordinationMigration {
   readonly id: string;
@@ -19,6 +20,8 @@ export interface CoordinationDatabaseOpenOptions {
   backupPath?: (databasePath: string) => string;
   /** Test seam for post-migration verification failure. */
   expectedSchemaIsComplete?: (database: DatabaseSync) => boolean;
+  /** Independently supplied review evidence for a synthetic future chain. */
+  expectedSchema?: string;
 }
 
 export type CoordinationDatabaseStartupFailure =
@@ -85,7 +88,7 @@ export class CoordinationDatabase {
       if (pending.length === 0) {
         verifyCurrentDatabase(
           connection,
-          options.expectedSchemaIsComplete ?? currentSchemaIsComplete,
+          options.expectedSchemaIsComplete ?? ((database) => currentSchemaIsComplete(database, options.expectedSchema)),
           path,
         );
         return new CoordinationDatabase(connection);
@@ -115,7 +118,7 @@ export class CoordinationDatabase {
         path,
         applied.length,
         pending,
-        options.expectedSchemaIsComplete ?? currentSchemaIsComplete,
+        options.expectedSchemaIsComplete ?? ((database) => currentSchemaIsComplete(database, options.expectedSchema)),
         recoveryBackupPath,
       );
       return new CoordinationDatabase(connection);
@@ -133,7 +136,8 @@ export class CoordinationDatabase {
     }
   }
 
-  static openEphemeral(): CoordinationDatabase {
+  /** Diagnostic shell only: do not re-run the failed snapshot gate to report it. */
+  static openConfigurationError(): CoordinationDatabase {
     const connection = new DatabaseSync(":memory:");
     try {
       connection.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000");
@@ -142,7 +146,7 @@ export class CoordinationDatabase {
         ":memory:",
         0,
         coordinationMigrations,
-        currentSchemaIsComplete,
+        () => true,
       );
       return new CoordinationDatabase(connection);
     } catch (error) {
@@ -345,44 +349,8 @@ function startupError(
   );
 }
 
-function currentSchemaIsComplete(database: DatabaseSync): boolean {
-  const requiredTables = [
-    "runtime", "agents", "model_pricing", "boards", "columns", "task_numbers", "tasks",
-    "activity_ledger", "activations", "agent_conversations", "activation_contexts",
-    "agent_conversation_messages", "pending_conversation_uploads", "conversation_attachments",
-    "task_workspaces", "task_starting_refs", "attempts", "attempt_transcripts",
-    "activation_dispatch_claims", "activation_startup_failures", "task_comments",
-    "task_relationships", "attention_reasons", "task_attachments", "command_responses",
-    "notification_policy", "notification_column_subscriptions", "notification_occurrences",
-  ];
-  const tables = new Set(
-    (database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>)
-      .map(({ name }) => name),
-  );
-  if (requiredTables.some((table) => !tables.has(table))) return false;
-  if (database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'mapped_tasks'").get() === undefined) return false;
-  if (database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'agent_inspectable_tasks'").get() === undefined) return false;
-  const columns = (table: string) => new Set(
-    (database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(({ name }) => name),
-  );
-  const runtimeColumns = columns("runtime");
-  const taskColumns = columns("tasks");
-  const activationColumns = columns("activations");
-  const conversationColumns = columns("agent_conversations");
-  const attemptColumns = columns("attempts");
-  const commentColumns = columns("task_comments");
-  const transcriptColumns = columns("attempt_transcripts");
-  const activityTable = database
-    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activity_ledger'")
-    .get() as { sql: string } | undefined;
-  return runtimeColumns.has("impact_previous_version") &&
-    ["automation_suspended", "suspended_activation_id", "archived_at", "archival_pending", "archival_actor_id", "archival_idempotency_key"].every((name) => taskColumns.has(name)) &&
-    ["continuation_message", "retry_cycle_start", "definition_version", "stale", "conversation_id"].every((name) => activationColumns.has(name)) &&
-    ["owning_agent_name_snapshot", "generated_label", "originating_activation_id", "current_thread_id", "latest_activity_at", "latest_activity_sequence", "delivered_description", "delivered_comment_sequence", "delivered_activity_sequence", "retired_at", "retirement_reason", "retirement_actor_id", "replaces_conversation_id", "replacement_reason", "archived_cost_json"].every((name) => conversationColumns.has(name)) &&
-    ["outcome_kind", "thread_continuity", "pricing_json", "context_window_usage_json"].every((name) => attemptColumns.has(name)) &&
-    ["usage_json", "reported_usage_json"].every((name) => transcriptColumns.has(name)) &&
-    commentColumns.has("attempt_id") &&
-    ["task.archived", "conversation.continued", "conversation.retired", "activation.dismissed", "relationship.removed"].every((value) => activityTable?.sql.includes(value) === true);
+function currentSchemaIsComplete(database: DatabaseSync, expected?: string): boolean {
+  return verifyCoordinationSchema(database, expected ?? readExpectedCoordinationSchema());
 }
 
 function readAppliedMigrations(database: DatabaseSync): string[] {
