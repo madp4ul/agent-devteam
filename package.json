@@ -33,7 +33,7 @@
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^2.0.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openai/codex-sdk": "^0.146.0",
+    "@openai/codex-sdk": "^0.154.0",
     "ajv": "^8.17.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

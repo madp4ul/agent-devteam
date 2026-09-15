@@ -6,7 +6,7 @@ import test from "node:test";
 
 import { LocalCodexSessionEvidenceReader } from "../../src/runtime/codex-session-evidence-reader.ts";
 
-// Contract fixtures are pinned to @openai/codex-sdk and @openai/codex 0.146.0.
+// Contract fixtures match the @openai/codex-sdk and @openai/codex 0.154.0 rollout fields.
 test("discovers a nested matching rollout and returns its newest valid token-count record", async (t) => {
   const root = await temporarySessionsRoot(t);
   const path = await rolloutPath(root, "nested-thread");

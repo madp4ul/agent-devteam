@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { AttemptContextWindowUsage } from "../application/runtime-contract.ts";
 
 /**
- * Private local-rollout evidence pinned to @openai/codex-sdk and @openai/codex 0.146.0.
+ * Private local-rollout evidence audited against @openai/codex-sdk and @openai/codex 0.154.0.
  * Re-audit the session location, filename convention, token_count envelope,
  * active-context fields, and display baseline whenever the lockfile upgrades Codex.
  */
