@@ -39,7 +39,10 @@ export function BoardPage({
   const scrollPositions = useRef(new Map<string, number>(
     Object.entries(pendingInitialContext.current?.scrollPositions ?? {}),
   ));
-  const unfilteredScrollPositions = useRef<Map<string, number> | undefined>(undefined);
+  const unfilteredScrollPositions = useRef<Map<string, number> | undefined>(
+    pendingInitialContext.current?.unfilteredScrollPositions === undefined ? undefined
+      : new Map(Object.entries(pendingInitialContext.current.unfilteredScrollPositions)),
+  );
   if (
     pendingInitialContext.current !== undefined &&
     !scrollPositions.current.has(`column:${pendingInitialContext.current.boardId}`)
@@ -55,11 +58,14 @@ export function BoardPage({
   );
   const [layout, setLayout] = useState<BoardLayout>(readLayoutPreference);
   const [creation, setCreation] = useState<{ boardId: string; columnId: string }>();
-  const [highlightedTaskId, setHighlightedTaskId] = useState<string>();
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | undefined>(
+    pendingInitialContext.current?.highlightedTaskId,
+  );
   const [showArchived, setShowArchived] = useState(
     pendingInitialContext.current?.showArchived === true,
   );
   const [archivedTasks, setArchivedTasks] = useState<TaskOverviewView[]>([]);
+  const [archivesSettled, setArchivesSettled] = useState(false);
   const showArchivedRef = useRef(showArchived);
   const archivedLoadSequence = useRef(0);
   const laneRefs = useRef(new Map<string, HTMLDivElement>());
@@ -77,6 +83,10 @@ export function BoardPage({
     } catch (error) {
       if (sequence === archivedLoadSequence.current && showArchivedRef.current) {
         setFeedback({ role: "alert", text: errorMessage(error) });
+      }
+    } finally {
+      if (sequence === archivedLoadSequence.current && showArchivedRef.current) {
+        setArchivesSettled(true);
       }
     }
   }, [setFeedback]);
@@ -129,6 +139,7 @@ export function BoardPage({
   );
   useLayoutEffect(() => {
     if (state === undefined || !pendingScrollRestore.current) return;
+    if (pendingInitialContext.current?.showArchived && showArchived && !archivesSettled) return;
     let restored = false;
     for (const [key, element] of scrollElements.current) {
       const position = scrollPositions.current.get(key);
@@ -137,28 +148,62 @@ export function BoardPage({
       restored = true;
     }
     if (restored) {
+      if (pendingInitialContext.current?.scrollTop !== undefined) {
+        window.scrollTo({ top: pendingInitialContext.current.scrollTop, behavior: "instant" });
+      }
+      const anchor = pendingInitialContext.current?.taskAnchor;
+      const card = anchor === undefined ? null : document.querySelector<HTMLElement>(
+        `[data-task-id="${CSS.escape(anchor.taskId)}"]`,
+      );
+      if (card !== null && anchor !== undefined) {
+        window.scrollBy({ top: card.getBoundingClientRect().top - anchor.top, behavior: "instant" });
+        const bounds = card.getBoundingClientRect();
+        let visibleLeft = 0;
+        let visibleRight = window.innerWidth;
+        for (const element of scrollElements.current.values()) {
+          if (!element.contains(card)) continue;
+          const container = element.getBoundingClientRect();
+          visibleLeft = Math.max(visibleLeft, container.left);
+          visibleRight = Math.min(visibleRight, container.right);
+        }
+        if (bounds.right <= visibleLeft || bounds.left >= visibleRight) {
+          card.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+        }
+      }
       pendingScrollRestore.current = false;
       pendingInitialContext.current = undefined;
     }
-  }, [filter, layout, state]);
+  }, [archivesSettled, filter, layout, showArchived, state]);
 
-  const rememberContext = useCallback((boardId: string) => {
+  const rememberContext = useCallback((boardId: string, taskId?: string) => {
     captureScrollPositions();
+    const card = taskId === undefined ? null : document.querySelector<HTMLElement>(
+      `[data-task-id="${CSS.escape(taskId)}"]`,
+    );
+    const bounds = card?.getBoundingClientRect();
     const boardContext = {
       boardId,
       filter,
       showArchived,
       scrollLeft: laneRefs.current.get(boardId)?.scrollLeft ?? 0,
+      scrollTop: window.scrollY,
+      ...(taskId !== undefined && bounds !== undefined && bounds.bottom > 0 && bounds.top < window.innerHeight
+        ? { taskAnchor: { taskId, top: bounds.top } }
+        : {}),
       scrollPositions: Object.fromEntries(scrollPositions.current),
+      ...(unfilteredScrollPositions.current === undefined ? {} : {
+        unfilteredScrollPositions: Object.fromEntries(unfilteredScrollPositions.current),
+      }),
+      ...(highlightedTaskId === undefined ? {} : { highlightedTaskId }),
     };
     window.history.replaceState(
       { boardContext },
       "",
       filter.length === 0 ? "/" : `/?q=${encodeURIComponent(filter)}`,
     );
-  }, [captureScrollPositions, filter, showArchived]);
+  }, [captureScrollPositions, filter, highlightedTaskId, showArchived]);
   const openTask = useCallback((taskId: string, boardId: string) => {
-    rememberContext(boardId);
+    rememberContext(boardId, taskId);
     navigate(`/tasks/${encodeURIComponent(taskId)}`, { returnToBoard: true });
   }, [navigate, rememberContext]);
   const locateTask = useCallback((taskId: string, boardId: string) => {

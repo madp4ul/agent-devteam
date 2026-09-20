@@ -1,45 +1,42 @@
-# 03 — Preserve board overview state when returning from task details
+# 03 — Preserve board navigation state
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Blocked by:** None.
-**Next step:** Reproduce navigation-state loss and inspect state ownership.
+**Next step:** User review.
 
-## Report and reproduction
+## Problem
 
-The user scrolls down the board overview to find a task, opens its details, and
-uses Back. The board reappears at the top, leaving the previously selected task
-out of view. Repeatedly finding that task breaks the browsing workflow.
-
-The desired outcome is returning to the board in exactly the state it had when
-the user left, with scroll position the concrete reported failure. Inventory
-other relevant view state during diagnosis rather than silently narrowing this
-to one vertical offset.
+Opening a task from a scrolled board and going Back returned the board to the
+top. Navigation also lost the remembered pre-filter row position, and delayed
+archive loading could defeat horizontal restoration.
 
 ## Acceptance criteria
 
-- [ ] Returning from task details restores the prior board reading position so
-  the originating task remains visible when it still exists in that view.
-- [ ] Preserve applicable view state such as selected board, filters, and relevant
-  scroll containers; determine which of these already survive navigation.
-- [ ] Cover the reported Back action and distinguish browser history navigation
-  from any in-app back control if both exist.
-- [ ] Define sensible restoration when a task moves/disappears or board content
-  changes while details are open; avoid restoring stale board data as authority.
-- [ ] Verify restoration after the board's asynchronous content has rendered,
-  without a subsequent refresh resetting the viewport again.
+- [x] Browser Back and Back to board restore the prior reading context.
+- [x] Preserve filters, layout, archived visibility, and relevant scroll positions.
+- [x] Keep the originating card visible when it moves; clamp saved offsets when
+  it disappears. Always query current board data.
+- [x] Restore after board/archive content loads, without later polls resetting
+  the user's position.
 
-## Candidate approach, not a decision
+## Implementation
 
-The user suspects that navigating away destroys the board overview. Keeping it
-mounted might preserve state more naturally. They contrast this with opening an
-agent conversation dialog: task details remain behind the overlay and retain
-their state. Neither the suspected lifecycle nor the suggested fix is verified.
+Extended the existing history context with document position, a visible-card
+anchor, pre-filter row offsets, and the Locate card highlight. Restoration waits
+for board and requested archive data, then runs once. Horizontal visibility
+accounts for clipping inside each scroll container. All boards share one page;
+layout already persists as a browser preference. Keeping the board mounted
+would unnecessarily change page and polling lifetimes.
 
-Compare retaining the board with explicit restoration before choosing an approach.
-Read the architecture map before changing state ownership or navigation boundaries;
-update it and record durable reasoning if the resulting fix changes architecture.
+## Verification
 
-## Comments
+17 board/navigation tests pass, covering both Back controls and themes, delayed
+archives, multiple boards, moved/missing/reordered cards, filters, and refresh.
+Typechecks, build, and 313 non-browser tests pass (4 opt-in skips). Both reviews
+have no remaining findings.
 
-- 2026-09-20: User-described GitHub issue; diagnosis remains open.
+Full browser suite: 135 passed, 3 failures also reproduced on unchanged HEAD:
+`automation.browser.spec.ts:129` (unmapped task returns not found),
+`conversation-lifecycle.browser.spec.ts:36` (dated fixture timestamp), and
+`task-attention.browser.spec.ts:77` (attention-button count).

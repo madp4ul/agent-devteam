@@ -6,7 +6,7 @@ GitHub URLs and numbers were not supplied, and the originals were not fetched.
 The user's account below is the source, not independent reproduction or diagnosis.
 
 Each issue has its own file. This is a backlog intake, not an agreed implementation
-specification. All issues remain open; none is labelled `ready-for-agent`.
+specification. Issue files track current status; none was labelled `ready-for-agent` at intake.
 Numbering follows the supplied order, with the shared MCP design preceding the
 participant-addressing issue that depends on it. It does not assign priority.
 
@@ -16,7 +16,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | --- | --- | --- |
 | [01](issues/01-evaluate-mcp-usage-by-context-position.md) | MCP usage by context position, per tool and per conversation | Research call-time evidence, then grill the statistics design |
 | [02](issues/02-stop-conversation-scroll-snapback.md) | Stop conversation scrolling from snapping back to the bottom | Reproduce and diagnose the scroll-follow bug |
-| [03](issues/03-preserve-board-navigation-state.md) | Restore board state when returning from task details | Reproduce navigation-state loss and choose the smallest fix |
+| [03](issues/03-preserve-board-navigation-state.md) | Restore board state when returning from task details | Implemented; user review |
 | [04](issues/04-reduce-routine-permission-interruptions.md) | Reduce permission interruptions for routine authorized commands | Investigate concrete denials and simpler supported policy options |
 | [05](issues/05-open-local-file-links-from-comments.md) | Make task-comment local file links open the actual file | Reproduce URL handling and clarify the opening experience |
 | [06](issues/06-attach-files-to-tasks-and-comments.md) | Attach files directly to tasks and comments | Grill ownership, lifetime, and agent file access |
@@ -46,8 +46,8 @@ and browser coverage of icon/button geometric centering.
 
 ## Decisions so far
 
-None. The reports, candidate approaches, and unresolved questions are captured;
-no implementation, diagnosis, or architectural decision was made during intake.
+- [03](issues/03-preserve-board-navigation-state.md): implemented by extending
+  existing history restoration; diagnosis and verification are in the ticket.
 
 ## Comments
 
