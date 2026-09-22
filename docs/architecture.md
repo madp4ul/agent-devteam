@@ -49,6 +49,19 @@ browser and host share the request and response contracts for that local
 transport, while the host maps decoding and status codes. Neither side owns
 workflow or automation policy.
 
+Markdown rendered anywhere within task details can explicitly hand a local-file
+reference to the host. The task page supplies one shared workspace-link context
+to descriptions, comments, outcomes, activity messages, and conversations so
+the behavior does not depend on an individual Markdown caller.
+The host resolves relative references against that task's authoritative Git
+workspace, canonicalizes both the workspace and target, rejects lexical and
+symlink escapes, and opens only an existing regular file through the native
+desktop integration. Browser restrictions therefore do not require direct
+`file:` navigation, and missing or archived workspaces remain explicit outcomes.
+Line and column suffixes are recognized and removed from path resolution; the
+chosen default-application opener leaves exact source positioning to that
+application.
+
 The local HTTP adapter remains framework-free and keeps browser and
 project-scoped agent authorization/capability boundaries explicit. Project-owned
 routing uses a shared typed literal/named-segment dispatcher beneath separate

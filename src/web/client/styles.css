@@ -517,6 +517,8 @@ textarea { resize: vertical; line-height: 1.5; }
 .markdown-content pre { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; overflow-wrap: anywhere; border-radius: .5rem; background: var(--code-surface); padding: .75rem; white-space: pre-wrap; word-break: break-word; }
 .markdown-content pre code { background: transparent; padding: 0; white-space: inherit; overflow-wrap: inherit; word-break: inherit; }
 .markdown-content blockquote { margin: .7rem 0; border-left: 3px solid var(--border); padding-left: .85rem; color: var(--muted); }
+.markdown-content .local-file-feedback { margin-left: .45rem; color: var(--success-text); }
+.markdown-content .local-file-feedback[role="alert"] { color: var(--failure-text); }
 .markdown-copy-button { display: grid; flex: 0 0 auto; width: 1.7rem; height: 1.7rem; place-items: center; border: 1px solid transparent; border-radius: .4rem; color: var(--muted); background: transparent; padding: 0; }
 .markdown-copy-button:hover:not(:disabled), .markdown-copy-button:focus-visible, .markdown-copy-button.copied { border-color: var(--border); color: var(--text); background: var(--surface-raised); }
 .markdown-copy-button svg { display: block; width: .9rem; height: .9rem; fill: none; stroke: currentcolor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }

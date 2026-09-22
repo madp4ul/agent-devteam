@@ -12,6 +12,7 @@ import type { HttpRouteContext } from "../http/route-context.ts";
 import { sendJson } from "../http/response.ts";
 import { localUserActor } from "./actor.ts";
 import type { BrowserCoordinationCapabilities } from "./capabilities.ts";
+import { resolveWorkspaceFileReference, type WorkspaceFileTarget } from "../workspace-file-reference.ts";
 
 type ArchiveWorkspaceCapabilities = Pick<BrowserCoordinationCapabilities,
   | "queryArchivedTaskOverviews"
@@ -25,6 +26,11 @@ type ArchiveWorkspaceCapabilities = Pick<BrowserCoordinationCapabilities,
 export interface WorkspaceOpeners {
   openWorkspace?: (taskId: string, workspace: TaskWorkspaceView) => Promise<void>;
   openWorkspaceInVisualStudioCode?: (taskId: string, workspace: TaskWorkspaceView) => Promise<void>;
+  openWorkspaceFile?: (
+    taskId: string,
+    workspace: TaskWorkspaceView,
+    target: WorkspaceFileTarget,
+  ) => Promise<void>;
 }
 
 export function registerArchiveWorkspaceRoutes(
@@ -75,6 +81,57 @@ export function registerArchiveWorkspaceRoutes(
     "/api/tasks/:taskId/workspace/open-vscode",
     "browser/archive-workspace",
     workspaceOpenHandler(application, openers.openWorkspaceInVisualStudioCode, true),
+  );
+  dispatcher.register(
+    "POST",
+    "/api/tasks/:taskId/workspace/files/open",
+    "browser/archive-workspace",
+    async ({ request, response, params }) => {
+      const inspection = application.queryTaskInspectionForUser(params.taskId);
+      if (!inspection.available) {
+        sendJson(response, inspection.reason === "not-found" ? 404 : 409, inspection);
+        return;
+      }
+      if (inspection.task.workspace === null) {
+        sendJson(response, 409, {
+          reason: "workspace-not-provisioned",
+          diagnostic: "This task no longer has an available workspace.",
+        });
+        return;
+      }
+      const body = await readJsonBody<{ reference?: unknown }>(request);
+      const resolution = await resolveWorkspaceFileReference(
+        inspection.task.workspace.path,
+        stringField(body, "reference"),
+      );
+      if (!resolution.resolved) {
+        const status = resolution.reason === "file-outside-workspace"
+          ? 403
+          : resolution.reason === "file-not-found"
+            ? 404
+            : resolution.reason === "workspace-unavailable"
+              ? 409
+              : 400;
+        sendJson(response, status, resolution);
+        return;
+      }
+      if (openers.openWorkspaceFile === undefined) {
+        sendJson(response, 503, {
+          reason: "host-integration-unavailable",
+          diagnostic: "Opening local files is unavailable on this host.",
+        });
+        return;
+      }
+      try {
+        await openers.openWorkspaceFile(params.taskId, inspection.task.workspace, resolution.target);
+        sendJson(response, 200, { accepted: true });
+      } catch (error) {
+        sendJson(response, 409, {
+          reason: "file-open-failed",
+          diagnostic: error instanceof Error ? error.message : "The linked file could not be opened.",
+        });
+      }
+    },
   );
   dispatcher.register("GET", "/api/tasks/:taskId/workspace/git-state", "browser/archive-workspace", async ({ response, params }) => {
     const result = await application.queryTaskWorkspaceGitState(params.taskId);

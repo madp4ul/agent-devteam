@@ -160,6 +160,10 @@ async function run(arguments_: string[]): Promise<void> {
               taskWorkspaceManager,
               openWorkspaceInVisualStudioCode,
             ),
+            openWorkspaceFile: createVerifiedWorkspaceFileOpener(
+              taskWorkspaceManager,
+              openWorkspaceInHost,
+            ),
           }),
     });
     agentApiBaseUrl = server.baseUrl;
@@ -234,6 +238,20 @@ function createVerifiedWorkspaceOpener(
   return async (taskId, workspace) => {
     await workspaceManager.verify(taskId, workspace);
     await openPath(workspace.path);
+  };
+}
+
+function createVerifiedWorkspaceFileOpener(
+  workspaceManager: GitTaskWorkspaceManager,
+  openPath: (path: string) => Promise<void>,
+): (
+  taskId: string,
+  workspace: TaskWorkspaceView,
+  target: { filePath: string; line?: number; column?: number },
+) => Promise<void> {
+  return async (taskId, workspace, target) => {
+    await workspaceManager.verify(taskId, workspace);
+    await openPath(target.filePath);
   };
 }
 

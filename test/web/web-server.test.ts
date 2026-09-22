@@ -479,6 +479,116 @@ test("open workspace uses only the authoritative provisioned path and reports ho
   });
 });
 
+test("open workspace file resolves local links inside the authoritative task worktree", async (t) => {
+  const fixture = await createFixture("open-workspace-file");
+  const repositoryPath = join(fixture.directory, "project repository");
+  const workspaceRoot = join(fixture.directory, "task workspaces");
+  await mkdir(repositoryPath);
+  await execFileAsync("git", ["init", "--initial-branch=main", repositoryPath]);
+  await execFileAsync("git", ["-C", repositoryPath, "config", "user.email", "test@example.com"]);
+  await execFileAsync("git", ["-C", repositoryPath, "config", "user.name", "Test User"]);
+  await writeFile(join(repositoryPath, "README.md"), "# Test project\n");
+  await mkdir(join(repositoryPath, "docs"));
+  await writeFile(join(repositoryPath, "docs", "review notes.md"), "# Review notes\n");
+  await execFileAsync("git", ["-C", repositoryPath, "add", "."]);
+  await execFileAsync("git", ["-C", repositoryPath, "commit", "-m", "Initial commit"]);
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: repositoryPath,
+      taskWorkspaceRoot: workspaceRoot,
+      agentRuntime: {
+        run: async (_request, lifecycle) => {
+          lifecycle.started("thread-open-workspace-file");
+          return { status: "completed", summary: "Workspace provisioned." };
+        },
+      },
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Open a linked file",
+    description: "Use the persisted task worktree path.",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "open-workspace-file-task",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+  await application.resumeAutomation();
+  await application.waitForAutomationIdle();
+
+  const opened: Array<{ taskId: string; filePath: string; line?: number; column?: number }> = [];
+  const server = await startWebServer(application, {
+    host: "127.0.0.1",
+    port: 0,
+    assetDirectory: fixture.assetDirectory,
+    openWorkspaceFile: async (taskId, _workspace, target) => { opened.push({ taskId, ...target }); },
+  });
+  t.after(() => server.close());
+
+  const relative = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/workspace/files/open`,
+    { reference: "docs/review%20notes.md#L14C3" },
+  );
+  assert.equal(relative.response.status, 200);
+  assert.deepEqual(opened, [{
+    taskId: created.task.id,
+    filePath: join(workspaceRoot, created.task.id, "docs", "review notes.md"),
+    line: 14,
+    column: 3,
+  }]);
+
+  const absolute = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/workspace/files/open`,
+    { reference: `${join(workspaceRoot, created.task.id, "docs", "review notes.md")}:9` },
+  );
+  assert.equal(absolute.response.status, 200);
+  assert.equal(opened[1]?.filePath, opened[0]?.filePath);
+  assert.equal(opened[1]?.line, 9);
+
+  const outside = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/workspace/files/open`,
+    { reference: "../outside.txt" },
+  );
+  assert.equal(outside.response.status, 403);
+  assert.equal((outside.body as { reason: string }).reason, "file-outside-workspace");
+
+  const missing = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/workspace/files/open`,
+    { reference: "docs/removed.md" },
+  );
+  assert.equal(missing.response.status, 404);
+  assert.equal((missing.body as { reason: string }).reason, "file-not-found");
+
+  const unavailableServer = await startWebServer(application, {
+    host: "127.0.0.1",
+    port: 0,
+    assetDirectory: fixture.assetDirectory,
+  });
+  t.after(() => unavailableServer.close());
+  const unavailable = await postJson(
+    `${unavailableServer.baseUrl}/api/tasks/${created.task.id}/workspace/files/open`,
+    { reference: "docs/review%20notes.md" },
+  );
+  assert.equal(unavailable.response.status, 503);
+  assert.equal((unavailable.body as { reason: string }).reason, "host-integration-unavailable");
+
+  const archived = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/archive`,
+    { idempotencyKey: "archive-open-workspace-file-task" },
+  );
+  assert.equal(archived.response.status, 200);
+  const removedWorkspace = await postJson(
+    `${server.baseUrl}/api/tasks/${created.task.id}/workspace/files/open`,
+    { reference: "docs/review%20notes.md" },
+  );
+  assert.equal(removedWorkspace.response.status, 409);
+  assert.equal((removedWorkspace.body as { reason: string }).reason, "workspace-not-provisioned");
+});
+
 test("browser archive endpoints remove tasks from the board and support history and unarchive", async (t) => {
   const fixture = await createFixture("browser-archive");
   const application = await CoordinationApplication.start({

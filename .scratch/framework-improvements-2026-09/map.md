@@ -18,7 +18,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [02](issues/02-stop-conversation-scroll-snapback.md) | Stop conversation scrolling from snapping back to the bottom | Implemented; user review |
 | [03](issues/03-preserve-board-navigation-state.md) | Restore board state when returning from task details | Implemented; user review |
 | [04](issues/04-reduce-routine-permission-interruptions.md) | Reduce permission interruptions for routine authorized commands | Investigate concrete denials and simpler supported policy options |
-| [05](issues/05-open-local-file-links-from-comments.md) | Make task-comment local file links open the actual file | Reproduce URL handling and clarify the opening experience |
+| [05](issues/05-open-local-file-links-from-comments.md) | Make task-comment local file links open the actual file | Implemented; user review |
 | [06](issues/06-attach-files-to-tasks-and-comments.md) | Attach files directly to tasks and comments | Grill ownership, lifetime, and agent file access |
 | [07](issues/07-keep-task-movement-controls-accessible.md) | Sticky Move Task controls and one-click next-column movement | Clarify next-column edge cases, then specify the UI change |
 | [08](issues/08-use-full-height-conversation-dialog.md) | Use the browser's full height for the conversation dialog | Specify and verify the full-height overlay layout |
@@ -52,6 +52,9 @@ and browser coverage of icon/button geometric centering.
   polling, and layout changes.
 - [03](issues/03-preserve-board-navigation-state.md): implemented by extending
   existing history restoration; diagnosis and verification are in the ticket.
+- [05](issues/05-open-local-file-links-from-comments.md): implemented secure
+  host-native opening for workspace-local links across task-detail Markdown,
+  with explicit feedback and browser/API regression coverage.
 
 ## Comments
 

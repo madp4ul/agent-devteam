@@ -324,6 +324,13 @@ export async function readAgentConversation(
   return body;
 }
 
+export async function openTaskWorkspaceFile(taskId: string, reference: string): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/workspace/files/open`, {
+    method: "POST",
+    body: serializeBrowserRequest({ reference }),
+  });
+}
+
 export async function continueAgentConversation(
   taskId: string,
   conversationId: string,

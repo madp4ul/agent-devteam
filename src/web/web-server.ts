@@ -11,6 +11,7 @@ import { createAgentApiRoutes, type AgentApiRoutes } from "./agent-api/routes.ts
 import type { BrowserCoordinationCapabilities } from "./browser-api/capabilities.ts";
 import { createBrowserApiRoutes, type BrowserApiRoutes } from "./browser-api/routes.ts";
 import { sendJson, sendText } from "./http/response.ts";
+import type { WorkspaceFileTarget } from "./workspace-file-reference.ts";
 
 type WebCoordinationCapabilities = BrowserCoordinationCapabilities & AgentCoordinationCapabilities;
 
@@ -21,6 +22,11 @@ export interface WebServerOptions {
   assetDirectory?: string;
   openWorkspace?: (taskId: string, workspace: TaskWorkspaceView) => Promise<void>;
   openWorkspaceInVisualStudioCode?: (taskId: string, workspace: TaskWorkspaceView) => Promise<void>;
+  openWorkspaceFile?: (
+    taskId: string,
+    workspace: TaskWorkspaceView,
+    target: WorkspaceFileTarget,
+  ) => Promise<void>;
 }
 
 export interface RunningWebServer {

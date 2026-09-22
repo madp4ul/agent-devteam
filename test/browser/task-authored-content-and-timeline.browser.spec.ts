@@ -1,5 +1,109 @@
 import { expect, test } from "./browser-fixture.ts";
 
+test("task Markdown local-file links share the owning workspace while web links stay external", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.description = "Review the [description file](docs/description.md#L4).";
+    detail.task.comments[0].body = [
+      "Inspect [the local note](docs/review%20notes.md#L14) and [web evidence](https://example.com/evidence).",
+      "",
+      "Keep [another task](/tasks/T-0002) and [a protocol-relative site](//example.com/guide) as browser links.",
+      "",
+      "Open [a native absolute path](C:/task-workspaces/T-0001/docs/review.md:22) through the same workspace check.",
+      "",
+      "The [removed file](docs/removed.md:8) should report why it cannot open.",
+    ].join("\n");
+    const activation = detail.task.activations.find((candidate: { attempts: unknown[] }) => candidate.attempts.length > 0);
+    activation.attempts[0].outcome.summary = "Review the [outcome file](docs/outcome.md#L9).";
+    detail.task.activity.push({
+      id: "workspace-link-conversation-message",
+      type: "conversation.continued",
+      actor: { kind: "user", id: "local-user" },
+      occurredAt: "2026-08-15T12:00:00.000Z",
+      details: {
+        conversationId: "browser-conversation",
+        messageId: "workspace-link-message",
+        activationId: "workspace-link-activation",
+        messageBody: "Review the [activity message file](docs/message.md:5).",
+      },
+    });
+    await route.fulfill({ response, json: detail });
+  });
+  const openedReferences: string[] = [];
+  await page.route("**/api/tasks/T-0001/workspace/files/open", async (route) => {
+    const body = route.request().postDataJSON() as { reference: string };
+    openedReferences.push(body.reference);
+    if (body.reference.includes("removed")) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({
+          reason: "file-not-found",
+          diagnostic: "The linked file no longer exists in this task workspace.",
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ accepted: true }),
+    });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const comment = page.locator(".comment-entry").filter({ hasText: "Inspect the local note" });
+  const local = comment.getByRole("link", { name: "the local note" });
+  const web = comment.getByRole("link", { name: "web evidence" });
+  const task = comment.getByRole("link", { name: "another task" });
+  const protocolRelative = comment.getByRole("link", { name: "a protocol-relative site" });
+  await expect(local).toHaveAttribute(
+    "href",
+    "/api/tasks/T-0001/workspace/files/open?reference=docs%2Freview%2520notes.md%23L14",
+  );
+  await expect(web).toHaveAttribute("href", "https://example.com/evidence");
+  await expect(web).toHaveAttribute("target", "_blank");
+  await expect(task).toHaveAttribute("href", "/tasks/T-0002");
+  await expect(task).toHaveAttribute("target", "_blank");
+  await expect(protocolRelative).toHaveAttribute("href", "//example.com/guide");
+  await expect(page.getByRole("region", { name: "Description" }).getByRole("link", { name: "description file" }))
+    .toHaveAttribute("href", "/api/tasks/T-0001/workspace/files/open?reference=docs%2Fdescription.md%23L4");
+  const outcomeFile = page.getByRole("region", { name: "Outcome" }).getByRole("link", { name: "outcome file" });
+  await expect(outcomeFile).toHaveAttribute(
+    "href",
+    "/api/tasks/T-0001/workspace/files/open?reference=docs%2Foutcome.md%23L9",
+  );
+  await expect(page.getByRole("link", { name: "activity message file" })).toHaveAttribute(
+    "href",
+    "/api/tasks/T-0001/workspace/files/open?reference=docs%2Fmessage.md%3A5",
+  );
+
+  await local.click();
+  await expect(comment.getByRole("status")).toHaveText("Opened the local note.");
+  await expect(comment.getByRole("status")).toHaveCSS("color", "rgb(23, 78, 58)");
+  expect(openedReferences).toEqual(["docs/review%20notes.md#L14"]);
+
+  await comment.getByRole("link", { name: "a native absolute path" }).click();
+  await expect(comment.getByRole("status").filter({ hasText: "Opened a native absolute path." })).toBeVisible();
+  expect(openedReferences).toEqual([
+    "docs/review%20notes.md#L14",
+    "C:/task-workspaces/T-0001/docs/review.md:22",
+  ]);
+
+  await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+  await comment.getByRole("link", { name: "removed file" }).click();
+  await expect(comment.getByRole("alert")).toHaveText(
+    "The linked file no longer exists in this task workspace.",
+  );
+  await expect(comment.getByRole("alert")).toHaveCSS("color", "rgb(255, 173, 156)");
+  expect(openedReferences).toEqual([
+    "docs/review%20notes.md#L14",
+    "C:/task-workspaces/T-0001/docs/review.md:22",
+    "docs/removed.md:8",
+  ]);
+});
+
 test("rendered Markdown code stays within every authored task surface", async ({ page }) => {
   const unbrokenToken = `https://example.invalid/${"unbroken".repeat(24)}`;
   const codeSource = [
