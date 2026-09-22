@@ -1,9 +1,9 @@
 # 02 — Stop agent conversation scrolling from snapping back to the bottom
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Blocked by:** None.
-**Next step:** Reproduce the bug and diagnose the follow-to-bottom behavior.
+**Next step:** User review.
 
 ## Report and reproduction
 
@@ -22,13 +22,13 @@ and settled conversations and isolate refresh/render triggers before choosing a 
 
 ## Desired behavior and acceptance criteria
 
-- [ ] Wheel, trackpad, keyboard, and scrollbar navigation can reach and read older
+- [x] Wheel, trackpad, keyboard, and scrollbar navigation can reach and read older
   messages without an unsolicited jump to the bottom.
-- [ ] New messages, polling, and transcript layout changes preserve a user's
+- [x] New messages, polling, and transcript layout changes preserve a user's
   reading position while they are browsing history.
-- [ ] Intentional live following still works when the reader is at the bottom;
+- [x] Intentional live following still works when the reader is at the bottom;
   define how leaving and returning to that position disables/resumes following.
-- [ ] Add browser regression coverage for the reproduced snapback and intended
+- [x] Add browser regression coverage for the reproduced snapback and intended
   live-follow behavior, including long content.
 
 ## Scope and related work
@@ -41,3 +41,22 @@ to fix the bug. Do not conflate this with board navigation restoration in issue 
 ## Comments
 
 - 2026-09-20: User-described GitHub bug; not independently reproduced during intake.
+
+## Answer
+
+The snapback came from deferring wheel and keyboard intent until an animation
+frame. A trailing event could replace the movement baseline, while pending
+layout or polling work restored the bottom before cancellation became durable.
+
+Upward wheel/trackpad and history-navigation keys now cancel following
+immediately without treating text editing or downward-at-bottom input as leaving
+the live edge. Scrollbar movement cancels through the existing pointer path.
+Cancellation also clears pending bottom restoration, and following resumes only
+after the reader returns within one pixel of the true bottom; the broader 32px
+tolerance remains limited to deciding whether a newly submitted follow-up should
+start in follow mode.
+
+Browser coverage now exercises long-content wheel and incremental trackpad
+gestures, genuine Page Up navigation, scrollbar dragging, polling and layout
+races, preserved history reading, deliberate bottom return, and continued live
+following at the bottom.

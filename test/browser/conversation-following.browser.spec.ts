@@ -106,6 +106,19 @@ async function submitFromDistance(page: Page, distance: number): Promise<Locator
   return viewport;
 }
 
+async function openFollowedConversation(page: Page): Promise<Locator> {
+  await installAcceptedFollowUp(page);
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  return submitFromDistance(page, 0);
+}
+
+async function growFollowUpMessage(viewport: Locator): Promise<void> {
+  await viewport.locator("[data-conversation-message='bottom-follow-up-message']").evaluate((element) => {
+    (element as HTMLElement).style.minHeight = "360px";
+  });
+}
+
 test("a bottom-anchored conversation keeps an accepted follow-up visible", async ({ page }) => {
   await installAcceptedFollowUp(page);
   await page.goto("/tasks/T-0001");
@@ -188,9 +201,7 @@ test("layout growth keeps a followed conversation bottom-anchored", async ({ pag
   const viewport = await submitFromDistance(page, 0);
   await expect.poll(() => bottomDistance(page)).toBeLessThanOrEqual(1);
 
-  await viewport.locator("[data-conversation-message='bottom-follow-up-message']").evaluate((element) => {
-    (element as HTMLElement).style.minHeight = "360px";
-  });
+  await growFollowUpMessage(viewport);
 
   await expect.poll(() => bottomDistance(page)).toBeLessThanOrEqual(1);
 });
@@ -214,9 +225,7 @@ test("non-scroll interaction does not cancel bottom following", async ({ page })
   await composer.press("Home");
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 
-  await message.evaluate((element) => {
-    (element as HTMLElement).style.minHeight = "360px";
-  });
+  await growFollowUpMessage(viewport);
 
   await expect.poll(() => bottomDistance(page)).toBeLessThanOrEqual(1);
 });
@@ -241,6 +250,106 @@ test("user scrolling wins over an already pending layout follow", async ({ page 
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeCloseTo(userPosition, 0);
   expect(await bottomDistance(page)).toBeGreaterThan(200);
+});
+
+test("a trailing wheel event cannot snap an upward gesture back to the bottom", async ({ page }) => {
+  const viewport = await openFollowedConversation(page);
+  await expect.poll(() => bottomDistance(page)).toBeLessThanOrEqual(1);
+
+  const userPosition = await viewport.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -240 }));
+    element.scrollTop -= 240;
+    return element.scrollTop;
+  });
+  await viewport.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }));
+  });
+
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeCloseTo(userPosition, 0);
+  expect(await bottomDistance(page)).toBeGreaterThan(150);
+});
+
+test("an incremental trackpad gesture does not rearm following inside the bottom tolerance", async ({ page }) => {
+  const viewport = await openFollowedConversation(page);
+
+  const userPosition = await viewport.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -8 }));
+    element.scrollTop -= 8;
+    return element.scrollTop;
+  });
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  await growFollowUpMessage(viewport);
+
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeCloseTo(userPosition, 0);
+  expect(await bottomDistance(page)).toBeGreaterThan(300);
+});
+
+test("returning to the bottom resumes live following", async ({ page }) => {
+  const viewport = await openFollowedConversation(page);
+
+  await viewport.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -240 }));
+    element.scrollTop -= 240;
+  });
+  await expect.poll(() => bottomDistance(page)).toBeGreaterThan(150);
+
+  await viewport.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect.poll(() => bottomDistance(page)).toBeLessThanOrEqual(1);
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  await growFollowUpMessage(viewport);
+
+  await expect.poll(() => bottomDistance(page)).toBeLessThanOrEqual(1);
+});
+
+test("downward wheel input at the bottom keeps live following active", async ({ page }) => {
+  const viewport = await openFollowedConversation(page);
+
+  await viewport.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 120 }));
+  });
+  await growFollowUpMessage(viewport);
+
+  await expect.poll(() => bottomDistance(page)).toBeLessThanOrEqual(1);
+});
+
+test("repeated keyboard navigation can leave the followed bottom", async ({ page }) => {
+  const viewport = await openFollowedConversation(page);
+  const message = viewport.locator("[data-conversation-message='bottom-follow-up-message']");
+  await message.focus();
+
+  await page.keyboard.press("PageUp");
+  await expect.poll(() => bottomDistance(page)).toBeGreaterThan(150);
+  const firstPosition = await viewport.evaluate((element) => element.scrollTop);
+  await page.keyboard.press("PageUp");
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeLessThan(firstPosition);
+  const userPosition = await viewport.evaluate((element) => element.scrollTop);
+  await growFollowUpMessage(viewport);
+
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeCloseTo(userPosition, 0);
+  expect(await bottomDistance(page)).toBeGreaterThan(150);
+});
+
+test("scrollbar dragging leaves live following and preserves the reading position", async ({ page }) => {
+  const viewport = await openFollowedConversation(page);
+  const bounds = await viewport.boundingBox();
+  expect(bounds).not.toBeNull();
+
+  await viewport.dispatchEvent("pointerdown", {
+    bubbles: true,
+    clientX: bounds!.x + bounds!.width - 2,
+    clientY: bounds!.y + bounds!.height / 2,
+  });
+  const userPosition = await viewport.evaluate((element) => {
+    element.scrollTop -= 8;
+    return element.scrollTop;
+  });
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  await viewport.dispatchEvent("pointerup", { bubbles: true });
+  await growFollowUpMessage(viewport);
+
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeCloseTo(userPosition, 0);
+  expect(await bottomDistance(page)).toBeGreaterThan(300);
 });
 
 test("user scrolling wins when a polling refresh commits before scroll measurement", async ({ page }) => {

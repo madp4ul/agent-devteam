@@ -19,6 +19,8 @@ import {
 
 const ACTIVE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 1_000;
 const IDLE_CONVERSATION_POLL_INTERVAL_MILLISECONDS = 2_000;
+const BOTTOM_FOLLOW_TOLERANCE_PX = 32;
+const BOTTOM_RESUME_TOLERANCE_PX = 1;
 export function AgentConversationDialog({
   taskId,
   conversationId,
@@ -65,7 +67,11 @@ export function AgentConversationDialog({
   const retirementIdempotencyKey = useRef(crypto.randomUUID());
   const pendingActivationId = useRef<string | undefined>(selectedPendingActivationId);
   const cancelBottomFollowing = (): void => {
-    if (bottomFollowing.current === "following") bottomFollowing.current = "cancelled";
+    if (bottomFollowing.current !== "following") return;
+    bottomFollowing.current = "cancelled";
+    pendingScrollPosition.current = null;
+    if (bottomFollowFrame.current !== undefined) window.cancelAnimationFrame(bottomFollowFrame.current);
+    bottomFollowFrame.current = undefined;
   };
   const cancelIfViewportMoved = (startingScrollTop: number): void => {
     if (bottomFollowing.current !== "following") return;
@@ -152,7 +158,7 @@ export function AgentConversationDialog({
               ? "bottom"
               : bottomFollowing.current === "cancelled"
                 ? content.scrollTop
-                : content.scrollHeight - content.clientHeight - content.scrollTop <= 32
+                : isAtConversationBottom(content, BOTTOM_FOLLOW_TOLERANCE_PX)
               ? "bottom"
               : content.scrollTop;
           pendingTextSelection.current = captureTextSelectionWithin(content);
@@ -280,7 +286,7 @@ export function AgentConversationDialog({
           ref={contentRef}
           className="transcript-content"
           onWheelCapture={(event) => {
-            cancelIfViewportMoved(event.currentTarget.scrollTop);
+            if (event.deltaY < 0) cancelBottomFollowing();
           }}
           onTouchMove={(event) => {
             cancelIfViewportMoved(event.currentTarget.scrollTop);
@@ -295,14 +301,17 @@ export function AgentConversationDialog({
           onPointerCancel={() => {
             pointerScrolling.current = false;
           }}
-          onScroll={() => {
-            if (pointerScrolling.current) cancelBottomFollowing();
+          onScroll={(event) => {
+            const atResumeBottom = isAtConversationBottom(event.currentTarget, BOTTOM_RESUME_TOLERANCE_PX);
+            if (pointerScrolling.current && !atResumeBottom) cancelBottomFollowing();
+            if (bottomFollowing.current === "cancelled" && atResumeBottom) bottomFollowing.current = "following";
           }}
           onKeyDown={(event) => {
             if (
               bottomFollowing.current === "following" &&
-              ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)
-            ) cancelIfViewportMoved(event.currentTarget.scrollTop);
+              !isTextEditingTarget(event.target) &&
+              (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey))
+            ) cancelBottomFollowing();
           }}
         >
           {error !== undefined ? (
@@ -335,8 +344,7 @@ export function AgentConversationDialog({
               acceptWindowDrops={!retirementOpen}
               onSubmissionStart={() => {
                 const content = contentRef.current;
-                bottomFollowing.current = content !== null &&
-                  content.scrollHeight - content.clientHeight - content.scrollTop <= 32
+                bottomFollowing.current = content !== null && isAtConversationBottom(content, BOTTOM_FOLLOW_TOLERANCE_PX)
                   ? "following"
                   : "inactive";
               }}
@@ -425,6 +433,16 @@ function activationReasonLabel(reason: AgentConversationView["originatingActivat
     case "blockers-cleared": return "Blockers cleared";
     case "user-follow-up": return "User follow-up";
   }
+}
+
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable);
+}
+
+function isAtConversationBottom(element: HTMLElement, tolerance: number): boolean {
+  return element.scrollHeight - element.clientHeight - element.scrollTop <= tolerance;
 }
 
 function ConversationActionsMenu({

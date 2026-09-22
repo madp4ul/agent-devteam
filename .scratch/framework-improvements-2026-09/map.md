@@ -15,7 +15,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | Issue | Request | Next step |
 | --- | --- | --- |
 | [01](issues/01-evaluate-mcp-usage-by-context-position.md) | MCP usage by context position, per tool and per conversation | Research call-time evidence, then grill the statistics design |
-| [02](issues/02-stop-conversation-scroll-snapback.md) | Stop conversation scrolling from snapping back to the bottom | Reproduce and diagnose the scroll-follow bug |
+| [02](issues/02-stop-conversation-scroll-snapback.md) | Stop conversation scrolling from snapping back to the bottom | Implemented; user review |
 | [03](issues/03-preserve-board-navigation-state.md) | Restore board state when returning from task details | Implemented; user review |
 | [04](issues/04-reduce-routine-permission-interruptions.md) | Reduce permission interruptions for routine authorized commands | Investigate concrete denials and simpler supported policy options |
 | [05](issues/05-open-local-file-links-from-comments.md) | Make task-comment local file links open the actual file | Reproduce URL handling and clarify the opening experience |
@@ -46,6 +46,10 @@ and browser coverage of icon/button geometric centering.
 
 ## Decisions so far
 
+- [02](issues/02-stop-conversation-scroll-snapback.md): implemented immediate
+  cancellation for upward history navigation, exact-bottom resumption, and
+  long-content browser coverage across wheel, trackpad, keyboard, scrollbar,
+  polling, and layout changes.
 - [03](issues/03-preserve-board-navigation-state.md): implemented by extending
   existing history restoration; diagnosis and verification are in the ticket.
 
