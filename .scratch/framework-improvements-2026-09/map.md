@@ -1,9 +1,10 @@
 # Framework improvement intake — September 2026
 
-This intake records ten user-reported issues dictated on 2026-09-20. Nine were
-reported as existing GitHub issues; issue 08 was added during the conversation.
-GitHub URLs and numbers were not supplied, and the originals were not fetched.
-The user's account below is the source, not independent reproduction or diagnosis.
+This intake records seventeen user-reported issues dictated on 2026-09-20 and
+2026-09-23. Nine of the original ten were reported as existing GitHub issues;
+issue 08 and issues 11–17 were added during the conversations. GitHub URLs and
+numbers were not supplied, and the originals were not fetched. The user's
+account below is the source, not independent reproduction or diagnosis.
 
 Each issue has its own file. This is a backlog intake, not an agreed implementation
 specification. Issue files track current status; none was labelled `ready-for-agent` at intake.
@@ -24,6 +25,13 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [08](issues/08-use-full-height-conversation-dialog.md) | Use the browser's full height for the conversation dialog | Specify and verify the full-height overlay layout |
 | [09](issues/09-redesign-cross-task-mcp-capabilities.md) | Inventory and redesign MCP tools for broad board collaboration | Wayfinder / grill-with-docs for capabilities and invariants |
 | [10](issues/10-address-agents-on-other-tasks.md) | Address the correct task-scoped agent participant | Resolve addressing within issue 09's capability design |
+| [11](issues/11-collapse-long-task-descriptions.md) | Collapse task descriptions longer than 20 lines behind Show more / Show less | Specify the shared overflow behavior, then implement with browser coverage |
+| [12](issues/12-audit-agent-instructions-with-user.md) | Audit all agent instructions for unintended restrictions | User and agent review the instruction inventory together before any edits |
+| [13](issues/13-support-tables-in-markdown-content.md) | Render tables in every Markdown content surface without widening the UI | Inventory Markdown surfaces, then specify and implement shared table support |
+| [14](issues/14-avoid-redundant-activation-after-follow-up-move.md) | Do not reactivate a running follow-up agent when it moves into its watched column | Extend and verify the existing mention-activation exception semantics |
+| [15](issues/15-redesign-blockers-around-explicit-resume-agents.md) | Replace task-wide execution blocking with explicit per-blocker resume responsibility | Grill the blocker lifecycle, interaction model, and migration before specifying it |
+| [16](issues/16-navigate-timeline-with-column-movement-map.md) | Navigate long timelines through a compact column-lane movement map | Grill and prototype the navigation model against real long histories |
+| [17](issues/17-compact-routine-timeline-activity.md) | Compact routine timeline activity while preserving items that merit attention | Define reliable prominence signals and filtering behavior before implementation |
 
 ## Workflow and relationships
 
@@ -39,6 +47,22 @@ Issues 05 and 06 both concern files but describe separate defects/capabilities.
 Issue 10 depends on the relevant capability decisions from 09; its scenario and
 identity requirements should inform that design from the start. Issue 01 can
 evaluate MCP changes later but is not a prerequisite for 09 or 10.
+
+Issues 11 and 13 both affect rendered Markdown and should share renderer/layout
+coverage where practical, but either may be delivered independently. Issue 12
+requires the user's direct participation: do not turn it into an autonomous
+implementation task or change instructions without reviewing the findings and
+proposed wording with the user. Issue 14 should build on the narrow running
+mention-activation exception recorded in the coordination framework rather than
+introducing a separate activation model.
+
+Issue 15 intentionally reopens the blocker lifecycle delivered by the original
+coordination framework and requires a new design decision rather than a local UI
+fix. Issues 16 and 17 both improve long-timeline scanning and should be designed
+together enough to avoid competing controls, but movement navigation and
+content prominence remain separate capabilities. Timeline prominence in issue
+17 must not silently create or resolve the framework's formal user-attention
+reasons.
 
 For browser changes, apply repository dark/light appearance requirements and
 accessible controls. Any new icon-only button pattern uses shared decorative SVGs
@@ -60,3 +84,7 @@ and browser coverage of icon/button geometric centering.
 
 - 2026-09-20: Recorded from the user's dictation; preserve the concrete examples
   when converting these reports into specifications.
+- 2026-09-23: Added issues 11–14 from a second dictation. Three further issues
+  remained to be supplied by the user.
+- 2026-09-23: Added the remaining issues 15–17 from the user's follow-up
+  dictation, bringing this intake to seventeen issues.
