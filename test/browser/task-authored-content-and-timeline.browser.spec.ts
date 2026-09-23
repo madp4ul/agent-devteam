@@ -397,7 +397,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await movement.press("ArrowDown");
   await expect(page.getByText(/Moved T-0001 to Completion/)).toBeVisible();
 
-  const commentBounds = await page.getByRole("region", { name: "Add comment" }).boundingBox();
+  const commentBounds = await page.locator('[data-task-section="comment"]').boundingBox();
   const timelineBounds = await page.getByRole("region", { name: "Task timeline" }).boundingBox();
   expect(commentBounds).not.toBeNull();
   expect(timelineBounds).not.toBeNull();
@@ -907,8 +907,8 @@ test("task details prioritize agent activity and preserve the responsive reading
     "comment",
     "timeline",
     "workspace",
-    "move",
     "relationships",
+    "move",
     "conversations",
   ]);
 });

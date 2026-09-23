@@ -39,6 +39,8 @@ test("compact conversation rows stay last in the supporting column and open by k
   };
   const conversationId = detail.task.activations.find(({ conversationId }) => conversationId !== null)?.conversationId;
   expect(conversationId).not.toBeNull();
+  const latestActivityAt = new Date(Date.now() - 5 * 60_000).toISOString();
+  const historicalActivityAt = new Date(Date.now() - 10 * 60_000).toISOString();
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
     const taskDetail = await response.json();
@@ -52,7 +54,7 @@ test("compact conversation rows stay last in the supporting column and open by k
           present: true,
         },
         label: "Inspect existing coordination",
-        latestActivityAt: "2026-08-09T12:05:00.000Z",
+        latestActivityAt,
         status: null,
         continuation: { available: true },
       },
@@ -65,7 +67,7 @@ test("compact conversation rows stay last in the supporting column and open by k
           present: false,
         },
         label: "Verify the responsive navigation order",
-        latestActivityAt: "2026-08-09T12:00:00.000Z",
+        latestActivityAt: historicalActivityAt,
         status: null,
         continuation: { available: false, reason: "owning-agent-unavailable" },
       },
@@ -93,7 +95,7 @@ test("compact conversation rows stay last in the supporting column and open by k
     activityTimeBox!.y + activityTimeBox!.height / 2 - (agentNameBox!.y + agentNameBox!.height / 2),
   )).toBeLessThanOrEqual(2);
   await expect(conversations).not.toContainText(/attempt|token|duration|completed|unavailable/i);
-  const supportingOrder = await page.locator(".detail-column > [data-task-section]").evaluateAll((elements) =>
+  const supportingOrder = await page.locator(".detail-column [data-task-section]").evaluateAll((elements) =>
     elements.map((element) => element.getAttribute("data-task-section")),
   );
   expect(supportingOrder.at(-1)).toBe("conversations");
@@ -110,7 +112,7 @@ test("compact conversation rows stay last in the supporting column and open by k
 
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const [stickyTop, topbarBottom] = await Promise.all([
-    page.locator('[data-task-section="conversations"]').evaluate((element) => element.getBoundingClientRect().top),
+    page.locator(".detail-sticky-controls").evaluate((element) => element.getBoundingClientRect().top),
     page.locator(".detail-topbar").evaluate((element) => element.getBoundingClientRect().bottom),
   ]);
   expect(stickyTop).toBeGreaterThanOrEqual(topbarBottom);

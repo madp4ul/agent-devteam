@@ -505,6 +505,19 @@ test("only the user can recover an unmapped task into a defined column", async (
     databasePath: fixture.databasePath,
   });
   t.after(() => changed.close());
+  const userDetail = changed.queryUserTaskDetail(created.task.id);
+  assert.equal(userDetail.available, true);
+  if (userDetail.available) {
+    assert.equal(userDetail.inspection.column.id, "implementation");
+    assert.deepEqual(userDetail.agentInspectableContent, {
+      taskFields: [],
+      commentIds: [],
+      relationshipIds: [],
+      activityIds: [],
+      conversationMessageIds: [],
+      attachmentIds: [],
+    });
+  }
   const rejected = changed.moveTask({
     taskId: created.task.id,
     destinationColumnId: "backlog",

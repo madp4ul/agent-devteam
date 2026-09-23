@@ -318,19 +318,6 @@ export function TaskPage({
                 attemptRunning={detail.activeRun !== null}
               />
             </div>
-            {task.archived ? null : (
-              <div data-task-section="move">
-                <MoveTaskPanel
-                  columns={board.columns}
-                  currentColumnId={task.columnId}
-                  currentColumnName={board.columns.find((column) => column.id === task.columnId)?.name ?? task.columnId}
-                  {...(currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id })}
-                  pending={pendingTaskId !== undefined}
-                  onMove={async (column) => move({ id: task.id, revision: task.revision }, column)}
-                  inspectable={inspectableTaskFields.has("column")}
-                />
-              </div>
-            )}
             <div data-task-section="relationships">
             <TaskRelationshipsPanel
               detail={detail}
@@ -338,18 +325,35 @@ export function TaskPage({
               onFeedback={setFeedback}
             />
             </div>
-            {detail.conversations.length === 0 ? null : (
-              <div data-task-section="conversations">
-                <TaskConversationsPanel
-                  taskId={task.id}
-                  conversations={detail.conversations}
-                  conversationCost={detail.conversationCost}
-                  agentInspectableContent={detail.agentInspectableContent}
-                  onCommentSource={(sourceId) => setTimelineSourceRequest((current) => ({
-                    sourceId,
-                    sequence: (current?.sequence ?? 0) + 1,
-                  }))}
-                />
+            {task.archived && detail.conversations.length === 0 ? null : (
+              <div className="detail-sticky-controls">
+                {task.archived ? null : (
+                  <div data-task-section="move">
+                    <MoveTaskPanel
+                      columns={board.columns}
+                      currentColumnId={task.columnId}
+                      currentColumnName={board.columns.find((column) => column.id === task.columnId)?.name ?? task.columnId}
+                      {...(currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id })}
+                      pending={pendingTaskId !== undefined}
+                      onMove={async (column) => move({ id: task.id, revision: task.revision }, column)}
+                      inspectable={inspectableTaskFields.has("column")}
+                    />
+                  </div>
+                )}
+                {detail.conversations.length === 0 ? null : (
+                  <div data-task-section="conversations">
+                    <TaskConversationsPanel
+                      taskId={task.id}
+                      conversations={detail.conversations}
+                      conversationCost={detail.conversationCost}
+                      agentInspectableContent={detail.agentInspectableContent}
+                      onCommentSource={(sourceId) => setTimelineSourceRequest((current) => ({
+                        sourceId,
+                        sequence: (current?.sequence ?? 0) + 1,
+                      }))}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>

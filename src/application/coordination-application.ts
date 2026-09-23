@@ -589,11 +589,25 @@ export class CoordinationApplication {
     const inspection = this.queryTaskInspectionForUser(taskId);
     if (!inspection.available) return inspection;
     const agentInspection = this.queryTaskInspection(taskId);
-    if (!agentInspection.available) return agentInspection;
-    const agentActivity = this.queryTaskActivity(taskId);
-    if (!agentActivity.available) return agentActivity;
-    const agentAttachments = this.queryTaskAttachments(taskId);
-    if (!agentAttachments.available) return agentAttachments;
+    let agentInspectableContent: AgentInspectableTaskContentView = {
+      taskFields: [],
+      commentIds: [],
+      relationshipIds: [],
+      activityIds: [],
+      conversationMessageIds: [],
+      attachmentIds: [],
+    };
+    if (agentInspection.available) {
+      const agentActivity = this.queryTaskActivity(taskId);
+      if (!agentActivity.available) return agentActivity;
+      const agentAttachments = this.queryTaskAttachments(taskId);
+      if (!agentAttachments.available) return agentAttachments;
+      agentInspectableContent = describeAgentInspectableTaskContent(
+        agentInspection.task,
+        agentActivity.activity,
+        agentAttachments.attachments,
+      );
+    }
     const collaborators = this.queryCollaborators();
     const conversationIndex = this.queryTaskConversationIndex(taskId);
     const activeRuns = this.queryActiveRuns();
@@ -604,11 +618,7 @@ export class CoordinationApplication {
       inspection: inspection.task,
       relationshipTasks: this.readUserRelatedTasks(loaded.task),
       timelineRelationshipTasks: this.readUserTimelineRelatedTasks(loaded.task),
-      agentInspectableContent: describeAgentInspectableTaskContent(
-        agentInspection.task,
-        agentActivity.activity,
-        agentAttachments.attachments,
-      ),
+      agentInspectableContent,
       activeRun: activeRuns.find((run) => run.taskId === taskId) ?? null,
       activeRuns,
       automation: this.queryAutomation(),

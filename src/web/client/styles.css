@@ -322,7 +322,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .comment-timeline-flow .detail-panel.comment-panel.comment-panel-docked { position: fixed; z-index: 10; right: auto; bottom: 0; left: var(--comment-composer-left); width: var(--comment-composer-width); }
 .comment-panel > h2 { position: relative; top: -.5rem; }
 .detail-panel, .move-panel, .timeline-section { border: 1px solid var(--line); border-radius: .85rem; background: var(--paper); padding: 1.3rem; box-shadow: 0 5px 18px rgb(20 34 28 / 4%); }
-.detail-column > [data-task-section="conversations"] { position: sticky; top: var(--detail-sticky-offset); }
+.detail-sticky-controls { position: sticky; top: var(--detail-sticky-offset); display: grid; gap: 1rem; }
 .conversations-panel { padding: 1rem; }
 .conversations-panel h2 { margin: 0; font-size: 1rem; }
 .conversations-panel-heading { margin-bottom: .65rem; }
@@ -444,7 +444,10 @@ textarea { resize: vertical; line-height: 1.5; }
 .attention-groups ul li, .attention-list li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .attention-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .highlighted { outline: 3px solid #d79a14; outline-offset: 3px; }
-.move-select { display: grid; gap: .42rem; margin-top: .8rem; color: #435049; font-size: .8rem; font-weight: 800; }
+.move-column-heading { justify-content: space-between; margin-top: .8rem; color: #435049; font-size: .8rem; font-weight: 800; }
+.move-destination-controls { display: flex; align-items: stretch; gap: .65rem; margin-top: .42rem; }
+.move-destination-controls select { width: 100%; min-width: 0; flex: 1 1 auto; }
+.move-next-column { flex: 0 0 auto; white-space: nowrap; }
 .current-column-source { display: inline-block; margin-top: .7rem; color: var(--forest); font-size: .76rem; font-weight: 750; }
 .timeline-section { padding: clamp(1.2rem, 3vw, 2rem); }
 .timeline-heading-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1.5rem; }
@@ -729,7 +732,7 @@ html[data-theme] .coordination-activity-actions .quiet-action:focus-visible { ou
   .task-heading h1 { font-size: 2rem; }
   .detail-grid { display: block; }
   .detail-column { margin-top: 1rem; }
-  .detail-column > [data-task-section="conversations"] { position: static; }
+  .detail-sticky-controls { position: static; }
   .detail-panel-heading { align-items: flex-start; }
   .task-attention-panel .attention-list li { grid-template-columns: 1fr; align-items: stretch; }
   .task-attention-panel .attention-list li > button,
@@ -740,6 +743,10 @@ html[data-theme] .coordination-activity-actions .quiet-action:focus-visible { ou
   .entry-meta-actions { width: 100%; }
   .comment-coordination { align-items: flex-start; flex-direction: column; }
   .comment-actions { max-width: 100%; justify-content: flex-start; }
+}
+
+@media (max-height: 640px) {
+  .detail-sticky-controls { position: static; }
 }
 
 /* Shared semantic appearance roles. Component rules above retain the accepted light appearance. */
@@ -794,7 +801,7 @@ input, textarea, select { border-color: var(--border-control); color: var(--text
 .activation-dismiss:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); background: transparent; }
 .modal-backdrop { background: var(--backdrop); }
 .modal, .detail-panel, .move-panel, .timeline-section, .token-usage, .transcript-item:not(.message):not(.tool):not(.diagnostic), .relationship-options, .attention-groups > li { border-color: var(--border); color: var(--text); background: var(--surface); box-shadow: 0 5px 18px var(--shadow-color); }
-form label, .move-select { color: var(--text-muted); }
+form label, .move-column-heading { color: var(--text-muted); }
 .description { color: var(--text-emphasis); }
 .workspace-open-options button { color: var(--text); background: transparent; }
 .workspace-history-connector::before { background: var(--border-control); }

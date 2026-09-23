@@ -1,9 +1,9 @@
 # 07 — Keep Move Task sticky and offer a next-column shortcut
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Blocked by:** None.
-**Next step:** Settle next-column edge cases, then specify the focused UI change.
+**Next step:** User review.
 
 ## Problem and requested behavior
 
@@ -19,15 +19,15 @@ needed to select it from a dropdown.
 
 ## Acceptance criteria
 
-- [ ] While reading a long description or comment, Move Task and Agent Conversation
+- [x] While reading a long description or comment, Move Task and Agent Conversation
   remain accessible together in the sidebar, with movement above conversation.
-- [ ] The shortcut names the actual next destination and moves the task with one
+- [x] The shortcut names the actual next destination and moves the task with one
   action while retaining explicit selection of other destinations.
-- [ ] Movement uses existing authoritative behavior, including activation and
+- [x] Movement uses existing authoritative behavior, including activation and
   conflict handling; a stale browser view must not cause a misleading move.
-- [ ] Define shortcut behavior for the final workflow column, Completion, unmapped
+- [x] Define shortcut behavior for the final workflow column, Completion, unmapped
   tasks, and cases where movement is unavailable.
-- [ ] On short/narrow viewports the sticky group does not hide controls or make
+- [x] On short/narrow viewports the sticky group does not hide controls or make
   content unreachable; cover long content and both themes in browser checks.
 
 ## Questions and design constraints
@@ -41,3 +41,14 @@ hierarchy of task content and avoid making a supporting sidebar dominate the pag
 
 - 2026-09-20: User-described GitHub issue; both sticky placement and the shortcut
   are part of the request.
+- 2026-09-22: Implemented Move Task immediately above Conversations in one sticky
+  desktop group. The compact “Next” shortcut sits to the right of the destination
+  selector; its accessible name and tooltip identify the actual destination. It
+  follows board order (including Completion) and uses the existing revision-checked
+  movement command. Completion and unmapped tasks omit the shortcut; an unmapped
+  task retains a labelled current option plus every valid explicit destination.
+  Pending movement disables both controls, and archived tasks retain the existing
+  behavior of exposing no movement controls. Narrow layouts return the group to
+  ordinary document flow. Browser coverage exercises long content, both themes,
+  narrow viewports, Completion, unmapped state, pending movement, and stale-view
+  conflicts.

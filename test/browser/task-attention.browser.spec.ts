@@ -85,6 +85,7 @@ test("needs attention groups by task, locates the card, and opens the task actio
   const attentionReasons = page.getByRole("region", { name: "Needs attention" }).locator(".attention-list li");
   await expect(attentionReasons.first()).toBeVisible();
   await expect(attentionReasons.first().getByRole("button", { name: "View request" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Needs attention" }).getByRole("button"))
+  await expect(page.getByRole("region", { name: "Needs attention" })
+    .getByRole("button", { name: "View request" }))
     .toHaveCount(await attentionReasons.count());
 });
