@@ -16,7 +16,7 @@ import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
-import { MarkdownContent } from "./MarkdownContent.tsx";
+import { TextPreview } from "./TextPreview.tsx";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import { Modal } from "./Modal.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
@@ -54,6 +54,7 @@ export function TaskPage({
 }): ReactNode {
   const [detail, setDetail] = useState<BrowserTaskDetail>();
   const [editing, setEditing] = useState(false);
+  const [expandedDescriptionTaskId, setExpandedDescriptionTaskId] = useState<string>();
   const [archivalPending, setArchivalPending] = useState(false);
   const [discardConfirmation, setDiscardConfirmation] = useState(false);
   const [timelineSourceRequest, setTimelineSourceRequest] = useState<{ sourceId: string; sequence: number }>();
@@ -261,7 +262,16 @@ export function TaskPage({
                   {inspectableTaskFields.has("description") ? <AgentInspectableMarker /> : null}
                 </div>
               </div>
-              <MarkdownContent source={task.description} className="description" />
+              <TextPreview
+                id={`task-description-${task.id}`}
+                text={task.description}
+                expanded={expandedDescriptionTaskId === task.id}
+                onExpanded={(expanded) => setExpandedDescriptionTaskId(expanded ? task.id : undefined)}
+                className="task-description-prose"
+                markdownClassName="description"
+                renderedLineLimit={15}
+                collapsedLabel="Show more"
+              />
             </section>
 
             <div data-task-section="activity">

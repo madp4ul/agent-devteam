@@ -2,13 +2,28 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { MarkdownContent } from "./MarkdownContent.tsx";
 
-export function TextPreview({ id, text, expanded, onExpanded, participants, markdown = true }: {
+export function TextPreview({
+  id,
+  text,
+  expanded,
+  onExpanded,
+  participants,
+  markdown = true,
+  className,
+  markdownClassName,
+  renderedLineLimit,
+  collapsedLabel,
+}: {
   id: string;
   text: string;
   expanded: boolean;
   onExpanded(expanded: boolean): void;
   participants?: Map<string, string>;
   markdown?: boolean;
+  className?: string;
+  markdownClassName?: string;
+  renderedLineLimit?: number;
+  collapsedLabel?: string;
 }): ReactNode {
   const ref = useRef<HTMLDivElement>(null);
   const topBeforeToggle = useRef<number | undefined>(undefined);
@@ -18,8 +33,12 @@ export function TextPreview({ id, text, expanded, onExpanded, participants, mark
     if (element === null) return;
     let animationFrame: number | undefined;
     const measure = (): void => {
-      alignCollapsedHeightToRenderedLine(element);
-      setHiddenLineCount(measureHiddenRenderedLines(element));
+      if (renderedLineLimit === undefined) {
+        alignCollapsedHeightToRenderedLine(element);
+        setHiddenLineCount(measureHiddenRenderedLines(element));
+        return;
+      }
+      setHiddenLineCount(limitToRenderedLines(element, renderedLineLimit));
     };
     const scheduleMeasure = (): void => {
       if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
@@ -31,13 +50,25 @@ export function TextPreview({ id, text, expanded, onExpanded, participants, mark
     measure();
     const observer = new ResizeObserver(scheduleMeasure);
     observer.observe(element);
+    const inheritedStyleObserver = renderedLineLimit === undefined ? undefined : new MutationObserver((records) => {
+      if (records.some((record) =>
+        record.target instanceof Element && record.target !== element && record.target.contains(element))) {
+        scheduleMeasure();
+      }
+    });
+    inheritedStyleObserver?.observe(document.documentElement, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["class", "style", "data-theme"],
+    });
     document.fonts?.addEventListener("loadingdone", scheduleMeasure);
     return () => {
       observer.disconnect();
+      inheritedStyleObserver?.disconnect();
       document.fonts?.removeEventListener("loadingdone", scheduleMeasure);
       if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
     };
-  }, [text]);
+  }, [renderedLineLimit, text]);
   useLayoutEffect(() => {
     const element = ref.current;
     const previousTop = topBeforeToggle.current;
@@ -53,9 +84,23 @@ export function TextPreview({ id, text, expanded, onExpanded, participants, mark
   }, [expanded]);
   return (
     <div className="authored-text">
-      <div id={id} ref={ref} className={`authored-prose${expanded ? " expanded" : ""}`}>
+      <div
+        id={id}
+        ref={ref}
+        className={[
+          "authored-prose",
+          className,
+          renderedLineLimit === undefined ? undefined : "rendered-line-preview",
+          hiddenLineCount > 0 ? "overflowing" : undefined,
+          expanded ? "expanded" : undefined,
+        ].filter(Boolean).join(" ")}
+      >
         {markdown ? (
-          <MarkdownContent source={text} {...(participants === undefined ? {} : { participants })} />
+          <MarkdownContent
+            source={text}
+            {...(markdownClassName === undefined ? {} : { className: markdownClassName })}
+            {...(participants === undefined ? {} : { participants })}
+          />
         ) : (
           <p className="authored-plain-text">{text}</p>
         )}
@@ -70,11 +115,39 @@ export function TextPreview({ id, text, expanded, onExpanded, participants, mark
             onExpanded(!expanded);
           }}
         >
-          {expanded ? "Show less" : `Show ${hiddenLineCount} more ${hiddenLineCount === 1 ? "line" : "lines"}`}
+          {expanded
+            ? "Show less"
+            : collapsedLabel ?? `Show ${hiddenLineCount} more ${hiddenLineCount === 1 ? "line" : "lines"}`}
         </button>
       )}
     </div>
   );
+}
+
+function limitToRenderedLines(element: HTMLDivElement, lineLimit: number): number {
+  element.style.removeProperty("--authored-preview-height");
+  const bounds = element.getBoundingClientRect();
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  const renderedLines: Array<{ top: number; bottom: number }> = [];
+  while (walker.nextNode()) {
+    const range = document.createRange();
+    range.selectNodeContents(walker.currentNode);
+    for (const rect of range.getClientRects()) {
+      if (rect.height === 0) continue;
+      const existingLine = renderedLines.find((line) => Math.abs(line.top - rect.top) <= 0.5);
+      if (existingLine === undefined) renderedLines.push({ top: rect.top, bottom: rect.bottom });
+      else existingLine.bottom = Math.max(existingLine.bottom, rect.bottom);
+    }
+  }
+  renderedLines.sort((left, right) => left.top - right.top);
+  if (renderedLines.length <= lineLimit) return 0;
+  const finalVisibleLine = renderedLines[lineLimit - 1];
+  if (finalVisibleLine === undefined) return 0;
+  element.style.setProperty(
+    "--authored-preview-height",
+    `${Math.ceil(finalVisibleLine.bottom - bounds.top)}px`,
+  );
+  return renderedLines.length - lineLimit;
 }
 
 function nearestVerticalScrollContainer(element: HTMLElement): HTMLElement {

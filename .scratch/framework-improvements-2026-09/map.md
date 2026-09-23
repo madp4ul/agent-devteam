@@ -25,7 +25,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [08](issues/08-use-full-height-conversation-dialog.md) | Use the browser's full height for the conversation dialog | Implemented; user review |
 | [09](issues/09-redesign-cross-task-mcp-capabilities.md) | Inventory and redesign MCP tools for broad board collaboration | Wayfinder / grill-with-docs for capabilities and invariants |
 | [10](issues/10-address-agents-on-other-tasks.md) | Address the correct task-scoped agent participant | Resolve addressing within issue 09's capability design |
-| [11](issues/11-collapse-long-task-descriptions.md) | Collapse task descriptions longer than 20 lines behind Show more / Show less | Specify the shared overflow behavior, then implement with browser coverage |
+| [11](issues/11-collapse-long-task-descriptions.md) | Collapse task descriptions longer than 15 lines behind Show more / Show less | Implemented; user review |
 | [12](issues/12-audit-agent-instructions-with-user.md) | Audit all agent instructions for unintended restrictions | User and agent review the instruction inventory together before any edits |
 | [13](issues/13-support-tables-in-markdown-content.md) | Render tables in every Markdown content surface without widening the UI | Inventory Markdown surfaces, then specify and implement shared table support |
 | [14](issues/14-avoid-redundant-activation-after-follow-up-move.md) | Do not reactivate a running follow-up agent when it moves into its watched column | Extend and verify the existing mention-activation exception semantics |
@@ -82,6 +82,9 @@ and browser coverage of icon/button geometric centering.
 - [08](issues/08-use-full-height-conversation-dialog.md): implemented a
   conversation-specific full-height overlay that preserves the existing width,
   side backdrop, internal scrolling, controls, and modal interaction behavior.
+- [11](issues/11-collapse-long-task-descriptions.md): implemented an accessible
+  15-rendered-line task-description disclosure that remeasures formatted
+  Markdown across responsive width, font, and appearance changes.
 
 ## Comments
 

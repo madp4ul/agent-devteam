@@ -501,7 +501,10 @@ textarea { resize: vertical; line-height: 1.5; }
 .attempt-footer > button { flex: 0 0 auto; padding: .4rem .65rem; font-size: .75rem; }
 .attempt-footer a { color: var(--forest); font-weight: 750; }
 .authored-prose { --authored-preview-limit: 6em; min-width: 0; max-height: var(--authored-preview-height, var(--authored-preview-limit)); overflow: hidden; margin-bottom: .2rem; overflow-wrap: anywhere; }
+.authored-prose.rendered-line-preview { max-height: none; overflow: visible; }
+.authored-prose.rendered-line-preview.overflowing { max-height: var(--authored-preview-height); overflow: hidden; }
 .authored-prose.expanded { max-height: none; overflow: visible; }
+.authored-prose.rendered-line-preview.expanded { max-height: none; overflow: visible; }
 .markdown-content { min-width: 0; max-width: 100%; }
 .markdown-content > :first-child { margin-top: .55rem; }
 .markdown-content > :last-child { margin-bottom: .2rem; }
