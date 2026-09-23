@@ -545,7 +545,8 @@ textarea { resize: vertical; line-height: 1.5; }
 .comment-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
 .comment-actions button { padding: .35rem .6rem; font-size: .72rem; }
 .diagnostic { color: #953824; }
-.transcript-modal { width: min(68rem, 100%); min-width: 0; height: min(52rem, calc(100vh - 2rem)); display: flex; flex-direction: column; overscroll-behavior: contain; }
+.transcript-backdrop { padding-block: 0; }
+.transcript-modal { width: min(68rem, 100%); min-width: 0; height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh; display: flex; flex-direction: column; border-radius: 0; overscroll-behavior: contain; }
 .settings-modal { display: flex; width: min(68rem, 100%); height: min(42rem, calc(100vh - 2rem)); flex-direction: column; overflow: hidden; }
 .settings-layout { display: grid; min-width: 0; min-height: 0; flex: 1 1 auto; grid-template-columns: minmax(10rem, 14rem) 1fr; gap: 1.5rem; }
 .settings-categories { display: flex; flex-direction: column; gap: .25rem; }

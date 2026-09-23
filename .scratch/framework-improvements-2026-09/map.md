@@ -22,7 +22,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [05](issues/05-open-local-file-links-from-comments.md) | Make task-comment local file links open the actual file | Implemented; user review |
 | [06](issues/06-attach-files-to-tasks-and-comments.md) | Attach files directly to tasks and comments | Grill ownership, lifetime, and agent file access |
 | [07](issues/07-keep-task-movement-controls-accessible.md) | Sticky Move Task controls and one-click next-column movement | Clarify next-column edge cases, then specify the UI change |
-| [08](issues/08-use-full-height-conversation-dialog.md) | Use the browser's full height for the conversation dialog | Specify and verify the full-height overlay layout |
+| [08](issues/08-use-full-height-conversation-dialog.md) | Use the browser's full height for the conversation dialog | Implemented; user review |
 | [09](issues/09-redesign-cross-task-mcp-capabilities.md) | Inventory and redesign MCP tools for broad board collaboration | Wayfinder / grill-with-docs for capabilities and invariants |
 | [10](issues/10-address-agents-on-other-tasks.md) | Address the correct task-scoped agent participant | Resolve addressing within issue 09's capability design |
 | [11](issues/11-collapse-long-task-descriptions.md) | Collapse task descriptions longer than 20 lines behind Show more / Show less | Specify the shared overflow behavior, then implement with browser coverage |
@@ -79,6 +79,9 @@ and browser coverage of icon/button geometric centering.
 - [05](issues/05-open-local-file-links-from-comments.md): implemented secure
   host-native opening for workspace-local links across task-detail Markdown,
   with explicit feedback and browser/API regression coverage.
+- [08](issues/08-use-full-height-conversation-dialog.md): implemented a
+  conversation-specific full-height overlay that preserves the existing width,
+  side backdrop, internal scrolling, controls, and modal interaction behavior.
 
 ## Comments
 

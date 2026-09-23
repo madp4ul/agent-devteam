@@ -1,4 +1,11 @@
-import { contrastRatio, expect, openAppearance, setAppearance, test } from "./browser-fixture.ts";
+import {
+  availableConversationResponse,
+  contrastRatio,
+  expect,
+  openAppearance,
+  setAppearance,
+  test,
+} from "./browser-fixture.ts";
 
 test.use({ desktopNotificationConsent: "unset" });
 
@@ -295,6 +302,79 @@ test("conversation index remains quiet and readable in dark and light appearance
     await expect(row).toHaveCSS("outline-style", "solid");
     await expect(row).toHaveCSS("outline-width", "2px");
     await expect(row).toHaveCSS("outline-color", theme === "dark" ? "rgb(168, 206, 233)" : "rgb(49, 81, 107)");
+  }
+});
+
+test("conversation dialog uses the full viewport height while preserving its reading layout", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await availableConversationResponse(response);
+    const activation = result.conversation.history.find((entry) => entry.kind === "activation");
+    if (activation === undefined) throw new Error("Expected an activation history entry.");
+    result.conversation.history.push(...Array.from({ length: 12 }, (_, index) => ({
+      kind: "item" as const,
+      activationId: activation.activationId,
+      attemptId: "full-height-layout-attempt",
+      item: {
+        id: `full-height-layout-message-${index}`,
+        kind: "message" as const,
+        role: "agent" as const,
+        text: `Layout evidence ${index + 1}: the transcript keeps a real scroll range while the dialog grows with the viewport.`,
+      },
+    })));
+    await route.fulfill({ response, json: result });
+  });
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+
+  for (const theme of ["dark", "light"] as const) {
+    await page.evaluate((selectedTheme) => {
+      document.documentElement.dataset.theme = selectedTheme;
+    }, theme);
+    await expect(dialog).toHaveCSS(
+      "background-color",
+      theme === "dark" ? "rgb(29, 37, 33)" : "rgb(255, 254, 249)",
+    );
+    expect(await contrastRatio(dialog)).toBeGreaterThanOrEqual(4.5);
+
+    const desktopReadingHeights: number[] = [];
+    for (const { width, height } of [
+      { width: 1200, height: 560 },
+      { width: 1200, height: 900 },
+      { width: 360, height: 640 },
+    ]) {
+      await page.setViewportSize({ width, height });
+      const layout = await dialog.evaluate((element) => {
+        const dialogBounds = element.getBoundingClientRect();
+        const transcript = element.querySelector<HTMLElement>(".transcript-content");
+        if (transcript === null) throw new Error("Expected the conversation transcript.");
+        return {
+          top: dialogBounds.top,
+          bottom: dialogBounds.bottom,
+          left: dialogBounds.left,
+          right: dialogBounds.right,
+          width: dialogBounds.width,
+          viewportHeight: window.innerHeight,
+          viewportWidth: window.innerWidth,
+          transcriptHeight: transcript.clientHeight,
+          transcriptScrollHeight: transcript.scrollHeight,
+          transcriptOverflowY: getComputedStyle(transcript).overflowY,
+        };
+      });
+
+      expect(layout.top).toBe(0);
+      expect(layout.bottom).toBe(layout.viewportHeight);
+      expect(layout.width).toBe(Math.min(1088, layout.viewportWidth - 32));
+      expect(layout.left).toBeGreaterThanOrEqual(16);
+      expect(layout.viewportWidth - layout.right).toBeGreaterThanOrEqual(16);
+      expect(layout.transcriptOverflowY).toBe("auto");
+      expect(layout.transcriptScrollHeight).toBeGreaterThan(layout.transcriptHeight);
+      if (width === 1200) desktopReadingHeights.push(layout.transcriptHeight);
+      await expect(dialog.getByRole("button", { name: "Close conversation" })).toBeVisible();
+      await expect(dialog.getByRole("textbox", { name: "Follow-up message" })).toBeVisible();
+    }
+    expect(desktopReadingHeights[1]!).toBeGreaterThan(desktopReadingHeights[0]!);
   }
 });
 

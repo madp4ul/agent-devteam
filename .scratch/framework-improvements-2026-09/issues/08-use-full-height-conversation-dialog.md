@@ -1,9 +1,9 @@
 # 08 — Use the full browser height for the agent conversation dialog
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Blocked by:** None.
-**Next step:** Specify and implement the focused layout change with browser verification.
+**Next step:** User review.
 
 ## Problem and requested behavior
 
@@ -22,14 +22,14 @@ reuse rather than assuming it. Wider dialogs are not requested.
 
 ## Acceptance criteria
 
-- [ ] The conversation dialog uses the full available browser viewport height,
+- [x] The conversation dialog uses the full available browser viewport height,
   including after resizing, without unnecessary top/bottom outer gaps.
-- [ ] The transcript gains useful reading space while the close control, header,
+- [x] The transcript gains useful reading space while the close control, header,
   and follow-up composer remain accessible and content scrolls appropriately.
-- [ ] Preserve the current horizontal footprint and visible side backdrop where
+- [x] Preserve the current horizontal footprint and visible side backdrop where
   viewport width permits it; keep narrow layouts operable.
-- [ ] Preserve focus containment, dismissal, and background scroll behavior.
-- [ ] Verify dark/light appearance, short and tall viewports, and Settings if its
+- [x] Preserve focus containment, dismissal, and background scroll behavior.
+- [x] Verify dark/light appearance, short and tall viewports, and Settings if its
   shared dialog styling changes.
 
 ## Related work
@@ -42,3 +42,21 @@ This ticket does not propose removing the overlay or replacing it with navigatio
 
 - 2026-09-20: Added directly during dictation; the user could not find an existing
   GitHub issue for it.
+
+## Answer
+
+Implemented a conversation-specific full-height layout. The backdrop keeps its
+existing horizontal padding but removes vertical padding, and the conversation
+dialog now follows the dynamic viewport height without rounded top or bottom
+gaps. Its existing 68rem width cap and internal transcript scrolling remain in
+place, so the header, close control, and follow-up composer stay accessible.
+
+Settings reuses the shared modal component but has its own specialized height
+rule. Because the shared modal styling did not change, Settings intentionally
+keeps its existing compact height.
+
+Browser coverage verifies dark and light appearances at short, tall, and narrow
+viewport sizes, including resize behavior, exact vertical fit, horizontal
+footprint, side backdrop, transcript overflow, and visible controls. Existing
+focus, dismissal, background-scroll, conversation-following, attachment, and
+Settings coverage also passes in the complete browser suite.
