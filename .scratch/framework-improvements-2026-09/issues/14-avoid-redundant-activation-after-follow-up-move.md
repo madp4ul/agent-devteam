@@ -1,7 +1,7 @@
 # 14 — Avoid redundant activation when a follow-up agent moves into its watched column
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Blocked by:** None.
 **Next step:** Confirm the existing mention-activation exception, then extend its invariant to running follow-up activations.
 
@@ -24,22 +24,22 @@ case or suppressing legitimate handoffs.
 
 ## Acceptance criteria
 
-- [ ] When the actor has a running `user-follow-up` activation and successfully
+- [x] When the actor has a running `user-follow-up` activation and successfully
   moves its task into a column watched by that same agent, no additional
   `column-entry` activation is created for the move.
-- [ ] The existing follow-up activation remains running and attributable to its
+- [x] The existing follow-up activation remains running and attributable to its
   original conversation, source message, attempt, and agent.
-- [ ] The move and resulting board state remain fully recorded even though a
+- [x] The move and resulting board state remain fully recorded even though a
   duplicate activation is suppressed.
-- [ ] The exception is based on the authenticated actor's current activation,
+- [x] The exception is based on the authenticated actor's current activation,
   destination watcher identity, and successful responsibility-changing move;
   merely having another activation queued or running is insufficient.
-- [ ] Moves into a different agent's watched column retain normal handoff and
+- [x] Moves into a different agent's watched column retain normal handoff and
   column-entry behavior.
-- [ ] User moves, non-follow-up runs, moves without a running activation,
+- [x] User moves, non-follow-up runs, moves without a running activation,
   unwatched destinations, failed/idempotent moves, retries, and concurrency
   retain their intended existing behavior.
-- [ ] Domain/application tests mirror the established running-mention scenarios
+- [x] Domain/application tests mirror the established running-mention scenarios
   and include same-agent suppression plus different-agent counterexamples.
 
 ## Related work
@@ -54,3 +54,20 @@ substituting the current column watcher.
 
 - 2026-09-23: Added from user dictation. The equivalence to running mention
   activations is a hypothesis to verify against the implementation.
+
+## Answer
+
+Extended the existing responsibility-claim predicate so a validated running
+`user-follow-up` attempt, like a running `agent-mention` attempt, suppresses the
+otherwise redundant `column-entry` activation only when its target agent moves
+into a different column watched by that same agent. The authoritative move,
+revision, activity, attempt provenance, conversation, source message, and
+running activation remain unchanged; moves to another agent still create the
+ordinary handoff activation.
+
+Application coverage now proves same-agent suppression, different-agent
+handoff, and failed follow-up retry continuity with the original activation and
+conversation. The durable domain vocabulary and coordination specification
+record the generalized invariant. Typechecking, the complete Node suite, and
+all 157 browser tests pass; both standards and spec review axes report no
+remaining findings.

@@ -88,6 +88,10 @@ and browser coverage of icon/button geometric centering.
 - [13](issues/13-support-tables-in-markdown-content.md): implemented shared GFM
   tables across task and conversation Markdown with semantic markup,
   theme-aware presentation, and keyboard-operable local overflow containment.
+- [14](issues/14-avoid-redundant-activation-after-follow-up-move.md): generalized
+  the running mention responsibility-claim invariant to conversation follow-ups,
+  preserving the original activation and conversation while retaining ordinary
+  cross-agent handoffs and retry behavior.
 
 ## Comments
 

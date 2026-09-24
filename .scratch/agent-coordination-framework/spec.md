@@ -493,9 +493,9 @@ continuing it, so that task automation can resume with the next expectation.
   use textual mention order. Different tasks may run concurrently.
 - Column entry creates an activation when the destination has a watcher,
   including task creation, re-entry, and entry into a column watched by the
-  currently running agent. The narrow exception is a running agent-mention
-  activation whose target moves into a different column watched by that same
-  agent: the move claims primary responsibility and the existing mention
+  currently running agent. The narrow exception is a running `agent-mention` or
+  `user-follow-up` activation whose target moves into a different column watched
+  by that same agent: the move claims primary responsibility and the existing
   activation continues without a redundant column-entry activation. A move by
   any other activation reason, or into another agent's watched column, retains
   ordinary column-entry behavior. Movement does not terminate the current run.

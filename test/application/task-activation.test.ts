@@ -26,8 +26,39 @@ import {
   createResponsibilityActivationFixture,
   PausedRetryClock,
   readGlobalSafeDirectories,
+  startFollowUpAgentMoveScenario,
   startMentionedAgentMoveScenario,
 } from "../support/activation-fixture.ts";
+
+async function advanceScheduledRetry(options: {
+  application: CoordinationApplication;
+  runtime: ControlledAgentRuntime;
+  clock: ControlledRetryClock;
+  taskId: string;
+  activationIndex: number;
+  requestCount: number;
+  retryAt: string;
+  expectedActivationId: string;
+  expectedReasonType: AgentRunRequest["reason"]["type"];
+}) {
+  let waiting = options.application.queryTask(options.taskId);
+  for (let index = 0; index < 100 && (
+    !waiting.available || waiting.task.activations[options.activationIndex]?.recovery?.state !== "scheduled"
+  ); index += 1) {
+    await delay(10);
+    waiting = options.application.queryTask(options.taskId);
+  }
+  assert.equal(waiting.available, true);
+  if (!waiting.available) throw new Error("Expected a task with a scheduled retry");
+  assert.equal(waiting.task.activations[options.activationIndex]?.recovery?.state, "scheduled");
+
+  options.clock.advanceTo(options.retryAt);
+  const retryRequest = await options.runtime.waitForRequest(options.requestCount);
+  assert.equal(retryRequest.activationId, options.expectedActivationId);
+  assert.equal(retryRequest.reason.type, options.expectedReasonType);
+  assert.equal(retryRequest.attempt.number, 2);
+  return { waitingTask: waiting.task, retryRequest };
+}
 
 test("entering a watched column records one activation with immutable source provenance", async (t) => {
   const fixture = await createActivationFixture("watched-entry");
@@ -169,6 +200,168 @@ test("a running mentioned agent can claim its watched column without a second ac
   if (completed.available) assert.equal(completed.task.activations[0]?.status, "completed");
 });
 
+test("a running follow-up agent can claim its watched column without a second activation", async (t) => {
+  const {
+    application,
+    runtime,
+    created,
+    initialRequest,
+    conversationId,
+    continued,
+    request: followUpRequest,
+  } = await startFollowUpAgentMoveScenario("follow-up-agent-claim");
+  t.after(() => application.close());
+
+  const moved = application.moveTask({
+    taskId: created.task.id,
+    destinationColumnId: "verification",
+    expectedRevision: created.task.revision,
+    actor: { kind: "agent", id: followUpRequest.agent.id },
+    attemptId: followUpRequest.attemptId,
+    idempotencyKey: "follow-up-agent-claims-column",
+  });
+
+  assert.equal(moved.accepted, true);
+  if (!moved.accepted) return;
+  assert.deepEqual(moved.transition, {
+    taskId: created.task.id,
+    fromColumnId: "implementation",
+    toColumnId: "verification",
+  });
+  assert.equal(moved.task.revision, 2);
+  assert.deepEqual(
+    moved.task.activations.map((activation) => ({
+      id: activation.id,
+      conversationId: activation.conversationId,
+      targetAgentId: activation.targetAgentId,
+      status: activation.status,
+      reason: activation.reason,
+      attemptIds: activation.attempts.map((attempt) => attempt.id),
+    })),
+    [
+      {
+        id: initialRequest.activationId,
+        conversationId,
+        targetAgentId: "implementer",
+        status: "completed",
+        reason: created.task.activations[0]?.reason,
+        attemptIds: [initialRequest.attemptId],
+      },
+      {
+        id: followUpRequest.activationId,
+        conversationId,
+        targetAgentId: "implementer",
+        status: "running",
+        reason: { type: "user-follow-up", sourceEventId: continued.message.id },
+        attemptIds: [followUpRequest.attemptId],
+      },
+    ],
+  );
+  assert.deepEqual(
+    moved.task.activity.map((event) => event.type),
+    [
+      "task.created",
+      "activation.created",
+      "attempt.started",
+      "attempt.completed",
+      "conversation.continued",
+      "attempt.started",
+      "task.moved",
+    ],
+  );
+  assert.equal(moved.task.activity.at(-1)?.details.attemptId, followUpRequest.attemptId);
+
+  runtime.complete({ status: "completed", summary: "Claimed and completed the follow-up." });
+  await application.waitForAutomationIdle();
+  assert.equal(runtime.requests.length, 2);
+});
+
+test("a running follow-up agent moving into another agent's watched column still hands off", async (t) => {
+  const { application, runtime, created, request } =
+    await startFollowUpAgentMoveScenario("follow-up-different-agent-counterexample");
+  t.after(() => application.close());
+  const moved = application.moveTask({
+    taskId: created.task.id,
+    destinationColumnId: "review",
+    expectedRevision: created.task.revision,
+    actor: { kind: "agent", id: request.agent.id },
+    attemptId: request.attemptId,
+    idempotencyKey: "follow-up-agent-hands-off",
+  });
+
+  assert.equal(moved.accepted, true);
+  if (!moved.accepted) return;
+  assert.deepEqual(
+    moved.task.activations.map((activation) => ({
+      targetAgentId: activation.targetAgentId,
+      status: activation.status,
+      reasonType: activation.reason.type,
+    })),
+    [
+      { targetAgentId: "implementer", status: "completed", reasonType: "column-entry" },
+      { targetAgentId: "implementer", status: "running", reasonType: "user-follow-up" },
+      { targetAgentId: "reviewer", status: "queued", reasonType: "column-entry" },
+    ],
+  );
+
+  runtime.complete({ status: "completed", summary: "Routed the follow-up to review." });
+  const reviewerRequest = await runtime.waitForRequest(3);
+  assert.equal(reviewerRequest.agent.id, "reviewer");
+  assert.equal(reviewerRequest.reason.type, "column-entry");
+  runtime.complete({ status: "completed", summary: "Reviewed the routed follow-up." });
+  await application.waitForAutomationIdle();
+});
+
+test("a failed follow-up claim retries the same activation and conversation", async (t) => {
+  const clock = new ControlledRetryClock("2026-09-24T10:00:00.000Z");
+  const { application, runtime, created, conversationId, continued, request: firstRequest } =
+    await startFollowUpAgentMoveScenario("follow-up-agent-claim-retry", { clock });
+  t.after(() => application.close());
+  const moved = application.moveTask({
+    taskId: created.task.id,
+    destinationColumnId: "verification",
+    expectedRevision: created.task.revision,
+    actor: { kind: "agent", id: firstRequest.agent.id },
+    attemptId: firstRequest.attemptId,
+    idempotencyKey: "follow-up-claim-before-retry",
+  });
+  assert.equal(moved.accepted, true);
+  runtime.complete({ status: "failed", summary: "Transient follow-up failure after the claim." });
+
+  const { waitingTask, retryRequest } = await advanceScheduledRetry({
+    application,
+    runtime,
+    clock,
+    taskId: created.task.id,
+    activationIndex: 1,
+    requestCount: 3,
+    retryAt: "2026-09-24T10:00:05.000Z",
+    expectedActivationId: firstRequest.activationId,
+    expectedReasonType: "user-follow-up",
+  });
+  assert.equal(waitingTask.columnId, "verification");
+  assert.equal(waitingTask.activations.length, 2);
+  assert.equal(waitingTask.activations[1]?.id, firstRequest.activationId);
+  assert.equal(waitingTask.activations[1]?.conversationId, conversationId);
+  assert.deepEqual(waitingTask.activations[1]?.reason, {
+    type: "user-follow-up",
+    sourceEventId: continued.message.id,
+  });
+  assert.equal(retryRequest.task.columnId, "verification");
+  runtime.complete({ status: "completed", summary: "Completed the claimed follow-up responsibility." });
+  await application.waitForAutomationIdle();
+
+  const completed = application.queryTask(created.task.id);
+  assert.equal(completed.available, true);
+  if (completed.available) {
+    assert.equal(completed.task.activations.length, 2);
+    assert.equal(completed.task.activations[1]?.id, firstRequest.activationId);
+    assert.equal(completed.task.activations[1]?.conversationId, conversationId);
+    assert.equal(completed.task.activations[1]?.status, "completed");
+    assert.equal(completed.task.activations[1]?.attempts.length, 2);
+  }
+});
+
 test("a failed mentioned-agent claim retries the same activation under the normal lifecycle", async (t) => {
   const clock = new ControlledRetryClock("2026-08-11T10:00:00.000Z");
   const { application, runtime, created, mentioned, request: firstRequest } =
@@ -185,26 +378,21 @@ test("a failed mentioned-agent claim retries the same activation under the norma
   assert.equal(moved.accepted, true);
   runtime.complete({ status: "failed", summary: "Transient failure after the claim." });
 
-  let waiting = application.queryTask(created.task.id);
-  for (let index = 0; index < 100 && (
-    !waiting.available || waiting.task.activations[0]?.recovery?.state !== "scheduled"
-  ); index += 1) {
-    await delay(10);
-    waiting = application.queryTask(created.task.id);
-  }
-  assert.equal(waiting.available, true);
-  if (!waiting.available) return;
-  assert.equal(waiting.task.columnId, "implementation");
-  assert.equal(waiting.task.activations.length, 1);
-  assert.equal(waiting.task.activations[0]?.id, firstRequest.activationId);
-  assert.deepEqual(waiting.task.activations[0]?.reason, firstRequest.reason);
-  assert.equal(waiting.task.activations[0]?.recovery?.state, "scheduled");
-
-  clock.advanceTo("2026-08-11T10:00:05.000Z");
-  const retryRequest = await runtime.waitForRequest(2);
-  assert.equal(retryRequest.activationId, firstRequest.activationId);
-  assert.equal(retryRequest.reason.type, "agent-mention");
-  assert.equal(retryRequest.attempt.number, 2);
+  const { waitingTask, retryRequest } = await advanceScheduledRetry({
+    application,
+    runtime,
+    clock,
+    taskId: created.task.id,
+    activationIndex: 0,
+    requestCount: 2,
+    retryAt: "2026-08-11T10:00:05.000Z",
+    expectedActivationId: firstRequest.activationId,
+    expectedReasonType: "agent-mention",
+  });
+  assert.equal(waitingTask.columnId, "implementation");
+  assert.equal(waitingTask.activations.length, 1);
+  assert.equal(waitingTask.activations[0]?.id, firstRequest.activationId);
+  assert.deepEqual(waitingTask.activations[0]?.reason, firstRequest.reason);
   assert.equal(retryRequest.task.columnId, "implementation");
   runtime.complete({ status: "completed", summary: "Completed the claimed responsibility." });
   await application.waitForAutomationIdle();

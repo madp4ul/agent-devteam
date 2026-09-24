@@ -231,6 +231,52 @@ export async function startMentionedAgentMoveScenario(
   return { application, runtime, created, mentioned, request };
 }
 
+export async function startFollowUpAgentMoveScenario(
+  name: string,
+  options: { clock?: AutomationClock } = {},
+) {
+  const fixture = await createResponsibilityActivationFixture(name);
+  const runtime = new ControlledAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    ...(options.clock === undefined ? {} : { automationClock: options.clock }),
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  const created = application.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Continue claimed work",
+    description: "A follow-up lets the owning agent continue into its next responsibility.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: `create-${name}`,
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) throw new Error("Expected follow-up scenario task creation");
+  await application.resumeAutomation();
+  const initialRequest = await runtime.waitForRequest(1);
+  runtime.complete({ status: "completed", summary: "Ready for the follow-up.", threadId: "claim-thread" });
+  await application.waitForAutomationIdle();
+  const conversationId = created.task.activations[0]?.conversationId;
+  assert.ok(conversationId);
+  const continued = application.continueAgentConversation({
+    taskId: created.task.id,
+    conversationId,
+    body: "Please continue and route the task.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: `continue-${name}`,
+  });
+  assert.equal(continued.accepted, true);
+  if (!continued.accepted) throw new Error("Expected follow-up scenario continuation");
+  const request = await runtime.waitForRequest(2);
+  assert.equal(request.reason.type, "user-follow-up");
+  return { application, runtime, created, initialRequest, conversationId, continued, request };
+}
+
 export async function readGlobalSafeDirectories(): Promise<string[]> {
   try {
     const result = await execFileAsync("git", ["config", "--global", "--get-all", "safe.directory"]);

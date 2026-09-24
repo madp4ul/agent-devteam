@@ -83,12 +83,12 @@ column activates its agent; a task in an unwatched column simply remains there.
 Moving a task to another watched column transfers primary responsibility to
 that column's agent. Every entry creates an activation, including creation in a
 watched column, re-entry into a column, and entry into a column watched by the
-currently active agent. The one exception is a currently running agent-mention
-activation whose target agent moves the task into a different column watched by
-that same agent: the move explicitly claims primary responsibility, so the
-existing mention activation continues without a redundant column-entry
-activation. Processes are responsible for avoiding unintended self-handoff
-loops in every other case.
+currently active agent. The one exception is a currently running
+`agent-mention` or `user-follow-up` activation whose target agent moves the task
+into a different column watched by that same agent: the move explicitly claims
+primary responsibility, so the existing activation continues without a
+redundant column-entry activation. Processes are responsible for avoiding
+unintended self-handoff loops in every other case.
 
 **Completion column**:
 The framework-owned final column present on every board. It has a stable
@@ -153,7 +153,10 @@ in their existing order until the failure is explicitly resolved.
 A durable, task-scoped lineage owned by one immutable agent identity. Each
 ordinary activation for the same task and agent normally joins that pair's
 current conversation, retries remain in that conversation, and a user follow-up
-adds a new activation without transferring workflow responsibility.
+adds a new activation without transferring workflow responsibility. During that
+follow-up run, the owning agent may explicitly claim primary responsibility by
+moving the task into another column it watches without creating a redundant
+column-entry activation.
 
 **Conversation context fill**:
 The latest measured active Codex context for the conversation's current thread,

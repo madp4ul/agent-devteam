@@ -634,17 +634,17 @@ export class TaskCommandStore {
       )
       .get(boardId, columnId) as { watching_agent_id: string | null } | undefined;
     if (destination?.watching_agent_id === null || destination === undefined) return;
-    const mentionedAgentIsClaimingResponsibility = currentAttemptId !== undefined && this.#database
+    const runningAgentIsClaimingResponsibility = currentAttemptId !== undefined && this.#database
       .prepare(
         `SELECT 1
          FROM attempts attempt
          JOIN activations activation ON activation.id = attempt.activation_id
          WHERE attempt.id = ? AND attempt.status = 'running'
-           AND activation.reason_type = 'agent-mention'
+           AND activation.reason_type IN ('agent-mention', 'user-follow-up')
            AND activation.target_agent_id = ?`,
       )
       .get(currentAttemptId, destination.watching_agent_id) !== undefined;
-    if (mentionedAgentIsClaimingResponsibility) return;
+    if (runningAgentIsClaimingResponsibility) return;
     const occurredAt = new Date().toISOString();
     this.#activationCreation.createOrdinary({
       taskId,
