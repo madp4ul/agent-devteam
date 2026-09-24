@@ -27,7 +27,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [10](issues/10-address-agents-on-other-tasks.md) | Address the correct task-scoped agent participant | Resolve addressing within issue 09's capability design |
 | [11](issues/11-collapse-long-task-descriptions.md) | Collapse task descriptions longer than 15 lines behind Show more / Show less | Implemented; user review |
 | [12](issues/12-audit-agent-instructions-with-user.md) | Audit all agent instructions for unintended restrictions | User and agent review the instruction inventory together before any edits |
-| [13](issues/13-support-tables-in-markdown-content.md) | Render tables in every Markdown content surface without widening the UI | Inventory Markdown surfaces, then specify and implement shared table support |
+| [13](issues/13-support-tables-in-markdown-content.md) | Render tables in every Markdown content surface without widening the UI | Implemented; user review |
 | [14](issues/14-avoid-redundant-activation-after-follow-up-move.md) | Do not reactivate a running follow-up agent when it moves into its watched column | Extend and verify the existing mention-activation exception semantics |
 | [15](issues/15-redesign-blockers-around-explicit-resume-agents.md) | Replace task-wide execution blocking with explicit per-blocker resume responsibility | Grill the blocker lifecycle, interaction model, and migration before specifying it |
 | [16](issues/16-navigate-timeline-with-column-movement-map.md) | Navigate long timelines through a compact column-lane movement map | Grill and prototype the navigation model against real long histories |
@@ -85,6 +85,9 @@ and browser coverage of icon/button geometric centering.
 - [11](issues/11-collapse-long-task-descriptions.md): implemented an accessible
   15-rendered-line task-description disclosure that remeasures formatted
   Markdown across responsive width, font, and appearance changes.
+- [13](issues/13-support-tables-in-markdown-content.md): implemented shared GFM
+  tables across task and conversation Markdown with semantic markup,
+  theme-aware presentation, and keyboard-operable local overflow containment.
 
 ## Comments
 

@@ -1,4 +1,6 @@
-import { createContext, Fragment, useContext, useState, type MouseEvent, type ReactNode } from "react";
+import { createContext, Fragment, useContext, useState, type MouseEvent, type ReactNode, type WheelEvent } from "react";
+import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
+import { gfmTable } from "micromark-extension-gfm-table";
 import ReactMarkdown, { defaultUrlTransform, type Components, type UrlTransform } from "react-markdown";
 
 import { findParticipantMentions } from "../../application/participant-mentions.ts";
@@ -26,10 +28,24 @@ export function MarkdownContent({ source, participants, className }: {
         skipHtml
         disallowedElements={["img"]}
         components={components}
+        remarkPlugins={[remarkTables]}
         urlTransform={taskId === undefined ? defaultUrlTransform : taskMarkdownUrlTransform}
       >{source}</ReactMarkdown>
     </div>
   );
+}
+
+type TableMarkdownProcessor = {
+  data(): {
+    micromarkExtensions?: ReturnType<typeof gfmTable>[];
+    fromMarkdownExtensions?: ReturnType<typeof gfmTableFromMarkdown>[];
+  };
+};
+
+function remarkTables(this: unknown): void {
+  const data = (this as TableMarkdownProcessor).data();
+  (data.micromarkExtensions ??= []).push(gfmTable());
+  (data.fromMarkdownExtensions ??= []).push(gfmTableFromMarkdown());
 }
 
 function markdownComponents(participants: Map<string, string> | undefined, taskId: string | undefined): Components {
@@ -48,6 +64,9 @@ function markdownComponents(participants: Map<string, string> | undefined, taskI
     strong: ({ children }) => <strong>{content(children)}</strong>,
     em: ({ children }) => <em>{content(children)}</em>,
     blockquote: ({ children }) => <blockquote>{content(children)}</blockquote>,
+    table: MarkdownTable,
+    th: ({ children, style }) => <th style={style}>{content(children)}</th>,
+    td: ({ children, style }) => <td style={style}>{content(children)}</td>,
     a: ({ children, href }) => {
       if (taskId !== undefined && href !== undefined && isLocalFileReference(href)) {
         return <LocalFileLink taskId={taskId} reference={href}>{content(children)}</LocalFileLink>;
@@ -61,6 +80,29 @@ function markdownComponents(participants: Map<string, string> | undefined, taskI
       );
     },
   };
+}
+
+function MarkdownTable({ children }: { children?: ReactNode }): ReactNode {
+  return (
+    <div
+      className="markdown-table-scroll"
+      role="region"
+      aria-label="Scrollable table"
+      tabIndex={0}
+      onWheel={scrollMarkdownTable}
+    >
+      <table>{children}</table>
+    </div>
+  );
+}
+
+function scrollMarkdownTable(event: WheelEvent<HTMLDivElement>): void {
+  const delta = event.deltaX !== 0 ? event.deltaX : event.shiftKey ? event.deltaY : 0;
+  if (delta === 0) return;
+  const scroller = event.currentTarget;
+  const previous = scroller.scrollLeft;
+  scroller.scrollLeft += delta;
+  if (scroller.scrollLeft !== previous) event.preventDefault();
 }
 
 function LocalFileLink({ taskId, reference, children }: {

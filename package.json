@@ -35,6 +35,8 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/codex-sdk": "^0.154.0",
     "ajv": "^8.17.1",
+    "mdast-util-gfm-table": "^2.0.0",
+    "micromark-extension-gfm-table": "^2.1.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",

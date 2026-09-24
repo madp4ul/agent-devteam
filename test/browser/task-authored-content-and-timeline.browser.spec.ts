@@ -1,4 +1,4 @@
-import { expect, test } from "./browser-fixture.ts";
+import { contrastRatio, expect, test } from "./browser-fixture.ts";
 
 test("task Markdown local-file links share the owning workspace while web links stay external", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
@@ -181,6 +181,145 @@ test("rendered Markdown code stays within every authored task surface", async ({
     await copyCase.surface.getByRole("button", { name: copyCase.label }).click();
     await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n")))
       .toBe(`${copyCase.prefix}\n\n${codeBlock}`);
+  }
+});
+
+test("Markdown tables stay semantic and locally scrollable across authored task surfaces", async ({ page }) => {
+  const compactTable = [
+    "A bare URL stays text: https://example.invalid/plain",
+    "",
+    "| Work | Result |",
+    "| :--- | ---: |",
+    "| **Build** | [Passed](https://example.com/result) |",
+  ].join("\n");
+  const columns = Array.from({ length: 9 }, (_, index) => `Evidence ${index + 1}`);
+  const wideTable = [
+    `| ${columns.join(" | ")} |`,
+    `| ${columns.map(() => "---").join(" | ")} |`,
+    `| ${columns.map((_, index) => index === 8 ? "unbroken-evidence-".repeat(12) : `Value ${index + 1}`).join(" | ")} |`,
+  ].join("\n");
+
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.description = compactTable;
+    detail.task.comments[0].body = wideTable;
+    const activation = detail.task.activations.find((candidate: { attempts: unknown[] }) => candidate.attempts.length > 0);
+    activation.attempts[0].outcome.summary = wideTable;
+    detail.task.activity.push({
+      id: "table-conversation-message",
+      type: "conversation.continued",
+      actor: { kind: "user", id: "local-user" },
+      occurredAt: "2026-08-15T12:00:00.000Z",
+      details: {
+        conversationId: "browser-conversation",
+        messageId: "table-message",
+        activationId: "table-activation",
+        messageBody: wideTable,
+      },
+    });
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.goto("/tasks/T-0001");
+  const collapsedContent = page.getByRole("button", { name: /Show \d+ more lines?/ });
+  while (await collapsedContent.count() > 0) await collapsedContent.first().click();
+
+  const description = page.getByRole("region", { name: "Description" });
+  const comment = page.locator(".comment-entry, .nested-comment").filter({ hasText: "Evidence 9" }).first();
+  const outcome = page.getByRole("region", { name: "Outcome" }).filter({ hasText: "Evidence 9" });
+  const timelineMessage = page.locator(".event-entry").filter({ hasText: "Evidence 9" });
+  const surfaces = [description, comment, outcome, timelineMessage];
+
+  for (const surface of surfaces) {
+    const table = surface.getByRole("table");
+    await expect(table.getByRole("columnheader")).toHaveCount(surface === description ? 2 : 9);
+    await expect(table.getByRole("cell")).toHaveCount(surface === description ? 2 : 9);
+  }
+  await expect(description.getByRole("columnheader", { name: "Work" })).toHaveCSS("text-align", "left");
+  await expect(description.getByRole("columnheader", { name: "Result" })).toHaveCSS("text-align", "right");
+  await expect(description.getByRole("cell").first().locator("strong")).toHaveText("Build");
+  await expect(description.getByRole("link", { name: "Passed" })).toHaveAttribute("href", "https://example.com/result");
+  await expect(description.getByRole("link", { name: "https://example.invalid/plain" })).toHaveCount(0);
+
+  for (const appearance of ["dark", "light"] as const) {
+    await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, appearance);
+    await page.setViewportSize({ width: 390, height: 900 });
+    expect(await contrastRatio(description.getByRole("columnheader").first())).toBeGreaterThanOrEqual(4.5);
+    await expect.poll(() => page.evaluate(() =>
+      document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+    for (const surface of [comment, outcome, timelineMessage]) {
+      const scroller = surface.locator(".markdown-table-scroll");
+      await expect(scroller).toHaveAttribute("tabindex", "0");
+      await expect(scroller).toHaveCSS("overflow-x", "auto");
+      expect(await scroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+      await scroller.focus();
+      await page.keyboard.press("ArrowRight");
+      await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+      await scroller.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+      await expect(surface.getByRole("cell", { name: /unbroken-evidence/ })).toBeVisible();
+    }
+    const pointerScroller = comment.locator(".markdown-table-scroll");
+    await pointerScroller.evaluate((element) => { element.scrollLeft = 0; });
+    await pointerScroller.hover();
+    await page.mouse.wheel(300, 0);
+    await expect.poll(() => pointerScroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  }
+});
+
+test("a wide Markdown table keeps its horizontal position through task polling", async ({ page }) => {
+  const columns = Array.from({ length: 12 }, (_, index) => `Polling evidence ${index + 1}`);
+  const wideTable = [
+    `| ${columns.join(" | ")} |`,
+    `| ${columns.map(() => "---").join(" | ")} |`,
+    `| ${columns.map((_, index) => index === 11 ? "polling-unbroken-".repeat(16) : `Stable value ${index + 1}`).join(" | ")} |`,
+  ].join("\n");
+  let taskReads = 0;
+
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    taskReads += 1;
+    const detail = await response.json();
+    detail.task.title = `Table polling refresh ${taskReads}`;
+    detail.task.description = wideTable;
+    detail.task.comments[0].body = wideTable;
+    await route.fulfill({ response, json: detail });
+  });
+
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto("/tasks/T-0001");
+  const descriptionScroller = page.getByRole("region", { name: "Description" }).locator(".markdown-table-scroll");
+  expect(await descriptionScroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  const scroller = page.locator(".comment-entry, .nested-comment")
+    .filter({ hasText: "Polling evidence 12" })
+    .first()
+    .locator(".markdown-table-scroll");
+  await expect(scroller).toBeVisible();
+  const original = await scroller.elementHandle();
+  expect(original).not.toBeNull();
+  const initialOverflow = await scroller.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    tableWidth: element.querySelector("table")!.getBoundingClientRect().width,
+  }));
+  expect(initialOverflow.scrollWidth, JSON.stringify(initialOverflow)).toBeGreaterThan(initialOverflow.clientWidth);
+  const expectedScrollLeft = await scroller.evaluate((element) => {
+    element.scrollLeft = Math.min(260, element.scrollWidth - element.clientWidth);
+    return element.scrollLeft;
+  });
+  expect(expectedScrollLeft).toBeGreaterThan(0);
+  const readsBeforePolling = taskReads;
+
+  for (let refresh = 1; refresh <= 2; refresh += 1) {
+    await expect(page.getByRole("heading", {
+      level: 1,
+      name: `Table polling refresh ${readsBeforePolling + refresh}`,
+      exact: true,
+    })).toBeVisible({ timeout: 4_000 });
+    expect(await scroller.evaluate((element, previous) => element === previous, original)).toBe(true);
+    expect(await scroller.evaluate((element) => element.scrollLeft)).toBe(expectedScrollLeft);
   }
 });
 

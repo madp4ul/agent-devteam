@@ -183,6 +183,107 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   expect(narrowWidths.every((ratio) => ratio > 0.95)).toBe(true);
 });
 
+test("conversation messages keep wide Markdown tables inside the dialog", async ({ page }) => {
+  const columns = Array.from({ length: 8 }, (_, index) => `Column ${index + 1}`);
+  const table = [
+    `| ${columns.join(" | ")} |`,
+    `| ${columns.map((_, index) => index === 0 ? ":---" : index === 7 ? "---:" : "---").join(" | ")} |`,
+    `| ${columns.map((_, index) => index === 7 ? "unbroken-result-".repeat(12) : `**Value ${index + 1}**`).join(" | ")} |`,
+  ].join("\n");
+
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    const response = await route.fetch();
+    const result = await availableConversationResponse(response);
+    const activation = result.conversation.history.find((entry) => entry.kind === "activation");
+    if (activation === undefined) throw new Error("Expected an activation history entry.");
+    activation.source = {
+      kind: "comment",
+      comment: {
+        id: "table-activation-comment",
+        body: table,
+        actor: { kind: "user", id: "local-user" },
+        occurredAt: "2026-08-09T11:59:00.000Z",
+      },
+    };
+    const message: AgentConversationMessageView = {
+      id: "table-follow-up",
+      conversationId: result.conversation.id,
+      body: table,
+      actor: { kind: "user", id: "local-user" },
+      occurredAt: "2026-08-09T12:00:00.000Z",
+      attachments: [],
+    };
+    result.conversation.history = [
+      activation,
+      { kind: "message", activationId: activation.activationId, status: "running", attemptIds: ["table-attempt"], message },
+      {
+        kind: "item",
+        activationId: activation.activationId,
+        attemptId: "table-attempt",
+        item: { id: "table-agent-message", kind: "message", role: "agent", text: table },
+      },
+      {
+        kind: "item",
+        activationId: activation.activationId,
+        attemptId: "table-attempt",
+        item: {
+          id: "table-coordination-comment",
+          kind: "coordination",
+          tool: "add_comment",
+          status: "succeeded",
+          summary: "T-0001: comment",
+          presentation: { kind: "coordination-comment", body: table, commentId: "table-activation-comment" },
+          evidence: {
+            rawStatus: "completed",
+            arguments: { body: table, expectedRevision: 5 },
+            result: { accepted: true, commentId: "table-activation-comment" },
+          },
+        },
+      },
+    ];
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  const surfaces = [
+    dialog.locator(".conversation-message.user-message"),
+    dialog.locator(".conversation-activation-source"),
+    dialog.locator(".transcript-item.message"),
+    dialog.getByRole("article", { name: "Comment added" }),
+  ];
+
+  for (const appearance of ["dark", "light"] as const) {
+    await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, appearance);
+    const dialogBounds = await dialog.boundingBox();
+    expect(dialogBounds).not.toBeNull();
+    expect(dialogBounds!.width).toBeLessThanOrEqual(358);
+    for (const surface of surfaces) {
+      await expect(surface.getByRole("columnheader")).toHaveCount(8);
+      await expect(surface.getByRole("cell")).toHaveCount(8);
+      const scroller = surface.locator(".markdown-table-scroll");
+      const overflow = await scroller.evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        tableWidth: element.querySelector("table")!.getBoundingClientRect().width,
+      }));
+      expect(overflow.scrollWidth, JSON.stringify(overflow)).toBeGreaterThan(overflow.clientWidth);
+      await scroller.focus();
+      await page.keyboard.press("ArrowRight");
+      await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    }
+    const pointerScroller = surfaces[0]!.locator(".markdown-table-scroll");
+    await pointerScroller.evaluate((element) => { element.scrollLeft = 0; });
+    await pointerScroller.hover();
+    await page.mouse.wheel(300, 0);
+    await expect.poll(() => pointerScroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() =>
+      document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  }
+});
+
 test("generic MCP calls identify the capability and disclose bounded literal evidence", async ({ page }) => {
   const longPath = `C:/workspace/${"nested-segment/".repeat(40)}evidence.json`;
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
