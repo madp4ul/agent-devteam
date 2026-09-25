@@ -344,6 +344,9 @@ export function TaskPage({
                       currentColumnId={task.columnId}
                       currentColumnName={board.columns.find((column) => column.id === task.columnId)?.name ?? task.columnId}
                       {...(currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id })}
+                      movementCount={task.activity.filter((entry) => entry.type === "task.moved").length}
+                      movements={task.activity.filter((entry): entry is typeof entry & { type: "task.moved" } => entry.type === "task.moved")}
+                      agents={detail.collaborators}
                       pending={pendingTaskId !== undefined}
                       onMove={async (column) => move({ id: task.id, revision: task.revision }, column)}
                       inspectable={inspectableTaskFields.has("column")}

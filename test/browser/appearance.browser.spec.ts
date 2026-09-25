@@ -292,6 +292,7 @@ test("conversation index remains quiet and readable in dark and light appearance
     await setAppearance(page, theme);
     const row = page.getByRole("region", { name: "Conversations" }).getByRole("button").first();
 
+    await row.scrollIntoViewIfNeeded();
     await expect(row).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await row.hover();
     await expect(row).toHaveCSS("color", theme === "dark" ? "rgb(237, 243, 239)" : "rgb(20, 34, 28)");

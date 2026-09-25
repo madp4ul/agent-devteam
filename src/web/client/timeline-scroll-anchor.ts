@@ -4,6 +4,8 @@ export interface TimelineViewportAnchor {
 }
 
 let sourceHighlightTimer: number | undefined;
+let sourceScrollFrame: number | undefined;
+const sourceScrollDuration = 480;
 
 export function captureTimelineViewportAnchor(): TimelineViewportAnchor | null {
   const timeline = document.querySelector<HTMLElement>('[data-task-section="timeline"]');
@@ -41,16 +43,46 @@ export function timelineSourceElementId(sourceId: string): string {
 export function focusTimelineSource(sourceId: string): void {
   const source = document.getElementById(timelineSourceElementId(sourceId));
   if (sourceHighlightTimer !== undefined) window.clearTimeout(sourceHighlightTimer);
+  if (sourceScrollFrame !== undefined) window.cancelAnimationFrame(sourceScrollFrame);
   document.querySelector(".timeline-source-target")?.classList.remove("timeline-source-target");
   source?.classList.add("timeline-source-target");
   source?.focus({ preventScroll: true });
-  source?.scrollIntoView({ behavior: "smooth", block: "center" });
   if (source !== null) {
+    animateSourceToViewportCenter(source);
     sourceHighlightTimer = window.setTimeout(() => {
       source.classList.remove("timeline-source-target");
       sourceHighlightTimer = undefined;
     }, 1_800);
   }
+}
+
+function animateSourceToViewportCenter(source: HTMLElement): void {
+  const startScrollY = window.scrollY;
+  const sourceBounds = source.getBoundingClientRect();
+  const documentHeight = document.documentElement.scrollHeight;
+  const targetScrollY = Math.min(
+    Math.max(0, startScrollY + elementCenter(sourceBounds) - window.innerHeight / 2),
+    Math.max(0, documentHeight - window.innerHeight),
+  );
+  const distance = targetScrollY - startScrollY;
+  if (Math.abs(distance) < 1) {
+    sourceScrollFrame = undefined;
+    return;
+  }
+  const startedAt = performance.now();
+  const animate = (now: number): void => {
+    const progress = Math.min(1, (now - startedAt) / sourceScrollDuration);
+    const eased = progress < .5
+      ? 4 * progress * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+    window.scrollTo({ top: startScrollY + distance * eased });
+    if (progress < 1) {
+      sourceScrollFrame = window.requestAnimationFrame(animate);
+    } else {
+      sourceScrollFrame = undefined;
+    }
+  };
+  sourceScrollFrame = window.requestAnimationFrame(animate);
 }
 
 function elementCenter(bounds: DOMRect): number {

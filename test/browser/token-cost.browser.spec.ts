@@ -113,6 +113,7 @@ test("conversation aggregates show known lower bounds while running totals stay 
   await expect(panelCost).toHaveClass(/cost-estimate-badge/);
   await expect(panelCost).toHaveRole("status");
   await expect(panelCost).toHaveAccessibleName(/update when the current run finishes/i);
+  await panelCost.scrollIntoViewIfNeeded();
   await panelCost.hover();
   const panelBreakdown = panelCost.getByRole("tooltip", { name: "Token cost breakdown" });
   await expect(panelBreakdown).toBeVisible();

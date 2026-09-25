@@ -980,7 +980,7 @@ test("task details prioritize agent activity and preserve the responsive reading
   const attention = page.getByRole("region", { name: "Needs attention" });
   const activity = page.getByRole("region", { name: "Agent activity" });
   const workspace = page.getByRole("region", { name: "Workspace", exact: true });
-  const movement = page.getByRole("region", { name: "Move task" });
+  const movement = page.getByRole("region", { name: "Task position" });
   const relationships = page.getByRole("region", { name: "Relationships" });
   await expect(activity.getByText("Current work", { exact: true })).toHaveCount(0);
   await expect(workspace.getByText("Development files", { exact: true })).toHaveCount(0);

@@ -30,8 +30,9 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [13](issues/13-support-tables-in-markdown-content.md) | Render tables in every Markdown content surface without widening the UI | Implemented; user review |
 | [14](issues/14-avoid-redundant-activation-after-follow-up-move.md) | Do not reactivate a running follow-up agent when it moves into its watched column | Extend and verify the existing mention-activation exception semantics |
 | [15](issues/15-redesign-blockers-around-explicit-resume-agents.md) | Replace task-wide execution blocking with explicit per-blocker resume responsibility | Grill the blocker lifecycle, interaction model, and migration before specifying it |
-| [16](issues/16-navigate-timeline-with-column-movement-map.md) | Navigate long timelines through a compact column-lane movement map | Grill and prototype the navigation model against real long histories |
+| [16](issues/16-navigate-timeline-with-column-movement-map.md) | Navigate long timelines through a compact column-lane movement map | Implemented; user review and tuning |
 | [17](issues/17-compact-routine-timeline-activity.md) | Compact routine timeline activity while preserving items that merit attention | Define reliable prominence signals and filtering behavior before implementation |
+| [18](issues/18-widen-task-detail-content.md) | Give long task-detail content more horizontal room | Inspect representative content and agree the desktop width |
 
 ## Workflow and relationships
 
@@ -64,12 +65,20 @@ content prominence remain separate capabilities. Timeline prominence in issue
 17 must not silently create or resolve the framework's formal user-attention
 reasons.
 
+Issue 18 was split from issue 16 after the movement map was placed in released
+sidebar height rather than beside the timeline. It can be designed and
+implemented independently.
+
 For browser changes, apply repository dark/light appearance requirements and
 accessible controls. Any new icon-only button pattern uses shared decorative SVGs
 and browser coverage of icon/button geometric centering.
 
 ## Decisions so far
 
+- [16](issues/16-navigate-timeline-with-column-movement-map.md): implemented a
+  scroll-revealed movement map inside the sticky Task position panel, with
+  fixed-scale landmarks, agent/user lane provenance, a timeline viewport frame,
+  and direct navigation of the main timeline.
 - [02](issues/02-stop-conversation-scroll-snapback.md): implemented immediate
   cancellation for upward history navigation, exact-bottom resumption, and
   long-content browser coverage across wheel, trackpad, keyboard, scrollbar,

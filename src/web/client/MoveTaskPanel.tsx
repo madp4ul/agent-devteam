@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
-import type { BoardColumnView } from "../../application/browser-transport-contract.ts";
+import type { BoardColumnView, CollaboratorView, TaskActivityView } from "../../application/browser-transport-contract.ts";
 import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
+import { TaskMovementMap } from "./TaskMovementMap.tsx";
 import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
 
 export function MoveTaskPanel({
@@ -9,6 +10,9 @@ export function MoveTaskPanel({
   currentColumnId,
   currentColumnName,
   currentColumnSourceId,
+  movementCount,
+  movements,
+  agents,
   pending,
   onMove,
   inspectable,
@@ -17,6 +21,9 @@ export function MoveTaskPanel({
   currentColumnId: string;
   currentColumnName: string;
   currentColumnSourceId?: string;
+  movementCount: number;
+  movements: Array<TaskActivityView & { type: "task.moved" }>;
+  agents: Pick<CollaboratorView, "id" | "name">[];
   pending: boolean;
   onMove(column: BoardColumnView): Promise<void>;
   inspectable: boolean;
@@ -27,7 +34,12 @@ export function MoveTaskPanel({
 
   return (
     <section className="detail-panel move-panel" aria-labelledby="move-heading" aria-busy={pending}>
-      <h2 id="move-heading">Move task</h2>
+      <div className="detail-panel-heading">
+        <h2 id="move-heading">Task position</h2>
+        <span className="movement-count-summary">
+          {movementCount === 0 ? "Not moved yet" : movementCount === 1 ? "Moved once" : `Moved ${movementCount} times`}
+        </span>
+      </div>
       <div className="move-column-heading agent-inspectable-content-heading">
         <label htmlFor="move-task-destination">Column</label>
         {inspectable ? <AgentInspectableMarker /> : null}
@@ -48,18 +60,18 @@ export function MoveTaskPanel({
           )}
           {columns.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
         </select>
-        {nextColumn === undefined ? null : (
-          <button
-            type="button"
-            className="secondary move-next-column"
-            disabled={pending}
-            aria-label={`Move to ${nextColumn.name}`}
-            title={`Move to ${nextColumn.name}`}
-            onClick={() => void onMove(nextColumn)}
-          >
-            Next
-          </button>
-        )}
+        <button
+          type="button"
+          className="secondary move-next-column"
+          disabled={pending || nextColumn === undefined}
+          aria-label={nextColumn === undefined ? "No next column" : `Move to ${nextColumn.name}`}
+          title={nextColumn === undefined ? "No next column" : `Move to ${nextColumn.name}`}
+          onClick={() => {
+            if (nextColumn !== undefined) void onMove(nextColumn);
+          }}
+        >
+          Next
+        </button>
       </div>
       {currentColumnSourceId === undefined ? null : (
         <a
@@ -71,6 +83,7 @@ export function MoveTaskPanel({
           }}
         >View move to {currentColumnName} in timeline</a>
       )}
+      <TaskMovementMap movements={movements} columns={columns} agents={agents} />
     </section>
   );
 }
