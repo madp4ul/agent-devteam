@@ -1,10 +1,11 @@
 # Framework improvement intake — September 2026
 
-This intake records seventeen user-reported issues dictated on 2026-09-20 and
-2026-09-23. Nine of the original ten were reported as existing GitHub issues;
-issue 08 and issues 11–17 were added during the conversations. GitHub URLs and
-numbers were not supplied, and the originals were not fetched. The user's
-account below is the source, not independent reproduction or diagnosis.
+This intake records twenty user-reported issues dictated on 2026-09-20,
+2026-09-23, and 2026-09-26. Nine of the original ten were reported as existing
+GitHub issues; issue 08 and issues 11–20 were added during the conversations.
+GitHub URLs and numbers were not supplied, and the originals were not fetched.
+The user's account is the source except where an issue explicitly records
+separate investigation evidence.
 
 Each issue has its own file. This is a backlog intake, not an agreed implementation
 specification. Issue files track current status; none was labelled `ready-for-agent` at intake.
@@ -33,6 +34,8 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [16](issues/16-navigate-timeline-with-column-movement-map.md) | Navigate long timelines through a compact column-lane movement map | Implemented; user review and tuning |
 | [17](issues/17-compact-routine-timeline-activity.md) | Compact routine timeline activity while preserving items that merit attention | Define reliable prominence signals and filtering behavior before implementation |
 | [18](issues/18-widen-task-detail-content.md) | Give long task-detail content more horizontal room | Inspect representative content and agree the desktop width |
+| [19](issues/19-anchor-live-timeline-refresh-at-visible-top.md) | Anchor live timeline refresh at the top of the unobscured reading area | Implemented; user review |
+| [20](issues/20-bound-task-detail-projection-cost.md) | Keep task-detail load cost independent of unrelated task history | Define the narrow projection contract and convert the investigation into regression coverage |
 
 ## Workflow and relationships
 
@@ -69,12 +72,26 @@ Issue 18 was split from issue 16 after the movement map was placed in released
 sidebar height rather than beside the timeline. It can be designed and
 implemented independently.
 
+Issue 19 refines the live timeline anchoring delivered by the original
+coordination framework. It should remain compatible with issue 16's movement
+navigation and issue 17's future compaction, but neither blocks the top-edge
+anchoring change.
+
+Issue 20 is supported by a read-only projection investigation. Narrow the
+task-detail contract and remove cross-task history loading before considering a
+polling reduction; a slower poll alone would mask the confirmed projection
+cost. Any supporting indexes must follow the released migration workflow.
+
 For browser changes, apply repository dark/light appearance requirements and
 accessible controls. Any new icon-only button pattern uses shared decorative SVGs
 and browser coverage of icon/button geometric centering.
 
 ## Decisions so far
 
+- [19](issues/19-anchor-live-timeline-refresh-at-visible-top.md): passive task
+  polling now preserves the unique timeline record nearest the sticky header's
+  lower edge at the same header-relative offset, without changing active
+  command refreshes or explicit navigation.
 - [16](issues/16-navigate-timeline-with-column-movement-map.md): implemented a
   scroll-revealed movement map inside the sticky Task position panel, with
   fixed-scale landmarks, agent/user lane provenance, a timeline viewport frame,
@@ -110,3 +127,7 @@ and browser coverage of icon/button geometric centering.
   remained to be supplied by the user.
 - 2026-09-23: Added the remaining issues 15–17 from the user's follow-up
   dictation, bringing this intake to seventeen issues.
+- 2026-09-24: Split issue 18 from issue 16 during implementation review.
+- 2026-09-26: Added issues 19–20 from live-use feedback. Issue 20 incorporates
+  the supplied noninterfering investigation rather than claiming a new
+  reproduction during intake.

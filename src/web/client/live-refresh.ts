@@ -3,7 +3,15 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 export function useLatestRefresh<Result>(
   read: () => Promise<Result>,
   apply: (result: Result) => void,
-): () => Promise<void> {
+): () => Promise<void>;
+export function useLatestRefresh<Result, RequestContext>(
+  read: () => Promise<Result>,
+  apply: (result: Result, context: RequestContext) => void,
+): (context: RequestContext) => Promise<void>;
+export function useLatestRefresh<Result, RequestContext>(
+  read: () => Promise<Result>,
+  apply: (result: Result, context: RequestContext) => void,
+): (context: RequestContext) => Promise<void> {
   const callbacks = useRef({ read, apply });
   const mounted = useRef(false);
   const sequence = useRef(0);
@@ -17,11 +25,11 @@ export function useLatestRefresh<Result>(
     };
   }, []);
 
-  return useCallback(async (): Promise<void> => {
+  return useCallback(async (context: RequestContext): Promise<void> => {
     const requestSequence = ++sequence.current;
     try {
       const result = await callbacks.current.read();
-      if (mounted.current && requestSequence === sequence.current) callbacks.current.apply(result);
+      if (mounted.current && requestSequence === sequence.current) callbacks.current.apply(result, context);
     } catch (error) {
       if (mounted.current && requestSequence === sequence.current) throw error;
     }

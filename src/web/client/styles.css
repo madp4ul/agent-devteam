@@ -494,7 +494,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .movement-map-overview-indicator::before { position: absolute; top: 0; right: 1px; bottom: 0; width: 1px; content: ""; background: var(--border-control); opacity: .35; }
 .movement-map-overview-range { position: absolute; top: 0; right: 0; width: 3px; min-height: 18px; border: 0; background: var(--text-muted); opacity: .78; will-change: transform; }
 body.movement-map-dragging, body.movement-map-dragging * { user-select: none !important; }
-.timeline-section { padding: clamp(1.2rem, 3vw, 2rem); }
+.timeline-section { overflow-anchor: none; padding: clamp(1.2rem, 3vw, 2rem); }
 .timeline-heading-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1.5rem; }
 .timeline-heading-row h2 { margin: 0; }
 .timeline-filters { display: flex; align-items: center; gap: .55rem; margin: 0; border: 0; padding: 0; color: var(--muted); font-size: .76rem; font-weight: 750; }

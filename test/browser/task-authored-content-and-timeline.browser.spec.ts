@@ -776,19 +776,33 @@ test("collapsed timeline prose reports hidden rendered lines at desktop and narr
 });
 
 
-test("task timeline keeps the centered record stable when polling inserts newer history", async ({ page }) => {
-  let addNewHistory = false;
+test("task timeline keeps the record below the sticky header stable when polling resizes visible history", async ({ page }) => {
+  let taskReads = 0;
+  const resizedRecordIds = new Set<string>();
+  let insertNewHistory = false;
   await page.route("**/api/tasks/T-0001", async (route) => {
+    taskReads += 1;
     const response = await route.fetch();
     const detail = await response.json();
-    if (addNewHistory) {
-      const occurredAt = new Date().toISOString();
+    for (let index = 0; index < 40; index += 1) {
+      const id = `polling-comment-${index}`;
+      detail.task.comments.push({
+        id,
+        body: resizedRecordIds.has(id)
+          ? Array.from({ length: 12 }, (_, paragraph) =>
+              `Polling resize ${id} paragraph ${paragraph + 1} adds height to history.`).join("\n\n")
+          : `Stable polling history ${index}`,
+        actor: { kind: "user", id: "local-user" },
+        occurredAt: new Date(Date.UTC(2026, 8, 1, 12, index)).toISOString(),
+      });
+    }
+    if (insertNewHistory) {
       for (let index = 0; index < 4; index += 1) {
         detail.task.comments.push({
-          id: `polling-comment-${index}`,
-          body: `New polling history ${index}`,
+          id: `inserted-polling-comment-${index}`,
+          body: `Inserted polling history ${index}`,
           actor: { kind: "user", id: "local-user" },
-          occurredAt,
+          occurredAt: new Date(Date.UTC(2027, 0, 1, 12, index)).toISOString(),
         });
       }
     }
@@ -796,21 +810,145 @@ test("task timeline keeps the centered record stable when polling inserts newer 
   });
 
   await page.goto("/tasks/T-0001");
-  const attempt = page.locator(".attempt-entry.completed-attempt").filter({ hasText: "Attempt 1" });
-  await attempt.scrollIntoViewIfNeeded();
-  await attempt.evaluate((element) => element.scrollIntoView({ block: "center" }));
-  const centerBefore = await attempt.evaluate((element) => {
-    const bounds = element.getBoundingClientRect();
-    return bounds.top + bounds.height / 2;
+  await page.evaluate(() => { document.documentElement.dataset.theme = "light"; });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect.poll(() => taskReads).toBeGreaterThanOrEqual(2);
+  const topRecord = page.locator('[data-timeline-record="polling-comment-20"]');
+  const stickyHeader = page.locator(".detail-topbar");
+  await topRecord.evaluate((element) => {
+    const header = document.querySelector<HTMLElement>(".detail-topbar")!;
+    window.scrollBy({ top: element.getBoundingClientRect().top - header.getBoundingClientRect().bottom - 12 });
+  });
+  const headerBottom = await stickyHeader.evaluate((element) => element.getBoundingClientRect().bottom);
+  const topBefore = await topRecord.evaluate((element) => element.getBoundingClientRect().top);
+  expect(topBefore).toBeGreaterThanOrEqual(headerBottom);
+  expect(topBefore - headerBottom).toBeLessThanOrEqual(16);
+  const edgeRecordId = await page.locator("[data-timeline-record]").evaluateAll((records) => {
+    const viewportTop = document.querySelector<HTMLElement>(".detail-topbar")!.getBoundingClientRect().bottom;
+    return records
+      .map((element) => ({
+        id: (element as HTMLElement).dataset.timelineRecord,
+        bounds: element.getBoundingClientRect(),
+      }))
+      .filter(({ bounds }) => bounds.bottom > viewportTop && bounds.top < window.innerHeight)
+      .sort((left, right) =>
+        Math.abs(left.bounds.top - viewportTop) - Math.abs(right.bounds.top - viewportTop))[0]?.id;
+  });
+  expect(edgeRecordId).toBe("polling-comment-20");
+
+  const resizedCenterRecordId = await page.locator("[data-timeline-record]").evaluateAll((records) => {
+    const viewportCenter = window.innerHeight / 2;
+    const visible = records
+      .map((element) => ({
+        id: (element as HTMLElement).dataset.timelineRecord,
+        bounds: element.getBoundingClientRect(),
+      }))
+      .filter(({ id, bounds }) => id !== "polling-comment-20" && bounds.bottom > 0 && bounds.top < window.innerHeight)
+      .sort((left, right) =>
+        Math.abs(left.bounds.top + left.bounds.height / 2 - viewportCenter) -
+        Math.abs(right.bounds.top + right.bounds.height / 2 - viewportCenter));
+    return visible[0]?.id;
+  });
+  expect(resizedCenterRecordId).toBeTruthy();
+  resizedRecordIds.add("polling-comment-25");
+  resizedRecordIds.add(resizedCenterRecordId!);
+
+  await expect(page.getByText("Polling resize polling-comment-25 paragraph 12 adds height to history."))
+    .toHaveCount(1);
+  await expect.poll(() => topRecord.evaluate((element, expectedTop) =>
+    Math.abs(element.getBoundingClientRect().top - expectedTop), topBefore)).toBeLessThanOrEqual(2);
+
+  await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const topBeforeInsertion = await topRecord.evaluate((element) => element.getBoundingClientRect().top);
+  insertNewHistory = true;
+  await expect(page.getByText("Inserted polling history 3")).toBeVisible();
+  await expect.poll(() => topRecord.evaluate((element, expectedTop) =>
+    Math.abs(element.getBoundingClientRect().top - expectedTop), topBeforeInsertion)).toBeLessThanOrEqual(2);
+});
+
+
+test("passive polling leaves an off-screen timeline alone and anchors nested history at the visible top", async ({ page }) => {
+  let refreshStage = 0;
+  let delayNextRefresh = false;
+  let signalDelayedRefresh = (): void => undefined;
+  let releaseDelayedRefresh = (): void => undefined;
+  const delayedRefreshStarted = new Promise<void>((resolve) => { signalDelayedRefresh = resolve; });
+  const delayedRefreshRelease = new Promise<void>((resolve) => { releaseDelayedRefresh = resolve; });
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    if (refreshStage >= 1) {
+      detail.task.comments.push({
+        id: "off-screen-polling-history",
+        body: "Off-screen polling history arrived.",
+        actor: { kind: "user", id: "local-user" },
+        occurredAt: "2027-01-02T12:00:00.000Z",
+      });
+    }
+    if (refreshStage >= 2) {
+      detail.task.comments.push({
+        id: "nested-anchor-polling-history",
+        body: "Nested-anchor polling history arrived.",
+        actor: { kind: "user", id: "local-user" },
+        occurredAt: "2027-01-02T12:01:00.000Z",
+      });
+    }
+    if (refreshStage >= 3) {
+      detail.task.comments.push({
+        id: "navigation-race-polling-history",
+        body: "Navigation-race polling history arrived.",
+        actor: { kind: "user", id: "local-user" },
+        occurredAt: "2027-01-02T12:02:00.000Z",
+      });
+    }
+    if (delayNextRefresh) {
+      delayNextRefresh = false;
+      signalDelayedRefresh();
+      await delayedRefreshRelease;
+    }
+    await route.fulfill({ response, json: detail });
   });
 
-  addNewHistory = true;
-  await expect(page.getByText("New polling history 3")).toBeVisible();
-  const centerAfter = await attempt.evaluate((element) => {
-    const bounds = element.getBoundingClientRect();
-    return bounds.top + bounds.height / 2;
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await page.goto("/tasks/T-0001");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const timeline = page.locator('[data-task-section="timeline"]');
+  expect(await timeline.evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThanOrEqual(500);
+  refreshStage = 1;
+  await expect(page.getByText("Off-screen polling history arrived.")).toHaveCount(1);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  const nestedRecord = page.locator(".nested-comment")
+    .filter({ hasText: "This intentionally long comment explains" });
+  await nestedRecord.evaluate((element) => {
+    const header = document.querySelector<HTMLElement>(".detail-topbar")!;
+    window.scrollBy({ top: element.getBoundingClientRect().top - header.getBoundingClientRect().bottom - 12 });
   });
-  expect(Math.abs(centerAfter - centerBefore)).toBeLessThanOrEqual(2);
+  const nestedTopBefore = await nestedRecord.evaluate((element) => element.getBoundingClientRect().top);
+  refreshStage = 2;
+  await expect(page.getByText("Nested-anchor polling history arrived.")).toHaveCount(1);
+  await expect.poll(() => nestedRecord.evaluate((element, expectedTop) =>
+    Math.abs(element.getBoundingClientRect().top - expectedTop), nestedTopBefore)).toBeLessThanOrEqual(2);
+
+  delayNextRefresh = true;
+  refreshStage = 3;
+  await delayedRefreshStarted;
+  const scrollBeforeUserInput = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, 180);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollBeforeUserInput);
+  const movementLink = page.getByRole("link", { name: /View move to .* in timeline/ });
+  const movementTargetId = (await movementLink.getAttribute("href"))!.slice(1);
+  const movementTarget = page.locator(`[id="${movementTargetId}"]`);
+  await movementLink.click();
+  await expect(movementTarget).toBeFocused();
+  await page.waitForTimeout(550);
+  const targetTopBeforeRefresh = await movementTarget.evaluate((element) => element.getBoundingClientRect().top);
+  releaseDelayedRefresh();
+  await expect(page.getByText("Navigation-race polling history arrived.")).toHaveCount(1);
+  await expect(movementTarget).toBeFocused();
+  await expect.poll(() => movementTarget.evaluate((element, expectedTop) =>
+    Math.abs(element.getBoundingClientRect().top - expectedTop), targetTopBeforeRefresh)).toBeLessThanOrEqual(2);
 });
 
 

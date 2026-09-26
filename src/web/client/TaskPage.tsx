@@ -62,10 +62,12 @@ export function TaskPage({
   const pendingTimelineAnchor = useRef<TimelineViewportAnchor | null>(null);
   const taskDetailRef = useRef<HTMLElement>(null);
   const pendingTextSelection = useRef<CapturedTextSelection | null>(null);
-  const refresh = useLatestRefresh(
+  const refreshLatest = useLatestRefresh<BrowserTaskDetail, "interactive" | "polling">(
     () => readTask(taskId),
-    (next) => {
-      pendingTimelineAnchor.current = captureTimelineViewportAnchor();
+    (next, origin) => {
+      pendingTimelineAnchor.current = captureTimelineViewportAnchor(
+        origin === "polling" ? "sticky-header" : "viewport-center",
+      );
       pendingTextSelection.current = captureTextSelectionWithin(
         taskDetailRef.current,
         document.querySelector(".transcript-content"),
@@ -73,19 +75,33 @@ export function TaskPage({
       setDetail(next);
     },
   );
+  const refresh = useCallback(() => refreshLatest("interactive"), [refreshLatest]);
+  const poll = useCallback(() => refreshLatest("polling"), [refreshLatest]);
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
 
   useEffect(() => {
     void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
   }, [refresh, setFeedback, taskId]);
   useLayoutEffect(() => {
-    restoreTimelineViewportAnchor(pendingTimelineAnchor.current);
+    const timelineAnchor = pendingTimelineAnchor.current;
+    restoreTimelineViewportAnchor(timelineAnchor);
     pendingTimelineAnchor.current = null;
     restoreCapturedTextSelection(pendingTextSelection.current);
     pendingTextSelection.current = null;
+    let userMovedViewport = false;
+    const cancelForUserInput = (): void => { userMovedViewport = true; };
+    const inputEvents = ["keydown", "pointerdown", "touchstart", "wheel"] as const;
+    for (const event of inputEvents) window.addEventListener(event, cancelForUserInput, { passive: true });
+    const settledLayoutFrame = window.requestAnimationFrame(() => {
+      if (!userMovedViewport) restoreTimelineViewportAnchor(timelineAnchor);
+    });
+    return () => {
+      window.cancelAnimationFrame(settledLayoutFrame);
+      for (const event of inputEvents) window.removeEventListener(event, cancelForUserInput);
+    };
   }, [detail]);
   usePolling(
-    refresh,
+    poll,
     1_000,
     (error) => setFeedback({ role: "alert", text: errorMessage(error) }),
   );
