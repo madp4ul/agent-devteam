@@ -126,6 +126,14 @@ The implementation extends that model rather than flattening grouped attempts.
   expanded the map. Reveal height now synchronizes inside the scroll event
   rather than deliberately waiting one additional frame; drag work remains
   animation-frame-coalesced, preserving scrub performance.
+- 2026-09-26: Physical wheel scrolling showed that synchronizing the scroll
+  handler still could not eliminate a compositor frame before main-thread
+  layout. The reveal phase now bottom-docks the complete Task position and
+  Conversations group before the map gains height, while a sticky placeholder
+  preserves its document footprint. Conversations therefore stays 16 px from
+  the viewport bottom independently of scroll-event timing and the map grows
+  upward. The docking limit uses the sticky slot's resolved pixel offset rather
+  than parsing the unresolved `4.5rem` token as `4.5`.
 
 ## Agreed implementation
 
@@ -151,8 +159,9 @@ The implementation extends that model rather than flattening grouped attempts.
   user-owned and use the corresponding rail appearance. Current watcher
   assignments may be applied retrospectively; missing legacy identities must
   remain renderable without elaborate reconstruction.
-- Begin with approximately 40 px per movement row and keep spacing behind one
-  policy so bounded compression can be tuned later. Expanding the panel reveals
+- Use 28 px per movement row after visual review found the initial 40 px rhythm
+  unnecessarily loose, and keep spacing behind one policy so bounded
+  compression can be tuned later. Expanding the panel reveals
   more of a stable strip; it does not stretch existing rows. When the complete
   strip does not fit, show a clipped window around the timeline viewport.
 - Derive a viewport frame by mapping the rendered timeline viewport's top and

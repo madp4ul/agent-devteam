@@ -324,7 +324,9 @@ textarea { resize: vertical; line-height: 1.5; }
 .comment-timeline-flow .detail-panel.comment-panel.comment-panel-docked { position: fixed; z-index: 10; right: auto; bottom: 0; left: var(--comment-composer-left); width: var(--comment-composer-width); }
 .comment-panel > h2 { position: relative; top: -.5rem; }
 .detail-panel, .move-panel, .timeline-section { border: 1px solid var(--line); border-radius: .85rem; background: var(--paper); padding: 1.3rem; box-shadow: 0 5px 18px rgb(20 34 28 / 4%); }
-.detail-sticky-controls { position: sticky; top: var(--detail-sticky-offset); display: grid; gap: 1rem; }
+.detail-sticky-controls-slot { position: sticky; top: var(--detail-sticky-offset); min-width: 0; }
+.detail-sticky-controls { display: grid; gap: 1rem; }
+.detail-sticky-controls:has(.movement-map[data-bottom-docked="true"]) { position: fixed; top: auto; right: auto; bottom: 1rem; left: var(--movement-map-controls-left); z-index: 4; width: var(--movement-map-controls-width); }
 .conversations-panel { padding: 1rem; }
 .conversations-panel h2 { margin: 0; font-size: 1rem; }
 .conversations-panel-heading { margin-bottom: .65rem; }
@@ -789,7 +791,7 @@ html[data-theme] .coordination-activity-actions .quiet-action:focus-visible { ou
   .task-heading h1 { font-size: 2rem; }
   .detail-grid { display: block; }
   .detail-column { margin-top: 1rem; }
-  .detail-sticky-controls { position: static; }
+  .detail-sticky-controls-slot { position: static; }
   .detail-panel-heading { align-items: flex-start; }
   .task-attention-panel .attention-list li { grid-template-columns: 1fr; align-items: stretch; }
   .task-attention-panel .attention-list li > button,
@@ -803,7 +805,7 @@ html[data-theme] .coordination-activity-actions .quiet-action:focus-visible { ou
 }
 
 @media (max-height: 640px) {
-  .detail-sticky-controls { position: static; }
+  .detail-sticky-controls-slot { position: static; }
 }
 
 /* Shared semantic appearance roles. Component rules above retain the accepted light appearance. */

@@ -8,7 +8,7 @@ import type {
 } from "../../application/browser-transport-contract.ts";
 import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
 
-const movementStep = 40;
+const movementStep = 28;
 const viewportBottomGutter = 16;
 const dragModel: "viewport-scrub" | "map-pan" = "viewport-scrub";
 
@@ -51,10 +51,18 @@ export function TaskMovementMap({
   const suppressClickRef = useRef(false);
   const naturalControlsTopRef = useRef<number | null>(null);
   const [available, setAvailable] = useState(false);
+  const [bottomDocked, setBottomDocked] = useState(false);
   const [dragReady, setDragReady] = useState(false);
   const dragReadyRef = useRef(false);
   const minimumDragScrollYRef = useRef(0);
   const stripHeight = Math.max(movementStep, ordered.length * movementStep);
+
+  useLayoutEffect(() => () => {
+    mapRef.current
+      ?.closest<HTMLElement>(".detail-sticky-controls-slot")
+      ?.style.removeProperty("height");
+    clearDockingStyles();
+  }, []);
 
   const updateMapPosition = useCallback(() => {
     const plot = plotRef.current;
@@ -115,7 +123,8 @@ export function TaskMovementMap({
   useLayoutEffect(() => {
     const map = mapRef.current;
     const controls = map?.closest<HTMLElement>(".detail-sticky-controls");
-    if (map == null || controls == null) return;
+    const slot = controls?.closest<HTMLElement>(".detail-sticky-controls-slot");
+    if (map == null || controls == null || slot == null) return;
     let layoutFrame: number | null = null;
     const updateHeightAndPosition = (): void => {
       layoutFrame = null;
@@ -123,30 +132,33 @@ export function TaskMovementMap({
       const currentHeight = Number.parseFloat(map.style.height) || 0;
       const baseHeight = controls.scrollHeight - currentHeight;
       naturalControlsTopRef.current ??= window.scrollY + controls.getBoundingClientRect().top;
-      const revealStart = Math.max(0, naturalControlsTopRef.current + baseHeight - window.innerHeight);
-      const stickyOffset = Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("--detail-sticky-offset"),
-      ) || 0;
+      const revealStart = Math.max(
+        0,
+        naturalControlsTopRef.current + baseHeight + viewportBottomGutter - window.innerHeight,
+      );
+      const stickyOffset = Number.parseFloat(getComputedStyle(slot).top) || 0;
       const maximumHeight = Math.max(
         0,
         window.innerHeight - stickyOffset - baseHeight - viewportBottomGutter,
       );
-      const geometryHeight = Math.max(
-        0,
-        window.innerHeight - controls.getBoundingClientRect().top - baseHeight - viewportBottomGutter,
-      );
-      const nextHeight = enabled
-        ? Math.min(clamp(window.scrollY - revealStart, 0, maximumHeight), geometryHeight)
-        : 0;
-      const fullMapScrollY = Math.max(
-        0,
-        naturalControlsTopRef.current - stickyOffset - viewportBottomGutter,
-      );
+      const nextHeight = enabled ? clamp(window.scrollY - revealStart, 0, maximumHeight) : 0;
+      const fullMapScrollY = revealStart + maximumHeight;
+      const nextBottomDocked = enabled && maximumHeight > 0 && window.scrollY >= revealStart;
+      if (nextBottomDocked) {
+        const slotBounds = slot.getBoundingClientRect();
+        slot.style.height = `${baseHeight + nextHeight}px`;
+        document.body.style.setProperty("--movement-map-controls-left", `${slotBounds.left}px`);
+        document.body.style.setProperty("--movement-map-controls-width", `${slotBounds.width}px`);
+      } else {
+        slot.style.removeProperty("height");
+        clearDockingStyles();
+      }
       const nextDragReady = enabled && nextHeight >= 20 && window.scrollY >= fullMapScrollY - .5;
       dragReadyRef.current = nextDragReady;
       minimumDragScrollYRef.current = fullMapScrollY;
       map.style.height = `${nextHeight}px`;
       setAvailable(nextHeight >= 20);
+      setBottomDocked(nextBottomDocked);
       setDragReady(nextDragReady);
       updateMapPosition();
     };
@@ -212,6 +224,7 @@ export function TaskMovementMap({
     <div
       ref={mapRef}
       className={`movement-map${available ? " available" : ""}`}
+      data-bottom-docked={bottomDocked ? "true" : undefined}
       data-testid="movement-map"
       data-drag-ready={dragReady ? "true" : "false"}
       aria-hidden={available ? undefined : true}
@@ -477,6 +490,11 @@ function interpolate<TInput extends keyof ScalePoint, TOutput extends keyof Scal
   if (span === 0) return upper[output];
   const progress = (value - lower[input]) / span;
   return lower[output] + (upper[output] - lower[output]) * progress;
+}
+
+function clearDockingStyles(): void {
+  document.body.style.removeProperty("--movement-map-controls-left");
+  document.body.style.removeProperty("--movement-map-controls-width");
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

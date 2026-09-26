@@ -336,37 +336,39 @@ export function TaskPage({
             />
             </div>
             {task.archived && detail.conversations.length === 0 ? null : (
-              <div className="detail-sticky-controls">
-                {task.archived ? null : (
-                  <div data-task-section="move">
-                    <MoveTaskPanel
-                      columns={board.columns}
-                      currentColumnId={task.columnId}
-                      currentColumnName={board.columns.find((column) => column.id === task.columnId)?.name ?? task.columnId}
-                      {...(currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id })}
-                      movementCount={task.activity.filter((entry) => entry.type === "task.moved").length}
-                      movements={task.activity.filter((entry): entry is typeof entry & { type: "task.moved" } => entry.type === "task.moved")}
-                      agents={detail.collaborators}
-                      pending={pendingTaskId !== undefined}
-                      onMove={async (column) => move({ id: task.id, revision: task.revision }, column)}
-                      inspectable={inspectableTaskFields.has("column")}
-                    />
-                  </div>
-                )}
-                {detail.conversations.length === 0 ? null : (
-                  <div data-task-section="conversations">
-                    <TaskConversationsPanel
-                      taskId={task.id}
-                      conversations={detail.conversations}
-                      conversationCost={detail.conversationCost}
-                      agentInspectableContent={detail.agentInspectableContent}
-                      onCommentSource={(sourceId) => setTimelineSourceRequest((current) => ({
-                        sourceId,
-                        sequence: (current?.sequence ?? 0) + 1,
-                      }))}
-                    />
-                  </div>
-                )}
+              <div className="detail-sticky-controls-slot">
+                <div className="detail-sticky-controls">
+                  {task.archived ? null : (
+                    <div data-task-section="move">
+                      <MoveTaskPanel
+                        columns={board.columns}
+                        currentColumnId={task.columnId}
+                        currentColumnName={board.columns.find((column) => column.id === task.columnId)?.name ?? task.columnId}
+                        {...(currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id })}
+                        movementCount={task.activity.filter((entry) => entry.type === "task.moved").length}
+                        movements={task.activity.filter((entry): entry is typeof entry & { type: "task.moved" } => entry.type === "task.moved")}
+                        agents={detail.collaborators}
+                        pending={pendingTaskId !== undefined}
+                        onMove={async (column) => move({ id: task.id, revision: task.revision }, column)}
+                        inspectable={inspectableTaskFields.has("column")}
+                      />
+                    </div>
+                  )}
+                  {detail.conversations.length === 0 ? null : (
+                    <div data-task-section="conversations">
+                      <TaskConversationsPanel
+                        taskId={task.id}
+                        conversations={detail.conversations}
+                        conversationCost={detail.conversationCost}
+                        agentInspectableContent={detail.agentInspectableContent}
+                        onCommentSource={(sourceId) => setTimelineSourceRequest((current) => ({
+                          sourceId,
+                          sequence: (current?.sequence ?? 0) + 1,
+                        }))}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

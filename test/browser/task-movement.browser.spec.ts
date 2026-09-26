@@ -37,6 +37,7 @@ test("scrolling reveals a fixed-scale movement map while conversations remain bo
   const position = page.getByRole("region", { name: "Task position" });
   const map = position.getByTestId("movement-map");
   const plot = map.locator(".movement-map-plot");
+  const stickyControls = page.locator(".detail-sticky-controls");
   const conversations = page.getByRole("region", { name: "Conversations" });
   await expect(position.getByText("Moved 5 times", { exact: true })).toBeVisible();
   expect((await map.boundingBox())?.height ?? 0).toBeLessThanOrEqual(1);
@@ -77,6 +78,10 @@ test("scrolling reveals a fixed-scale movement map while conversations remain bo
   expect(revealGeometry.maximumTransientBottomJump).toBeLessThanOrEqual(1);
 
   await expect.poll(async () => (await map.boundingBox())?.height ?? 0).toBeGreaterThan(80);
+  await expect(stickyControls).toHaveCSS("position", "fixed");
+  const dockedConversationBounds = await conversations.boundingBox();
+  expect(dockedConversationBounds).not.toBeNull();
+  expect(Math.abs(700 - 16 - (dockedConversationBounds!.y + dockedConversationBounds!.height))).toBeLessThanOrEqual(1);
   await expect(position).toHaveCSS("overflow", "hidden");
   await expect(map.locator(".movement-map-lane")).toHaveCount(3);
   await expect(map.locator(".movement-map-legend-item")).toHaveText(["B", "I", "C"]);
@@ -406,7 +411,7 @@ test("a long movement map scrubs the viewport without runaway scrolling or text 
   const outsideY = roomAbove >= 12
     ? nextPlotBounds!.y + 6
     : nextPlotBounds!.y + nextPlotBounds!.height - 6;
-  const outsideDelta = 24;
+  const outsideDelta = outsideY < nextFrameBounds!.y + nextFrameBounds!.height / 2 ? 24 : -24;
   const scrollBeforeOutsideDrag = await page.evaluate(() => window.scrollY);
   await expect(map).toHaveAttribute("data-drag-ready", "true");
   const commandsBeforeOutsideDrag = await page.evaluate(() =>
@@ -560,7 +565,7 @@ test("movement stays immediately above conversations while long task content scr
   });
   await page.goto("/tasks/T-0001");
 
-  const stickyControls = page.locator(".detail-sticky-controls");
+  const stickyControls = page.locator(".detail-sticky-controls-slot");
   const movement = page.getByRole("region", { name: "Task position" });
   const selector = movement.getByRole("combobox", { name: "Move task" });
   const conversations = page.getByRole("region", { name: "Conversations" });
