@@ -9,6 +9,92 @@ test("task position summarizes durable movement without making the summary inter
   await expect(position.getByRole("link", { name: /Moved once/i })).toHaveCount(0);
 });
 
+test("docked task controls stay aligned with their lanes during viewport resizing", async ({ page }) => {
+  await page.addInitScript(`(() => {
+    const nativeAddEventListener = window.addEventListener.bind(window);
+    const deferredResizeListeners = [];
+    window.addEventListener = (type, listener, options) => {
+      if (type === "resize") deferredResizeListeners.push(listener);
+      else nativeAddEventListener(type, listener, options);
+    };
+    window.flushDeferredResizeListeners = () => {
+      const event = new Event("resize");
+      for (const listener of deferredResizeListeners) {
+        if (typeof listener === "function") listener.call(window, event);
+        else listener.handleEvent(event);
+      }
+    };
+  })();`);
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.description = "Long resize alignment context. ".repeat(900);
+    await route.fulfill({ response, json: detail });
+  });
+  await page.goto("/tasks/T-0001");
+
+  const composer = page.getByRole("region", { name: "Add comment" });
+  const stickyControls = page.locator(".detail-sticky-controls");
+  await composer.evaluate((element) => element.scrollIntoView({ block: "end" }));
+  await page.evaluate(async () => {
+    const composer = document.querySelector<HTMLElement>(".comment-panel")!;
+    for (let attempt = 0; attempt < 12 && !composer.classList.contains("comment-panel-docked"); attempt += 1) {
+      window.scrollBy(0, 250);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+  });
+  await expect(composer).toHaveClass(/comment-panel-docked/);
+  await expect.poll(async () => {
+    const bounds = await composer.boundingBox();
+    return bounds === null ? Number.POSITIVE_INFINITY : Math.abs(700 - (bounds.y + bounds.height));
+  }).toBeLessThanOrEqual(1);
+  await expect(stickyControls).toHaveCSS("position", "fixed");
+
+  const composerScrollSamples = await page.evaluate(async () => {
+    const composer = document.querySelector<HTMLElement>(".comment-panel")!;
+    const samples: Array<{ docked: boolean; bottomGap: number }> = [];
+    for (let step = 0; step < 6; step += 1) {
+      window.scrollBy(0, 40);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const bounds = composer.getBoundingClientRect();
+      samples.push({
+        docked: composer.classList.contains("comment-panel-docked"),
+        bottomGap: Math.abs(window.innerHeight - bounds.bottom),
+      });
+    }
+    return samples;
+  });
+  expect(
+    composerScrollSamples.every((sample) => sample.docked && sample.bottomGap <= 1),
+    JSON.stringify(composerScrollSamples),
+  ).toBe(true);
+
+  await page.setViewportSize({ width: 1400, height: 700 });
+  const alignment = await page.evaluate(() => {
+    const composer = document.querySelector<HTMLElement>(".comment-panel-docked")!;
+    const composerSlot = composer.parentElement!;
+    const controls = document.querySelector<HTMLElement>(".detail-sticky-controls")!;
+    const controlsSlot = controls.closest<HTMLElement>(".detail-sticky-controls-slot")!;
+    const difference = (surface: DOMRect, slot: DOMRect) => ({
+      left: Math.abs(surface.left - slot.left),
+      right: Math.abs(surface.right - slot.right),
+    });
+    return {
+      composer: difference(composer.getBoundingClientRect(), composerSlot.getBoundingClientRect()),
+      controls: difference(controls.getBoundingClientRect(), controlsSlot.getBoundingClientRect()),
+    };
+  });
+  expect(alignment.composer.left).toBeLessThanOrEqual(1);
+  expect(alignment.composer.right).toBeLessThanOrEqual(1);
+  expect(alignment.controls.left).toBeLessThanOrEqual(1);
+  expect(alignment.controls.right).toBeLessThanOrEqual(1);
+
+  await page.evaluate(() => {
+    (window as Window & { flushDeferredResizeListeners?: () => void }).flushDeferredResizeListeners?.();
+  });
+});
+
 test("scrolling reveals a fixed-scale movement map while conversations remain bottom anchored", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 700 });
   await page.route("**/api/tasks/T-0001", async (route) => {

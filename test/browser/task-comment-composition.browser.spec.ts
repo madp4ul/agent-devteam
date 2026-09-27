@@ -376,14 +376,20 @@ test("comment composer stays beside a long timeline without covering its final e
     .toBeLessThanOrEqual(24);
 
   await composer.evaluate((element) => element.scrollIntoView({ block: "end" }));
-  await page.evaluate(() => window.scrollBy(0, 900));
+  await page.evaluate(() => {
+    window.scrollBy(0, 900);
+    window.dispatchEvent(new Event("scroll"));
+  });
   const stickyComposerBounds = await composer.boundingBox();
   expect(stickyComposerBounds).not.toBeNull();
   expect(stickyComposerBounds!.y + stickyComposerBounds!.height).toBeLessThanOrEqual(800);
   expect(stickyComposerBounds!.y + stickyComposerBounds!.height).toBeGreaterThanOrEqual(790);
-  await expect(composer).toHaveCSS("position", "fixed");
+  await expect(composer).toHaveClass(/comment-panel-docked/);
 
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    window.dispatchEvent(new Event("scroll"));
+  });
   const finalEntry = page.locator("#timeline-source-sticky-comment-17");
   const [finalEntryBounds, finalComposerBounds] = await Promise.all([
     finalEntry.boundingBox(),
@@ -413,7 +419,10 @@ test("comment composer stays beside a long timeline without covering its final e
     .toBeLessThanOrEqual(intermediateComposerBounds!.y - 8);
   await draft.fill("");
 
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+    window.dispatchEvent(new Event("scroll"));
+  });
   await expect(composer).toHaveCSS("position", "relative");
   const restoredComposerBounds = await composer.boundingBox();
   expect(restoredComposerBounds).not.toBeNull();
@@ -437,8 +446,15 @@ test("comment composer stays beside a long timeline without covering its final e
     return Math.abs(declaredHeight - measuredHeight);
   }).toBeLessThanOrEqual(1);
   await composer.evaluate((element) => element.scrollIntoView({ block: "end" }));
-  await page.evaluate(() => window.scrollBy(0, 600));
-  await expect(composer).toHaveCSS("position", "fixed");
+  await page.evaluate(async () => {
+    const composer = document.querySelector<HTMLElement>(".comment-panel")!;
+    for (let attempt = 0; attempt < 12 && !composer.classList.contains("comment-panel-docked"); attempt += 1) {
+      window.scrollBy(0, 250);
+      window.dispatchEvent(new Event("scroll"));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+  });
+  await expect(composer).toHaveClass(/comment-panel-docked/);
   const narrowStickyBounds = await composer.boundingBox();
   expect(narrowStickyBounds).not.toBeNull();
   expect(narrowStickyBounds!.x).toBeGreaterThanOrEqual(0);
@@ -494,8 +510,11 @@ test("comment textarea grows with its draft, stops before crowding out context, 
   const initialBounds = await draft.boundingBox();
   expect(initialBounds).not.toBeNull();
 
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await expect(composer).toHaveCSS("position", "fixed");
+  await page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    window.dispatchEvent(new Event("scroll"));
+  });
+  await expect(composer).toHaveClass(/comment-panel-docked/);
   const [bottomComposerBounds, bottomDraftBounds] = await Promise.all([
     composer.boundingBox(),
     draft.boundingBox(),

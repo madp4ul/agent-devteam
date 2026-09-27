@@ -327,6 +327,24 @@ textarea { resize: vertical; line-height: 1.5; }
 .detail-sticky-controls-slot { position: sticky; top: var(--detail-sticky-offset); min-width: 0; }
 .detail-sticky-controls { display: grid; gap: 1rem; }
 .detail-sticky-controls:has(.movement-map[data-bottom-docked="true"]) { position: fixed; top: auto; right: auto; bottom: 1rem; left: var(--movement-map-controls-left); z-index: 4; width: var(--movement-map-controls-width); }
+@supports (position-anchor: --task-sidebar-dock-slot) and (left: anchor(left)) and (width: anchor-size(width)) {
+  .comment-timeline-flow > [data-task-section="comment"]:has(.comment-panel-docked) {
+    position: sticky;
+    top: calc(100dvh - var(--comment-composer-height));
+  }
+  .comment-timeline-flow .detail-panel.comment-panel.comment-panel-docked {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    width: auto;
+  }
+  .detail-sticky-controls-slot { anchor-name: --task-sidebar-dock-slot; }
+  .detail-sticky-controls:has(.movement-map[data-bottom-docked="true"]) {
+    position-anchor: --task-sidebar-dock-slot;
+    left: anchor(left);
+    width: anchor-size(width);
+  }
+}
 .conversations-panel { padding: 1rem; }
 .conversations-panel h2 { margin: 0; font-size: 1rem; }
 .conversations-panel-heading { margin-bottom: .65rem; }

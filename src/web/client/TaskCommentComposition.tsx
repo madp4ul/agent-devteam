@@ -85,11 +85,12 @@ export function TaskCommentComposition({
     let docked = false;
     const synchronizeHeight = (): void => synchronizeComposerHeight(panel, flow);
     const synchronizeDocking = (): void => {
-      const bounds = placeholder.getBoundingClientRect();
-      flow.style.setProperty("--comment-composer-left", `${bounds.left}px`);
-      flow.style.setProperty("--comment-composer-width", `${bounds.width}px`);
+      const slotBounds = placeholder.getBoundingClientRect();
+      const flowBounds = flow.getBoundingClientRect();
+      flow.style.setProperty("--comment-composer-left", `${slotBounds.left}px`);
+      flow.style.setProperty("--comment-composer-width", `${slotBounds.width}px`);
       if (!docked) dockingThresholdHeight = panel.getBoundingClientRect().height;
-      docked = bounds.top + dockingThresholdHeight <= window.innerHeight;
+      docked = flowBounds.top + dockingThresholdHeight <= window.innerHeight;
       panel.classList.toggle("comment-panel-docked", docked);
     };
     const synchronizeLayout = (): void => {
