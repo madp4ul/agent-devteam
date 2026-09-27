@@ -88,6 +88,10 @@ and browser coverage of icon/button geometric centering.
 
 ## Decisions so far
 
+- [18](issues/18-widen-task-detail-content.md): widened task details from
+  `76rem` to `86rem` and shifted the desktop primary/sidebar allocation from
+  2:1 to 7:3, adding about 81–147 px to representative narrative content while
+  preserving sidebar controls, local overflow, themes, and responsive stacking.
 - [20](issues/20-bound-task-detail-projection-cost.md): task details now read
   only the inspected task's history, return task-free board metadata, and use
   deduplicated compact relationship references. Released task-scoped indexes

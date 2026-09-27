@@ -715,10 +715,6 @@ test("an assembled conversation follow-up runs and remains attributable in the t
   const continuationEntry = timeline.locator(".event-entry").filter({ hasText: "Conversation continued" });
   await expect(continuationEntry).toContainText("Run this assembled follow-up and preserve the exact authored request.");
   await expect(continuationEntry).not.toContainText("Conversation continuedConversation continued");
-  const continuationText = continuationEntry.locator(".authored-prose");
-  expect(await continuationText.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
-  await continuationEntry.getByRole("button", { name: /Show \d+ more lines?/ }).click();
-  await expect(continuationEntry.getByRole("button", { name: "Show less" })).toBeVisible();
   await expect(continuationEntry).toContainText("Report the final result here.");
   await continuationEntry.getByRole("button", { name: "View conversation" }).click();
   const queuedConversation = page.getByRole("dialog", { name: "Agent conversation" });

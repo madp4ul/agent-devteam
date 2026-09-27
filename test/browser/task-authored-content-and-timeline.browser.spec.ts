@@ -1,5 +1,109 @@
 import { contrastRatio, expect, test } from "./browser-fixture.ts";
 
+test("task details give narrative history more desktop room without crowding the sidebar", async ({ page }) => {
+  const representativeContent = [
+    "Representative narrative history should use the added horizontal room without forcing supporting controls out of view.",
+    "",
+    "| Surface | Expected behavior |",
+    "| --- | --- |",
+    "| Comments | Readable narrative measure |",
+    "| Tables | Local horizontal overflow |",
+    "",
+    "```ts",
+    `const representativeEvidence = "${"wide-content-".repeat(18)}";`,
+    "```",
+  ].join("\n");
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.comments[0].body = representativeContent;
+    const activation = detail.task.activations.find((candidate: { attempts: unknown[] }) => candidate.attempts.length > 0);
+    activation.attempts[0].outcome.summary = representativeContent;
+    await route.fulfill({ response, json: detail });
+  });
+  await page.goto("/tasks/T-0001");
+
+  const comment = page.locator(".comment-entry, .nested-comment").filter({ hasText: "Representative narrative history" }).first();
+  const outcome = page.getByRole("region", { name: "Outcome" }).filter({ hasText: "Representative narrative history" });
+  const representativeSurfaces = [comment, outcome];
+
+  for (const theme of ["dark", "light"] as const) {
+    await page.evaluate((selectedTheme) => {
+      document.documentElement.dataset.theme = selectedTheme;
+    }, theme);
+
+    for (const viewportWidth of [1280, 1600]) {
+      await page.setViewportSize({ width: viewportWidth, height: 900 });
+      const layout = await page.locator(".detail-grid").evaluate((grid) => {
+        const detail = grid.closest<HTMLElement>(".task-detail")!;
+        const primary = grid.querySelector<HTMLElement>(".detail-primary-column")!;
+        const sidebar = grid.querySelector<HTMLElement>(".detail-column")!;
+        return {
+          detailWidth: detail.getBoundingClientRect().width,
+          primaryWidth: primary.getBoundingClientRect().width,
+          sidebarWidth: sidebar.getBoundingClientRect().width,
+          pageOverflows: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        };
+      });
+
+      if (viewportWidth === 1600) {
+        expect(layout.detailWidth).toBeCloseTo(1376, 0);
+        expect(layout.primaryWidth).toBeGreaterThan(850);
+      } else {
+        expect(layout.primaryWidth).toBeGreaterThan(800);
+      }
+      expect(layout.primaryWidth / layout.sidebarWidth).toBeCloseTo(7 / 3, 1);
+      expect(layout.sidebarWidth).toBeGreaterThanOrEqual(288);
+      expect(layout.pageOverflows).toBe(false);
+      expect(await contrastRatio(page.getByRole("region", { name: "Task timeline" }))).toBeGreaterThanOrEqual(4.5);
+
+      for (const surface of representativeSurfaces) {
+        await expect(surface.getByRole("table")).toBeVisible();
+        expect(await surface.locator("pre").evaluate((element) =>
+          element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+        const tableScroller = surface.locator(".markdown-table-scroll");
+        expect(await tableScroller.evaluate((element) =>
+          element.getBoundingClientRect().right <= element.parentElement!.getBoundingClientRect().right + 1)).toBe(true);
+      }
+
+      const taskPosition = page.getByRole("region", { name: "Task position" });
+      const relationships = page.getByRole("region", { name: "Relationships" });
+      const workspace = page.getByRole("region", { name: "Workspace", exact: true });
+      const conversations = page.getByRole("region", { name: "Conversations" });
+      for (const region of [taskPosition, relationships, workspace, conversations]) {
+        await expect(region).toBeVisible();
+        expect(await region.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+      }
+      for (const control of [
+        taskPosition.getByRole("combobox", { name: "Move task" }),
+        relationships.getByRole("link", { name: "Drag this task" }),
+        workspace.getByRole("button", { name: "Open folder" }),
+        conversations.getByRole("button").first(),
+      ]) {
+        await control.focus();
+        await expect(control).toBeFocused();
+      }
+    }
+  }
+
+  await page.setViewportSize({ width: 760, height: 900 });
+  const responsiveLayout = await page.locator(".detail-grid").evaluate((grid) => {
+    const primary = grid.querySelector<HTMLElement>(".detail-primary-column")!.getBoundingClientRect();
+    const sidebar = grid.querySelector<HTMLElement>(".detail-column")!.getBoundingClientRect();
+    return {
+      display: getComputedStyle(grid).display,
+      primaryWidth: primary.width,
+      sidebarWidth: sidebar.width,
+      sidebarBelowPrimary: sidebar.top >= primary.bottom,
+      pageOverflows: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    };
+  });
+  expect(responsiveLayout.display).toBe("block");
+  expect(responsiveLayout.sidebarWidth).toBeCloseTo(responsiveLayout.primaryWidth, 0);
+  expect(responsiveLayout.sidebarBelowPrimary).toBe(true);
+  expect(responsiveLayout.pageOverflows).toBe(false);
+});
+
 test("task Markdown local-file links share the owning workspace while web links stay external", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
@@ -141,9 +245,8 @@ test("rendered Markdown code stays within every authored task surface", async ({
 
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/tasks/T-0001");
-  await page.getByRole("button", { name: /Show \d+ more lines?/ }).all().then(async (buttons) => {
-    for (const button of buttons) await button.click();
-  });
+  const collapsedContent = page.getByRole("button", { name: /Show \d+ more lines?/ });
+  while (await collapsedContent.count() > 0) await collapsedContent.first().click();
 
   const descriptionSurface = page.getByRole("region", { name: "Description" });
   const commentSurface = page.locator(".comment-entry, .nested-comment").filter({ hasText: "Comment code" });
