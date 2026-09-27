@@ -83,6 +83,11 @@ inspection.
 Complete user-facing board and task-detail read projections are assembled
 inside this boundary before the web adapter serializes them. The adapter does
 not reconstruct those authoritative views by coordinating lower-level queries.
+Task-detail projection reads the inspected task's history once, carries only
+board and column metadata rather than other tasks' histories, and resolves
+current and historical relationship labels through deduplicated task-ID
+lookups. Supporting task-scoped indexes keep those reads independent of
+unrelated accumulated history for active and archived tasks.
 
 Each command workflow owns its SQLite transaction and records the state change,
 activity provenance, projection updates, notifications, and idempotent response

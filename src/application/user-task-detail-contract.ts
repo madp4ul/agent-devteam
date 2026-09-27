@@ -5,11 +5,11 @@ import type {
 import type { AgentConversationIndexEntry } from "./conversation-contract.ts";
 import type {
   CollaboratorView,
+  ProcessBoardView,
   ProcessDiagnostic,
   StartupView,
 } from "./process-contract.ts";
 import type {
-  BoardView,
   TaskOverviewView,
   TaskInspectionView,
   TaskView,
@@ -56,7 +56,7 @@ export interface AgentInspectableTaskContentView {
 
 export interface UserTaskDetailView {
   task: TaskView;
-  board: BoardView;
+  board: ProcessBoardView;
   inspection: UserTaskInspectionView;
   activeRun: ActiveRunView | null;
   activeRuns: ActiveRunView[];

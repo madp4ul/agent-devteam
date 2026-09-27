@@ -97,6 +97,48 @@ test("the browser adapter serves the React application and authoritative board p
   );
 });
 
+test("task-detail endpoint cost and response size stay bounded at the investigated history scale", async (t) => {
+  const fixture = await createFixture("bounded-task-detail");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => application.close());
+
+  const created = Array.from({ length: 22 }, (_, index) => application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: index === 0 ? "Inspected task" : `Unrelated task ${index}`,
+    description: index === 0 ? "Keep this response bounded." : `Unrelated description ${index}.`,
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: `bounded-detail-task-${index}`,
+  }));
+  assert.equal(created.every((result) => result.accepted), true);
+  const inspected = created[0];
+  if (!inspected?.accepted) return;
+  const unrelatedTaskIds = created.slice(1).flatMap((result) => result.accepted ? [result.task.id] : []);
+
+  const server = await startWebServer(application, {
+    host: "127.0.0.1",
+    port: 0,
+    assetDirectory: fixture.assetDirectory,
+  });
+  t.after(() => server.close());
+  const url = `${server.baseUrl}/api/tasks/${inspected.task.id}`;
+  const baselineResponse = await fetch(url);
+  assert.equal(baselineResponse.status, 200);
+  const baselineBody = await baselineResponse.text();
+  const baselineBytes = Buffer.byteLength(baselineBody);
+
+  populateRepresentativeUnrelatedHistory(fixture.databasePath, unrelatedTaskIds);
+
+  const loadedResponse = await fetch(url);
+  assert.equal(loadedResponse.status, 200);
+  const loadedBody = await loadedResponse.text();
+  assert.equal(Buffer.byteLength(loadedBody), baselineBytes);
+  assert.equal(loadedBody, baselineBody);
+});
+
 test("browser commands preserve creation idempotency and revision conflicts", async (t) => {
   const fixture = await createFixture("browser-commands");
   const application = await CoordinationApplication.start({
@@ -685,6 +727,85 @@ boards:
     databasePath: join(directory, "coordination.sqlite3"),
     assetDirectory,
   };
+}
+
+function populateRepresentativeUnrelatedHistory(databasePath: string, taskIds: string[]): void {
+  assert.ok(taskIds.length > 0);
+  const database = new DatabaseSync(databasePath);
+  database.exec("PRAGMA foreign_keys = ON; BEGIN IMMEDIATE");
+  try {
+    const insertComment = database.prepare(
+      `INSERT INTO task_comments (id, task_id, body, actor_kind, actor_id, occurred_at)
+       VALUES (?, ?, ?, 'user', 'local-user', ?)`,
+    );
+    for (let index = 0; index < 332; index += 1) {
+      insertComment.run(
+        `bounded-comment-${index}`,
+        taskIds[index % taskIds.length]!,
+        `Unrelated retained comment ${index}`,
+        "2026-09-26T08:00:00.000Z",
+      );
+    }
+
+    const existingActivity = (database.prepare("SELECT COUNT(*) AS count FROM activity_ledger").get() as { count: number }).count;
+    const insertActivity = database.prepare(
+      `INSERT INTO activity_ledger (id, task_id, type, actor_kind, actor_id, occurred_at, details_json)
+       VALUES (?, ?, 'task.edited', 'user', 'local-user', ?, ?)`,
+    );
+    for (let index = existingActivity; index < 1_900; index += 1) {
+      insertActivity.run(
+        `bounded-activity-${index}`,
+        taskIds[index % taskIds.length]!,
+        "2026-09-26T08:00:00.000Z",
+        index === existingActivity ? "invalid JSON proves unrelated history stayed unloaded" : "{}",
+      );
+    }
+
+    const insertActivation = database.prepare(
+      `INSERT INTO activations
+         (id, task_id, target_agent_id, reason_type, source_event_id, status, created_at,
+          retry_cycle_start, definition_version, stale)
+       VALUES (?, ?, 'implementer', 'column-entry', ?, 'completed', ?, 0, 'representative', 0)`,
+    );
+    for (let index = 0; index < 451; index += 1) {
+      insertActivation.run(
+        `bounded-activation-${index}`,
+        taskIds[index % taskIds.length]!,
+        `bounded-activation-source-${index}`,
+        "2026-09-26T08:00:00.000Z",
+      );
+    }
+
+    const insertAttempt = database.prepare(
+      `INSERT INTO attempts
+         (id, activation_id, status, workspace_path, started_at, completed_at,
+          outcome_status, outcome_summary, thread_id)
+       VALUES (?, ?, 'completed', ?, ?, ?, 'completed', 'Retained unrelated attempt.', ?)`,
+    );
+    for (let index = 0; index < 472; index += 1) {
+      insertAttempt.run(
+        `bounded-attempt-${index}`,
+        `bounded-activation-${index % 451}`,
+        `D:/representative/task-${index % taskIds.length}`,
+        "2026-09-26T08:00:00.000Z",
+        "2026-09-26T08:01:00.000Z",
+        `bounded-thread-${index}`,
+      );
+    }
+
+    const insertTranscript = database.prepare(
+      "INSERT INTO attempt_transcripts (attempt_id, items_json) VALUES (?, '[]')",
+    );
+    for (let index = 0; index < 305; index += 1) {
+      insertTranscript.run(`bounded-attempt-${index}`);
+    }
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  } finally {
+    database.close();
+  }
 }
 
 async function postJson(url: string, body: unknown): Promise<{ response: Response; body: unknown }> {

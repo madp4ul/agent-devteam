@@ -124,6 +124,114 @@ test("the user task-detail projection returns complete browser-ready task contex
   });
 });
 
+test("task details stay bounded to the inspected task while preserving compact relationship labels", async (t) => {
+  const fixture = await createDiscoveryFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+
+  const created = [
+    ["Inspected task", "inspected"],
+    ["Active relationship", "active-related"],
+    ["Archived relationship", "archived-related"],
+    ["Timeline-only relationship", "timeline-related"],
+    ["Unrelated history sentinel", "unrelated"],
+  ] as const;
+  const results = created.map(([title, key]) => application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title,
+    description: `${title} description.`,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: `create-bounded-detail-${key}`,
+  }));
+  assert.equal(results.every((result) => result.accepted), true);
+  const [inspectedResult, activeResult, archivedResult, timelineResult, unrelatedResult] = results;
+  if (
+    !inspectedResult?.accepted || !activeResult?.accepted || !archivedResult?.accepted ||
+    !timelineResult?.accepted || !unrelatedResult?.accepted
+  ) return;
+
+  for (const [index, related] of [activeResult.task, archivedResult.task, timelineResult.task].entries()) {
+    const relationship = application.createTaskRelationship({
+      type: "dependency",
+      sourceTaskId: inspectedResult.task.id,
+      targetTaskId: related.id,
+      actor: { kind: "user", id: "paul" },
+      idempotencyKey: `create-bounded-detail-relationship-${index}`,
+    });
+    assert.equal(relationship.accepted, true);
+    if (!relationship.accepted) return;
+    if (related.id === timelineResult.task.id) {
+      assert.equal(application.removeTaskRelationship({
+        taskId: inspectedResult.task.id,
+        relationshipId: relationship.relationship.id,
+        actor: { kind: "user", id: "paul" },
+        idempotencyKey: "remove-bounded-detail-timeline-relationship",
+      }).accepted, true);
+    }
+  }
+
+  const fixtureDatabase = new DatabaseSync(fixture.databasePath);
+  fixtureDatabase.exec("PRAGMA foreign_keys = ON");
+  fixtureDatabase.prepare("UPDATE tasks SET archived_at = ? WHERE id = ?")
+    .run("2026-09-26T08:00:00.000Z", archivedResult.task.id);
+  const baseline = application.queryUserTaskDetail(inspectedResult.task.id);
+  assert.equal(baseline.available, true);
+  if (!baseline.available) return;
+  const baselineJson = JSON.stringify(baseline);
+  const baselineResponseBytes = Buffer.byteLength(baselineJson);
+  for (const task of [activeResult.task, archivedResult.task, timelineResult.task, unrelatedResult.task]) {
+    fixtureDatabase.prepare("UPDATE activity_ledger SET details_json = ? WHERE task_id = ?")
+      .run("not valid JSON: history must stay unloaded", task.id);
+  }
+  for (let index = 0; index < 100; index += 1) {
+    fixtureDatabase.prepare(
+      `INSERT INTO task_comments (id, task_id, body, actor_kind, actor_id, occurred_at)
+       VALUES (?, ?, ?, 'user', 'paul', ?)`,
+    ).run(
+      `unrelated-comment-${index}`,
+      unrelatedResult.task.id,
+      `UNRELATED-HISTORY-SENTINEL-${index}`,
+      `2026-09-26T08:${String(index % 60).padStart(2, "0")}:00.000Z`,
+    );
+  }
+  fixtureDatabase.close();
+
+  for (const archived of [false, true]) {
+    if (archived) {
+      const database = new DatabaseSync(fixture.databasePath);
+      database.prepare("UPDATE tasks SET archived_at = ? WHERE id = ?")
+        .run("2026-09-26T09:00:00.000Z", inspectedResult.task.id);
+      database.close();
+    }
+
+    const detail = application.queryUserTaskDetail(inspectedResult.task.id);
+    assert.equal(detail.available, true);
+    if (!detail.available) return;
+    assert.equal(detail.task.archived === true, archived);
+    assert.equal(detail.board.columns.every((column) => !("tasks" in column)), true);
+    const detailJson = JSON.stringify(detail);
+    assert.doesNotMatch(detailJson, /UNRELATED-HISTORY-SENTINEL/);
+    if (!archived) {
+      assert.equal(detailJson, baselineJson);
+      assert.equal(Buffer.byteLength(detailJson), baselineResponseBytes);
+    }
+    assert.deepEqual(detail.relationshipTasks.map((task) => ({
+      title: task.title,
+      archived: task.archived === true,
+    })), [
+      { title: "Active relationship", archived: false },
+      { title: "Archived relationship", archived: true },
+    ]);
+    assert.deepEqual(detail.timelineRelationshipTasks.map((task) =>
+      task.available ? { title: task.title, archived: task.archived } : task), [
+      { title: "Active relationship", archived: false },
+      { title: "Archived relationship", archived: true },
+      { title: "Timeline-only relationship", archived: false },
+    ]);
+  }
+});
+
 test("the user task-detail projection retains historical timeline targets and reports their honest state", async (t) => {
   const fixture = await createDiscoveryFixture();
   const application = await CoordinationApplication.start(fixture);

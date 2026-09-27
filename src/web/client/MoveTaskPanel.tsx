@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { BoardColumnView, CollaboratorView, TaskActivityView } from "../../application/browser-transport-contract.ts";
+import type { CollaboratorView, ProcessColumnView, TaskActivityView } from "../../application/browser-transport-contract.ts";
 import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { TaskMovementMap } from "./TaskMovementMap.tsx";
 import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
@@ -17,7 +17,7 @@ export function MoveTaskPanel({
   onMove,
   inspectable,
 }: {
-  columns: BoardColumnView[];
+  columns: ProcessColumnView[];
   currentColumnId: string;
   currentColumnName: string;
   currentColumnSourceId?: string;
@@ -25,7 +25,7 @@ export function MoveTaskPanel({
   movements: Array<TaskActivityView & { type: "task.moved" }>;
   agents: Pick<CollaboratorView, "id" | "name">[];
   pending: boolean;
-  onMove(column: BoardColumnView): Promise<void>;
+  onMove(column: ProcessColumnView): Promise<void>;
   inspectable: boolean;
 }): ReactNode {
   const currentColumnIndex = columns.findIndex((column) => column.id === currentColumnId);

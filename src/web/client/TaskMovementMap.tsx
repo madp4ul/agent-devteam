@@ -2,8 +2,8 @@ import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type Po
 import { createPortal } from "react-dom";
 
 import type {
-  BoardColumnView,
   CollaboratorView,
+  ProcessColumnView,
   TaskActivityView,
 } from "../../application/browser-transport-contract.ts";
 import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
@@ -32,7 +32,7 @@ export function TaskMovementMap({
   agents,
 }: {
   movements: Movement[];
-  columns: BoardColumnView[];
+  columns: ProcessColumnView[];
   agents: Pick<CollaboratorView, "id" | "name">[];
 }): ReactNode {
   const ordered = useMemo(
@@ -367,7 +367,7 @@ export function TaskMovementMap({
   );
 }
 
-function MovementMapLegendItem({ column }: { column: BoardColumnView }): ReactNode {
+function MovementMapLegendItem({ column }: { column: ProcessColumnView }): ReactNode {
   const tooltipId = useId();
   const itemRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLSpanElement>(null);
@@ -435,7 +435,7 @@ function MovementMapLegendItem({ column }: { column: BoardColumnView }): ReactNo
 
 function movementLabel(
   movement: Movement,
-  columns: BoardColumnView[],
+  columns: ProcessColumnView[],
   agents: Pick<CollaboratorView, "id" | "name">[],
 ): string {
   const from = columns.find((column) => column.id === movement.details.fromColumnId)?.name ?? movement.details.fromColumnId;
@@ -444,13 +444,13 @@ function movementLabel(
   return `Moved from ${from} to ${to} by ${actor}`;
 }
 
-function agentColumnIndex(movement: Movement, columns: BoardColumnView[]): number {
+function agentColumnIndex(movement: Movement, columns: ProcessColumnView[]): number {
   const watched = columns.findIndex((column) => column.watchingAgentId === movement.actor.id);
   if (watched >= 0) return watched;
   return columnIndex(movement.details.toColumnId, columns);
 }
 
-function columnIndex(columnId: string | undefined, columns: BoardColumnView[]): number {
+function columnIndex(columnId: string | undefined, columns: ProcessColumnView[]): number {
   const index = columns.findIndex((column) => column.id === columnId);
   return index >= 0 ? index : 0;
 }

@@ -27,6 +27,41 @@ export interface StoredTaskOverview {
   task: TaskOverviewView;
 }
 
+export interface StoredTaskReference {
+  id: string;
+  title: string;
+  boardId: string;
+  column: { id: string; name: string };
+  archived: boolean;
+  blocking: TaskOverviewView["blocking"];
+}
+
+interface TaskOverviewRecordRow {
+  id: string;
+  sequence: number;
+  title: string;
+  board_id: string;
+  column_id: string;
+  revision: number;
+  automation_suspended: number;
+  archived_at: string | null;
+  column_entry_sequence: number;
+  column_name: string;
+  queued_count: number;
+  failed_count: number;
+  running_count: number;
+  active_agent_id: string | null;
+}
+
+const taskOverviewRecordColumns = `
+  t.id, t.sequence, t.title, t.board_id, t.column_id, t.revision,
+  t.automation_suspended, t.archived_at,
+  c.name AS column_name,
+  SUM(CASE WHEN a.status = 'queued' THEN 1 ELSE 0 END) AS queued_count,
+  SUM(CASE WHEN a.status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+  SUM(CASE WHEN a.status = 'running' THEN 1 ELSE 0 END) AS running_count,
+  MAX(CASE WHEN a.status = 'running' THEN a.target_agent_id END) AS active_agent_id`;
+
 export class TaskProjectionStore {
   readonly #database: DatabaseSync;
 
@@ -116,8 +151,7 @@ export class TaskProjectionStore {
     const placeholders = columnIds.map(() => "?").join(", ");
     const rows = this.#database
       .prepare(
-        `SELECT t.id, t.sequence, t.title, t.board_id, t.column_id, t.revision,
-                t.automation_suspended, t.archived_at,
+        `SELECT ${taskOverviewRecordColumns},
                 COALESCE((
                   SELECT entry.sequence
                   FROM activity_ledger entry
@@ -130,12 +164,7 @@ export class TaskProjectionStore {
                     )
                   ORDER BY entry.sequence DESC
                   LIMIT 1
-                ), t.sequence) AS column_entry_sequence,
-                c.name AS column_name,
-                SUM(CASE WHEN a.status = 'queued' THEN 1 ELSE 0 END) AS queued_count,
-                SUM(CASE WHEN a.status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
-                SUM(CASE WHEN a.status = 'running' THEN 1 ELSE 0 END) AS running_count,
-                MAX(CASE WHEN a.status = 'running' THEN a.target_agent_id END) AS active_agent_id
+                ), t.sequence) AS column_entry_sequence
          FROM tasks t
          JOIN columns c ON c.board_id = t.board_id AND c.id = t.column_id
          LEFT JOIN activations a ON a.task_id = t.id
@@ -143,53 +172,95 @@ export class TaskProjectionStore {
          GROUP BY t.id, t.sequence, t.title, t.board_id, t.column_id, t.revision, c.name
          ORDER BY t.sequence`,
       )
-      .all(boardId, ...columnIds) as Array<{
+      .all(boardId, ...columnIds) as unknown as TaskOverviewRecordRow[];
+    return rows.map((row) => this.projectTaskOverviewRecord(row));
+  }
+
+  readTaskOverviewRecord(
+    taskId: string,
+    knownRelationships?: TaskRelationshipView[],
+  ): StoredTaskOverview | undefined {
+    const row = this.#database
+      .prepare(
+        `SELECT ${taskOverviewRecordColumns}, t.sequence AS column_entry_sequence
+         FROM tasks t
+         JOIN columns c ON c.board_id = t.board_id AND c.id = t.column_id
+         LEFT JOIN activations a ON a.task_id = t.id
+         WHERE t.id = ?
+         GROUP BY t.id, t.sequence, t.title, t.board_id, t.column_id, t.revision, c.name`,
+      )
+      .get(taskId) as unknown as TaskOverviewRecordRow | undefined;
+    if (row === undefined) return undefined;
+    return this.projectTaskOverviewRecord(row, knownRelationships);
+  }
+
+  private projectTaskOverviewRecord(
+    row: TaskOverviewRecordRow,
+    knownRelationships?: TaskRelationshipView[],
+  ): StoredTaskOverview {
+    const archived = row.archived_at !== null;
+    const blockerTaskIds = this.readBlockingTaskIds(row.id);
+    const startupFailure = archived ? undefined : this.readLatestUnresolvedStartupFailure(row.id);
+    return {
+      sequence: row.sequence,
+      columnEntrySequence: row.column_entry_sequence,
+      task: {
+        id: row.id,
+        title: row.title,
+        boardId: row.board_id,
+        column: { id: row.column_id, name: row.column_name },
+        revision: row.revision,
+        ...(archived ? { archived: true as const } : {}),
+        blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
+        relationships: knownRelationships ?? this.readTaskRelationships(row.id),
+        unresolvedAttention: this.readUnresolvedAttention(row.id),
+        automationSuspended: row.automation_suspended === 1,
+        ...(startupFailure === undefined ? {} : { startupFailure }),
+        run: archived
+          ? { status: "idle", activeAgentId: null, queuedActivationCount: 0, failedActivationCount: 0 }
+          : {
+              status:
+                row.running_count > 0
+                  ? "running"
+                  : row.failed_count > 0
+                    ? "failed"
+                    : row.queued_count > 0
+                      ? "queued"
+                      : "idle",
+              activeAgentId: row.active_agent_id,
+              queuedActivationCount: row.queued_count,
+              failedActivationCount: row.failed_count,
+            },
+      },
+    };
+  }
+
+  readTaskReferences(taskIds: string[]): StoredTaskReference[] {
+    if (taskIds.length === 0) return [];
+    const placeholders = taskIds.map(() => "?").join(", ");
+    const rows = this.#database.prepare(
+      `SELECT task.id, task.title, task.board_id, task.column_id,
+              task.archived_at, column.name AS column_name
+       FROM tasks task
+       JOIN columns column ON column.board_id = task.board_id AND column.id = task.column_id
+       WHERE task.id IN (${placeholders})`,
+    ).all(...taskIds) as Array<{
       id: string;
-      sequence: number;
       title: string;
       board_id: string;
       column_id: string;
-      revision: number;
-      automation_suspended: number;
       archived_at: string | null;
-      column_entry_sequence: number;
       column_name: string;
-      queued_count: number;
-      failed_count: number;
-      running_count: number;
-      active_agent_id: string | null;
     }>;
     return rows.map((row) => {
       const blockerTaskIds = this.readBlockingTaskIds(row.id);
-      const startupFailure = this.readLatestUnresolvedStartupFailure(row.id);
       return {
-        sequence: row.sequence,
-        columnEntrySequence: row.column_entry_sequence,
-        task: {
-          id: row.id,
-          title: row.title,
-          boardId: row.board_id,
-          column: { id: row.column_id, name: row.column_name },
-          revision: row.revision,
-          blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
-          relationships: this.readTaskRelationships(row.id),
-          unresolvedAttention: this.readUnresolvedAttention(row.id),
-          automationSuspended: row.automation_suspended === 1,
-          ...(startupFailure === undefined ? {} : { startupFailure }),
-          run: {
-            status:
-              row.running_count > 0
-                ? "running"
-                : row.failed_count > 0
-                  ? "failed"
-                  : row.queued_count > 0
-                    ? "queued"
-                    : "idle",
-            activeAgentId: row.active_agent_id,
-            queuedActivationCount: row.queued_count,
-            failedActivationCount: row.failed_count,
-          },
-        },
+        id: row.id,
+        title: row.title,
+        boardId: row.board_id,
+        column: { id: row.column_id, name: row.column_name },
+        archived: row.archived_at !== null,
+        blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
       };
     });
   }

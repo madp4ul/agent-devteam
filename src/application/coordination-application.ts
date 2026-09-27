@@ -52,6 +52,7 @@ import type {
 import type {
   BoardSummariesQueryResult,
   CollaboratorsQueryResult,
+  ProcessBoardView,
   ProcessDiagnostic,
   ProcessValidationResult,
   StartupView,
@@ -584,11 +585,8 @@ export class CoordinationApplication {
   }
 
   queryUserTaskDetail(taskId: string): UserTaskDetailQueryResult {
-    const loaded = this.queryTask(taskId);
-    if (!loaded.available) return loaded;
-    const inspection = this.queryTaskInspectionForUser(taskId);
-    if (!inspection.available) return inspection;
-    const agentInspection = this.queryTaskInspection(taskId);
+    const context = this.#discovery.queryUserTaskDetailContext(taskId);
+    if (!context.available) return context;
     let agentInspectableContent: AgentInspectableTaskContentView = {
       taskFields: [],
       commentIds: [],
@@ -597,15 +595,12 @@ export class CoordinationApplication {
       conversationMessageIds: [],
       attachmentIds: [],
     };
-    if (agentInspection.available) {
-      const agentActivity = this.queryTaskActivity(taskId);
-      if (!agentActivity.available) return agentActivity;
-      const agentAttachments = this.queryTaskAttachments(taskId);
-      if (!agentAttachments.available) return agentAttachments;
+    if (context.agentInspectable) {
+      const { workspace: _workspace, ...agentInspection } = context.inspection;
       agentInspectableContent = describeAgentInspectableTaskContent(
-        agentInspection.task,
-        agentActivity.activity,
-        agentAttachments.attachments,
+        agentInspection,
+        context.task.activity,
+        context.attachments,
       );
     }
     const collaborators = this.queryCollaborators();
@@ -613,11 +608,14 @@ export class CoordinationApplication {
     const activeRuns = this.queryActiveRuns();
     const conversations = conversationIndex.available ? conversationIndex.conversations : [];
     const conversationCost = aggregateTokenCostSummaries(conversations, { compactBreakdown: true });
+    const relatedTasks = this.readUserRelatedTaskReferences(context.task);
     return {
-      ...loaded,
-      inspection: inspection.task,
-      relationshipTasks: this.readUserRelatedTasks(loaded.task),
-      timelineRelationshipTasks: this.readUserTimelineRelatedTasks(loaded.task),
+      available: true,
+      task: context.task,
+      board: context.board,
+      inspection: context.inspection,
+      relationshipTasks: relatedTasks.relationshipTasks,
+      timelineRelationshipTasks: relatedTasks.timelineRelationshipTasks,
       agentInspectableContent,
       activeRun: activeRuns.find((run) => run.taskId === taskId) ?? null,
       activeRuns,
@@ -631,43 +629,52 @@ export class CoordinationApplication {
     };
   }
 
-  private readUserRelatedTasks(task: TaskView): UserRelatedTaskView[] {
-    const relatedTaskIds = new Set(task.relationships.map((relationship) => relationship.sourceTaskId === task.id
+  private readUserRelatedTaskReferences(task: TaskView): {
+    relationshipTasks: UserRelatedTaskView[];
+    timelineRelationshipTasks: UserTimelineRelatedTaskView[];
+  } {
+    const relationshipTaskIds = new Set(task.relationships.map((relationship) => relationship.sourceTaskId === task.id
       ? relationship.targetTaskId
       : relationship.sourceTaskId));
-    return [...relatedTaskIds].flatMap((relatedTaskId) => {
-      const related = this.queryTask(relatedTaskId);
-      const relatedInspection = this.queryTaskInspectionForUser(relatedTaskId);
-      if (!related.available || !relatedInspection.available) return [];
-      return [{
-        id: related.task.id,
-        title: related.task.title,
-        boardId: related.task.boardId,
-        boardName: related.board.name,
-        column: relatedInspection.task.column,
-        blocking: relatedInspection.task.blocking,
-        ...(related.task.archived ? { archived: true as const } : {}),
-      }];
-    });
-  }
-
-  private readUserTimelineRelatedTasks(task: TaskView): UserTimelineRelatedTaskView[] {
-    const relatedTaskIds = new Set(task.activity.flatMap((activity) => {
+    const timelineTaskIds = new Set(task.activity.flatMap((activity) => {
       const relatedTaskId = activity.details.relatedTaskId;
       return relatedTaskId === undefined ? [] : [relatedTaskId];
     }));
-    return [...relatedTaskIds].map((relatedTaskId) => {
-      const related = this.queryTask(relatedTaskId);
-      const inspection = this.queryTaskInspectionForUser(relatedTaskId);
-      if (!related.available || !inspection.available) return { id: relatedTaskId, available: false as const };
+    const relatedTaskIds = [...new Set([...relationshipTaskIds, ...timelineTaskIds])];
+    const boards = new Map<string, ProcessBoardView | undefined>();
+    const references = new Map(this.#persistence.taskProjections.readTaskReferences(relatedTaskIds)
+      .map((task) => {
+        if (!boards.has(task.boardId)) {
+          boards.set(task.boardId, this.#persistence.process.readBoard(task.boardId, true));
+        }
+        const board = boards.get(task.boardId);
+        return [task.id, board === undefined ? undefined : { task, board }] as const;
+      }));
+    const relationshipTasks = [...relationshipTaskIds].flatMap((relatedTaskId): UserRelatedTaskView[] => {
+      const reference = references.get(relatedTaskId);
+      if (reference === undefined) return [];
+      return [{
+        id: reference.task.id,
+        title: reference.task.title,
+        boardId: reference.task.boardId,
+        boardName: reference.board.name,
+        column: reference.task.column,
+        blocking: reference.task.blocking,
+        ...(reference.task.archived ? { archived: true as const } : {}),
+      }];
+    });
+    const timelineRelationshipTasks = [...timelineTaskIds].map((relatedTaskId): UserTimelineRelatedTaskView => {
+      const reference = references.get(relatedTaskId);
+      if (reference === undefined) return { id: relatedTaskId, available: false };
       return {
         id: relatedTaskId,
-        title: related.task.title,
-        available: true as const,
-        completed: inspection.task.column.id === "completion",
-        archived: related.task.archived === true,
+        title: reference.task.title,
+        available: true,
+        completed: reference.task.column.id === "completion",
+        archived: reference.task.archived,
       };
     });
+    return { relationshipTasks, timelineRelationshipTasks };
   }
 
   async queryTaskWorkspaceGitState(taskId: string): Promise<TaskWorkspaceGitStateQueryResult> {

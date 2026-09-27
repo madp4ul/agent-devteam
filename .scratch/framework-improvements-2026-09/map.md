@@ -35,7 +35,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [17](issues/17-compact-routine-timeline-activity.md) | Compact routine timeline activity while preserving items that merit attention | Define reliable prominence signals and filtering behavior before implementation |
 | [18](issues/18-widen-task-detail-content.md) | Give long task-detail content more horizontal room | Inspect representative content and agree the desktop width |
 | [19](issues/19-anchor-live-timeline-refresh-at-visible-top.md) | Anchor live timeline refresh at the top of the unobscured reading area | Implemented; user review |
-| [20](issues/20-bound-task-detail-projection-cost.md) | Keep task-detail load cost independent of unrelated task history | Define the narrow projection contract and convert the investigation into regression coverage |
+| [20](issues/20-bound-task-detail-projection-cost.md) | Keep task-detail load cost independent of unrelated task history | Implemented; user review and restart-based rollout verification |
 
 ## Workflow and relationships
 
@@ -88,6 +88,11 @@ and browser coverage of icon/button geometric centering.
 
 ## Decisions so far
 
+- [20](issues/20-bound-task-detail-projection-cost.md): task details now read
+  only the inspected task's history, return task-free board metadata, and use
+  deduplicated compact relationship references. Released task-scoped indexes
+  and an investigation-scale HTTP regression keep unrelated history from
+  changing the response or being hydrated; one-second polling remains in place.
 - [19](issues/19-anchor-live-timeline-refresh-at-visible-top.md): passive task
   polling now preserves the unique timeline record nearest the sticky header's
   lower edge at the same header-relative offset, without changing active

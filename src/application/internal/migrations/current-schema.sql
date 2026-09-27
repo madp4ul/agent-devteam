@@ -338,6 +338,22 @@ CREATE TABLE tasks (
       FOREIGN KEY (board_id, column_id) REFERENCES columns(board_id, id)
     );
 
+-- index activations_by_task_sequence on activations
+CREATE INDEX activations_by_task_sequence
+        ON activations(task_id, sequence);
+
+-- index activity_ledger_by_task_sequence on activity_ledger
+CREATE INDEX activity_ledger_by_task_sequence
+        ON activity_ledger(task_id, sequence);
+
+-- index attempts_by_activation on attempts
+CREATE INDEX attempts_by_activation
+        ON attempts(activation_id);
+
+-- index attention_reasons_by_task_resolution on attention_reasons
+CREATE INDEX attention_reasons_by_task_resolution
+        ON attention_reasons(task_id, resolved_at);
+
 -- index one_current_agent_conversation_per_task_agent on agent_conversations
 CREATE UNIQUE INDEX one_current_agent_conversation_per_task_agent
       ON agent_conversations(task_id, owning_agent_id)
@@ -351,6 +367,22 @@ CREATE UNIQUE INDEX one_relationship_of_each_type
 CREATE UNIQUE INDEX one_running_activation_per_task
       ON activations(task_id)
       WHERE status = 'running';
+
+-- index task_attachments_by_task on task_attachments
+CREATE INDEX task_attachments_by_task
+        ON task_attachments(task_id);
+
+-- index task_comments_by_task_sequence on task_comments
+CREATE INDEX task_comments_by_task_sequence
+        ON task_comments(task_id, sequence);
+
+-- index task_relationships_by_source on task_relationships
+CREATE INDEX task_relationships_by_source
+        ON task_relationships(source_task_id);
+
+-- index task_relationships_by_target on task_relationships
+CREATE INDEX task_relationships_by_target
+        ON task_relationships(target_task_id);
 
 -- trigger activations_start_in_task_order on activations
 CREATE TRIGGER activations_start_in_task_order

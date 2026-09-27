@@ -8,13 +8,18 @@ import type {
 import type {
   TaskActivityQueryResult,
   ArchivedTaskOverviewsQueryResult,
+  TaskAttachmentView,
   TaskAttachmentsQueryResult,
   TaskInspectionQueryResult,
+  TaskInspectionView,
+  TaskOverviewView,
   UserTaskInspectionQueryResult,
   TaskOverviewsQuery,
   TaskOverviewsQueryResult,
+  UserTaskInspectionView,
   TaskView,
 } from "../task-contract.ts";
+import type { ProcessBoardView } from "../process-contract.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
 import type { ActivationSchedulingModule } from "./activation-scheduling-module.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
@@ -131,6 +136,35 @@ export class TaskDiscovery {
     return this.queryTaskInspectionView(taskId, { audience: "user" });
   }
 
+  queryUserTaskDetailContext(taskId: string):
+    | {
+        available: true;
+        task: TaskView;
+        board: ProcessBoardView;
+        inspection: UserTaskInspectionView;
+        agentInspectable: boolean;
+        attachments: TaskAttachmentView[];
+      }
+    | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
+    | { available: false; reason: "not-found" } {
+    const loaded = this.readTask(taskId, true, true);
+    if (!loaded.available) return loaded;
+    const board = this.#processStore.readBoard(loaded.task.boardId, true);
+    const overview = this.#taskProjections.readTaskOverviewRecord(taskId, loaded.task.relationships)?.task;
+    const column = board?.columns.find((candidate) => candidate.id === loaded.task.columnId);
+    if (board === undefined || overview === undefined || column === undefined) {
+      return { available: false, reason: "not-found" };
+    }
+    return {
+      available: true,
+      task: loaded.task,
+      board,
+      inspection: this.projectTaskInspection(loaded.task, overview, column, true),
+      agentInspectable: loaded.task.archived === true || this.#taskProjections.isTaskInspectableByAgent(taskId),
+      attachments: this.#taskProjections.readTaskAttachments(taskId),
+    };
+  }
+
   private queryTaskInspectionView(
     taskId: string,
     options: { audience: "agent" },
@@ -151,22 +185,42 @@ export class TaskDiscovery {
       ? this.#processStore.readBoard(task.boardId, true)
       : this.#processStore.readBoard(task.boardId);
     const column = board?.columns.find((candidate) => candidate.id === task.columnId);
-    const overview = (task.archived
-      ? this.#taskProjections.readArchivedTaskOverviewRecords()
-      : this.#taskProjections.readTaskOverviewRecords(task.boardId, [task.columnId]))
-      .map((record) => record.task)
-      .find((candidate) => candidate.id === task.id);
+    const overview = this.#taskProjections.readTaskOverviewRecord(task.id)?.task;
     if (column === undefined || overview === undefined) {
       return { available: false, reason: "not-found" };
     }
+    return {
+      available: true,
+      task: options.audience === "user"
+        ? this.projectTaskInspection(task, overview, column, true)
+        : this.projectTaskInspection(task, overview, column, false),
+    } as TaskInspectionQueryResult | UserTaskInspectionQueryResult;
+  }
+
+  private projectTaskInspection(
+    task: TaskView,
+    overview: TaskOverviewView,
+    column: { id: string; name: string },
+    includeWorkspace: true,
+  ): UserTaskInspectionView;
+  private projectTaskInspection(
+    task: TaskView,
+    overview: TaskOverviewView,
+    column: { id: string; name: string },
+    includeWorkspace: false,
+  ): TaskInspectionView;
+  private projectTaskInspection(
+    task: TaskView,
+    overview: TaskOverviewView,
+    column: { id: string; name: string },
+    includeWorkspace: boolean,
+  ): TaskInspectionView | UserTaskInspectionView {
     const currentActivation = task.activations.find(
       (activation): activation is typeof activation & { status: "queued" | "running" | "failed" } =>
         activation.status !== "completed" && activation.status !== "dismissed",
     );
-    const automationSuspended = this.#taskProjections.isTaskAutomationSuspended(task.id);
+    const automationSuspended = overview.automationSuspended;
     return {
-      available: true,
-      task: {
         id: task.id,
         title: task.title,
         description: task.description,
@@ -178,7 +232,7 @@ export class TaskDiscovery {
         relationships: task.relationships,
         blocking: overview.blocking,
         run: overview.run,
-        unresolvedAttention: this.#taskProjections.readUnresolvedAttention(task.id),
+        unresolvedAttention: overview.unresolvedAttention,
         currentActivation:
           currentActivation === undefined
             ? null
@@ -192,11 +246,10 @@ export class TaskDiscovery {
                 reasoningEffort: currentActivation.reasoningEffort,
               },
         automationSuspended,
-        ...(options.audience === "user"
+        ...(includeWorkspace
           ? { workspace: this.#activationScheduling.readTaskWorkspace(task.id) ?? null }
           : {}),
         onDemand: { activity: true, attachments: true },
-      },
     };
   }
 

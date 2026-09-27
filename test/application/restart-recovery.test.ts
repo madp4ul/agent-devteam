@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
 import type { AutomationClock } from "../../src/application/automation-contract.ts";
+import { coordinationMigrations } from "../../src/application/internal/migrations/registry.ts";
 import type {
   AgentRunLifecycle,
   AgentRunOutcome,
@@ -290,7 +291,7 @@ test("the released migration ledger remains authoritative when user_version chan
   assert.deepEqual(
     current.prepare("SELECT migration_id FROM coordination_migrations ORDER BY position").all()
       .map((row) => ({ ...row })),
-    [{ migration_id: "0001_initial_released_schema" }],
+    coordinationMigrations.map(({ id: migration_id }) => ({ migration_id })),
   );
   current.close();
 });

@@ -10,10 +10,13 @@ import { promisify } from "node:util";
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
 import { describeCoordinationSchema } from "../../src/application/internal/coordination-schema-snapshot.ts";
 import { coordinationMigrations } from "../../src/application/internal/migrations/registry.ts";
+import { initialReleasedMigration } from "../../src/application/internal/migrations/0001-initial-released-schema.ts";
 import { createCommittedTestRepository } from "../support/agent-runtime-fixture.ts";
 import { CompletingAgentRuntime } from "../support/activation-fixture.ts";
 
 const initialReleasedMigrationId = "0001_initial_released_schema";
+const boundTaskDetailLookupsMigrationId = "0002_bound_task_detail_lookups";
+const productionMigrationIds = [initialReleasedMigrationId, boundTaskDetailLookupsMigrationId];
 
 test("fresh startup applies the released migration registry and matches the current schema snapshot", async (t) => {
   const fixture = await createStartupFixture("fresh");
@@ -43,7 +46,7 @@ test("fresh startup applies the released migration registry and matches the curr
   assert.deepEqual(
     inspection.prepare("SELECT position, migration_id FROM coordination_migrations ORDER BY position").all()
       .map((row) => ({ ...row })),
-    [{ position: 1, migration_id: initialReleasedMigrationId }],
+    productionMigrationIds.map((migration_id, index) => ({ position: index + 1, migration_id })),
   );
   assert.equal(
     (inspection.prepare("PRAGMA user_version").get() as { user_version: number }).user_version,
@@ -55,6 +58,77 @@ test("fresh startup applies the released migration registry and matches the curr
     "utf8",
   );
   assert.equal(describeCoordinationSchema(inspection), checkedInSnapshot);
+});
+
+test("the released task-detail indexes keep selected-history lookups off unrelated table scans", async (t) => {
+  const fixture = await createReleasedDatabase("task-detail-query-plans");
+  const database = new DatabaseSync(fixture.databasePath, { readOnly: true });
+  t.after(async () => {
+    database.close();
+    await rm(fixture.directory, { recursive: true, force: true });
+  });
+
+  const indexedQueries = [
+    ["activity_ledger_by_task_sequence", "SELECT * FROM activity_ledger WHERE task_id = ? ORDER BY sequence"],
+    ["task_comments_by_task_sequence", "SELECT * FROM task_comments WHERE task_id = ? ORDER BY sequence"],
+    ["activations_by_task_sequence", "SELECT * FROM activations WHERE task_id = ? ORDER BY sequence"],
+    ["attempts_by_activation", "SELECT * FROM attempts WHERE activation_id = ? ORDER BY rowid"],
+    ["attention_reasons_by_task_resolution", "SELECT * FROM attention_reasons WHERE task_id = ? AND resolved_at IS NULL"],
+    ["task_attachments_by_task", "SELECT * FROM task_attachments WHERE task_id = ?"],
+  ] as const;
+  for (const [indexName, sql] of indexedQueries) {
+    const plan = database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all("T-0001") as Array<{ detail: string }>;
+    assert.match(plan.map(({ detail }) => detail).join("\n"), new RegExp(`USING INDEX ${indexName}`));
+  }
+  const relationshipPlan = database.prepare(
+    `EXPLAIN QUERY PLAN SELECT * FROM task_relationships
+     WHERE source_task_id = ? OR target_task_id = ? ORDER BY rowid`,
+  ).all("T-0001", "T-0001") as Array<{ detail: string }>;
+  const relationshipDetails = relationshipPlan.map(({ detail }) => detail).join("\n");
+  assert.match(relationshipDetails, /USING INDEX task_relationships_by_source/);
+  assert.match(relationshipDetails, /USING INDEX task_relationships_by_target/);
+});
+
+test("an exact 0001 database upgrades through the released task-detail lookup migration", async (t) => {
+  const fixture = await createStartupFixture("task-detail-index-upgrade");
+  const database = new DatabaseSync(fixture.databasePath);
+  database.exec("PRAGMA foreign_keys = ON; BEGIN IMMEDIATE");
+  initialReleasedMigration.apply(database);
+  database.prepare("INSERT INTO coordination_migrations (position, migration_id) VALUES (1, ?)")
+    .run(initialReleasedMigrationId);
+  database.exec("COMMIT");
+  const beforePlan = database.prepare(
+    "EXPLAIN QUERY PLAN SELECT * FROM activity_ledger WHERE task_id = ? ORDER BY sequence",
+  ).all("T-0001") as Array<{ detail: string }>;
+  assert.match(beforePlan.map(({ detail }) => detail).join("\n"), /SCAN activity_ledger/);
+  database.close();
+
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(async () => {
+    application.close();
+    await rm(fixture.directory, { recursive: true, force: true });
+  });
+  assert.equal(application.queryStartup().mode, "paused", JSON.stringify(application.queryStartup()));
+  const upgraded = new DatabaseSync(fixture.databasePath, { readOnly: true });
+  try {
+    assert.deepEqual(readMigrationHistory(upgraded), productionMigrationIds);
+    assert.notEqual(
+      upgraded.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'index' AND name = 'activity_ledger_by_task_sequence'").get(),
+      undefined,
+    );
+    const afterPlan = upgraded.prepare(
+      "EXPLAIN QUERY PLAN SELECT * FROM activity_ledger WHERE task_id = ? ORDER BY sequence",
+    ).all("T-0001") as Array<{ detail: string }>;
+    assert.match(
+      afterPlan.map(({ detail }) => detail).join("\n"),
+      /SEARCH activity_ledger USING INDEX activity_ledger_by_task_sequence/,
+    );
+  } finally {
+    upgraded.close();
+  }
 });
 
 test("repeat startup opens an already-current released database without changing its history or schema", async (t) => {
@@ -225,11 +299,11 @@ test("a skipped-release upgrade preserves representative retained state and back
   const recovery = new DatabaseSync(backupPath, { readOnly: true });
   try {
     assert.deepEqual(readMigrationHistory(upgraded), [
-      initialReleasedMigrationId,
+      ...productionMigrationIds,
       "test_0002_add_upgrade_probe",
       "test_0003_transform_upgrade_probe",
     ]);
-    assert.deepEqual(readMigrationHistory(recovery), [initialReleasedMigrationId]);
+    assert.deepEqual(readMigrationHistory(recovery), productionMigrationIds);
     assert.equal(
       (recovery.prepare("SELECT title FROM tasks WHERE id = 'released-task'").get() as { title: string }).title,
       "Retained released task",
@@ -250,7 +324,7 @@ test("a direct one-step upgrade preserves released identities and values through
   const fixture = await createReleasedDatabase("direct-release");
   const database = new DatabaseSync(fixture.databasePath);
   database.exec(await readFile(
-    join(import.meta.dirname, "../fixtures/released-schema/0001-initial-released-schema-data.sql"),
+    join(import.meta.dirname, "../fixtures/released-schema/0002-bound-task-detail-lookups-data.sql"),
     "utf8",
   ));
   database.close();
@@ -268,7 +342,7 @@ test("a direct one-step upgrade preserves released identities and values through
   const application = await CoordinationApplication.startForMigrationTest(
     { processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath },
     {
-      migrations: syntheticThreeVersionRegistry().slice(0, 2),
+      migrations: syntheticThreeVersionRegistry().slice(0, coordinationMigrations.length + 1),
       expectedSchema: await syntheticUpgradeSchema(),
       backupPath: () => backupPath,
     },
@@ -402,7 +476,7 @@ test("a late migration failure rolls back the whole pending sequence, reports it
       "running",
     );
     assert.equal(source.prepare("SELECT 1 FROM tasks WHERE title = 'Must remain blocked'").get(), undefined);
-    assert.deepEqual(readMigrationHistory(recovery), [initialReleasedMigrationId]);
+    assert.deepEqual(readMigrationHistory(recovery), productionMigrationIds);
   } finally {
     source.close();
     recovery.close();
@@ -692,7 +766,7 @@ test("backup and post-migration verification failures block startup before accep
   assert.deepEqual(inspectReleasedDatabase(verificationFailure.databasePath), verificationBefore);
   const verifiedRecovery = new DatabaseSync(verificationBackupPath, { readOnly: true });
   try {
-    assert.deepEqual(readMigrationHistory(verifiedRecovery), [initialReleasedMigrationId]);
+    assert.deepEqual(readMigrationHistory(verifiedRecovery), productionMigrationIds);
   } finally {
     verifiedRecovery.close();
   }

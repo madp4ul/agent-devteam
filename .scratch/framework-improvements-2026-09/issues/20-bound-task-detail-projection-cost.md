@@ -1,9 +1,9 @@
 # 20 — Bound task-detail projection cost to the inspected task
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Blocked by:** None.
-**Next step:** Define the narrow task-detail projection contract and turn the isolated investigation into regression coverage and an implementation plan.
+**Next step:** User review.
 
 ## Problem
 
@@ -59,28 +59,28 @@ hydration changes the response contract and requires explicit review.
 
 ## Completion criteria
 
-- [ ] Give task details the board and column metadata they need without loading
+- [x] Give task details the board and column metadata they need without loading
   or returning every other board task's histories.
-- [ ] Read one task overview by ID, including an archived task, without
+- [x] Read one task overview by ID, including an archived task, without
   assembling all archived overviews or all tasks in a column.
-- [ ] Resolve related-task labels and status through compact reads, deduplicate
+- [x] Resolve related-task labels and status through compact reads, deduplicate
   current and timeline references, and cover archived related tasks.
-- [ ] Reuse task data within one request rather than repeating equivalent task
+- [x] Reuse task data within one request rather than repeating equivalent task
   and history reads.
-- [ ] Measure and add supporting indexes through a new released migration where
+- [x] Measure and add supporting indexes through a new released migration where
   they materially improve the narrowed query path; do not treat indexes as the
   sole fix.
-- [ ] Add an application-seam regression that grows unrelated task history and
+- [x] Add an application-seam regression that grows unrelated task history and
   proves inspecting an active or archived task neither loads nor returns that
   unrelated history.
-- [ ] Cover active tasks, archived tasks, active relationships, archived
+- [x] Cover active tasks, archived tasks, active relationships, archived
   relationships, and timeline relationship labels in the contract tests.
-- [ ] Measure the resulting detail endpoint and response size with a realistic
+- [x] Measure the resulting detail endpoint and response size with a realistic
   data set, recording repeatable relative or query-count bounds rather than
   relying on the investigation's machine-specific milliseconds.
-- [ ] Reassess the one-second polling interval only after projection cost is
+- [x] Reassess the one-second polling interval only after projection cost is
   bounded; slowing polling alone is not acceptance of the root-cause fix.
-- [ ] Preserve the released migration and snapshot workflow, and verify any
+- [x] Preserve the released migration and snapshot workflow, and verify any
   production rollout separately when the running instance can be restarted.
 
 ## Likely implementation seams
@@ -94,6 +94,35 @@ hydration changes the response contract and requires explicit review.
   and request-local results instead of recursively invoking broad inspection.
 - Database reads for comments, activity, activations, and attempts need measured
   query plans after the projection shape is narrowed.
+
+## Answer
+
+Implemented a bounded task-detail projection. The detail contract now returns
+only board and column metadata alongside the inspected task, reads that task's
+history once, reads active or archived overviews directly by task ID, and
+resolves current and historical related-task labels through one deduplicated
+batch of compact references.
+
+Released migration `0002_bound_task_detail_lookups` adds task-scoped indexes for
+activity, comments, activations, attempts, relationships, attention, and
+attachments. Migration coverage proves the representative activity lookup
+changes from a full scan on exact 0001 state to an indexed search after upgrade,
+while preserving the released backup, fixture, registry, and schema-snapshot
+workflow.
+
+The application regression covers active and archived inspected tasks plus
+active, archived, and timeline-only relationships. The HTTP regression uses
+the investigation scale—22 tasks, 332 comments, 1,900 activity records, 451
+activations, 472 attempts, and 305 transcripts—and requires the detail response
+to remain byte-identical after unrelated history is added. An invalid unrelated
+activity payload makes any accidental unrelated-history hydration fail rather
+than merely slowing the test.
+
+The one-second polling interval remains unchanged. After bounding the root
+projection cost, there is no evidence that a slower cadence is needed, and
+changing it would trade away live updates without addressing another measured
+bottleneck. Production rollout still requires restarting the running instance
+so the released migration can apply through the normal verified startup path.
 
 ## Comments
 
