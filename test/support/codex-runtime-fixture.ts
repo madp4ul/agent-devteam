@@ -201,6 +201,7 @@ export function request(activationId: string, taskId: string): AgentRunRequest {
           type: "dependency",
           sourceTaskId: taskId,
           targetTaskId: "T-0000",
+          resumeAgentId: "implementer",
         },
       ],
       activity: [],

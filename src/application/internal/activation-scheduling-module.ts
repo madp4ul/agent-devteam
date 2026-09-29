@@ -76,14 +76,6 @@ export class ActivationSchedulingModule {
            AND (a.retry_due_at IS NULL OR a.retry_due_at <= ?)
            AND NOT EXISTS (
              SELECT 1
-             FROM task_relationships relationship
-             JOIN tasks blocker ON blocker.id = relationship.target_task_id
-             WHERE relationship.type IN ('dependency', 'parent-child')
-               AND relationship.source_task_id = a.task_id
-               AND blocker.column_id <> 'completion'
-           )
-           AND NOT EXISTS (
-             SELECT 1
              FROM activations earlier
              WHERE earlier.task_id = a.task_id
                AND earlier.sequence < a.sequence

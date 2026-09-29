@@ -9,6 +9,7 @@ import { readExpectedCoordinationSchema, verifyCoordinationSchema } from "./coor
 
 export interface CoordinationMigration {
   readonly id: string;
+  readonly foreignKeys?: "disabled";
   apply(database: DatabaseSync): void;
 }
 
@@ -180,6 +181,8 @@ function applyPendingMigrations(
   expectedSchemaIsComplete: (database: DatabaseSync) => boolean,
   recoveryBackupPath?: string,
 ): void {
+  const foreignKeysDisabled = pending.some(({ foreignKeys }) => foreignKeys === "disabled");
+  if (foreignKeysDisabled) database.exec("PRAGMA foreign_keys = OFF");
   database.exec("BEGIN IMMEDIATE");
   let migrationId: string | undefined;
   try {
@@ -193,8 +196,10 @@ function applyPendingMigrations(
     migrationId = undefined;
     verifyCurrentDatabase(database, expectedSchemaIsComplete, databasePath, recoveryBackupPath);
     database.exec("COMMIT");
+    if (foreignKeysDisabled) database.exec("PRAGMA foreign_keys = ON");
   } catch (error) {
     rollback(database, error);
+    if (foreignKeysDisabled) database.exec("PRAGMA foreign_keys = ON");
     if (error instanceof CoordinationDatabaseStartupError) throw error;
     throw startupError(
       "migration-failure",

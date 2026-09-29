@@ -9,7 +9,7 @@ export interface AutomationClock {
 }
 
 export interface ActivationReasonView {
-  type: "column-entry" | "agent-mention" | "blockers-cleared" | "user-follow-up";
+  type: "column-entry" | "agent-mention" | "relationship-satisfied" | "relationship-changed" | "user-follow-up";
   sourceEventId: string;
 }
 

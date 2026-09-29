@@ -187,8 +187,8 @@ export function AgentActivityPanel({
 function waitingReasonsFor(state: AgentActivityState): Array<{ text: string; inspectable: boolean }> {
   const reasons: Array<{ text: string; inspectable: boolean }> = [];
   if (state.inspection.automationSuspended) reasons.push({ text: "Task automation is suspended", inspectable: true });
-  if (state.inspection.blocking.blocked) {
-    reasons.push({ text: `Blocked by ${state.inspection.blocking.blockerTaskIds.join(", ")}`, inspectable: true });
+  if (state.inspection.waitingOn.taskIds.length > 0) {
+    reasons.push({ text: `Waiting on ${state.inspection.waitingOn.taskIds.join(", ")}`, inspectable: true });
   }
   const scheduled = state.activations.find((activation) => activation.recovery?.state === "scheduled");
   if (scheduled?.recovery?.state === "scheduled") {
@@ -221,7 +221,8 @@ function waitingReasonsFor(state: AgentActivityState): Array<{ text: string; ins
 
 function activationReasonLabel(activation: ActivationView): string {
   if (activation.reason.type === "column-entry") return "Column entry";
-  if (activation.reason.type === "blockers-cleared") return "Blockers cleared";
+  if (activation.reason.type === "relationship-satisfied") return "Relationship satisfied";
+  if (activation.reason.type === "relationship-changed") return "Relationship changed";
   return "Mentioned in a comment";
 }
 

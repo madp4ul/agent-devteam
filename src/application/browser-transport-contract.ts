@@ -13,6 +13,7 @@ export interface CreateTaskRequest extends IdempotentBrowserRequest {
 }
 
 export interface CreateChildTaskRequest extends CreateTaskRequest {
+  resumeAgentId: string;
   startingRef?: string;
 }
 
@@ -30,6 +31,11 @@ export interface MoveTaskRequest extends IdempotentBrowserRequest {
 export interface CreateTaskRelationshipRequest extends IdempotentBrowserRequest {
   type: "parent-child" | "dependency";
   targetTaskId: string;
+  resumeAgentId: string;
+}
+
+export interface EditTaskRelationshipResumeAgentRequest extends IdempotentBrowserRequest {
+  resumeAgentId: string;
 }
 
 export interface AddTaskCommentRequest extends IdempotentBrowserRequest {

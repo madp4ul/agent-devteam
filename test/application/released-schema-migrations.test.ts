@@ -16,7 +16,12 @@ import { CompletingAgentRuntime } from "../support/activation-fixture.ts";
 
 const initialReleasedMigrationId = "0001_initial_released_schema";
 const boundTaskDetailLookupsMigrationId = "0002_bound_task_detail_lookups";
-const productionMigrationIds = [initialReleasedMigrationId, boundTaskDetailLookupsMigrationId];
+const relationshipResumeOwnersMigrationId = "0003_relationship_resume_owners";
+const productionMigrationIds = [
+  initialReleasedMigrationId,
+  boundTaskDetailLookupsMigrationId,
+  relationshipResumeOwnersMigrationId,
+];
 
 test("fresh startup applies the released migration registry and matches the current schema snapshot", async (t) => {
   const fixture = await createStartupFixture("fresh");
@@ -129,6 +134,83 @@ test("an exact 0001 database upgrades through the released task-detail lookup mi
   } finally {
     upgraded.close();
   }
+});
+
+test("the relationship-owner migration preserves legacy relationships for explicit repair", async (t) => {
+  const fixture = await createStartupFixture("legacy-relationship-owner-repair");
+  const database = new DatabaseSync(fixture.databasePath);
+  database.exec("PRAGMA foreign_keys = ON; BEGIN IMMEDIATE");
+  initialReleasedMigration.apply(database);
+  database.prepare("INSERT INTO coordination_migrations (position, migration_id) VALUES (1, ?)")
+    .run(initialReleasedMigrationId);
+  coordinationMigrations[1]!.apply(database);
+  database.prepare("INSERT INTO coordination_migrations (position, migration_id) VALUES (2, ?)")
+    .run(boundTaskDetailLookupsMigrationId);
+  database.exec(`
+    INSERT INTO runtime VALUES (1, 'Released schema process', 'legacy-version', 'paused', NULL);
+    INSERT INTO boards VALUES ('delivery', 'Delivery', 'Deliver work.', 0, 1);
+    INSERT INTO columns VALUES ('delivery', 'backlog', 'Backlog', 0, NULL, 0, 1);
+    INSERT INTO columns VALUES ('delivery', 'completion', 'Completion', 1, NULL, 1, 1);
+  `);
+  database.exec("COMMIT");
+  database.exec("PRAGMA foreign_keys = OFF");
+  database.exec(await readFile(
+    join(import.meta.dirname, "../fixtures/released-schema/0002-bound-task-detail-lookups-data.sql"),
+    "utf8",
+  ));
+  database.exec("PRAGMA foreign_keys = ON");
+  assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
+  database.prepare(
+    `INSERT INTO activity_ledger(id, task_id, type, actor_kind, actor_id, occurred_at, details_json)
+     VALUES (?, ?, 'relationship.removed', 'user', 'user', ?, '{}')`,
+  ).run("released-legacy-removal", "released-task", "2026-01-01T00:04:00.000Z");
+  database.prepare(
+    `INSERT INTO activations(id, task_id, target_agent_id, reason_type, source_event_id,
+                             status, created_at, definition_version)
+     SELECT ?, ?, ?, 'blockers-cleared', ?, 'completed', ?, definition_version FROM runtime`,
+  ).run(
+    "released-legacy-removal-activation",
+    "released-task",
+    "released-agent",
+    "released-legacy-removal",
+    "2026-01-01T00:05:00.000Z",
+  );
+  database.exec("DELETE FROM conversation_attachments");
+  database.close();
+
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(async () => {
+    application.close();
+    await rm(fixture.directory, { recursive: true, force: true });
+  });
+
+  const startup = application.queryStartup();
+  assert.equal(startup.mode, "paused", JSON.stringify(startup));
+  if (startup.mode !== "paused") return;
+  assert.deepEqual(startup.processImpact?.unavailableResumeAssignments, [{
+    relationshipId: "released-relationship",
+    sourceTaskId: "released-task",
+    sourceBoardId: "delivery",
+    targetTaskId: "released-related",
+    resumeAgentId: null,
+  }]);
+  const inspection = application.queryTask("released-task");
+  assert.equal(inspection.available, true);
+  if (inspection.available) {
+    assert.equal(inspection.task.relationships[0]?.id, "released-relationship");
+    assert.equal(inspection.task.relationships[0]?.resumeAgentId, null);
+    assert.equal(
+      inspection.task.activations.find(({ id }) => id === "released-legacy-removal-activation")?.reason.type,
+      "relationship-changed",
+    );
+  }
+  assert.deepEqual(await application.resumeAutomation(), {
+    accepted: false,
+    reason: "process-change-approval-required",
+  });
 });
 
 test("repeat startup opens an already-current released database without changing its history or schema", async (t) => {

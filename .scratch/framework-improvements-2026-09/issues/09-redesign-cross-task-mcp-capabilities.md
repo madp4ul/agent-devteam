@@ -1,7 +1,7 @@
 # 09 — Inventory and redesign MCP capabilities for cross-task collaboration
 
 **Type:** grilling
-**Status:** open
+**Status:** claimed
 **Blocked by:** None.
 **Next step:** Wayfinder / grill-with-docs, beginning with an inventory of current tools.
 

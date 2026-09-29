@@ -320,7 +320,8 @@ test("failed and interrupted runs can each provide the most recent available men
     await page.goto("/tasks/T-0001");
     const draft = page.getByRole("textbox", { name: "Comment" });
     await draft.fill("@");
-    await expect(page.getByRole("option", { name: /Review Agent/ }))
+    await expect(page.getByRole("listbox", { name: "Mention participants" })
+      .getByRole("option", { name: /Review Agent/ }))
       .toHaveAttribute("aria-selected", "true");
   }
 });

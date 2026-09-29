@@ -562,7 +562,8 @@ function activationReasonLabel(reason: AgentConversationView["originatingActivat
   switch (reason) {
     case "column-entry": return "Entered a watched column";
     case "agent-mention": return "Mentioned in a task comment";
-    case "blockers-cleared": return "Final blocker cleared";
+    case "relationship-satisfied": return "Relationship satisfied";
+    case "relationship-changed": return "Relationship changed";
     case "user-follow-up": return "User follow-up";
   }
 }

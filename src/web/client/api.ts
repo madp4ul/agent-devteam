@@ -9,6 +9,7 @@ import type {
   ContinueInterruptedTaskRequest,
   CreateChildTaskRequest,
   CreateTaskRelationshipRequest,
+  EditTaskRelationshipResumeAgentRequest,
   CreateTaskRequest,
   EditTaskRequest,
   EmptyBrowserRequest,
@@ -166,6 +167,7 @@ export async function createChildTask(
 export async function addTaskDependency(
   taskId: string,
   targetTaskId: string,
+  resumeAgentId: string,
   idempotencyKey: string,
 ): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/relationships`, {
@@ -173,9 +175,28 @@ export async function addTaskDependency(
     body: serializeBrowserRequest<CreateTaskRelationshipRequest>({
       type: "dependency",
       targetTaskId,
+      resumeAgentId,
       idempotencyKey,
     }),
   });
+}
+
+export async function editTaskRelationshipResumeAgent(
+  taskId: string,
+  relationshipId: string,
+  resumeAgentId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await request(
+    `/api/tasks/${encodeURIComponent(taskId)}/relationships/${encodeURIComponent(relationshipId)}/resume-agent`,
+    {
+      method: "PATCH",
+      body: serializeBrowserRequest<EditTaskRelationshipResumeAgentRequest>({
+        resumeAgentId,
+        idempotencyKey,
+      }),
+    },
+  );
 }
 
 export async function removeTaskRelationship(

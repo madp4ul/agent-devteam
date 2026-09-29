@@ -234,6 +234,8 @@ test("every known coordination tool has a typed presentation even when evidence 
     move_current_task: { kind: "coordination-task-move" },
     create_child_task: { kind: "coordination-child-task" },
     add_dependency: { kind: "coordination-dependency" },
+    set_relationship_resume_agent: { kind: "coordination-relationship-change" },
+    remove_relationship: { kind: "coordination-relationship-change" },
     report_permission_block: { kind: "coordination-permission-block" },
   } as const satisfies Record<CoordinationToolName, { kind: string; scope?: string }>;
   const expectedIncompleteStatuses = {
@@ -250,6 +252,8 @@ test("every known coordination tool has a typed presentation even when evidence 
     move_current_task: "failed",
     create_child_task: "failed",
     add_dependency: "failed",
+    set_relationship_resume_agent: "failed",
+    remove_relationship: "failed",
     report_permission_block: "failed",
   } as const satisfies Record<CoordinationToolName, "failed" | "succeeded">;
 

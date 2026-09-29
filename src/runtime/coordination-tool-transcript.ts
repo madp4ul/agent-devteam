@@ -169,6 +169,23 @@ function coordinationProjection(
       rejection,
     ));
   }
+  if (tool === "set_relationship_resume_agent") {
+    return projected({
+      kind: "coordination-relationship-change",
+      action: "resume-agent-changed",
+      task: { ...optionalString("id", arguments_?.taskId) },
+      ...optionalString("relationshipId", arguments_?.relationshipId),
+      ...optionalString("resumeAgentId", arguments_?.resumeAgent),
+    }, withRejection(`${taskId}: relationship resume agent changed`, rejection));
+  }
+  if (tool === "remove_relationship") {
+    return projected({
+      kind: "coordination-relationship-change",
+      action: "removed",
+      task: { ...optionalString("id", arguments_?.taskId) },
+      ...optionalString("relationshipId", arguments_?.relationshipId),
+    }, withRejection(`${taskId}: relationship removed`, rejection));
+  }
   if (tool === "report_permission_block") {
     const reason = stringValue(arguments_?.summary);
     return projected(
@@ -221,6 +238,8 @@ function requiresAuthoritativeAcceptance(tool: CoordinationToolName): boolean {
     case "move_current_task":
     case "create_child_task":
     case "add_dependency":
+    case "set_relationship_resume_agent":
+    case "remove_relationship":
     case "report_permission_block":
       return true;
     case "summarize_boards":

@@ -14,4 +14,6 @@ export type AgentCoordinationCapabilities = Pick<CoordinationApplication,
   | "moveTask"
   | "createChildTask"
   | "createTaskRelationship"
+  | "removeTaskRelationship"
+  | "editTaskRelationshipResumeAgent"
 >;

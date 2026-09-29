@@ -73,6 +73,7 @@ test("the user task-detail projection returns complete browser-ready task contex
     type: "dependency",
     sourceTaskId: task.task.id,
     targetTaskId: related.task.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "relate-user-task-detail",
   });
@@ -96,7 +97,7 @@ test("the user task-detail projection returns complete browser-ready task contex
     boardId: "delivery",
     boardName: "Delivery",
     column: { id: "backlog", name: "Backlog" },
-    blocking: { blocked: false, blockerTaskIds: [] },
+    waitingOn: { taskIds: [] },
   }]);
   assert.deepEqual(result.timelineRelationshipTasks, [{
     id: related.task.id,
@@ -156,6 +157,7 @@ test("task details stay bounded to the inspected task while preserving compact r
       type: "dependency",
       sourceTaskId: inspectedResult.task.id,
       targetTaskId: related.id,
+      resumeAgentId: "implementer",
       actor: { kind: "user", id: "paul" },
       idempotencyKey: `create-bounded-detail-relationship-${index}`,
     });
@@ -273,6 +275,7 @@ test("the user task-detail projection retains historical timeline targets and re
       type: "dependency",
       sourceTaskId: primary.task.id,
       targetTaskId: target.id,
+      resumeAgentId: "implementer",
       actor: { kind: "user", id: "paul" },
       idempotencyKey: `timeline-relationship-${index}`,
     });
@@ -455,7 +458,7 @@ test("task overview cursors remain stable when an earlier task moves within sele
       boardId: "delivery",
       column: { id: "backlog", name: "Backlog" },
       revision: 1,
-      blocking: { blocked: false, blockerTaskIds: [] },
+      waitingOn: { taskIds: [] },
         relationships: [],
         unresolvedAttention: [],
         automationSuspended: false,
@@ -472,7 +475,7 @@ test("task overview cursors remain stable when an earlier task moves within sele
       boardId: "delivery",
       column: { id: "backlog", name: "Backlog" },
       revision: 1,
-      blocking: { blocked: false, blockerTaskIds: [] },
+      waitingOn: { taskIds: [] },
         relationships: [],
         unresolvedAttention: [],
         automationSuspended: false,
@@ -678,7 +681,7 @@ test("full task inspection keeps history and attachments behind on-demand querie
       },
     ],
     relationships: [],
-    blocking: { blocked: false, blockerTaskIds: [] },
+    waitingOn: { taskIds: [] },
     run: {
       status: "queued",
       activeAgentId: null,
@@ -729,8 +732,8 @@ test("discovery projects durable relationships, blockers, attention, and attachm
   const fixtureDatabase = new DatabaseSync(fixture.databasePath);
   fixtureDatabase.exec("PRAGMA foreign_keys = ON");
   fixtureDatabase
-    .prepare("INSERT INTO task_relationships VALUES (?, ?, ?, ?)")
-    .run("R-1", "dependency", "T-0001", "T-0002");
+    .prepare("INSERT INTO task_relationships VALUES (?, ?, ?, ?, ?)")
+    .run("R-1", "dependency", "T-0001", "T-0002", "implementer");
   fixtureDatabase
     .prepare(
       `INSERT INTO attention_reasons
@@ -753,16 +756,14 @@ test("discovery projects durable relationships, blockers, attention, and attachm
   assert.equal(inspection.available, true);
   assert.equal(attachments.available, true);
   if (!overview.available || !inspection.available || !attachments.available) return;
-  assert.deepEqual(overview.tasks[0]?.blocking, {
-    blocked: true,
-    blockerTaskIds: ["T-0002"],
-  });
+  assert.deepEqual(overview.tasks[0]?.waitingOn, { taskIds: ["T-0002"] });
   assert.deepEqual(overview.tasks[0]?.relationships, [
     {
       id: "R-1",
       type: "dependency",
       sourceTaskId: "T-0001",
       targetTaskId: "T-0002",
+      resumeAgentId: "implementer",
     },
   ]);
   assert.deepEqual(inspection.task.unresolvedAttention, [
@@ -796,10 +797,7 @@ test("discovery projects durable relationships, blockers, attention, and attachm
   });
   assert.equal(unblocked.available, true);
   if (unblocked.available) {
-    assert.deepEqual(unblocked.tasks[0]?.blocking, {
-      blocked: false,
-      blockerTaskIds: [],
-    });
+    assert.deepEqual(unblocked.tasks[0]?.waitingOn, { taskIds: [] });
   }
 });
 

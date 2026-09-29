@@ -18,6 +18,8 @@ type CurrentTaskCapabilities = Pick<AgentCoordinationCapabilities,
   | "moveTask"
   | "createChildTask"
   | "createTaskRelationship"
+  | "removeTaskRelationship"
+  | "editTaskRelationshipResumeAgent"
 >;
 
 export function registerCurrentTaskRoutes(
@@ -81,8 +83,9 @@ export function registerCurrentTaskRoutes(
   });
   dispatcher.register("POST", "/agent-api/current-task/children", "agent/current-task", async ({ request, response, scope }) => {
     const body = await readJsonBody(request);
+    const resumeAgent = stringField(body, "resumeAgent");
     const result = application.createChildTask(childTaskCommand(
-      body,
+      { ...body, resumeAgentId: resumeAgent === "self" ? scope.agentId : resumeAgent },
       scope.taskId,
       { kind: "agent", id: scope.agentId },
       scope.attemptId,
@@ -100,8 +103,9 @@ export function registerCurrentTaskRoutes(
   });
   dispatcher.register("POST", "/agent-api/current-task/dependencies", "agent/current-task", async ({ request, response, scope }) => {
     const body = await readJsonBody(request);
+    const resumeAgent = stringField(body, "resumeAgent");
     const result = application.createTaskRelationship(relationshipCommand(
-      body,
+      { ...body, resumeAgentId: resumeAgent === "self" ? scope.agentId : resumeAgent },
       "dependency",
       scope.taskId,
       { kind: "agent", id: scope.agentId },
@@ -109,6 +113,43 @@ export function registerCurrentTaskRoutes(
     ));
     if (!result.accepted) sendRelationshipMutation(response, result);
     else sendJson(response, 201, { accepted: true, relationship: result.relationship });
+  });
+  dispatcher.register("PATCH", "/agent-api/tasks/:taskId/relationships/:relationshipId/resume-agent", "agent/current-task", async ({ request, response, scope, params }) => {
+    const body = await readJsonBody(request);
+    const resumeAgent = stringField(body, "resumeAgent");
+    const result = application.editTaskRelationshipResumeAgent({
+      taskId: params.taskId === "current" ? scope.taskId : params.taskId,
+      relationshipId: params.relationshipId,
+      resumeAgentId: resumeAgent === "self" ? scope.agentId : resumeAgent,
+      actor: { kind: "agent", id: scope.agentId },
+      ...(scope.attemptId === undefined ? {} : { attemptId: scope.attemptId }),
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    sendRelationshipMutation(response, result, 200);
+  });
+  dispatcher.register("DELETE", "/agent-api/tasks/:taskId/relationships/:relationshipId", "agent/current-task", async ({ request, response, scope, params }) => {
+    const body = await readJsonBody(request);
+    const taskId = params.taskId === "current" ? scope.taskId : params.taskId;
+    const selectedTask = application.queryTaskInspection(taskId);
+    if (
+      !selectedTask.available ||
+      selectedTask.task.relationships.every((relationship) =>
+        relationship.id !== params.relationshipId || relationship.sourceTaskId !== taskId)
+    ) {
+      sendJson(response, selectedTask.available ? 409 : 404, {
+        accepted: false,
+        reason: selectedTask.available ? "relationship-conflict" : "not-found",
+      });
+      return;
+    }
+    const result = application.removeTaskRelationship({
+      taskId,
+      relationshipId: params.relationshipId,
+      actor: { kind: "agent", id: scope.agentId },
+      ...(scope.attemptId === undefined ? {} : { attemptId: scope.attemptId }),
+      idempotencyKey: stringField(body, "idempotencyKey"),
+    });
+    sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
   });
   dispatcher.register("POST", "/agent-api/current-task/permission-block", "agent/current-task", async ({ request, response, scope }) => {
     const body = await readJsonBody(request);

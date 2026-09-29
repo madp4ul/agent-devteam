@@ -109,7 +109,7 @@ A generated identifier used to refer to a task from comments and external
 resources.
 
 **Task overview**:
-A compact read projection of a task's title, column, blocking state,
+A compact read projection of a task's title, column, waiting state,
 relationships, and run state. Board views and agent tools use it to provide
 orientation without loading the task's full content.
 
@@ -211,15 +211,14 @@ occurred. Activations for a task are handled individually in strict
 chronological order; an activation waits while that task already has an active
 run. The coordination framework does not generally reprioritize, cancel,
 coalesce, or supersede queued activations when later events change the task.
-The narrow exception is final-blocker clearance: if an untouched queued
-column-entry activation already represents responsibility for the task's
-current column and watching agent, clearance releases that activation instead
-of creating a duplicate `blockers-cleared` activation. The relationship
-satisfaction or removal remains immutable activity, and the original
-activation's reason, source event, target, process version, and position remain
-unchanged. The addressed agent receives the current task state and decides
-whether the original request still requires action. Its target agent is fixed
-when the activation is created and is not re-resolved when the run begins.
+Relationship satisfaction follows the same rule: every relationship whose
+target enters Completion appends its own `relationship-satisfied` activation
+for that relationship's resume agent. It neither releases nor coalesces another
+queued activation, even when the same agent is already queued or another
+relationship remains unresolved. The addressed agent receives the current task
+state and decides whether the original request still requires action. An
+activation's target agent is fixed when the activation is created and is not
+re-resolved when the run begins.
 
 **Stale activation**:
 An activation created under a different process-definition version from the
@@ -438,19 +437,21 @@ A typed relationship showing that one task needs the outcome of another task
 before it can continue. The relationship is satisfied when the task being
 depended on reaches the last column on its board.
 
-**Blocking relationship**:
-A task relationship whose unresolved condition prevents a task from
-continuing. Satisfying one blocking relationship is recorded in the task
-activity history but does not activate the task while another blocking
-relationship remains unresolved.
+**Waiting relationship**:
+A dependency or parent-child relationship whose target has not reached
+Completion. It records that the source task is waiting on the target without
+disabling work or suppressing activations on the source. Each relationship has
+one stable resume-agent ID: responsibility for reassessing the source task when
+the target next enters Completion, not a subscription list. Every such entry
+records satisfaction activity on both tasks and appends one independent
+activation for that resume agent, even while other relationships remain
+unresolved. Reopening the target makes the relationship unresolved again.
 
 **Relationship removal**:
-An idempotent user recovery command that removes one current dependency or
-parent-child relationship without deleting either task or rewriting earlier
-history. Both tasks receive immutable removal activity. Removing the final
-unresolved blocker follows the same watched-column activation rule as satisfying
-it; removing one of several blockers or an already satisfied relationship does
-not activate work.
+An idempotent user or agent recovery command that removes one current dependency
+or parent-child relationship without deleting either task or rewriting earlier
+history. Both tasks receive immutable removal activity. Removal is corrective
+cleanup and never creates, cancels, or retargets an activation.
 
 **Board handoff**:
 A transition in which work on one board leads to work on another, normally by

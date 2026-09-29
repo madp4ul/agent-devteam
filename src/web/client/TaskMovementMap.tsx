@@ -119,6 +119,12 @@ export function TaskMovementMap({
     }
     scaleRef.current = { points, translate, topInset };
   }, [ordered, stripHeight]);
+  const updateMapPositionRef = useRef(updateMapPosition);
+  updateMapPositionRef.current = updateMapPosition;
+
+  useLayoutEffect(() => {
+    updateMapPosition();
+  }, [updateMapPosition]);
 
   useLayoutEffect(() => {
     const map = mapRef.current;
@@ -160,23 +166,43 @@ export function TaskMovementMap({
       setAvailable(nextHeight >= 20);
       setBottomDocked(nextBottomDocked);
       setDragReady(nextDragReady);
-      updateMapPosition();
+      updateMapPositionRef.current();
     };
     const scheduleUpdate = (): void => {
       if (layoutFrame !== null) return;
       layoutFrame = window.requestAnimationFrame(updateHeightAndPosition);
     };
     updateHeightAndPosition();
+    const observedHeights = new Map<Element, number>();
+    const layoutObserver = new ResizeObserver((entries) => {
+      let layoutChanged = false;
+      for (const entry of entries) {
+        const height = entry.target.getBoundingClientRect().height;
+        const previousHeight = observedHeights.get(entry.target);
+        observedHeights.set(entry.target, height);
+        if (previousHeight !== undefined && Math.abs(previousHeight - height) > .5) layoutChanged = true;
+      }
+      if (!layoutChanged) return;
+      naturalControlsTopRef.current = documentLayoutTop(slot);
+      scheduleUpdate();
+    });
+    for (const sibling of slot.parentElement?.children ?? []) {
+      if (sibling === slot) break;
+      if (!(sibling instanceof HTMLElement)) continue;
+      observedHeights.set(sibling, sibling.getBoundingClientRect().height);
+      layoutObserver.observe(sibling);
+    }
     window.addEventListener("scroll", updateHeightAndPosition, { passive: true });
     window.addEventListener("resize", scheduleUpdate);
     return () => {
       window.removeEventListener("scroll", updateHeightAndPosition);
       window.removeEventListener("resize", scheduleUpdate);
+      layoutObserver.disconnect();
       if (layoutFrame !== null) window.cancelAnimationFrame(layoutFrame);
       if (dragAnimationRef.current !== null) window.cancelAnimationFrame(dragAnimationRef.current);
       document.body.classList.remove("movement-map-dragging");
     };
-  }, [updateMapPosition]);
+  }, []);
 
   const applyDragTarget = (): void => {
     dragAnimationRef.current = null;
@@ -495,6 +521,16 @@ function interpolate<TInput extends keyof ScalePoint, TOutput extends keyof Scal
 function clearDockingStyles(): void {
   document.body.style.removeProperty("--movement-map-controls-left");
   document.body.style.removeProperty("--movement-map-controls-width");
+}
+
+function documentLayoutTop(element: HTMLElement): number {
+  let top = 0;
+  let current: HTMLElement | null = element;
+  while (current !== null) {
+    top += current.offsetTop;
+    current = current.offsetParent instanceof HTMLElement ? current.offsetParent : null;
+  }
+  return top;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

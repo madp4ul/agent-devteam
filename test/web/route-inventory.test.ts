@@ -24,6 +24,7 @@ test("browser route catalog accounts for the complete pre-dispatcher API invento
     "GET /api/tasks/:taskId/workspace/git-state",
     "PATCH /api/settings/notifications",
     "PATCH /api/tasks/:taskId",
+    "PATCH /api/tasks/:taskId/relationships/:relationshipId/resume-agent",
     "POST /api/activations/:activationId/dismiss",
     "POST /api/activations/:activationId/dismiss-stale",
     "POST /api/archive/completed",
@@ -57,6 +58,7 @@ test("agent route catalog is separate and accounts for discovery and current-tas
   const routes = createAgentApiRoutes({} as AgentCoordinationCapabilities, undefined).catalog();
 
   assert.deepEqual(routeKeys(routes), [
+    "DELETE /agent-api/tasks/:taskId/relationships/:relationshipId",
     "GET /agent-api/boards/summary",
     "GET /agent-api/collaborators",
     "GET /agent-api/current-task",
@@ -65,6 +67,7 @@ test("agent route catalog is separate and accounts for discovery and current-tas
     "GET /agent-api/tasks/:taskId/activity",
     "GET /agent-api/tasks/:taskId/attachments",
     "GET /agent-api/tasks/archive",
+    "PATCH /agent-api/tasks/:taskId/relationships/:relationshipId/resume-agent",
     "POST /agent-api/current-task/children",
     "POST /agent-api/current-task/comments",
     "POST /agent-api/current-task/dependencies",

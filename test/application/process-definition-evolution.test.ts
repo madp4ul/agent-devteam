@@ -100,6 +100,152 @@ test("removed process identities preserve live state as unmapped and stale", asy
   }
 });
 
+test("removed resume agents use ordinary relationship repair before automation can resume", async (t) => {
+  const fixture = await createFixture();
+  await writeFile(join(fixture.directory, "reviewer.md"), "Review completed work.\n");
+  await writeResumeOwnershipDefinition(fixture.definitionPath, true);
+  const first = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  const source = first.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Resume after dependency",
+    description: "Keep the relationship repairable when its owner leaves the process.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-resume-source",
+  });
+  const target = first.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Dependency outcome",
+    description: "Remain unresolved across the process change.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-resume-target",
+  });
+  assert.equal(source.accepted, true);
+  assert.equal(target.accepted, true);
+  if (!source.accepted || !target.accepted) return;
+  const relationship = first.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: source.task.id,
+    targetTaskId: target.task.id,
+    resumeAgentId: "reviewer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-reviewer-owned-relationship",
+  });
+  assert.equal(relationship.accepted, true);
+  if (!relationship.accepted) return;
+  first.close();
+
+  await writeResumeOwnershipDefinition(fixture.definitionPath, false);
+  const changed = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => changed.close());
+  const startup = changed.queryStartup();
+  assert.equal(startup.mode, "paused");
+  if (startup.mode !== "paused") return;
+  assert.deepEqual(startup.processImpact?.unavailableResumeAssignments, [{
+    relationshipId: relationship.relationship.id,
+    sourceTaskId: source.task.id,
+    sourceBoardId: "delivery",
+    targetTaskId: target.task.id,
+    resumeAgentId: "reviewer",
+  }]);
+  assert.deepEqual(await changed.resumeAutomation(), {
+    accepted: false,
+    reason: "process-change-approval-required",
+  });
+  assert.deepEqual(await changed.resumeWithCurrentProcess(), {
+    accepted: false,
+    reason: "process-change-approval-required",
+  });
+
+  const repaired = changed.editTaskRelationshipResumeAgent({
+    taskId: source.task.id,
+    relationshipId: relationship.relationship.id,
+    resumeAgentId: "implementer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "repair-removed-resume-agent",
+  });
+  assert.equal(repaired.accepted, true);
+  const repairedStartup = changed.queryStartup();
+  assert.equal(repairedStartup.mode, "paused");
+  if (repairedStartup.mode === "paused") assert.equal(repairedStartup.processImpact, undefined);
+  assert.notDeepEqual(await changed.resumeAutomation(), {
+    accepted: false,
+    reason: "process-change-approval-required",
+  });
+});
+
+test("an unmapped waiting task retains dormant satisfaction work until it is remapped", async (t) => {
+  const fixture = await createFixture();
+  await writeUnmappedRelationshipDefinition(fixture.definitionPath, true);
+  const first = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  const source = first.createTask({
+    boardId: "delivery",
+    columnId: "implementation",
+    title: "Temporarily unmapped source",
+    description: "Retain continuation work while this column is unavailable.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-unmapped-relationship-source",
+  });
+  const target = first.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Mapped dependency target",
+    description: "Complete while the source task is unmapped.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-unmapped-relationship-target",
+  });
+  assert.equal(source.accepted, true);
+  assert.equal(target.accepted, true);
+  if (!source.accepted || !target.accepted) return;
+  const relationship = first.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: source.task.id,
+    targetTaskId: target.task.id,
+    resumeAgentId: "implementer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "link-unmapped-relationship",
+  });
+  assert.equal(relationship.accepted, true);
+  first.close();
+
+  await writeUnmappedRelationshipDefinition(fixture.definitionPath, false);
+  const changed = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => changed.close());
+  const impact = changed.queryStartup();
+  assert.equal(impact.mode, "paused");
+  if (impact.mode !== "paused") return;
+  assert.deepEqual(impact.processImpact?.unmappedTasks.map(({ taskId }) => taskId), [source.task.id]);
+  const completed = changed.moveTask({
+    taskId: target.task.id,
+    destinationColumnId: "completion",
+    expectedRevision: target.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "complete-for-unmapped-source",
+  });
+  assert.equal(completed.accepted, true);
+  const retained = changed.queryTask(source.task.id);
+  assert.equal(retained.available, true);
+  if (retained.available) {
+    assert.equal(retained.task.activations.length, 1);
+    assert.equal(retained.task.activations[0]?.status, "queued");
+    assert.equal(retained.task.activations[0]?.reason.type, "relationship-satisfied");
+    assert.equal(retained.task.activations[0]?.targetAgentId, "implementer");
+  }
+});
+
 test("renaming and reordering process entities preserves their live identities", async (t) => {
   const fixture = await createFixture();
   const first = await CoordinationApplication.start({
@@ -646,6 +792,58 @@ async function createFixture(): Promise<{
   await writeFile(join(directory, "implementer.md"), "Implement the requested change.\n");
   await writeProcessEvolutionDefinition(definitionPath, { includeImplementation: true });
   return { directory, definitionPath, databasePath: join(directory, "coordination.sqlite3") };
+}
+
+async function writeResumeOwnershipDefinition(path: string, includeReviewer: boolean): Promise<void> {
+  await writeFile(path, `schemaVersion: 1
+name: Resume ownership process
+defaultTaskWorkspaceStartingRef: main
+coordinationGuidance: Preserve explicit continuation responsibility.
+agents:
+  - id: implementer
+    name: Implementation Agent
+    role: Implements scoped work
+    summary: Builds and verifies changes.
+    instructions: ./implementer.md${includeReviewer ? `
+  - id: reviewer
+    name: Review Agent
+    role: Reviews work
+    summary: Reassesses completed dependencies.
+    instructions: ./reviewer.md` : ""}
+boards:
+  - id: delivery
+    name: Delivery
+    guidance: Deliver changes safely.
+    columns:
+      - id: backlog
+        name: Backlog
+      - id: implementation
+        name: Implementation
+        watchingAgent: implementer
+`);
+}
+
+async function writeUnmappedRelationshipDefinition(path: string, includeImplementation: boolean): Promise<void> {
+  await writeFile(path, `schemaVersion: 1
+name: Unmapped relationship process
+defaultTaskWorkspaceStartingRef: main
+coordinationGuidance: Retain explicit continuation responsibility.
+agents:
+  - id: implementer
+    name: Implementation Agent
+    role: Implements scoped work
+    summary: Builds and verifies changes.
+    instructions: ./implementer.md
+boards:
+  - id: delivery
+    name: Delivery
+    guidance: Deliver changes safely.
+    columns:
+      - id: backlog
+        name: Backlog${includeImplementation ? `
+      - id: implementation
+        name: Implementation` : ""}
+`);
 }
 
 class RecordingRuntime implements AgentRuntime {

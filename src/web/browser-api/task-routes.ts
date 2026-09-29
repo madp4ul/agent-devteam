@@ -5,6 +5,7 @@ import type {
   CreateTaskRelationshipRequest,
   CreateTaskRequest,
   EditTaskRequest,
+  EditTaskRelationshipResumeAgentRequest,
   IdempotentBrowserRequest,
   MoveTaskRequest,
   UserTaskDetailQueryResult,
@@ -32,6 +33,7 @@ type TaskCapabilities = Pick<BrowserCoordinationCapabilities,
   | "createChildTask"
   | "createTaskRelationship"
   | "removeTaskRelationship"
+  | "editTaskRelationshipResumeAgent"
   | "addTaskComment"
 >;
 
@@ -125,6 +127,16 @@ export function registerTaskRoutes(
       actor: localUserActor,
     });
     sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
+  });
+  dispatcher.register("PATCH", "/api/tasks/:taskId/relationships/:relationshipId/resume-agent", "browser/tasks", async ({ request, response, params }) => {
+    const body = await readJsonBody<EditTaskRelationshipResumeAgentRequest>(request);
+    const result = application.editTaskRelationshipResumeAgent({
+      ...params,
+      resumeAgentId: stringField(body, "resumeAgentId"),
+      idempotencyKey: stringField(body, "idempotencyKey"),
+      actor: localUserActor,
+    });
+    sendRelationshipMutation(response, result, 200);
   });
   dispatcher.register("POST", "/api/tasks/:taskId/comments", "browser/tasks", async ({ request, response, params }) => {
     const body = await readJsonBody<AddTaskCommentRequest>(request);

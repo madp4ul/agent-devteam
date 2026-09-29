@@ -304,7 +304,8 @@ export function BoardPage({
         <AutomationControls
           automation={state.automation}
           activeRuns={state.activeRuns}
-          canResume={(processImpact?.staleActivations.length ?? 0) === 0}
+          canResume={(processImpact?.staleActivations.length ?? 0) === 0 &&
+            (processImpact?.unavailableResumeAssignments.length ?? 0) === 0}
           notifications={notifications}
           onChanged={refresh}
           onFeedback={setFeedback}
@@ -353,6 +354,23 @@ export function BoardPage({
                 </li>
               ))}
             </ul>
+            <h3>Unavailable resume assignments · {processImpact.unavailableResumeAssignments.length}</h3>
+            {processImpact.unavailableResumeAssignments.length === 0 ? (
+              <p>All waiting relationships have a current resume agent.</p>
+            ) : (
+              <ul>
+                {processImpact.unavailableResumeAssignments.map((relationship) => (
+                  <li key={relationship.relationshipId}>
+                    <button
+                      className="secondary"
+                      onClick={() => openTask(relationship.sourceTaskId, relationship.sourceBoardId)}
+                    >
+                      {relationship.sourceTaskId} waits on {relationship.targetTaskId} · {relationship.resumeAgentId ?? "missing agent"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             {processImpact.staleActivations.some((activation) => activation.targetAvailable) ? (
               <button onClick={() => void resumeWithCurrentProcess().then(refresh).catch((error) =>
                 setFeedback({ role: "alert", text: errorMessage(error) }))}>

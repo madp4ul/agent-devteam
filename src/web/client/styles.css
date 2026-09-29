@@ -243,7 +243,8 @@ input, textarea, select { width: 100%; border: 1px solid #cbd2cc; border-radius:
 .card-signals { display: grid; gap: .32rem; margin-top: .7rem; }
 .signal { width: fit-content; border-radius: 999px; padding: .25rem .5rem; font-size: .68rem; font-weight: 800; }
 .signal.running { display: inline-flex; align-items: center; gap: .35rem; }
-.signal.blocked, .signal.failed { color: #943421; background: #f9ddd5; }
+.signal.waiting { color: #72500e; background: #f6e5bd; }
+.signal.failed { color: #943421; background: #f9ddd5; }
 .signal.attention { color: #72500e; background: #f6e5bd; }
 .signal.queued { color: #31516b; background: #dce9f2; }
 .signal.running { color: #145039; background: #d3ecdf; }
@@ -269,7 +270,6 @@ input, textarea, select { width: 100%; border: 1px solid #cbd2cc; border-radius:
 @media (max-width: 560px) {
   .row-layout .board-column { grid-template-columns: 1fr; }
   .row-layout .column-header { border-right: 0; border-bottom: 1px solid var(--line); }
-  .relationship-actions { grid-template-columns: 1fr; }
   .agent-inspectable-tooltip { right: .5rem; left: auto !important; }
 }
 
@@ -366,6 +366,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .workspace-open-primary { border-radius: .65rem 0 0 .65rem; }
 .workspace-open-menu { position: relative; }
 .workspace-actions .workspace-open-disclosure { display: grid; width: 1.75rem; height: 100%; place-items: center; border-left: 1px solid rgb(255 255 255 / 28%); border-radius: 0 .65rem .65rem 0; padding: 0; }
+.disclosure-icon { display: block; width: 1rem; height: 1rem; fill: none; stroke: currentcolor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
 .workspace-open-options { position: absolute; z-index: 5; top: calc(100% + .4rem); right: 0; min-width: 14rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); padding: .35rem; box-shadow: var(--shadow); }
 .workspace-open-options button { width: 100%; color: var(--ink); background: transparent; text-align: left; white-space: nowrap; }
 .workspace-open-options button:hover:not(:disabled) { background: #e9ede7; }
@@ -426,10 +427,15 @@ textarea { resize: vertical; line-height: 1.5; }
 .permission-continuation button { justify-self: end; }
 .task-attention-panel .permission-continuation { grid-column: 1 / -1; }
 .interruption-message { display: grid; gap: .42rem; margin-top: 1rem; color: var(--muted); font-size: .8rem; font-weight: 800; }
-.relationship-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; margin-top: 1.25rem; border-top: 1px solid #d8ddd9; padding-top: 1rem; }
-.relationship-action { display: grid; align-content: start; gap: .42rem; min-width: 0; }
-.relationship-action label, .relationship-action-label { color: var(--forest); font-size: .78rem; font-weight: 800; }
-.relationship-child-action button { width: 100%; min-height: 2.55rem; }
+.relationship-actions { display: flex; align-items: center; gap: .65rem; margin-top: 1.25rem; border-top: 1px solid #d8ddd9; padding-top: 1rem; }
+.relationship-action-label { color: var(--muted); font-size: .75rem; font-weight: 750; }
+.relationship-create-control { display: flex; min-height: 1.9rem; }
+.relationship-create-primary { border-radius: .55rem 0 0 .55rem; padding: .35rem .55rem; font-size: .72rem; }
+.relationship-create-menu { position: relative; }
+.relationship-create-disclosure { display: grid; width: 1.75rem; height: 100%; place-items: center; border-left: 1px solid rgb(255 255 255 / 28%); border-radius: 0 .55rem .55rem 0; padding: 0; }
+.relationship-create-options { position: absolute; z-index: 5; top: calc(100% + .4rem); left: 0; min-width: 9rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--paper); padding: .35rem; box-shadow: var(--shadow); }
+.relationship-create-options button { width: 100%; color: var(--ink); background: transparent; padding: .45rem .55rem; font-size: .75rem; text-align: left; white-space: nowrap; }
+.relationship-create-options button:hover:not(:disabled) { background: #e9ede7; }
 .relationship-groups { display: grid; gap: 1rem; margin-top: .85rem; }
 .relationship-groups h3 { margin: 0 0 .45rem; color: var(--muted); font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; }
 .relationship-list { display: grid; gap: .55rem; margin: 0; padding: 0; list-style: none; }
@@ -440,15 +446,21 @@ textarea { resize: vertical; line-height: 1.5; }
 .relationship-row > .relationship-remove { grid-column: 2; }
 .relationship-row > .agent-inspectable-disclosure { grid-column: 3; margin-left: 0; }
 .relationship-context { color: var(--muted); font-size: .75rem; }
+.relationship-resume-select { max-width: 100%; padding: .3rem .45rem; font-size: .72rem; }
 .relationship-remove { display: grid; flex: 0 0 1.75rem; width: 1.75rem; height: 1.75rem; place-items: center; border: 1px solid #9eaaa3; border-radius: 50%; color: var(--forest); background: #ffffff9c; padding: 0; }
 .relationship-remove:hover:not(:disabled) { border-color: var(--forest); color: white; background: var(--forest); }
 .relationship-remove svg { display: block; width: 1rem; height: 1rem; fill: none; stroke: currentcolor; stroke-linecap: round; stroke-width: 2; }
-.relationship-finder { position: relative; }
 .relationship-options { position: absolute; z-index: 10; top: 100%; right: 0; left: 0; max-height: min(16rem, 50vh); margin: .35rem 0 0; padding: .35rem; overflow-y: auto; border: 1px solid var(--line); border-radius: .55rem; background: white; box-shadow: 0 12px 30px rgb(21 37 29 / 18%); list-style: none; }
 .relationship-empty { color: var(--muted); font-size: .8rem; }
 .relationship-options li { display: grid; gap: .15rem; border-radius: .35rem; padding: .55rem; cursor: pointer; }
 .relationship-options li:hover, .relationship-options li.active { background: #edf4ef; }
 .relationship-options span { color: var(--muted); font-size: .75rem; }
+.dependency-dialog { width: min(36rem, 100%); }
+.relationship-task-results { height: min(15rem, 35vh); min-height: 9rem; margin-top: -.45rem; }
+.dependency-dialog .relationship-options { position: static; height: 100%; max-height: none; margin: 0; box-shadow: none; }
+.relationship-results-message { display: grid; height: 100%; margin: 0; place-content: center; border: 1px solid var(--line); border-radius: .55rem; color: var(--muted); padding: .75rem; font-size: .8rem; text-align: center; }
+.relationship-selection { display: grid; height: 100%; align-content: center; gap: .2rem; margin: 0; border: 1px solid var(--line); border-radius: .55rem; background: var(--surface-subtle); padding: .65rem .75rem; font-size: .8rem; }
+.relationship-selection span { color: var(--muted); font-size: .75rem; }
 .create-advanced { border-top: 1px solid #d8ddd9; padding-top: .75rem; }
 .create-advanced summary { width: fit-content; color: var(--forest); font-weight: 800; cursor: pointer; }
 .create-advanced label { margin-top: .75rem; }
@@ -865,8 +877,9 @@ input, textarea, select { border-color: var(--border-control); color: var(--text
 .task-card:hover { box-shadow: 0 9px 22px var(--shadow-color); }
 .task-card.archived { border-color: var(--archive-border); background: var(--archive-soft-theme); }
 .drag-handle { color: var(--text-muted); background: transparent; }
-.drag-handle:hover:not(:disabled), .workspace-actions .workspace-copy-button:hover:not(:disabled), .workspace-open-options button:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
-.signal.blocked, .signal.failed { color: var(--failure-text); background: var(--failure-soft); }
+.drag-handle:hover:not(:disabled), .workspace-actions .workspace-copy-button:hover:not(:disabled), .workspace-open-options button:hover:not(:disabled), .relationship-create-options button:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
+.signal.waiting { color: var(--warning-text); background: var(--warning-soft); }
+.signal.failed { color: var(--failure-text); background: var(--failure-soft); }
 .signal.attention { color: var(--warning-text); background: var(--warning-soft); }
 .signal.queued { color: var(--info-text); background: var(--info-soft); }
 .signal.running { color: var(--running-text); background: var(--running-soft); }
@@ -877,10 +890,10 @@ input, textarea, select { border-color: var(--border-control); color: var(--text
 .activation-dismiss { border-color: var(--border-control); color: var(--text-muted); background: transparent; }
 .activation-dismiss:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); background: transparent; }
 .modal-backdrop { background: var(--backdrop); }
-.modal, .detail-panel, .move-panel, .timeline-section, .token-usage, .transcript-item:not(.message):not(.tool):not(.diagnostic), .relationship-options, .attention-groups > li { border-color: var(--border); color: var(--text); background: var(--surface); box-shadow: 0 5px 18px var(--shadow-color); }
+.modal, .detail-panel, .move-panel, .timeline-section, .token-usage, .transcript-item:not(.message):not(.tool):not(.diagnostic), .relationship-options, .relationship-create-options, .attention-groups > li { border-color: var(--border); color: var(--text); background: var(--surface); box-shadow: 0 5px 18px var(--shadow-color); }
 form label, .move-column-heading { color: var(--text-muted); }
 .description { color: var(--text-emphasis); }
-.workspace-open-options button { color: var(--text); background: transparent; }
+.workspace-open-options button, .relationship-create-options button { color: var(--text); background: transparent; }
 .workspace-history-connector::before { background: var(--border-control); }
 .workspace-history-connector.diverged { color: var(--failure-text); }
 .workspace-history-connector.diverged::before { background: repeating-linear-gradient(to bottom, var(--failure-text) 0 3px, transparent 3px 6px); }

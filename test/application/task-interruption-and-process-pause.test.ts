@@ -224,6 +224,25 @@ test("user dismisses an interrupted head and releases later work in Completion",
   const [interruptedActivation, laterActivation] = mentioned.task.activations;
   assert.ok(interruptedActivation);
   assert.ok(laterActivation);
+  const prerequisite = application.createTask({
+    boardId: "delivery",
+    columnId: "backlog",
+    title: "Still-open prerequisite",
+    description: "The interrupted task remains waiting while its queue advances.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-dismissal-prerequisite",
+  });
+  assert.equal(prerequisite.accepted, true);
+  if (!prerequisite.accepted) return;
+  const relationship = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: created.task.id,
+    targetTaskId: prerequisite.task.id,
+    resumeAgentId: "implementer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "link-dismissal-prerequisite",
+  });
+  assert.equal(relationship.accepted, true);
 
   await application.resumeAutomation();
   const first = await runtime.waitForRequest(1);
@@ -245,6 +264,10 @@ test("user dismisses an interrupted head and releases later work in Completion",
   });
   assert.equal(completed.accepted, true);
   if (!completed.accepted) return;
+  const beforeDismissal = application.queryTask(created.task.id);
+  assert.equal(beforeDismissal.available, true);
+  if (!beforeDismissal.available) return;
+  assert.deepEqual(beforeDismissal.task.activations[0]?.dismissal, { mayStartNext: true });
 
   const dismissed = application.dismissActivation({
     activationId: interruptedActivation.id,

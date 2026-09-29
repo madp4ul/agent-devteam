@@ -538,7 +538,8 @@ function EditDialog({
 
 function interruptionReasonDescription(reason: string | undefined): string {
   if (reason === "column-entry") return "column entry";
-  if (reason === "blockers-cleared") return "blockers being cleared";
+  if (reason === "relationship-satisfied") return "a relationship being satisfied";
+  if (reason === "relationship-changed") return "a relationship change";
   if (reason === "user-follow-up") return "a user follow-up";
   return "a mention in a comment";
 }

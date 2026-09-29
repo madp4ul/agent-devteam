@@ -43,9 +43,12 @@ export function sendMutation(
 
 export function sendRelationshipMutation(
   response: ServerResponse,
-  result: ReturnType<CoordinationApplication["createTaskRelationship"]>,
+  result:
+    | ReturnType<CoordinationApplication["createTaskRelationship"]>
+    | ReturnType<CoordinationApplication["editTaskRelationshipResumeAgent"]>,
+  acceptedStatus = 201,
 ): void {
-  sendJson(response, result.accepted ? 201 : result.reason === "not-found" ? 404 : 409, result);
+  sendJson(response, result.accepted ? acceptedStatus : result.reason === "not-found" ? 404 : 409, result);
 }
 
 export function sendAgentQuery(

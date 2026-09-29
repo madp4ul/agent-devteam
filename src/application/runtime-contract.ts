@@ -75,6 +75,8 @@ export const coordinationToolNames = [
   "move_current_task",
   "create_child_task",
   "add_dependency",
+  "set_relationship_resume_agent",
+  "remove_relationship",
   "report_permission_block",
 ] as const;
 
@@ -113,6 +115,13 @@ export type CoordinationTranscriptPresentation =
       kind: "coordination-dependency";
       sourceTask: CoordinationTaskIdentity & { id: string };
       targetTask: CoordinationTaskIdentity;
+    }
+  | {
+      kind: "coordination-relationship-change";
+      action: "resume-agent-changed" | "removed";
+      task: CoordinationTaskIdentity;
+      relationshipId?: string;
+      resumeAgentId?: string;
     }
   | {
       kind: "coordination-permission-block";

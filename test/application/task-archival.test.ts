@@ -99,10 +99,19 @@ test("archive removes a clean durable workspace and retains task history without
     type: "dependency",
     sourceTaskId: created.task.id,
     targetTaskId: blockerId,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "local-user" },
     idempotencyKey: "archive-race-dependency",
   });
   assert.equal(relationship.accepted, true);
+  if (!relationship.accepted) return;
+  const removedRelationship = application.removeTaskRelationship({
+    taskId: created.task.id,
+    relationshipId: relationship.relationship.id,
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "remove-archive-race-dependency",
+  });
+  assert.equal(removedRelationship.accepted, true);
   const blocker = application.queryTask(blockerId);
   assert.equal(blocker.available, true);
   if (!blocker.available) return;
@@ -187,6 +196,42 @@ test("archive removes a clean durable workspace and retains task history without
     reason: "task-archived",
   });
   assert.equal(archived.accepted && archived.task.activity.at(-1)?.type, "task.archived");
+});
+
+test("archive rejects a completed task that still waits on an unresolved relationship", async (t) => {
+  const fixture = await createFixture("archive-waiting-relationship");
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+  });
+  t.after(() => application.close());
+  const sourceId = createTaskInColumn(application, "Completed but waiting", "backlog", "archive-waiting-source");
+  const targetId = createTaskInColumn(application, "Unresolved dependency", "backlog", "archive-waiting-target");
+  const relationship = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: sourceId,
+    targetTaskId: targetId,
+    resumeAgentId: "implementer",
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "archive-waiting-relationship",
+  });
+  assert.equal(relationship.accepted, true);
+  const source = application.queryTask(sourceId);
+  assert.equal(source.available, true);
+  if (!source.available) return;
+  const completed = application.moveTask({
+    taskId: sourceId,
+    destinationColumnId: "completion",
+    expectedRevision: source.task.revision,
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "complete-waiting-source",
+  });
+  assert.equal(completed.accepted, true);
+  assert.deepEqual(await application.archiveTask({
+    taskId: sourceId,
+    actor: { kind: "user", id: "local-user" },
+    idempotencyKey: "reject-waiting-archive",
+  }), { accepted: false, reason: "waiting-relationships" });
 });
 
 test("archive rejects busy tasks and requires explicit permission to discard a dirty workspace", async (t) => {
@@ -449,6 +494,7 @@ test("an activation after unarchive provisions from the current process default 
   const parentId = createTaskInColumn(application, "Parent", "completion", "reprovision-parent");
   const child = application.createChildTask({
     parentTaskId: parentId,
+    resumeAgentId: "implementer",
     boardId: "delivery",
     columnId: "implementation",
     title: "Reprovision after archive",

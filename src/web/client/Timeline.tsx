@@ -646,7 +646,7 @@ function triggerDescription(activity: TaskActivityView, context: TimelineContext
   if (activity.type === "task.created") {
     return `task creation in ${columnName(activity.details.columnId, context.columns)}`;
   }
-  if (activity.type === "relationship.satisfied") return "the final blocker being cleared";
+  if (activity.type === "relationship.satisfied") return "a relationship being satisfied";
   return `${actor} ${activityLabel(activity.type).toLocaleLowerCase()}`;
 }
 
@@ -658,6 +658,7 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "relationship.created": "Relationship created",
     "relationship.removed": "Relationship removed",
     "relationship.satisfied": "Relationship satisfied",
+    "relationship.resume-agent-changed": "Resume agent changed",
     "attention.created": "Attention requested",
     "attention.resolved": "Attention resolved",
     "activation.created": "Activation queued",
@@ -679,6 +680,9 @@ function activityDescription(activity: TaskActivityView, columns: TimelineColumn
   }
   if (activity.type === "task.created") return `Created in ${columnName(activity.details.columnId, columns)}.`;
   if (activity.type === "task.edited") return "Title or description updated.";
+  if (activity.type === "relationship.resume-agent-changed") {
+    return `Resume responsibility changed from ${nameForAgent(activity.details.previousResumeAgentId || "unassigned", agents)} to ${nameForAgent(activity.details.resumeAgentId ?? "unassigned", agents)}.`;
+  }
   if (activity.type === "attention.resolved") return `Resolved ${activity.details.reasonType ?? "attention"}.`;
   if (activity.type === "activation.dismissed") {
     return activity.details.clearedSuspension === "true"
@@ -711,15 +715,15 @@ const directionalRelationshipPresentations = {
   "dependency:source:created": { label: "Dependency added", prefix: "Now depends on ", suffix: "." },
   "dependency:source:removed": { label: "Dependency removed", prefix: "Does not depend on ", suffix: " anymore." },
   "dependency:source:satisfied": { label: "Dependency satisfied", prefix: "", suffix: " completed, satisfying this dependency." },
-  "dependency:target:created": { label: "Blocking dependency added", prefix: "Now blocks ", suffix: "." },
-  "dependency:target:removed": { label: "Blocking dependency removed", prefix: "No longer blocks ", suffix: "." },
-  "dependency:target:satisfied": { label: "Blocking dependency satisfied", prefix: "Completed and stopped blocking ", suffix: "." },
+  "dependency:target:created": { label: "Waiting task added", prefix: "", suffix: " now waits on this task." },
+  "dependency:target:removed": { label: "Waiting task removed", prefix: "", suffix: " no longer waits on this task." },
+  "dependency:target:satisfied": { label: "Dependency satisfied", prefix: "Completed; ", suffix: " no longer waits on this task." },
   "parent-child:source:created": { label: "Child task added", prefix: "", suffix: " was added as a child task." },
   "parent-child:source:removed": { label: "Child task removed", prefix: "", suffix: " is no longer a child task." },
   "parent-child:source:satisfied": { label: "Child task completed", prefix: "", suffix: " completed, satisfying this child relationship." },
   "parent-child:target:created": { label: "Parent task added", prefix: "", suffix: " was added as the parent task." },
   "parent-child:target:removed": { label: "Parent task removed", prefix: "", suffix: " is no longer the parent task." },
-  "parent-child:target:satisfied": { label: "Parent task unblocked", prefix: "Completed and stopped blocking ", suffix: "." },
+  "parent-child:target:satisfied": { label: "Parent wait satisfied", prefix: "Completed; parent ", suffix: " no longer waits on this child task." },
 } satisfies Record<DirectionalRelationshipKey, RelationshipPresentationText>;
 
 function relationshipActivityPresentation(
@@ -778,7 +782,8 @@ function reasonLabel(reason: ActivationView["reason"]["type"]): string {
   return {
     "agent-mention": "an agent mention",
     "column-entry": "entering a watched column",
-    "blockers-cleared": "the final blocker being cleared",
+    "relationship-satisfied": "a relationship being satisfied",
+    "relationship-changed": "a relationship change",
     "user-follow-up": "a user follow-up",
   }[reason];
 }

@@ -33,6 +33,7 @@ export type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
   | "createChildTask"
   | "createTaskRelationship"
   | "removeTaskRelationship"
+  | "editTaskRelationshipResumeAgent"
   | "addTaskComment"
   | "markUserMentionAddressed"
   | "continuePermissionBlockedActivation"

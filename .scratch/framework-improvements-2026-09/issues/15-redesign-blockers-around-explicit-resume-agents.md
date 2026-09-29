@@ -1,9 +1,9 @@
 # 15 — Redesign blockers around explicit resume agents
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Blocked by:** None.
-**Next step:** Implement the agreed relationship-resume model in this ticket.
+**Next step:** User review of the implemented relationship-resume lifecycle.
 
 ## What to build
 
@@ -171,33 +171,33 @@ The implementation must update these existing seams together:
 
 ## Acceptance criteria
 
-- [ ] A task with one or more unresolved relationships can run user follow-ups,
+- [x] A task with one or more unresolved relationships can run user follow-ups,
   mentions, column entries, and retries normally.
-- [ ] Browser and MCP relationship creation reject a missing or invalid resume
+- [x] Browser and MCP relationship creation reject a missing or invalid resume
   agent; MCP accepts both `self` and stable IDs.
-- [ ] Resume ownership is inspectable and editable on unresolved relationships,
+- [x] Resume ownership is inspectable and editable on unresolved relationships,
   including through cross-task MCP targeting, with dual-timeline history.
-- [ ] Every target entry into Completion creates exactly one ordered activation
+- [x] Every target entry into Completion creates exactly one ordered activation
   per attached relationship for its assigned agent, even when other
   relationships remain unresolved.
-- [ ] Satisfaction activations remain separate from existing queued/running
+- [x] Satisfaction activations remain separate from existing queued/running
   work and from one another; none are coalesced or retargeted.
-- [ ] Removal by user or agent preserves history and never creates or cancels an
+- [x] Removal by user or agent preserves history and never creates or cancels an
   activation.
-- [ ] Reopening and recompleting a target queues a new activation; relating an
+- [x] Reopening and recompleting a target queues a new activation; relating an
   already-completed target does not queue one immediately.
-- [ ] Waiting state and resume ownership are clear in task cards, task details,
+- [x] Waiting state and resume ownership are clear in task cards, task details,
   timelines, agent projections, and activation prompts without execution-block
   language.
-- [ ] Archival rejects unresolved outgoing relationships, while unmapped source
+- [x] Archival rejects unresolved outgoing relationships, while unmapped source
   tasks retain dormant satisfaction activations until remapped.
-- [ ] Migration and process changes surface missing/unavailable assignments in
+- [x] Migration and process changes surface missing/unavailable assignments in
   existing startup-impact review and allow ordinary edit/removal repair before
   automation resumes.
-- [ ] `CONTEXT.md`, `docs/architecture.md`, the MCP reference, and any durable
+- [x] `CONTEXT.md`, `docs/architecture.md`, the MCP reference, and any durable
   decision documentation are updated with the changed activation eligibility,
   relationship ownership, and authoritative wake-up flow.
-- [ ] Application, migration, MCP/API, runtime prompt, and dark/light browser
+- [x] Application, migration, MCP/API, runtime prompt, and dark/light browser
   tests cover the agreed lifecycle and pass with the repository's normal
   verification commands.
 
@@ -219,3 +219,44 @@ of issue 09's remaining MCP redesign questions.
 - 2026-09-28: Grilling completed with the user. The agreed design is consolidated
   into this existing ticket by explicit request; do not create a separate spec
   or implementation tickets for it.
+- 2026-09-29: Implemented and reviewed in the existing ticket. Review findings
+  tightened legacy activation migration, source-task MCP removal, deterministic
+  satisfaction ordering, waiting-independent dismissal projection, and
+  directional timeline wording before final verification.
+- 2026-09-29: User review moved dependency creation into a dedicated dialog
+  with task and resume-agent selection, consolidated relationship creation into
+  compact Child task and Dependency actions, and fixed Task position docking so
+  it responds when the relationship panel grows.
+- 2026-09-29: Follow-up UI review consolidated creation into a compact Child
+  task split button with Dependency in its menu, stabilized the dependency
+  dialog while focus moves between task and agent selection, and extended the
+  docking regression through real child creation rather than synthetic growth.
+
+## Answer
+
+Implemented explicit resume ownership for parent-child and dependency
+relationships. Waiting relationships no longer gate ordinary activation work;
+every target entry into Completion records a relationship-specific satisfaction
+event and queues an ordered activation for that relationship's assigned agent.
+Assignment inspection, unresolved reassignment, cross-task MCP repair/removal,
+dual-task history, archival protection, unmapped-task retention, process-impact
+repair, and released migration behavior now follow the agreed lifecycle.
+
+The browser and agent surfaces use “Waiting on” language and expose resume
+ownership without implying execution is blocked. Historical blocker-clearance
+activations migrate to the provenance-neutral `relationship-changed` reason so
+corrective removals are not misrepresented as completed dependencies.
+Architecture, domain, MCP, and ADR documentation were updated with the
+authoritative flow.
+
+The relationship panel now presents a compact Child task split button with
+Dependency in its menu. Dependency creation opens a stable-height dialog with
+searchable task selection, explicit resume-agent assignment, and confirmation.
+Task position docking keeps its resize observer across relationship-only task
+refreshes, preventing newly created child relationships from being covered by
+the fixed controls.
+
+Verification completed with type checking, production build, 331 passing
+non-browser tests (4 intentional skips), and 164 passing browser tests,
+including dark/light relationship controls. The standards/spec review found no
+remaining actionable issue after its findings were repaired.

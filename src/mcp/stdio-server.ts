@@ -153,6 +153,7 @@ server.registerTool(
       columnId: z.string().min(1),
       title: z.string().min(1),
       description: z.string().min(1),
+      resumeAgent: z.string().min(1),
       startingRef: z.string().min(1).optional(),
       idempotencyKey: z.string().min(1),
     },
@@ -166,10 +167,46 @@ server.registerTool(
     description: "Make the current task depend on another task.",
     inputSchema: {
       targetTaskId: z.string().min(1),
+      resumeAgent: z.string().min(1),
       idempotencyKey: z.string().min(1),
     },
   },
   async (arguments_) => callAgentApi("POST", "/agent-api/current-task/dependencies", arguments_),
+);
+
+server.registerTool(
+  "set_relationship_resume_agent",
+  {
+    description: "Change who reassesses a waiting task when an unresolved relationship is satisfied. Use current or a concrete source task ID.",
+    inputSchema: {
+      taskId: z.string().min(1),
+      relationshipId: z.string().min(1),
+      resumeAgent: z.string().min(1),
+      idempotencyKey: z.string().min(1),
+    },
+  },
+  async ({ taskId, relationshipId, ...body }) => callAgentApi(
+    "PATCH",
+    `/agent-api/tasks/${encodeURIComponent(taskId)}/relationships/${encodeURIComponent(relationshipId)}/resume-agent`,
+    body,
+  ),
+);
+
+server.registerTool(
+  "remove_relationship",
+  {
+    description: "Remove a mistaken relationship from current or a concrete task without waking its resume agent.",
+    inputSchema: {
+      taskId: z.string().min(1),
+      relationshipId: z.string().min(1),
+      idempotencyKey: z.string().min(1),
+    },
+  },
+  async ({ taskId, relationshipId, ...body }) => callAgentApi(
+    "DELETE",
+    `/agent-api/tasks/${encodeURIComponent(taskId)}/relationships/${encodeURIComponent(relationshipId)}`,
+    body,
+  ),
 );
 
 server.registerTool(
@@ -188,7 +225,7 @@ server.registerTool(
 await server.connect(new StdioServerTransport());
 
 async function callAgentApi(
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   body?: Record<string, unknown>,
 ): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {

@@ -23,7 +23,7 @@ export interface UserRelatedTaskView {
   boardId: string;
   boardName: string;
   column: { id: string; name: string };
-  blocking: TaskOverviewView["blocking"];
+  waitingOn: TaskOverviewView["waitingOn"];
   archived?: true;
 }
 

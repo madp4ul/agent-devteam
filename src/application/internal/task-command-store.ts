@@ -9,6 +9,8 @@ import type {
   CreateTaskCommand,
   CreateChildTaskCommand,
   CreateTaskRelationshipCommand,
+  EditTaskRelationshipResumeAgentCommand,
+  EditTaskRelationshipResumeAgentResult,
   RemoveTaskRelationshipCommand,
   RemoveTaskRelationshipResult,
   EditTaskCommand,
@@ -89,13 +91,23 @@ export class TaskCommandStore {
       if (command.startingRef !== undefined && command.startingRef.trim().length === 0) {
         return { accepted: false, reason: "invalid-starting-ref" };
       }
+      if (!this.agentIsApplied(command.resumeAgentId)) {
+        return { accepted: false, reason: "resume-agent-not-found" };
+      }
 
       const task = this.insertTask(
         command,
         { parentTaskId: command.parentTaskId },
         command.startingRef?.trim(),
       );
-      this.insertRelationship("parent-child", command.parentTaskId, task.id, command.actor, attemptId);
+      this.insertRelationship(
+        "parent-child",
+        command.parentTaskId,
+        task.id,
+        command.resumeAgentId,
+        command.actor,
+        attemptId,
+      );
       const updated = this.#projections.readTask(task.id);
       if (updated === undefined) throw new Error("Created child task could not be read back");
       return { accepted: true, task: updated };
@@ -174,14 +186,16 @@ export class TaskCommandStore {
       const relationshipsSatisfied = command.destinationColumnId === "completion"
         ? (this.#database
             .prepare(
-              `SELECT id, type, source_task_id
+              `SELECT id, type, source_task_id, resume_agent_id
                FROM task_relationships
-               WHERE type IN ('dependency', 'parent-child') AND target_task_id = ?`,
+               WHERE type IN ('dependency', 'parent-child') AND target_task_id = ?
+               ORDER BY rowid`,
             )
             .all(command.taskId) as Array<{
               id: string;
               type: TaskRelationshipView["type"];
               source_task_id: string;
+              resume_agent_id: string | null;
             }>)
         : [];
       this.#database
@@ -224,9 +238,10 @@ export class TaskCommandStore {
           { kind: "framework", id: "coordination" },
           this.relationshipActivityDetails(relationship, "target", relationship.source_task_id),
         );
-        if (this.#projections.readBlockingTaskIds(relationship.source_task_id).length === 0) {
-          this.createBlockersClearedActivation(
+        if (relationship.resume_agent_id !== null) {
+          this.createRelationshipSatisfiedActivation(
             relationship.source_task_id,
+            relationship.resume_agent_id,
             relationshipEventId,
           );
         }
@@ -295,6 +310,8 @@ export class TaskCommandStore {
         result = { accepted: false, reason: "archived-task" };
       } else if (command.sourceTaskId === command.targetTaskId) {
         result = { accepted: false, reason: "self-relationship" };
+      } else if (!this.agentIsApplied(command.resumeAgentId)) {
+        result = { accepted: false, reason: "resume-agent-not-found" };
       } else {
         const duplicate = this.#database
           .prepare(
@@ -309,6 +326,7 @@ export class TaskCommandStore {
             command.type,
             command.sourceTaskId,
             command.targetTaskId,
+            command.resumeAgentId,
             command.actor,
             attemptId,
           );
@@ -330,6 +348,7 @@ export class TaskCommandStore {
       idempotencyKey: command.idempotencyKey,
     }, () => {
       const currentTask = this.#projections.readTask(command.taskId);
+      this.assertAgentAttemptAllowsCrossTaskAction(command);
       let result: RemoveTaskRelationshipResult;
       if (currentTask === undefined) {
         result = { accepted: false, reason: "not-found" };
@@ -340,7 +359,7 @@ export class TaskCommandStore {
           .prepare(
             `SELECT relationship.id, relationship.type,
                     relationship.source_task_id, relationship.target_task_id,
-                    target.column_id AS target_column_id
+                    relationship.resume_agent_id
              FROM task_relationships relationship
              JOIN tasks target ON target.id = relationship.target_task_id
              WHERE relationship.id = ?
@@ -351,7 +370,7 @@ export class TaskCommandStore {
             type: TaskRelationshipView["type"];
             source_task_id: string;
             target_task_id: string;
-            target_column_id: string;
+            resume_agent_id: string | null;
           } | undefined;
         if (row === undefined) {
           result = { accepted: false, reason: "relationship-conflict" };
@@ -361,12 +380,11 @@ export class TaskCommandStore {
             type: row.type,
             sourceTaskId: row.source_task_id,
             targetTaskId: row.target_task_id,
+            resumeAgentId: row.resume_agent_id,
           };
-          const clearedFinalBlocker = row.target_column_id !== "completion" &&
-            this.#projections.readBlockingTaskIds(row.source_task_id).length === 1;
           this.#database.prepare("DELETE FROM task_relationships WHERE id = ?").run(row.id);
           const occurredAt = new Date().toISOString();
-          const sourceEventId = this.#activityJournal.append(
+          this.#activityJournal.append(
             row.source_task_id,
             "relationship.removed",
             command.actor,
@@ -380,19 +398,86 @@ export class TaskCommandStore {
             this.relationshipActivityDetails(relationship, "target", row.source_task_id),
             occurredAt,
           );
-          if (clearedFinalBlocker) {
-            this.createBlockersClearedActivation(row.source_task_id, sourceEventId);
-          }
           result = {
             accepted: true,
             relationship,
             sourceTask: this.#projections.readTask(row.source_task_id)!,
             targetTask: this.#projections.readTask(row.target_task_id)!,
-            clearedFinalBlocker,
           };
         }
       }
       return result;
+    });
+  }
+
+  editTaskRelationshipResumeAgent(
+    command: EditTaskRelationshipResumeAgentCommand,
+  ): EditTaskRelationshipResumeAgentResult {
+    return this.#idempotentCommands.execute({
+      kind: "edit-task-relationship-resume-agent",
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
+      this.assertAgentAttemptAllowsCrossTaskAction(command);
+      const currentTask = this.#projections.readTask(command.taskId);
+      if (currentTask === undefined) return { accepted: false, reason: "not-found" };
+      if (this.taskIsReadOnly(currentTask)) return { accepted: false, reason: "archived-task" };
+      if (!this.agentIsApplied(command.resumeAgentId)) {
+        return { accepted: false, reason: "resume-agent-not-found" };
+      }
+      const row = this.#database.prepare(
+        `SELECT relationship.id, relationship.type, relationship.source_task_id,
+                relationship.target_task_id, relationship.resume_agent_id,
+                target.column_id AS target_column_id
+         FROM task_relationships relationship
+         JOIN tasks target ON target.id = relationship.target_task_id
+         WHERE relationship.id = ? AND relationship.source_task_id = ?`,
+      ).get(command.relationshipId, command.taskId) as {
+        id: string;
+        type: TaskRelationshipView["type"];
+        source_task_id: string;
+        target_task_id: string;
+        resume_agent_id: string | null;
+        target_column_id: string;
+      } | undefined;
+      if (row === undefined) return { accepted: false, reason: "relationship-conflict" };
+      if (row.target_column_id === "completion") {
+        return { accepted: false, reason: "relationship-satisfied" };
+      }
+      this.#database.prepare(
+        "UPDATE task_relationships SET resume_agent_id = ? WHERE id = ?",
+      ).run(command.resumeAgentId, row.id);
+      const relationship: TaskRelationshipView = {
+        id: row.id,
+        type: row.type,
+        sourceTaskId: row.source_task_id,
+        targetTaskId: row.target_task_id,
+        resumeAgentId: command.resumeAgentId,
+      };
+      const occurredAt = new Date().toISOString();
+      const change = {
+        previousResumeAgentId: row.resume_agent_id ?? "",
+        resumeAgentId: command.resumeAgentId,
+      };
+      this.#activityJournal.append(
+        row.source_task_id,
+        "relationship.resume-agent-changed",
+        command.actor,
+        this.relationshipActivityDetails(relationship, "source", row.target_task_id, change),
+        occurredAt,
+      );
+      this.#activityJournal.append(
+        row.target_task_id,
+        "relationship.resume-agent-changed",
+        command.actor,
+        this.relationshipActivityDetails(relationship, "target", row.source_task_id, change),
+        occurredAt,
+      );
+      return {
+        accepted: true,
+        relationship,
+        sourceTask: this.#projections.readTask(row.source_task_id)!,
+        targetTask: this.#projections.readTask(row.target_task_id)!,
+      };
     });
   }
 
@@ -470,6 +555,23 @@ export class TaskCommandStore {
       this.assertAgentAttemptProvenance(taskId, command.actor.id, attemptId);
     }
     return attemptId;
+  }
+
+  private assertAgentAttemptAllowsCrossTaskAction(command: { actor: Actor; attemptId?: string }): void {
+    if (command.actor.kind !== "agent") return;
+    if (command.attemptId === undefined) return;
+    const attempt = this.#database.prepare(
+      `SELECT 1 FROM attempts attempt
+       JOIN activations activation ON activation.id = attempt.activation_id
+       WHERE attempt.id = ? AND activation.target_agent_id = ?
+         AND attempt.status = 'running'`,
+    ).get(command.attemptId, command.actor.id);
+    if (attempt === undefined) throw new Error("Agent action attempt provenance is not current");
+  }
+
+  private agentIsApplied(agentId: string): boolean {
+    return this.#database.prepare("SELECT 1 FROM agents WHERE id = ? AND applied = 1")
+      .get(agentId) !== undefined;
   }
 
   private taskIsReadOnly(task: TaskView): boolean {
@@ -576,6 +678,7 @@ export class TaskCommandStore {
     type: TaskRelationshipView["type"],
     sourceTaskId: string,
     targetTaskId: string,
+    resumeAgentId: string,
     actor: Actor,
     sourceAttemptId?: string,
   ): TaskRelationshipView {
@@ -584,10 +687,15 @@ export class TaskCommandStore {
       type,
       sourceTaskId,
       targetTaskId,
+      resumeAgentId,
     };
     this.#database
-      .prepare("INSERT INTO task_relationships VALUES (?, ?, ?, ?)")
-      .run(relationship.id, relationship.type, sourceTaskId, targetTaskId);
+      .prepare(
+        `INSERT INTO task_relationships
+          (id, type, source_task_id, target_task_id, resume_agent_id)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(relationship.id, relationship.type, sourceTaskId, targetTaskId, resumeAgentId);
     this.#activityJournal.append(sourceTaskId, "relationship.created", actor, this.relationshipActivityDetails(
       relationship,
       "source",
@@ -605,7 +713,8 @@ export class TaskCommandStore {
   }
 
   private relationshipActivityDetails(
-    relationship: Pick<TaskRelationshipView, "id" | "type">,
+    relationship: Pick<TaskRelationshipView, "id" | "type"> &
+      Partial<Pick<TaskRelationshipView, "resumeAgentId">>,
     role: "source" | "target",
     relatedTaskId: string,
     additional: Record<string, string> = {},
@@ -615,6 +724,9 @@ export class TaskCommandStore {
       relationshipType: relationship.type,
       relationshipRole: role,
       relatedTaskId,
+      ...(relationship.resumeAgentId === undefined || relationship.resumeAgentId === null
+        ? {}
+        : { resumeAgentId: relationship.resumeAgentId }),
       ...additional,
     };
   }
@@ -655,39 +767,16 @@ export class TaskCommandStore {
     });
   }
 
-  private createBlockersClearedActivation(taskId: string, sourceEventId: string): void {
-    const task = this.#database
-      .prepare(
-        `SELECT task.board_id, task.column_id, column.watching_agent_id
-         FROM tasks task
-         JOIN columns column ON column.board_id = task.board_id AND column.id = task.column_id
-         WHERE task.id = ? AND task.archived_at IS NULL
-           AND task.archival_pending = 0 AND column.applied = 1`,
-      )
-      .get(taskId) as { watching_agent_id: string | null } | undefined;
-    if (task?.watching_agent_id == null) return;
-    const queuedColumnEntryAlreadyOwnsResponsibility = this.#database
-      .prepare(
-        `SELECT 1
-         FROM activations activation
-         WHERE activation.task_id = ?
-           AND activation.target_agent_id = ?
-           AND activation.reason_type = 'column-entry'
-           AND activation.status = 'queued'
-           AND activation.stale = 0
-           AND NOT EXISTS (
-             SELECT 1 FROM attempts attempt
-             WHERE attempt.activation_id = activation.id
-           )
-         LIMIT 1`,
-      )
-      .get(taskId, task.watching_agent_id) !== undefined;
-    if (queuedColumnEntryAlreadyOwnsResponsibility) return;
+  private createRelationshipSatisfiedActivation(
+    taskId: string,
+    resumeAgentId: string,
+    sourceEventId: string,
+  ): void {
     const occurredAt = new Date().toISOString();
     this.#activationCreation.createOrdinary({
       taskId,
-      targetAgentId: task.watching_agent_id,
-      reasonType: "blockers-cleared",
+      targetAgentId: resumeAgentId,
+      reasonType: "relationship-satisfied",
       sourceEventId,
       occurredAt,
     });

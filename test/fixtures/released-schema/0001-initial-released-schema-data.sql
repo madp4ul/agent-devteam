@@ -24,6 +24,8 @@ INSERT INTO attempts(id, activation_id, status, workspace_path, started_at, comp
 INSERT INTO attempt_transcripts VALUES ('released-attempt', '[{"kind":"message","role":"agent","text":"Retained transcript"}]', '{"inputTokens":10}', '{"inputTokens":10}');
 INSERT INTO task_comments(id, task_id, body, actor_kind, actor_id, occurred_at, attempt_id)
   VALUES ('released-comment', 'released-task', 'Retained comment', 'agent', 'released-agent', '2026-01-01T00:03:00.000Z', 'released-attempt');
-INSERT INTO task_relationships VALUES ('released-relationship', 'dependency', 'released-task', 'released-related');
+INSERT INTO task_relationships
+  (id, type, source_task_id, target_task_id)
+  VALUES ('released-relationship', 'dependency', 'released-task', 'released-related');
 INSERT INTO task_attachments VALUES ('released-task-attachment', 'released-task', 'brief.md', 'text/markdown', 42);
 COMMIT;

@@ -62,6 +62,7 @@ test("process changes expose startup impact and explicit stale-work recovery", a
         columnName: "Retired column",
       }],
       staleActivations,
+      unavailableResumeAssignments: [],
     };
     if (resumedWithCurrentProcess) {
       body.automation = { state: "running", attemptsMayStart: true };
@@ -111,6 +112,7 @@ test("accepting the final stale activation removes startup impact after refresh"
         targetAvailable: true,
         taskMapped: true,
       }],
+      unavailableResumeAssignments: [],
     };
     if (accepted) body.automation = { state: "running", attemptsMayStart: true };
     await route.fulfill({ response, json: body });
@@ -595,7 +597,7 @@ test("running agent activity uses the configured agent name and interruption con
     detail.collaborators = [
       { id: "implementer", name: "Implementation Agent", summary: "Builds verified changes." },
     ];
-    detail.inspection.blocking = { blocked: false, blockerTaskIds: [] };
+    detail.inspection.waitingOn = { taskIds: [] };
     detail.inspection.automationSuspended = false;
     detail.inspection.unresolvedAttention = [];
     detail.activeRun = {
@@ -654,16 +656,16 @@ test("live task refresh moves a singly blocked activity to idle without disturbi
         stale: false,
       });
     }
-    detail.inspection.blocking = reads < 3
-      ? { blocked: true, blockerTaskIds: ["T-0002"] }
-      : { blocked: false, blockerTaskIds: [] };
+    detail.inspection.waitingOn = reads < 3
+      ? { taskIds: ["T-0002"] }
+      : { taskIds: [] };
     await route.fulfill({ response, json: detail });
   });
 
   await page.goto("/tasks/T-0001");
   const activity = page.getByRole("region", { name: "Agent activity" });
   await expect(activity.getByText("Waiting", { exact: true })).toBeVisible();
-  await expect(activity).toContainText("Blocked by T-0002");
+  await expect(activity).toContainText("Waiting on T-0002");
   const draft = page.getByRole("textbox", { name: "Comment" });
   await expect(draft).toHaveAttribute("rows", "2");
   await draft.fill("Keep the reader's in-progress comment.");
@@ -696,7 +698,7 @@ test("waiting reason disclosure survives authoritative reason-count changes", as
     const detail = await response.json();
     reads += 1;
     detail.activeRun = null;
-    detail.inspection.blocking = { blocked: true, blockerTaskIds: ["T-0002"] };
+    detail.inspection.waitingOn = { taskIds: ["T-0002"] };
     detail.inspection.automationSuspended = false;
     detail.automation = reads === 3
       ? { state: "running", attemptsMayStart: true }

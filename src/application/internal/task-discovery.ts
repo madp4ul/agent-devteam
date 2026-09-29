@@ -230,7 +230,7 @@ export class TaskDiscovery {
         ...(task.archived ? { archived: true as const } : {}),
         comments: task.comments,
         relationships: task.relationships,
-        blocking: overview.blocking,
+        waitingOn: overview.waitingOn,
         run: overview.run,
         unresolvedAttention: overview.unresolvedAttention,
         currentActivation:

@@ -21,60 +21,51 @@ CREATE TABLE activation_startup_failures (
     );
 
 -- table activations on activations
-CREATE TABLE activations (
-      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-      id TEXT NOT NULL UNIQUE,
-      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      target_agent_id TEXT NOT NULL REFERENCES agents(id),
-      reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention', 'blockers-cleared', 'user-follow-up')),
-      source_event_id TEXT NOT NULL,
-      status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
-      created_at TEXT NOT NULL,
-      model TEXT,
-      reasoning_effort TEXT,
-      retry_due_at TEXT,
-      retry_cycle_start INTEGER NOT NULL DEFAULT 0,
-      failure_kind TEXT,
-      failure_summary TEXT,
-      resolution TEXT,
-      continuation_message TEXT
-      ,definition_version TEXT NOT NULL
-      ,stale INTEGER NOT NULL DEFAULT 0 CHECK (stale IN (0, 1))
-      ,conversation_id TEXT
-    );
+CREATE TABLE "activations" (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT NOT NULL UNIQUE,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        target_agent_id TEXT NOT NULL REFERENCES agents(id),
+        reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention', 'relationship-satisfied', 'relationship-changed', 'user-follow-up')),
+        source_event_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
+        created_at TEXT NOT NULL,
+        model TEXT,
+        reasoning_effort TEXT,
+        retry_due_at TEXT,
+        retry_cycle_start INTEGER NOT NULL DEFAULT 0,
+        failure_kind TEXT,
+        failure_summary TEXT,
+        resolution TEXT,
+        continuation_message TEXT,
+        definition_version TEXT NOT NULL,
+        stale INTEGER NOT NULL DEFAULT 0 CHECK (stale IN (0, 1)),
+        conversation_id TEXT
+      );
 
 -- table activity_ledger on activity_ledger
-CREATE TABLE activity_ledger (
-      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-      id TEXT NOT NULL UNIQUE,
-      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK (
-        type IN (
-          'task.created',
-          'task.edited',
-          'task.moved',
-          'relationship.created',
-          'relationship.removed',
-          'relationship.satisfied',
-          'attention.created',
-          'attention.resolved',
-          'activation.created',
-          'activation.dismissed',
-          'attempt.started',
-          'attempt.completed',
-          'automation.suspended',
-          'automation.resumed',
-          'conversation.continued',
-          'conversation.retired',
-          'task.archived',
-          'task.unarchived'
-        )
-      ),
-      actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
-      actor_id TEXT NOT NULL,
-      occurred_at TEXT NOT NULL,
-      details_json TEXT NOT NULL
-    );
+CREATE TABLE "activity_ledger" (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT NOT NULL UNIQUE,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (
+          type IN (
+            'task.created', 'task.edited', 'task.moved',
+            'relationship.created', 'relationship.removed',
+            'relationship.satisfied', 'relationship.resume-agent-changed',
+            'attention.created', 'attention.resolved',
+            'activation.created', 'activation.dismissed',
+            'attempt.started', 'attempt.completed',
+            'automation.suspended', 'automation.resumed',
+            'conversation.continued', 'conversation.retired',
+            'task.archived', 'task.unarchived'
+          )
+        ),
+        actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
+        actor_id TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        details_json TEXT NOT NULL
+      );
 
 -- table agent_conversation_messages on agent_conversation_messages
 CREATE TABLE agent_conversation_messages (
@@ -302,7 +293,7 @@ CREATE TABLE task_relationships (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL CHECK (type IN ('parent-child', 'dependency')),
       source_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      target_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      target_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, resume_agent_id TEXT REFERENCES agents(id),
       CHECK (source_task_id <> target_task_id)
     );
 
@@ -339,8 +330,7 @@ CREATE TABLE tasks (
     );
 
 -- index activations_by_task_sequence on activations
-CREATE INDEX activations_by_task_sequence
-        ON activations(task_id, sequence);
+CREATE INDEX activations_by_task_sequence ON activations(task_id, sequence);
 
 -- index activity_ledger_by_task_sequence on activity_ledger
 CREATE INDEX activity_ledger_by_task_sequence
@@ -365,8 +355,7 @@ CREATE UNIQUE INDEX one_relationship_of_each_type
 
 -- index one_running_activation_per_task on activations
 CREATE UNIQUE INDEX one_running_activation_per_task
-      ON activations(task_id)
-      WHERE status = 'running';
+        ON activations(task_id) WHERE status = 'running';
 
 -- index task_attachments_by_task on task_attachments
 CREATE INDEX task_attachments_by_task
@@ -386,18 +375,17 @@ CREATE INDEX task_relationships_by_target
 
 -- trigger activations_start_in_task_order on activations
 CREATE TRIGGER activations_start_in_task_order
-      BEFORE UPDATE OF status ON activations
-      WHEN NEW.status = 'running'
-       AND EXISTS (
-         SELECT 1
-         FROM activations earlier
-         WHERE earlier.task_id = NEW.task_id
-           AND earlier.sequence < NEW.sequence
-           AND earlier.status <> 'completed'
-       )
-      BEGIN
-        SELECT RAISE(ABORT, 'activation-order-conflict');
-      END;
+        BEFORE UPDATE OF status ON activations
+        WHEN NEW.status = 'running'
+         AND EXISTS (
+           SELECT 1 FROM activations earlier
+           WHERE earlier.task_id = NEW.task_id
+             AND earlier.sequence < NEW.sequence
+             AND earlier.status <> 'completed'
+         )
+        BEGIN
+          SELECT RAISE(ABORT, 'activation-order-conflict');
+        END;
 
 -- view agent_inspectable_tasks on agent_inspectable_tasks
 CREATE VIEW agent_inspectable_tasks AS

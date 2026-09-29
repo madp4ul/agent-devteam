@@ -16,7 +16,299 @@ import type {
 
 const execFileAsync = promisify(execFile);
 
-test("the final completed dependency releases the untouched queued column-entry activation", async (t) => {
+test("waiting relationships do not suppress work and each completion queues its resume owner", async (t) => {
+  const fixture = await createGitFixture();
+  const runtime = new RecordingRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.processDefinitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+
+  const waiting = createTask(application, "implementation", "Waiting work", "waiting-work");
+  const first = createTask(application, "backlog", "First prerequisite", "first-prerequisite");
+  const second = createTask(application, "backlog", "Second prerequisite", "second-prerequisite");
+  for (const [target, key] of [[first, "first"], [second, "second"]] as const) {
+    const linked = application.createTaskRelationship({
+      type: "dependency",
+      sourceTaskId: waiting.id,
+      targetTaskId: target.id,
+      resumeAgentId: "implementer",
+      actor: { kind: "user", id: "paul" },
+      idempotencyKey: `link-${key}`,
+    });
+    assert.equal(linked.accepted, true);
+    if (linked.accepted) assert.equal(linked.relationship.resumeAgentId, "implementer");
+  }
+
+  await application.resumeAutomation();
+  await application.waitForAutomationIdle();
+  assert.deepEqual(runtime.requests.map(({ reason }) => reason.type), ["column-entry"]);
+
+  const completed = application.moveTask({
+    taskId: first.id,
+    destinationColumnId: "completion",
+    expectedRevision: first.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "complete-first-prerequisite",
+  });
+  assert.equal(completed.accepted, true);
+  await application.waitForAutomationIdle();
+  assert.deepEqual(runtime.requests.map(({ reason }) => reason.type), [
+    "column-entry",
+    "relationship-satisfied",
+  ]);
+
+  const inspection = application.queryTaskInspection(waiting.id);
+  assert.equal(inspection.available, true);
+  if (inspection.available) {
+    assert.deepEqual(inspection.task.waitingOn, { taskIds: [second.id] });
+  }
+});
+
+test("an unresolved relationship resume owner can be reassigned with dual-task history", async (t) => {
+  const fixture = await createFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+  const waiting = createTask(application, "backlog", "Waiting", "edit-owner-waiting");
+  const prerequisite = createTask(application, "backlog", "Prerequisite", "edit-owner-target");
+  const created = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: waiting.id,
+    targetTaskId: prerequisite.id,
+    resumeAgentId: "implementer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-editable-owner",
+  });
+  assert.equal(created.accepted, true);
+  if (!created.accepted) return;
+
+  const edited = application.editTaskRelationshipResumeAgent({
+    taskId: waiting.id,
+    relationshipId: created.relationship.id,
+    resumeAgentId: "reviewer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "edit-resume-owner",
+  });
+  assert.equal(edited.accepted, true);
+  if (!edited.accepted) return;
+  assert.equal(edited.relationship.resumeAgentId, "reviewer");
+  for (const taskId of [waiting.id, prerequisite.id]) {
+    const task = application.queryTask(taskId);
+    assert.equal(task.available, true);
+    if (task.available) {
+      assert.equal(
+        task.task.activity.at(-1)?.type,
+        "relationship.resume-agent-changed",
+      );
+      assert.deepEqual(task.task.activity.at(-1)?.details, {
+        relationshipId: created.relationship.id,
+        relationshipType: "dependency",
+        relationshipRole: taskId === waiting.id ? "source" : "target",
+        relatedTaskId: taskId === waiting.id ? prerequisite.id : waiting.id,
+        resumeAgentId: "reviewer",
+        previousResumeAgentId: "implementer",
+      });
+    }
+  }
+
+  const completed = application.moveTask({
+    taskId: prerequisite.id,
+    destinationColumnId: "completion",
+    expectedRevision: prerequisite.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "complete-after-owner-edit",
+  });
+  assert.equal(completed.accepted, true);
+  const task = application.queryTask(waiting.id);
+  assert.equal(task.available, true);
+  if (!task.available || !completed.accepted) return;
+  assert.equal(task.task.activations.at(-1)?.targetAgentId, "reviewer");
+  assert.deepEqual(application.editTaskRelationshipResumeAgent({
+    taskId: waiting.id,
+    relationshipId: created.relationship.id,
+    resumeAgentId: "implementer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reject-edit-after-satisfaction",
+  }), { accepted: false, reason: "relationship-satisfied" });
+  const reopened = application.moveTask({
+    taskId: prerequisite.id,
+    destinationColumnId: "backlog",
+    expectedRevision: completed.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reopen-for-owner-edit",
+  });
+  assert.equal(reopened.accepted, true);
+  const editedAfterReopen = application.editTaskRelationshipResumeAgent({
+    taskId: waiting.id,
+    relationshipId: created.relationship.id,
+    resumeAgentId: "implementer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "edit-after-reopen",
+  });
+  assert.equal(editedAfterReopen.accepted, true);
+  if (editedAfterReopen.accepted) assert.equal(editedAfterReopen.relationship.resumeAgentId, "implementer");
+  const afterReassignment = application.queryTask(waiting.id);
+  assert.equal(afterReassignment.available, true);
+  if (afterReassignment.available) {
+    assert.equal(afterReassignment.task.activations.at(-1)?.targetAgentId, "reviewer");
+  }
+});
+
+test("reopening and recompleting a target queues a fresh satisfaction activation", async (t) => {
+  const fixture = await createFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+  const waiting = createTask(application, "backlog", "Waiting for a correction", "recomplete-waiting");
+  const target = createTask(application, "backlog", "Premature outcome", "recomplete-target");
+  const relationship = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: waiting.id,
+    targetTaskId: target.id,
+    resumeAgentId: "reviewer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "link-recompleted-target",
+  });
+  assert.equal(relationship.accepted, true);
+
+  const firstCompletion = application.moveTask({
+    taskId: target.id,
+    destinationColumnId: "completion",
+    expectedRevision: target.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "first-target-completion",
+  });
+  assert.equal(firstCompletion.accepted, true);
+  if (!firstCompletion.accepted) return;
+  const reopened = application.moveTask({
+    taskId: target.id,
+    destinationColumnId: "backlog",
+    expectedRevision: firstCompletion.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reopen-target",
+  });
+  assert.equal(reopened.accepted, true);
+  if (!reopened.accepted) return;
+  const secondCompletion = application.moveTask({
+    taskId: target.id,
+    destinationColumnId: "completion",
+    expectedRevision: reopened.task.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "second-target-completion",
+  });
+  assert.equal(secondCompletion.accepted, true);
+
+  const result = application.queryTask(waiting.id);
+  assert.equal(result.available, true);
+  if (!result.available) return;
+  assert.deepEqual(
+    result.task.activations.map(({ targetAgentId, reason }) => ({ targetAgentId, reason: reason.type })),
+    [
+      { targetAgentId: "reviewer", reason: "relationship-satisfied" },
+      { targetAgentId: "reviewer", reason: "relationship-satisfied" },
+    ],
+  );
+  assert.equal(result.task.activity.filter(({ type }) => type === "relationship.satisfied").length, 2);
+});
+
+test("one completion queues several relationship activations in relationship creation order", async (t) => {
+  const fixture = await createFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+  const waiting = createTask(application, "backlog", "Ordered relationship wakeups", "ordered-waiting");
+  const target = createTask(application, "backlog", "Shared completion target", "ordered-target");
+  const dependency = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: waiting.id,
+    targetTaskId: target.id,
+    resumeAgentId: "reviewer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "ordered-dependency",
+  });
+  const child = application.createTaskRelationship({
+    type: "parent-child",
+    sourceTaskId: waiting.id,
+    targetTaskId: target.id,
+    resumeAgentId: "implementer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "ordered-child",
+  });
+  assert.equal(dependency.accepted, true);
+  assert.equal(child.accepted, true);
+  if (!dependency.accepted || !child.accepted) return;
+
+  const completed = application.moveTask({
+    taskId: target.id,
+    destinationColumnId: "completion",
+    expectedRevision: target.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "complete-shared-target",
+  });
+  assert.equal(completed.accepted, true);
+
+  const result = application.queryTask(waiting.id);
+  assert.equal(result.available, true);
+  if (!result.available) return;
+  assert.deepEqual(
+    result.task.activations.map(({ targetAgentId }) => targetAgentId),
+    ["reviewer", "implementer"],
+  );
+  const satisfactionByEvent = new Map(
+    result.task.activity
+      .filter(({ type }) => type === "relationship.satisfied")
+      .map((event) => [event.id, event.details.relationshipId]),
+  );
+  assert.deepEqual(
+    result.task.activations.map(({ reason }) => satisfactionByEvent.get(reason.sourceEventId)),
+    [dependency.relationship.id, child.relationship.id],
+  );
+});
+
+test("relating an already-completed target records ownership without synthesizing an activation", async (t) => {
+  const fixture = await createFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+  const waiting = createTask(application, "backlog", "Trace completed work", "completed-link-source");
+  const target = createTask(application, "backlog", "Already completed", "completed-link-target");
+  const completed = application.moveTask({
+    taskId: target.id,
+    destinationColumnId: "completion",
+    expectedRevision: target.revision,
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "complete-before-linking",
+  });
+  assert.equal(completed.accepted, true);
+  assert.deepEqual(application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: waiting.id,
+    targetTaskId: target.id,
+    resumeAgentId: "missing-agent",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "reject-missing-resume-agent",
+  }), { accepted: false, reason: "resume-agent-not-found" });
+  const relationship = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: waiting.id,
+    targetTaskId: target.id,
+    resumeAgentId: "implementer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "link-completed-target",
+  });
+  assert.equal(relationship.accepted, true);
+  if (!relationship.accepted) return;
+  assert.equal(relationship.relationship.resumeAgentId, "implementer");
+  assert.equal(relationship.sourceTask.activations.length, 0);
+  const inspection = application.queryTaskInspection(waiting.id);
+  assert.equal(inspection.available, true);
+  if (inspection.available) assert.deepEqual(inspection.task.waitingOn, { taskIds: [] });
+});
+
+test("each completed dependency adds a distinct activation while other work remains", async (t) => {
   const fixture = await createFixture();
   const application = await CoordinationApplication.start(fixture);
   t.after(() => application.close());
@@ -29,6 +321,7 @@ test("the final completed dependency releases the untouched queued column-entry 
     type: "dependency",
     sourceTaskId: blocked.id,
     targetTaskId: first.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "link-first",
   });
@@ -36,15 +329,13 @@ test("the final completed dependency releases the untouched queued column-entry 
     type: "dependency",
     sourceTaskId: blocked.id,
     targetTaskId: second.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "link-second",
   });
   assert.equal(firstLink.accepted, true);
   assert.equal(secondLink.accepted, true);
   if (!secondLink.accepted) return;
-  const originalActivation = secondLink.sourceTask.activations[0];
-  assert.ok(originalActivation);
-
   const afterFirst = application.moveTask({
     taskId: first.id,
     destinationColumnId: "completion",
@@ -56,8 +347,8 @@ test("the final completed dependency releases the untouched queued column-entry 
   const stillBlocked = application.queryTaskInspection(blocked.id);
   assert.equal(stillBlocked.available, true);
   if (!stillBlocked.available) return;
-  assert.deepEqual(stillBlocked.task.blocking, { blocked: true, blockerTaskIds: [second.id] });
-  assert.equal(stillBlocked.task.run.queuedActivationCount, 1);
+  assert.deepEqual(stillBlocked.task.waitingOn, { taskIds: [second.id] });
+  assert.equal(stillBlocked.task.run.queuedActivationCount, 2);
 
   const afterSecond = application.moveTask({
     taskId: second.id,
@@ -70,20 +361,22 @@ test("the final completed dependency releases the untouched queued column-entry 
   const unblocked = application.queryTask(blocked.id);
   assert.equal(unblocked.available, true);
   if (!unblocked.available) return;
-  assert.equal(unblocked.task.activations.length, 1);
-  assert.deepEqual(unblocked.task.activations[0], originalActivation);
+  assert.deepEqual(
+    unblocked.task.activations.map(({ reason }) => reason.type),
+    ["column-entry", "relationship-satisfied", "relationship-satisfied"],
+  );
   const finalClearingEvent = unblocked.task.activity.findLast(
     (event) => event.type === "relationship.satisfied",
   );
   assert.ok(finalClearingEvent);
-  assert.notEqual(unblocked.task.activations[0]?.reason.sourceEventId, finalClearingEvent.id);
+  assert.equal(unblocked.task.activations.at(-1)?.reason.sourceEventId, finalClearingEvent.id);
   assert.deepEqual(
     unblocked.task.activity.filter((event) => event.type.startsWith("relationship.")).map((event) => event.type),
     ["relationship.created", "relationship.created", "relationship.satisfied", "relationship.satisfied"],
   );
 });
 
-test("child completion releases one run for responsibility queued by a watched-column move", async (t) => {
+test("child completion adds resume work after existing responsibility runs", async (t) => {
   const fixture = await createGitFixture();
   const runtime = new RecordingRuntime();
   const application = await CoordinationApplication.start({
@@ -113,6 +406,7 @@ test("child completion releases one run for responsibility queued by a watched-c
   assert.equal(queuedResponsibility.reason.sourceEventId, sourceMovement?.id);
   const child = application.createChildTask({
     parentTaskId: parent.id,
+    resumeAgentId: "implementer",
     boardId: "delivery",
     columnId: "backlog",
     title: "Required child",
@@ -125,7 +419,7 @@ test("child completion releases one run for responsibility queued by a watched-c
 
   await application.resumeAutomation();
   await application.waitForAutomationIdle();
-  assert.equal(runtime.requests.length, 0);
+  assert.deepEqual(runtime.requests.map(({ reason }) => reason.type), ["column-entry"]);
   const completedChild = application.moveTask({
     taskId: child.task.id,
     destinationColumnId: "completion",
@@ -136,21 +430,21 @@ test("child completion releases one run for responsibility queued by a watched-c
   assert.equal(completedChild.accepted, true);
   await application.waitForAutomationIdle();
 
-  assert.equal(runtime.requests.length, 1);
+  assert.equal(runtime.requests.length, 2);
   assert.equal(runtime.requests[0]?.task.id, parent.id);
   assert.deepEqual(runtime.requests[0]?.reason, queuedResponsibility.reason);
   const completedParent = application.queryTask(parent.id);
   assert.equal(completedParent.available, true);
   if (!completedParent.available) return;
-  assert.equal(completedParent.task.activations.length, 1);
-  assert.equal(completedParent.task.activations[0]?.status, "completed");
+  assert.equal(completedParent.task.activations.length, 2);
+  assert.equal(completedParent.task.activations[1]?.reason.type, "relationship-satisfied");
   assert.equal(
     completedParent.task.activity.filter((event) => event.type === "relationship.satisfied").length,
     1,
   );
 });
 
-test("a queued mention remains distinct when final-blocker clearance needs a new activation", async (t) => {
+test("a queued mention remains distinct from relationship satisfaction", async (t) => {
   const fixture = await createGitFixture();
   const runtime = new RecordingRuntime();
   const application = await CoordinationApplication.start({
@@ -172,6 +466,7 @@ test("a queued mention remains distinct when final-blocker clearance needs a new
     type: "dependency",
     sourceTaskId: dependent.id,
     targetTaskId: blocker.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "mention-link",
   });
@@ -195,12 +490,12 @@ test("a queued mention remains distinct when final-blocker clearance needs a new
   if (!unblocked.available) return;
   assert.deepEqual(
     unblocked.task.activations.map((activation) => activation.reason.type),
-    ["column-entry", "agent-mention", "blockers-cleared"],
+    ["column-entry", "agent-mention", "relationship-satisfied"],
   );
   assert.equal(new Set(unblocked.task.activations.map(({ conversationId }) => conversationId)).size, 1);
 });
 
-test("a running column-entry activation does not replace final-blocker clearance", async (t) => {
+test("a running column-entry activation does not replace relationship satisfaction", async (t) => {
   const fixture = await createGitFixture();
   const runtime = new HoldingRuntime();
   const application = await CoordinationApplication.start({
@@ -221,6 +516,7 @@ test("a running column-entry activation does not replace final-blocker clearance
     type: "dependency",
     sourceTaskId: dependent.id,
     targetTaskId: blocker.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "running-link",
   });
@@ -243,14 +539,14 @@ test("a running column-entry activation does not replace final-blocker clearance
     })),
     [
       { status: "running", reason: "column-entry" },
-      { status: "queued", reason: "blockers-cleared" },
+      { status: "queued", reason: "relationship-satisfied" },
     ],
   );
   runtime.complete();
   await application.waitForAutomationIdle();
 });
 
-test("repeated untouched column entries remain distinct after final-blocker clearance", async (t) => {
+test("repeated untouched column entries remain distinct from relationship satisfaction", async (t) => {
   const fixture = await createFixture();
   const application = await CoordinationApplication.start(fixture);
   t.after(() => application.close());
@@ -277,6 +573,7 @@ test("repeated untouched column entries remain distinct after final-blocker clea
     type: "dependency",
     sourceTaskId: dependent.id,
     targetTaskId: blocker.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "reentry-link",
   });
@@ -294,7 +591,7 @@ test("repeated untouched column entries remain distinct after final-blocker clea
   if (!unblocked.available) return;
   assert.deepEqual(
     unblocked.task.activations.map((activation) => activation.reason.type),
-    ["column-entry", "column-entry"],
+    ["column-entry", "column-entry", "relationship-satisfied"],
   );
 });
 
@@ -319,6 +616,7 @@ test("a child can start from committed Git state without sharing its parent's wo
   await writeFile(join(parentWorkspace.path, "DIRTY.txt"), "uncommitted parent state\n");
   const child = application.createChildTask({
     parentTaskId: parent.id,
+    resumeAgentId: "implementer",
     boardId: "delivery",
     columnId: "implementation",
     title: "Child work",
@@ -342,6 +640,7 @@ test("a child can start from committed Git state without sharing its parent's wo
       type: "parent-child",
       sourceTaskId: parent.id,
       targetTaskId: child.task.id,
+      resumeAgentId: "implementer",
     },
   ]);
 
@@ -357,11 +656,11 @@ test("a child can start from committed Git state without sharing its parent's wo
   assert.equal(completedChild.accepted, true);
   await application.waitForAutomationIdle();
   assert.equal(runtime.requests[2]?.task.id, parent.id);
-  assert.equal(runtime.requests[2]?.reason.type, "blockers-cleared");
+  assert.equal(runtime.requests[2]?.reason.type, "relationship-satisfied");
   const parentInspection = application.queryTaskInspection(parent.id);
   assert.equal(parentInspection.available, true);
   if (parentInspection.available) {
-    assert.deepEqual(parentInspection.task.blocking, { blocked: false, blockerTaskIds: [] });
+    assert.deepEqual(parentInspection.task.waitingOn, { taskIds: [] });
   }
   const completedChildRelationship = application.queryTask(parent.id);
   assert.equal(completedChildRelationship.available, true);
@@ -400,6 +699,7 @@ test("an agent-created relationship retains attempt provenance for timeline grou
     type: "dependency",
     sourceTaskId: source.id,
     targetTaskId: prerequisite.id,
+    resumeAgentId: "implementer",
     actor: { kind: "agent", id: "implementer" },
     attemptId: request.attemptId,
     idempotencyKey: "agent-link",
@@ -411,6 +711,7 @@ test("an agent-created relationship retains attempt provenance for timeline grou
   assert.equal(activity?.details.attemptId, request.attemptId);
   const child = application.createChildTask({
     parentTaskId: source.id,
+    resumeAgentId: "implementer",
     boardId: "delivery",
     columnId: "backlog",
     title: "Agent-created child",
@@ -439,6 +740,7 @@ test("child creation rejects Completion atomically and retains deliberate workfl
   const parent = createTask(application, "backlog", "Parent work", "completion-parent");
   const rejected = application.createChildTask({
     parentTaskId: parent.id,
+    resumeAgentId: "implementer",
     boardId: "delivery",
     columnId: "completion",
     title: "Already completed child",
@@ -463,6 +765,7 @@ test("child creation rejects Completion atomically and retains deliberate workfl
 
   const child = application.createChildTask({
     parentTaskId: parent.id,
+    resumeAgentId: "implementer",
     boardId: "delivery",
     columnId: "implementation",
     title: "Deliberately placed child",
@@ -478,7 +781,7 @@ test("child creation rejects Completion atomically and retains deliberate workfl
   assert.equal(child.task.activity.filter((event) => event.type === "task.created").length, 1);
 });
 
-test("final blocker clearance wakes idle automation through the released column entry", async (t) => {
+test("relationship satisfaction wakes idle automation after ordinary work completes", async (t) => {
   const fixture = await createGitFixture();
   const runtime = new RecordingRuntime();
   const application = await CoordinationApplication.start({
@@ -497,12 +800,13 @@ test("final blocker clearance wakes idle automation through the released column 
     type: "dependency",
     sourceTaskId: dependent.id,
     targetTaskId: blocker.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "wake-link",
   });
   await application.resumeAutomation();
   await application.waitForAutomationIdle();
-  assert.equal(runtime.requests.length, 0);
+  assert.deepEqual(runtime.requests.map(({ reason }) => reason.type), ["column-entry"]);
 
   application.moveTask({
     taskId: blocker.id,
@@ -512,10 +816,13 @@ test("final blocker clearance wakes idle automation through the released column 
     idempotencyKey: "wake-complete",
   });
   await application.waitForAutomationIdle();
-  assert.deepEqual(runtime.requests.map((request) => request.reason.type), ["column-entry"]);
+  assert.deepEqual(runtime.requests.map((request) => request.reason.type), [
+    "column-entry",
+    "relationship-satisfied",
+  ]);
 });
 
-test("fully unblocking a task in an unwatched column records no activation", async (t) => {
+test("satisfying a relationship in an unwatched column records its owner activation", async (t) => {
   const fixture = await createFixture();
   const application = await CoordinationApplication.start(fixture);
   t.after(() => application.close());
@@ -525,6 +832,7 @@ test("fully unblocking a task in an unwatched column records no activation", asy
     type: "dependency",
     sourceTaskId: dependent.id,
     targetTaskId: blocker.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "unwatched-link",
   });
@@ -537,10 +845,13 @@ test("fully unblocking a task in an unwatched column records no activation", asy
   });
   const result = application.queryTask(dependent.id);
   assert.equal(result.available, true);
-  if (result.available) assert.equal(result.task.activations.length, 0);
+  if (result.available) {
+    assert.equal(result.task.activations.length, 1);
+    assert.equal(result.task.activations[0]?.reason.type, "relationship-satisfied");
+  }
 });
 
-test("removing the final unresolved relationship preserves history and releases queued responsibility", async (t) => {
+test("removing an unresolved relationship preserves history without adding activation work", async (t) => {
   const fixture = await createFixture();
   const application = await CoordinationApplication.start(fixture);
   t.after(() => application.close());
@@ -550,6 +861,7 @@ test("removing the final unresolved relationship preserves history and releases 
     type: "dependency",
     sourceTaskId: dependent.id,
     targetTaskId: blocker.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "remove-link",
   });
@@ -565,7 +877,6 @@ test("removing the final unresolved relationship preserves history and releases 
   const removed = application.removeTaskRelationship(command);
   assert.equal(removed.accepted, true);
   if (!removed.accepted) return;
-  assert.equal(removed.clearedFinalBlocker, true);
   assert.deepEqual(removed.sourceTask.relationships, []);
   assert.deepEqual(removed.targetTask.relationships, []);
   assert.equal(removed.sourceTask.activations.length, 1);
@@ -589,7 +900,7 @@ test("removing the final unresolved relationship preserves history and releases 
   }), { accepted: false, reason: "relationship-conflict" });
 });
 
-test("relationship removal only reactivates an unresolved final blocker in a watched column", async (t) => {
+test("relationship removal never creates or cancels activation work", async (t) => {
   const fixture = await createFixture();
   const application = await CoordinationApplication.start(fixture);
   t.after(() => application.close());
@@ -601,6 +912,7 @@ test("relationship removal only reactivates an unresolved final blocker in a wat
     type: "parent-child",
     sourceTaskId: watched.id,
     targetTaskId: first.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "remove-first-link",
   });
@@ -608,6 +920,7 @@ test("relationship removal only reactivates an unresolved final blocker in a wat
     type: "dependency",
     sourceTaskId: watched.id,
     targetTaskId: second.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "remove-second-link",
   });
@@ -623,7 +936,6 @@ test("relationship removal only reactivates an unresolved final blocker in a wat
   });
   assert.equal(oneOfSeveral.accepted, true);
   if (!oneOfSeveral.accepted) return;
-  assert.equal(oneOfSeveral.clearedFinalBlocker, false);
   assert.equal(oneOfSeveral.sourceTask.activations.length, 1);
   assert.deepEqual(
     oneOfSeveral.sourceTask.relationships.map((relationship) => relationship.id),
@@ -646,6 +958,7 @@ test("relationship removal only reactivates an unresolved final blocker in a wat
     type: "dependency",
     sourceTaskId: unwatched.id,
     targetTaskId: first.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "remove-unwatched-link",
   });
@@ -679,7 +992,6 @@ test("relationship removal only reactivates an unresolved final blocker in a wat
   });
   assert.equal(satisfiedRemoval.accepted, true);
   if (satisfiedRemoval.accepted) {
-    assert.equal(satisfiedRemoval.clearedFinalBlocker, false);
     assert.equal(
       satisfiedRemoval.sourceTask.activations.length,
       beforeSatisfiedRemoval.task.activations.length,
@@ -709,6 +1021,7 @@ function createTask(
 async function createFixture(): Promise<{ processDefinitionPath: string; databasePath: string }> {
   const directory = await mkdtemp(join(tmpdir(), "coordination-relationships-"));
   await writeFile(join(directory, "implementer.md"), "Implement the current task.\n");
+  await writeFile(join(directory, "reviewer.md"), "Review the current task.\n");
   const processDefinitionPath = join(directory, "process.yaml");
   await writeFile(processDefinitionPath, `schemaVersion: 1
 name: Relationship process
@@ -720,6 +1033,11 @@ agents:
     role: Implements work
     summary: Builds unblocked tasks.
     instructions: ./implementer.md
+  - id: reviewer
+    name: Review Agent
+    role: Reviews work
+    summary: Reviews completed work.
+    instructions: ./reviewer.md
 boards:
   - id: delivery
     name: Delivery

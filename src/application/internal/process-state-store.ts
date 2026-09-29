@@ -10,6 +10,10 @@ import type {
   ProcessDefinition,
 } from "./process-definition.ts";
 
+const unavailableResumeAssignmentPredicate = `
+  target.column_id <> 'completion'
+  AND (relationship.resume_agent_id IS NULL OR agent.applied <> 1 OR agent.id IS NULL)`;
+
 export class ProcessStateStore {
   readonly #database: CoordinationDatabase;
 
@@ -152,9 +156,12 @@ export class ProcessStateStore {
           )
           .run(version);
       }
-      if (impactPreviousVersion === null) return undefined;
-      const impact = this.readDefinitionImpact(impactPreviousVersion, version);
-      if (impact.unmappedTasks.length === 0 && impact.staleActivations.length === 0) {
+      const impact = this.readDefinitionImpact(impactPreviousVersion ?? version, version);
+      if (
+        impact.unmappedTasks.length === 0 &&
+        impact.staleActivations.length === 0 &&
+        impact.unavailableResumeAssignments.length === 0
+      ) {
         connection.prepare("UPDATE runtime SET impact_previous_version = NULL WHERE singleton = 1").run();
         return undefined;
       }
@@ -197,6 +204,22 @@ export class ProcessStateStore {
       activation_id: string; task_id: string; target_agent_id: string;
       status: "queued" | "failed"; target_available: number; task_mapped: number;
     }>;
+    const unavailableResumeAssignments = connection.prepare(
+      `SELECT relationship.id AS relationship_id,
+              relationship.source_task_id, source.board_id AS source_board_id,
+              relationship.target_task_id,
+              relationship.resume_agent_id
+       FROM task_relationships relationship
+       JOIN tasks source ON source.id = relationship.source_task_id
+       JOIN tasks target ON target.id = relationship.target_task_id
+       LEFT JOIN agents agent ON agent.id = relationship.resume_agent_id
+       WHERE ${unavailableResumeAssignmentPredicate}
+       ORDER BY relationship.rowid`,
+    ).all() as Array<{
+      relationship_id: string; source_task_id: string; source_board_id: string;
+      target_task_id: string;
+      resume_agent_id: string | null;
+    }>;
     return {
       previousVersion,
       currentVersion,
@@ -216,6 +239,13 @@ export class ProcessStateStore {
         targetAvailable: activation.target_available === 1,
         taskMapped: activation.task_mapped === 1,
       })),
+      unavailableResumeAssignments: unavailableResumeAssignments.map((relationship) => ({
+        relationshipId: relationship.relationship_id,
+        sourceTaskId: relationship.source_task_id,
+        sourceBoardId: relationship.source_board_id,
+        targetTaskId: relationship.target_task_id,
+        resumeAgentId: relationship.resume_agent_id,
+      })),
     };
   }
 
@@ -224,7 +254,9 @@ export class ProcessStateStore {
     currentVersion: string,
   ): ProcessDefinitionImpact | undefined {
     const impact = this.readDefinitionImpact(previousVersion, currentVersion);
-    return impact.unmappedTasks.length > 0 || impact.staleActivations.length > 0
+    return impact.unmappedTasks.length > 0 ||
+      impact.staleActivations.length > 0 ||
+      impact.unavailableResumeAssignments.length > 0
       ? impact
       : undefined;
   }
@@ -239,6 +271,17 @@ export class ProcessStateStore {
     return this.#database.connection
       .prepare("SELECT 1 FROM activations WHERE stale = 1 AND resolution IS NULL LIMIT 1")
       .get() !== undefined;
+  }
+
+  hasUnavailableResumeAssignments(): boolean {
+    return this.#database.connection.prepare(
+      `SELECT 1
+       FROM task_relationships relationship
+       JOIN tasks target ON target.id = relationship.target_task_id
+       LEFT JOIN agents agent ON agent.id = relationship.resume_agent_id
+       WHERE ${unavailableResumeAssignmentPredicate}
+       LIMIT 1`,
+    ).get() !== undefined;
   }
 
   rebaseCompatibleStaleActivations(): string[] {

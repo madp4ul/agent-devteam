@@ -1,4 +1,4 @@
-import { expect, test } from "./browser-fixture.ts";
+import { contrastRatio, expect, setAppearance, test } from "./browser-fixture.ts";
 
 test("cross-task links in authored and framework history open a new tab", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
@@ -48,6 +48,22 @@ test("relationship history links every direction and reports completed, archived
         });
       }
     }
+    detail.task.activity.push(
+      {
+        id: "relationship-parent-target-satisfied",
+        type: "relationship.satisfied",
+        actor: { kind: "framework", id: "coordination" },
+        occurredAt: "2026-08-22T10:10:00.000Z",
+        details: { relationshipType: "parent-child", relationshipRole: "target", relatedTaskId: "T-9002" },
+      },
+      {
+        id: "relationship-dependency-target-satisfied",
+        type: "relationship.satisfied",
+        actor: { kind: "framework", id: "coordination" },
+        occurredAt: "2026-08-22T10:11:00.000Z",
+        details: { relationshipType: "dependency", relationshipRole: "target", relatedTaskId: "T-9004" },
+      },
+    );
     await route.fulfill({ response, json: detail });
   });
 
@@ -57,16 +73,18 @@ test("relationship history links every direction and reports completed, archived
     "Child task added", "Child task removed",
     "Parent task added", "Parent task removed",
     "Dependency added", "Dependency removed",
-    "Blocking dependency added", "Blocking dependency removed",
+    "Waiting task added", "Waiting task removed",
   ]) {
     await expect(timeline.getByText(label, { exact: true }).first()).toBeVisible();
   }
   await expect(timeline.getByRole("link", { name: "Child target" })).toHaveCount(2);
-  await expect(timeline.getByRole("link", { name: "Parent target" })).toHaveCount(2);
+  await expect(timeline.getByRole("link", { name: "Parent target" })).toHaveCount(3);
   await expect(timeline.getByRole("link", { name: "Dependency target" })).toHaveCount(2);
   await expect(timeline.getByText("Parent target (completed) was added as the parent task.", { exact: true })).toBeVisible();
   await expect(timeline.getByText("Now depends on Dependency target (archived).", { exact: true })).toBeVisible();
-  await expect(timeline.getByText("Now blocks T-9004 (currently unavailable).", { exact: true })).toBeVisible();
+  await expect(timeline.getByText("T-9004 (currently unavailable) now waits on this task.", { exact: true })).toBeVisible();
+  await expect(timeline.getByText("Completed; T-9004 (currently unavailable) no longer waits on this task.", { exact: true })).toBeVisible();
+  await expect(timeline.getByText("Completed; parent Parent target (completed) no longer waits on this child task.", { exact: true })).toBeVisible();
   await expect(timeline.getByRole("link", { name: "T-9004" })).toHaveCount(0);
   await expect(timeline.getByText("T-9004", { exact: true }).first()).toBeVisible();
 });
@@ -123,7 +141,7 @@ test("task relationships are discoverable, searchable, and recoverable", async (
               boardId: "operations",
               column: { id: "investigation", name: "Investigation" },
               revision: 1,
-              blocking: { blocked: false, blockerTaskIds: [] },
+              waitingOn: { taskIds: [] },
               relationships: [],
               unresolvedAttention: [],
               automationSuspended: false,
@@ -135,7 +153,7 @@ test("task relationships are discoverable, searchable, and recoverable", async (
               boardId: "operations",
               column: { id: "investigation", name: "Investigation" },
               revision: 1,
-              blocking: { blocked: false, blockerTaskIds: [] },
+              waitingOn: { taskIds: [] },
               relationships: [],
               unresolvedAttention: [],
               automationSuspended: false,
@@ -152,7 +170,7 @@ test("task relationships are discoverable, searchable, and recoverable", async (
             boardId: "operations",
             column: { id: "completion", name: "Completion" },
             revision: 2,
-            blocking: { blocked: false, blockerTaskIds: [] },
+            waitingOn: { taskIds: [] },
             relationships: [],
             unresolvedAttention: [],
             automationSuspended: false,
@@ -166,39 +184,79 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await page.goto("/tasks/T-0002");
 
   const relationships = page.getByRole("region", { name: "Relationships" });
-  await expect(relationships.getByRole("heading", { name: "Blocking tasks" })).toBeVisible();
+  await expect(relationships.getByRole("heading", { name: "Waiting tasks" })).toBeVisible();
   await expect(relationships.getByRole("link", { name: "Inspect existing coordination" })).toHaveAttribute("href", "/tasks/T-0001");
   await expect(relationships.getByRole("link", { name: "Inspect existing coordination" })).toHaveAttribute("target", "_blank");
   await expect(relationships).toContainText("T-0001 · Product delivery / Implementation");
-  await expect(relationships.getByRole("region", { name: "Blocking tasks" }).getByText("Blocking", { exact: true })).toHaveCount(0);
-  const relationshipActions = relationships.getByRole("group", { name: "Add relationship" });
-  const finder = relationshipActions.getByRole("combobox", { name: "Depends on" });
+  await expect(relationships.getByRole("region", { name: "Waiting tasks" }).getByText("Waiting on", { exact: true })).toHaveCount(0);
+  const relationshipActions = relationships.getByRole("group", { name: "Create relationship" });
   const createChild = relationshipActions.getByRole("button", { name: "Create child task" });
-  await expect(finder).toBeVisible();
+  const createDisclosure = relationshipActions.getByRole("button", { name: "More relationship types" });
+  const createLabel = relationshipActions.getByText("Create", { exact: true });
+  await expect(createLabel).toBeVisible();
   await expect(createChild).toBeVisible();
-  const [createChildBox, finderBox] = await Promise.all([createChild.boundingBox(), finder.boundingBox()]);
-  expect(createChildBox?.x).toBeLessThan(finderBox?.x ?? 0);
-  const actionFrames = await relationshipActions.locator(":scope > *").evaluateAll((elements) =>
-    elements.map((element) => ({
-      borderWidth: getComputedStyle(element).borderWidth,
-      backgroundColor: getComputedStyle(element).backgroundColor,
-    })),
-  );
-  expect(actionFrames).toEqual([
-    { borderWidth: "0px", backgroundColor: "rgba(0, 0, 0, 0)" },
-    { borderWidth: "0px", backgroundColor: "rgba(0, 0, 0, 0)" },
+  await expect(createDisclosure).toBeVisible();
+  await expect(relationshipActions.getByRole("menuitem", { name: "Dependency" })).toHaveCount(0);
+  const [disclosureBox, disclosureIconBox] = await Promise.all([
+    createDisclosure.boundingBox(),
+    createDisclosure.locator("svg").boundingBox(),
   ]);
-  await expect(relationshipActions.getByRole("listbox", { name: "Available dependency tasks" })).not.toBeVisible();
+  expect(disclosureBox).not.toBeNull();
+  expect(disclosureIconBox).not.toBeNull();
+  if (disclosureBox !== null && disclosureIconBox !== null) {
+    expect(Math.abs(disclosureBox.x + disclosureBox.width / 2 - (disclosureIconBox.x + disclosureIconBox.width / 2))).toBeLessThanOrEqual(1);
+    expect(Math.abs(disclosureBox.y + disclosureBox.height / 2 - (disclosureIconBox.y + disclosureIconBox.height / 2))).toBeLessThanOrEqual(1);
+  }
+  expect(await createLabel.evaluate((element) => getComputedStyle(element).color)).toBe(
+    await relationships.locator(".relationship-context").first().evaluate((element) => getComputedStyle(element).color),
+  );
+  const openDependencyDialog = async (): Promise<void> => {
+    await createDisclosure.click();
+    await expect(createDisclosure).toHaveAttribute("aria-expanded", "true");
+    await relationshipActions.getByRole("menuitem", { name: "Dependency" }).click();
+  };
   await expect(page.getByLabel("Starting Git ref (optional)")).not.toBeVisible();
-  await relationships.getByRole("button", { name: "Remove blocking dependency with Inspect existing coordination" }).click();
-  const finalBlockerPreview = page.getByRole("dialog", { name: "Remove blocking dependency?" });
-  await expect(finalBlockerPreview).toContainText("Neither task will be deleted");
-  await expect(finalBlockerPreview).toContainText("clear the final blocker");
-  await finalBlockerPreview.getByRole("button", { name: "Cancel" }).click();
+  await relationships.getByRole("button", { name: "Remove dependent relationship with Inspect existing coordination" }).click();
+  const removalPreview = page.getByRole("dialog", { name: "Remove dependent relationship?" });
+  await expect(removalPreview).toContainText("Neither task will be deleted");
+  await expect(removalPreview).toContainText("will stop waiting on this relationship");
+  await expect(removalPreview).toContainText("will not queue an agent");
+  await removalPreview.getByRole("button", { name: "Cancel" }).click();
+  await openDependencyDialog();
+  const dependencyDialog = page.getByRole("dialog", { name: "Create dependency" });
+  const finder = dependencyDialog.getByRole("combobox", { name: "Task to wait on" });
+  const resumeAgent = dependencyDialog.getByRole("combobox", { name: "Resume agent" });
+  const submitDependency = dependencyDialog.getByRole("button", { name: "Create dependency" });
+  await expect(submitDependency).toBeDisabled();
+  await dependencyDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dependencyDialog).not.toBeVisible();
+  for (const theme of ["dark", "light"] as const) {
+    await setAppearance(page, theme);
+    await openDependencyDialog();
+    await expect(resumeAgent).toBeVisible();
+    expect(await contrastRatio(resumeAgent)).toBeGreaterThanOrEqual(4.5);
+    await dependencyDialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dependencyDialog).not.toBeVisible();
+  }
+  await setAppearance(page, "dark");
+  await openDependencyDialog();
   await finder.focus();
-  const options = page.getByRole("listbox", { name: "Available dependency tasks" });
+  const options = dependencyDialog.getByRole("listbox", { name: "Available dependency tasks" });
   await expect(options).toBeVisible();
-  expect(await options.evaluate((element) => getComputedStyle(element).position)).toBe("absolute");
+  const [dialogBeforeAgentFocus, agentBeforeFocus] = await Promise.all([
+    dependencyDialog.boundingBox(),
+    resumeAgent.boundingBox(),
+  ]);
+  await resumeAgent.focus();
+  await expect(options).toBeVisible();
+  const [dialogAfterAgentFocus, agentAfterFocus] = await Promise.all([
+    dependencyDialog.boundingBox(),
+    resumeAgent.boundingBox(),
+  ]);
+  expect(dialogAfterAgentFocus?.height).toBe(dialogBeforeAgentFocus?.height);
+  expect(agentAfterFocus?.y).toBe(agentBeforeFocus?.y);
+  await resumeAgent.selectOption("implementer");
+  expect(await options.evaluate((element) => getComputedStyle(element).position)).toBe("static");
   expect(await options.evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
   const overlayScroll = await options.evaluate((element) => {
     const overflow = element.scrollHeight > element.clientHeight;
@@ -210,7 +268,7 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await finder.fill("Cross-board");
   await expect(options.getByRole("option", { name: /Cross-board investigation/ })).toContainText("T-9001 · Operations / Investigation");
   await finder.fill("Completed prerequisite");
-  await expect(options.getByRole("option", { name: /Completed prerequisite/ })).toContainText("Completed · nonblocking");
+  await expect(options.getByRole("option", { name: /Completed prerequisite/ })).toContainText("Completed");
   await finder.press("Escape");
   await expect(finder).toBeVisible();
   await expect(options).not.toBeVisible();
@@ -219,23 +277,25 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   const recoverOption = options.getByRole("option", { name: /Recover a workspace startup failure/ });
   await expect(recoverOption).toContainText("T-0003 · Product delivery / Implementation");
   await recoverOption.click();
+  await expect(dependencyDialog).toContainText("Selected task · Recover a workspace startup failure");
+  await expect(submitDependency).toBeEnabled();
+  await submitDependency.click();
+  await expect(dependencyDialog).not.toBeVisible();
   await expect(relationships.getByRole("heading", { name: "Depends on" })).toBeVisible();
   await expect(relationships.getByRole("link", { name: "Recover a workspace startup failure" })).toBeVisible();
-  await expect(relationships.getByRole("region", { name: "Depends on" }).getByText("Blocking", { exact: true })).toBeVisible();
+  await expect(relationships.getByRole("region", { name: "Depends on" }).getByText("Waiting on", { exact: true })).toBeVisible();
+  await expect(relationships.getByRole("region", { name: "Depends on" })).toContainText("Resume agent · Implementation Agent");
   const taskTimeline = page.getByRole("region", { name: "Task timeline" });
   await expect(taskTimeline.getByText("Dependency added", { exact: true })).toBeVisible();
   await expect(taskTimeline.getByText("Now depends on Recover a workspace startup failure.", { exact: true })).toBeVisible();
   await expect(taskTimeline.getByRole("link", { name: "Recover a workspace startup failure" })).toBeVisible();
   await expect(taskTimeline.getByRole("link", { name: "Recover a workspace startup failure" })).toHaveAttribute("target", "_blank");
-  await expect(finder).toBeVisible();
-  await expect(options).not.toBeVisible();
-  await expect(relationships.getByText("Selected: Recover a workspace startup failure")).toHaveCount(0);
-  await expect(relationships.getByRole("button", { name: "Add dependency" })).toHaveCount(0);
-  await expect(relationships.getByRole("button", { name: "Cancel" })).toHaveCount(0);
-  await finder.focus();
-  await finder.fill("Recover");
-  await expect(options.getByRole("option", { name: /Recover a workspace startup failure/ })).toHaveCount(0);
-  await finder.press("Escape");
+  await openDependencyDialog();
+  const duplicateDialog = page.getByRole("dialog", { name: "Create dependency" });
+  const duplicateFinder = duplicateDialog.getByRole("combobox", { name: "Task to wait on" });
+  await duplicateFinder.fill("Recover");
+  await expect(duplicateDialog.getByRole("option", { name: /Recover a workspace startup failure/ })).toHaveCount(0);
+  await duplicateDialog.getByRole("button", { name: "Cancel" }).click();
 
   await createChild.click();
   const childDialog = page.getByRole("dialog", { name: "Create child task" });
@@ -244,6 +304,7 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await expect(childDialog.getByLabel("Starting column").locator('option[value="completion"]')).toHaveCount(0);
   await childDialog.getByLabel("Outcome-oriented title").fill("Investigate a focused child outcome");
   await childDialog.getByLabel("Complete description").fill("Keep the child isolated from dirty parent files.");
+  await childDialog.getByLabel("Resume agent").selectOption("implementer");
   await expect(childDialog.getByLabel("Starting Git ref (optional)")).not.toBeVisible();
   await childDialog.getByText("Advanced", { exact: true }).click();
   await childDialog.getByLabel("Starting Git ref (optional)").fill("main");
@@ -267,7 +328,7 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   const childTimeline = page.getByRole("region", { name: "Task timeline" });
   await expect(childRelationships.getByRole("heading", { name: "Parent tasks" })).toBeVisible();
   await expect(childRelationships.getByRole("link", { name: "Drag this task" })).toBeVisible();
-  await expect(childRelationships.getByText("Blocking", { exact: true })).toHaveCount(0);
+  await expect(childRelationships.getByText("Waiting on", { exact: true })).toHaveCount(0);
   await expect(childTimeline.getByText("Parent task added", { exact: true })).toBeVisible();
   await expect(childTimeline.getByText("Drag this task was added as the parent task.", { exact: true })).toBeVisible();
   const parentLink = childRelationships.getByRole("link", { name: "Drag this task" });
@@ -291,7 +352,8 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await removeButton.click();
   const confirmation = page.getByRole("dialog", { name: "Remove dependency?" });
   await expect(confirmation).toContainText("Neither task will be deleted");
-  await expect(confirmation).toContainText("remain blocked by other unresolved work");
+  await expect(confirmation).toContainText("will stop waiting on this relationship");
+  await expect(confirmation).toContainText("will not queue an agent");
   await confirmation.getByRole("button", { name: "Cancel" }).click();
   await expect(relationships.getByRole("link", { name: "Recover a workspace startup failure" })).toBeVisible();
   let removalAttempts = 0;

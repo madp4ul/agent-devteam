@@ -28,10 +28,11 @@ import { startWebServer } from "../../src/web/web-server.ts";
 const execFileAsync = promisify(execFile);
 type CodexEventLike = any;
 
-test("the project MCP exposes bounded discovery while mutations stay current-task scoped", async (t) => {
+test("the project MCP exposes bounded discovery and explicit relationship coordination", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "coordination-mcp-"));
   const definitionPath = join(directory, "process.yaml");
   await writeFile(join(directory, "implementer.md"), "Implement and hand off.\n");
+  await writeFile(join(directory, "reviewer.md"), "Review relationship outcomes.\n");
   await writeFile(
     definitionPath,
     `schemaVersion: 1
@@ -44,6 +45,11 @@ agents:
     role: Implements changes
     summary: Builds the current task.
     instructions: ./implementer.md
+  - id: reviewer
+    name: Review Agent
+    role: Reviews changes
+    summary: Reviews relationship outcomes.
+    instructions: ./reviewer.md
 boards:
   - id: delivery
     name: Delivery
@@ -81,6 +87,16 @@ boards:
     });
     assert.equal(backlogTask.accepted, true);
   }
+  const crossTaskRelationship = application.createTaskRelationship({
+    type: "dependency",
+    sourceTaskId: "T-0002",
+    targetTaskId: "T-0003",
+    resumeAgentId: "reviewer",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "create-cross-task-relationship",
+  });
+  assert.equal(crossTaskRelationship.accepted, true);
+  if (!crossTaskRelationship.accepted) return;
 
   const scopes = new AgentToolScopeRegistry();
   const token = scopes.issue({ taskId: created.task.id, agentId: "implementer" });
@@ -123,6 +139,8 @@ boards:
       "move_current_task",
       "create_child_task",
       "add_dependency",
+      "set_relationship_resume_agent",
+      "remove_relationship",
       "report_permission_block",
     ],
   );
@@ -189,13 +207,23 @@ boards:
     "columnId",
     "title",
     "description",
+    "resumeAgent",
     "startingRef",
     "idempotencyKey",
   ]);
   assert.deepEqual(Object.keys(toolByName.get("add_dependency")?.inputSchema.properties ?? {}), [
     "targetTaskId",
+    "resumeAgent",
     "idempotencyKey",
   ]);
+  assert.deepEqual(
+    Object.keys(toolByName.get("set_relationship_resume_agent")?.inputSchema.properties ?? {}),
+    ["taskId", "relationshipId", "resumeAgent", "idempotencyKey"],
+  );
+  assert.deepEqual(
+    Object.keys(toolByName.get("remove_relationship")?.inputSchema.properties ?? {}),
+    ["taskId", "relationshipId", "idempotencyKey"],
+  );
   assert.deepEqual(
     Object.keys(toolByName.get("report_permission_block")?.inputSchema.properties ?? {}),
     ["summary"],
@@ -338,12 +366,22 @@ boards:
   const inspectedTask = JSON.parse(textContent(inspected.content)) as { id: string; revision: number };
   assert.equal(inspectedTask.id, created.task.id);
 
-  const dependencyArguments = { targetTaskId: "T-0002", idempotencyKey: "agent-dependency" };
+  const dependencyArguments = {
+    targetTaskId: "T-0002",
+    resumeAgent: "self",
+    idempotencyKey: "agent-dependency",
+  };
   const dependencyResult = await client.callTool({ name: "add_dependency", arguments: dependencyArguments });
   const repeatedDependencyResult = await client.callTool({ name: "add_dependency", arguments: dependencyArguments });
   const dependencyPayload = JSON.parse(textContent(dependencyResult.content)) as {
     accepted: true;
-    relationship: { id: string; type: string; sourceTaskId: string; targetTaskId: string };
+    relationship: {
+      id: string;
+      type: string;
+      sourceTaskId: string;
+      targetTaskId: string;
+      resumeAgentId: string;
+    };
   };
   assert.deepEqual(dependencyPayload, {
     accepted: true,
@@ -352,12 +390,63 @@ boards:
       type: "dependency",
       sourceTaskId: created.task.id,
       targetTaskId: "T-0002",
+      resumeAgentId: "implementer",
     },
   });
   assert.deepEqual(
     JSON.parse(textContent(repeatedDependencyResult.content)),
     dependencyPayload,
   );
+  const targetSideRemoval = await client.callTool({
+    name: "remove_relationship",
+    arguments: {
+      taskId: "T-0002",
+      relationshipId: dependencyPayload.relationship.id,
+      idempotencyKey: "reject-target-side-removal",
+    },
+  });
+  assert.equal(targetSideRemoval.isError, true);
+  assert.match(textContent(targetSideRemoval.content), /relationship-conflict/);
+  const reassignedCrossTaskRelationship = await client.callTool({
+    name: "set_relationship_resume_agent",
+    arguments: {
+      taskId: "T-0002",
+      relationshipId: crossTaskRelationship.relationship.id,
+      resumeAgent: "self",
+      idempotencyKey: "reassign-cross-task-relationship",
+    },
+  });
+  assert.equal(reassignedCrossTaskRelationship.isError, undefined);
+  const reassignedPayload = JSON.parse(textContent(reassignedCrossTaskRelationship.content)) as {
+    accepted: true;
+    relationship: { resumeAgentId: string };
+  };
+  assert.equal(reassignedPayload.accepted, true);
+  assert.equal(reassignedPayload.relationship.resumeAgentId, "implementer");
+  const removedCrossTaskRelationship = await client.callTool({
+    name: "remove_relationship",
+    arguments: {
+      taskId: "T-0002",
+      relationshipId: crossTaskRelationship.relationship.id,
+      idempotencyKey: "remove-cross-task-relationship",
+    },
+  });
+  assert.equal(removedCrossTaskRelationship.isError, undefined);
+  const removedPayload = JSON.parse(textContent(removedCrossTaskRelationship.content)) as {
+    accepted: true;
+    relationship: { id: string };
+  };
+  assert.equal(removedPayload.accepted, true);
+  assert.equal(removedPayload.relationship.id, crossTaskRelationship.relationship.id);
+  const crossTaskAfterRemoval = application.queryTask("T-0002");
+  assert.equal(crossTaskAfterRemoval.available, true);
+  if (crossTaskAfterRemoval.available) {
+    assert.equal(
+      crossTaskAfterRemoval.task.relationships.some(({ id }) => id === crossTaskRelationship.relationship.id),
+      false,
+    );
+    assert.equal(crossTaskAfterRemoval.task.activations.length, 0);
+  }
   const childResult = await client.callTool({
     name: "create_child_task",
     arguments: {
@@ -365,6 +454,7 @@ boards:
       columnId: "implementation",
       title: "Scoped child",
       description: "Created by the current-task-scoped agent tool.",
+      resumeAgent: "self",
       startingRef: "main",
       idempotencyKey: "agent-child",
     },
@@ -385,6 +475,7 @@ boards:
       columnId: "completion",
       title: "Completed at creation",
       description: "The agent adapter must expose the shared creation invariant.",
+      resumeAgent: "self",
       idempotencyKey: "agent-completed-child",
     },
   });

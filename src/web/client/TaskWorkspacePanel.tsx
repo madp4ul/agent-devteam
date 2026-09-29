@@ -6,6 +6,7 @@ import {
   openTaskWorkspaceInVisualStudioCode,
   readTaskWorkspaceGitState,
 } from "./api.ts";
+import { DisclosureIcon } from "./DisclosureIcon.tsx";
 import { errorMessage } from "./feedback.ts";
 
 export function TaskWorkspacePanel({
@@ -136,7 +137,7 @@ export function TaskWorkspacePanel({
                   disabled={opening !== undefined}
                   onClick={() => setMenuOpen((current) => !current)}
                 >
-                  <span aria-hidden="true">▾</span>
+                  <DisclosureIcon />
                 </button>
                 {menuOpen ? <div className="workspace-open-options" role="menu">
                   <button

@@ -205,6 +205,7 @@ boards:
     type: "dependency" as const,
     sourceTaskId: source.task.id,
     targetTaskId: target.task.id,
+    resumeAgentId: "implementer",
     actor: { kind: "user" as const, id: "paul" },
     idempotencyKey: "concurrent-relationship-one",
   };

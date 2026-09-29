@@ -15,12 +15,14 @@ export function TaskCreationDialog({
   initial,
   columns,
   parent,
+  collaborators = [],
   onClose,
   onCreated,
 }: {
   initial: { boardId: string; columnId: string };
   columns: CreationColumn[];
   parent?: { id: string; title: string };
+  collaborators?: Array<{ id: string; name: string }>;
   onClose(): void;
   onCreated(task: { id: string }, column: CreationColumn): Promise<void>;
 }): ReactNode {
@@ -33,6 +35,7 @@ export function TaskCreationDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startingRef, setStartingRef] = useState("");
+  const [resumeAgentId, setResumeAgentId] = useState("");
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
@@ -52,6 +55,7 @@ export function TaskCreationDialog({
         ? await createTask(input)
         : await createChildTask(parent.id, {
             ...input,
+            resumeAgentId,
             ...(startingRef.trim().length === 0 ? {} : { startingRef: startingRef.trim() }),
           });
       const column = availableColumns.find((candidate) => candidate.id === columnId);
@@ -96,13 +100,28 @@ export function TaskCreationDialog({
             <textarea rows={8} value={description} onChange={(event) => setDescription(event.currentTarget.value)} />
           </label>
           {childMode ? (
-            <details className="create-advanced">
-              <summary>Advanced</summary>
+            <>
+              <label>
+                Resume agent
+                <select
+                  required
+                  value={resumeAgentId}
+                  onChange={(event) => setResumeAgentId(event.currentTarget.value)}
+                >
+                  <option value="">Select an agent</option>
+                  {collaborators.map((agent) => (
+                    <option key={agent.id} value={agent.id}>{agent.name}</option>
+                  ))}
+                </select>
+              </label>
+              <details className="create-advanced">
+                <summary>Advanced</summary>
               <label>
                 Starting Git ref (optional)
                 <input value={startingRef} onChange={(event) => setStartingRef(event.currentTarget.value)} />
               </label>
-            </details>
+              </details>
+            </>
           ) : null}
           {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
           <div className="form-actions">

@@ -60,6 +60,13 @@ export interface ProcessDefinitionImpact {
     targetAvailable: boolean;
     taskMapped: boolean;
   }>;
+  unavailableResumeAssignments: Array<{
+    relationshipId: string;
+    sourceTaskId: string;
+    sourceBoardId: string;
+    targetTaskId: string;
+    resumeAgentId: string | null;
+  }>;
 }
 
 export interface CollaboratorView {

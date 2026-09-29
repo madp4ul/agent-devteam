@@ -448,7 +448,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await expect(relationships.getByRole("heading", { name: "Depends on" })).toBeVisible();
   await expect(relationships.getByRole("link", { name: "Drag this task" })).toBeVisible();
   await expect(relationships.getByRole("link", { name: "Drag this task" })).toHaveAttribute("target", "_blank");
-  await expect(relationships).toContainText("Blocking");
+  await expect(relationships).toContainText("Waiting on");
   const attention = page.getByRole("region", { name: "Needs attention" });
   const agentActivity = page.getByRole("region", { name: "Agent activity" });
   await expect(attention.getByText("user mention", { exact: true })).toBeVisible();
@@ -639,11 +639,14 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await movement.press("ArrowDown");
   await expect(page.getByText(/Moved T-0001 to Completion/)).toBeVisible();
 
-  const commentBounds = await page.locator('[data-task-section="comment"]').boundingBox();
-  const timelineBounds = await page.getByRole("region", { name: "Task timeline" }).boundingBox();
-  expect(commentBounds).not.toBeNull();
-  expect(timelineBounds).not.toBeNull();
-  expect(Math.abs(timelineBounds!.y - commentBounds!.y)).toBeLessThanOrEqual(1);
+  const commentGridArea = await page.locator('[data-task-section="comment"]').evaluate(
+    (element) => getComputedStyle(element).gridArea,
+  );
+  const timelineGridArea = await page.locator('[data-task-section="timeline"]').evaluate(
+    (element) => getComputedStyle(element).gridArea,
+  );
+  expect(commentGridArea).toBe(timelineGridArea);
+  await expect(page.getByRole("region", { name: "Task timeline" })).toHaveCount(1);
 });
 
 test("task details distinguish agent-inspectable content from user-only evidence", async ({ page }) => {
@@ -1172,7 +1175,7 @@ test("task details prioritize agent activity and preserve the responsive reading
       { id: "reviewer", name: "Review Agent", summary: "Reviews completed changes." },
     ];
     detail.activeRun = null;
-    detail.inspection.blocking = { blocked: true, blockerTaskIds: ["T-0002"] };
+    detail.inspection.waitingOn = { taskIds: ["T-0002"] };
     detail.inspection.automationSuspended = true;
     detail.task.activations.push(
       {
@@ -1232,7 +1235,7 @@ test("task details prioritize agent activity and preserve the responsive reading
   await expect(activity.getByText("Waiting", { exact: true })).toBeVisible();
   await expect(activity).toContainText("Process automation is paused");
   await activity.getByText(/more reasons?/).click();
-  await expect(activity).toContainText("Blocked by T-0002");
+  await expect(activity).toContainText("Waiting on T-0002");
   await expect(activity).toContainText("Task automation is suspended");
   await expect(activity.getByText("Implementation Agent", { exact: true })).toHaveCount(2);
   await expect(activity.getByText("Review Agent", { exact: true })).toHaveCount(1);

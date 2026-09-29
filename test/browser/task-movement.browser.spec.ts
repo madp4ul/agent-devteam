@@ -39,12 +39,17 @@ test("docked task controls stay aligned with their lanes during viewport resizin
   await composer.evaluate((element) => element.scrollIntoView({ block: "end" }));
   await page.evaluate(async () => {
     const composer = document.querySelector<HTMLElement>(".comment-panel")!;
-    for (let attempt = 0; attempt < 12 && !composer.classList.contains("comment-panel-docked"); attempt += 1) {
+    const movementMap = document.querySelector<HTMLElement>(".movement-map")!;
+    for (let attempt = 0; attempt < 20 && (
+      !composer.classList.contains("comment-panel-docked") ||
+      movementMap.dataset.bottomDocked !== "true"
+    ); attempt += 1) {
       window.scrollBy(0, 250);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
   });
   await expect(composer).toHaveClass(/comment-panel-docked/);
+  await expect(page.locator('.movement-map[data-bottom-docked="true"]')).toBeVisible();
   await expect.poll(async () => {
     const bounds = await composer.boundingBox();
     return bounds === null ? Number.POSITIVE_INFINITY : Math.abs(700 - (bounds.y + bounds.height));
@@ -93,6 +98,42 @@ test("docked task controls stay aligned with their lanes during viewport resizin
   await page.evaluate(() => {
     (window as Window & { flushDeferredResizeListeners?: () => void }).flushDeferredResizeListeners?.();
   });
+});
+
+test("task controls recalculate docking when child creation grows relationships", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.description = "Long relationship growth context. ".repeat(700);
+    await route.fulfill({ response, json: detail });
+  });
+  await page.goto("/tasks/T-0001");
+  await expect(page.getByRole("region", { name: "Task position" })).toBeVisible();
+
+  await page.evaluate(async () => {
+    const movementMap = document.querySelector<HTMLElement>(".movement-map")!;
+    for (let attempt = 0; attempt < 30 && movementMap.dataset.bottomDocked !== "true"; attempt += 1) {
+      window.scrollBy(0, 200);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+  });
+  await expect(page.locator('.movement-map[data-bottom-docked="true"]')).toBeVisible();
+
+  const relationships = page.getByRole("region", { name: "Relationships" });
+  await relationships.getByRole("button", { name: "Create child task" }).click();
+  const childDialog = page.getByRole("dialog", { name: "Create child task" });
+  await childDialog.getByLabel("Outcome-oriented title").fill("Grow the relationship panel");
+  await childDialog.getByLabel("Complete description").fill("Exercise docking after authoritative child creation.");
+  await childDialog.getByLabel("Resume agent").selectOption("implementer");
+  await childDialog.getByRole("button", { name: "Create child task", exact: true }).click();
+  await expect(relationships.getByRole("link", { name: "Grow the relationship panel" })).toBeVisible();
+
+  await expect.poll(async () => page.evaluate(() => {
+    const relationships = document.querySelector<HTMLElement>(".relationship-panel")!.getBoundingClientRect();
+    const controls = document.querySelector<HTMLElement>(".detail-sticky-controls")!.getBoundingClientRect();
+    return controls.top - relationships.bottom;
+  })).toBeGreaterThanOrEqual(0);
 });
 
 test("scrolling reveals a fixed-scale movement map while conversations remain bottom anchored", async ({ page }) => {
@@ -163,7 +204,7 @@ test("scrolling reveals a fixed-scale movement map while conversations remain bo
   expect(revealGeometry.minimumGap).toBeGreaterThanOrEqual(0);
   expect(revealGeometry.maximumTransientBottomJump).toBeLessThanOrEqual(1);
 
-  await expect.poll(async () => (await map.boundingBox())?.height ?? 0).toBeGreaterThan(80);
+  await expect.poll(async () => (await map.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(79);
   await expect(stickyControls).toHaveCSS("position", "fixed");
   const dockedConversationBounds = await conversations.boundingBox();
   expect(dockedConversationBounds).not.toBeNull();

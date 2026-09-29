@@ -33,7 +33,7 @@ export interface StoredTaskReference {
   boardId: string;
   column: { id: string; name: string };
   archived: boolean;
-  blocking: TaskOverviewView["blocking"];
+  waitingOn: TaskOverviewView["waitingOn"];
 }
 
 interface TaskOverviewRecordRow {
@@ -199,7 +199,7 @@ export class TaskProjectionStore {
     knownRelationships?: TaskRelationshipView[],
   ): StoredTaskOverview {
     const archived = row.archived_at !== null;
-    const blockerTaskIds = this.readBlockingTaskIds(row.id);
+    const waitingTaskIds = this.readWaitingTaskIds(row.id);
     const startupFailure = archived ? undefined : this.readLatestUnresolvedStartupFailure(row.id);
     return {
       sequence: row.sequence,
@@ -211,7 +211,7 @@ export class TaskProjectionStore {
         column: { id: row.column_id, name: row.column_name },
         revision: row.revision,
         ...(archived ? { archived: true as const } : {}),
-        blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
+        waitingOn: { taskIds: waitingTaskIds },
         relationships: knownRelationships ?? this.readTaskRelationships(row.id),
         unresolvedAttention: this.readUnresolvedAttention(row.id),
         automationSuspended: row.automation_suspended === 1,
@@ -253,14 +253,14 @@ export class TaskProjectionStore {
       column_name: string;
     }>;
     return rows.map((row) => {
-      const blockerTaskIds = this.readBlockingTaskIds(row.id);
+      const waitingTaskIds = this.readWaitingTaskIds(row.id);
       return {
         id: row.id,
         title: row.title,
         boardId: row.board_id,
         column: { id: row.column_id, name: row.column_name },
         archived: row.archived_at !== null,
-        blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
+        waitingOn: { taskIds: waitingTaskIds },
       };
     });
   }
@@ -297,7 +297,7 @@ export class TaskProjectionStore {
         "SELECT name FROM columns WHERE board_id = ? AND id = ?",
       ).get(boardId, columnId) as { name: string } | undefined;
       if (column === undefined) return [];
-      const blockerTaskIds = this.readBlockingTaskIds(id);
+      const waitingTaskIds = this.readWaitingTaskIds(id);
       return [{ sequence, columnEntrySequence: sequence, task: {
         id: task.id,
         title: task.title,
@@ -305,7 +305,7 @@ export class TaskProjectionStore {
         column: { id: task.columnId, name: column.name },
         revision: task.revision,
         archived: true,
-        blocking: { blocked: blockerTaskIds.length > 0, blockerTaskIds },
+        waitingOn: { taskIds: waitingTaskIds },
         relationships: task.relationships,
         unresolvedAttention: this.readUnresolvedAttention(id),
         automationSuspended: this.isTaskAutomationSuspended(id),
@@ -442,7 +442,7 @@ export class TaskProjectionStore {
     }));
   }
 
-  readBlockingTaskIds(taskId: string): string[] {
+  readWaitingTaskIds(taskId: string): string[] {
     return (
       this.#database
         .prepare(
@@ -609,7 +609,7 @@ export class TaskProjectionStore {
     return (
       this.#database
         .prepare(
-          `SELECT id, type, source_task_id, target_task_id
+          `SELECT id, type, source_task_id, target_task_id, resume_agent_id
            FROM task_relationships
            WHERE source_task_id = ? OR target_task_id = ?
            ORDER BY rowid`,
@@ -619,12 +619,14 @@ export class TaskProjectionStore {
         type: TaskRelationshipView["type"];
         source_task_id: string;
         target_task_id: string;
+        resume_agent_id: string | null;
       }>
     ).map((relationship) => ({
       id: relationship.id,
       type: relationship.type,
       sourceTaskId: relationship.source_task_id,
       targetTaskId: relationship.target_task_id,
+      resumeAgentId: relationship.resume_agent_id,
     }));
   }
 
@@ -720,14 +722,6 @@ export class TaskProjectionStore {
          AND candidate.id <> selected.id
          AND candidate.stale = 0
          AND (candidate.retry_due_at IS NULL OR candidate.retry_due_at <= ?)
-         AND NOT EXISTS (
-           SELECT 1
-           FROM task_relationships relationship
-           JOIN tasks blocker ON blocker.id = relationship.target_task_id
-           WHERE relationship.type IN ('dependency', 'parent-child')
-             AND relationship.source_task_id = candidate.task_id
-             AND blocker.column_id <> 'completion'
-         )
          AND NOT EXISTS (
            SELECT 1 FROM activations earlier
            WHERE earlier.task_id = candidate.task_id

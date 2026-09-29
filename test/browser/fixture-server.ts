@@ -246,6 +246,7 @@ const relationship = application.createTaskRelationship({
   type: "dependency",
   sourceTaskId: inspected.task.id,
   targetTaskId: draggable.task.id,
+  resumeAgentId: "implementer",
   actor: { kind: "user", id: "local-user" },
   idempotencyKey: "browser-relationship",
 });

@@ -125,6 +125,17 @@ transaction. The immutable originals survive restart and conversation
 retirement, while task archival removes both authored messages and their
 content. Startup clears abandoned uploads and disposable runtime projections.
 
+Every dependency and parent-child relationship stores one resume-agent ID.
+Unresolved relationships contribute a `waitingOn` projection but do not enter
+activation eligibility. When a target enters Completion, the task command
+transaction records relationship-satisfaction activity on both tasks and
+appends one `relationship-satisfied` activation per attached relationship for
+its stored owner. Removal records history without activating anyone. Because
+the activation is durable and independently ordered once appended, later
+relationship edits, removal, process changes, or task movement do not retarget
+or cancel it. Unresolved outgoing relationships prevent archival so their
+future continuation cannot be orphaned.
+
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
 state rather than silently replacing or adopting inconsistent data.
@@ -166,7 +177,9 @@ and proceeds only after the user resumes it.
 
 For each run, the Codex adapter starts or resumes a thread in the task's Git
 workspace. A per-attempt MCP adapter lets that agent inspect relevant project
-coordination state and mutate only its current task. Every activation belongs to
+coordination state. Most mutations remain current-task scoped; the explicit
+relationship reassignment and removal operations accept `current` or a concrete
+active source-task ID. Every activation belongs to
 a durable task-scoped agent conversation. Ordinary activation reasons select
 the current conversation for the stable task-and-agent pair, while explicit
 user follow-ups select their addressed conversation, including a retired one.
@@ -256,6 +269,9 @@ an agent's task workspace.
    immutable activity, and any resulting activation atomically.
    For a follow-up, streamed pending uploads are bound to its authored message
    in that same command; an attachment-only message is valid.
+   A target entering Completion appends one independent satisfaction activation
+   for every relationship's stored resume agent, while relationship removal
+   appends none.
 3. When automation is running, it claims the next eligible activation for a
    task and prepares or verifies that task's Git workspace.
 4. Codex receives the activation reason plus current structural and workspace
@@ -321,6 +337,9 @@ coordination database.
   justify reconsidering Drizzle.
 - [ADR 0018](adr/0018-make-released-migrations-the-coordination-schema-authority.md)
   records the released migration ledger and sole executable schema path.
+- [ADR 0019](adr/0019-assign-explicit-resume-ownership-to-task-relationships.md)
+  records why waiting relationships own explicit continuation rather than
+  blocking all task activation.
 - [Architecture decisions](adr/) explain why the product owns its board, runs
   host-native, uses React and Vite, binds state beside the project, and relocates
   state through an offline command.

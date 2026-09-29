@@ -76,6 +76,8 @@ import type {
   CreateChildTaskCommand,
   CreateTaskCommand,
   CreateTaskRelationshipCommand,
+  EditTaskRelationshipResumeAgentCommand,
+  EditTaskRelationshipResumeAgentResult,
   EditTaskCommand,
   InertMoveTaskResult,
   MarkUserMentionAddressedCommand,
@@ -406,13 +408,19 @@ export class CoordinationApplication {
   }
 
   async resumeAutomation(): Promise<ResumeAutomationResult> {
-    if (this.#persistence.process.hasStaleActivations()) {
+    if (
+      this.#persistence.process.hasStaleActivations() ||
+      this.#persistence.process.hasUnavailableResumeAssignments()
+    ) {
       return { accepted: false, reason: "process-change-approval-required" };
     }
     return this.#automation.resume();
   }
 
   async resumeWithCurrentProcess(): Promise<ResumeAutomationResult> {
+    if (this.#persistence.process.hasUnavailableResumeAssignments()) {
+      return { accepted: false, reason: "process-change-approval-required" };
+    }
     return this.#automation.resume(() => {
       this.#persistence.process.rebaseCompatibleStaleActivations();
     });
@@ -659,7 +667,7 @@ export class CoordinationApplication {
         boardId: reference.task.boardId,
         boardName: reference.board.name,
         column: reference.task.column,
-        blocking: reference.task.blocking,
+        waitingOn: reference.task.waitingOn,
         ...(reference.task.archived ? { archived: true as const } : {}),
       }];
     });
@@ -935,6 +943,13 @@ export class CoordinationApplication {
       this.#automation.kick();
     }
     return result;
+  }
+
+  editTaskRelationshipResumeAgent(
+    command: EditTaskRelationshipResumeAgentCommand,
+  ): EditTaskRelationshipResumeAgentResult {
+    const gated = this.configurationErrorRejection();
+    return gated ?? this.#persistence.taskCommands.editTaskRelationshipResumeAgent(command);
   }
 
   addTaskComment(command: AddTaskCommentCommand): AddTaskCommentResult {

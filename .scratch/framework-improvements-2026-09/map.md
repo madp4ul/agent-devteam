@@ -30,7 +30,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [12](issues/12-audit-agent-instructions-with-user.md) | Audit all agent instructions for unintended restrictions | User and agent review the instruction inventory together before any edits |
 | [13](issues/13-support-tables-in-markdown-content.md) | Render tables in every Markdown content surface without widening the UI | Implemented; user review |
 | [14](issues/14-avoid-redundant-activation-after-follow-up-move.md) | Do not reactivate a running follow-up agent when it moves into its watched column | Extend and verify the existing mention-activation exception semantics |
-| [15](issues/15-redesign-blockers-around-explicit-resume-agents.md) | Replace task-wide execution blocking with explicit per-relationship resume responsibility | Implement the agreed waiting and resume-owner model in the existing ticket |
+| [15](issues/15-redesign-blockers-around-explicit-resume-agents.md) | Replace task-wide execution blocking with explicit per-relationship resume responsibility | Implemented; user review |
 | [16](issues/16-navigate-timeline-with-column-movement-map.md) | Navigate long timelines through a compact column-lane movement map | Implemented; user review and tuning |
 | [17](issues/17-compact-routine-timeline-activity.md) | Compact routine timeline activity while preserving items that merit attention | Define reliable prominence signals and filtering behavior before implementation |
 | [18](issues/18-widen-task-detail-content.md) | Give long task-detail content more horizontal room | Inspect representative content and agree the desktop width |

@@ -73,6 +73,8 @@ export class TaskArchiveStore {
             ? { accepted: false as const, reason: "archive-in-progress" as const }
             : eligibility === "completed-only" && task.column_id !== "completion"
               ? { accepted: false as const, reason: "not-completed" as const }
+              : this.hasUnresolvedRelationships(command.taskId)
+                ? { accepted: false as const, reason: "waiting-relationships" as const }
               : task.automation_suspended === 1
                 ? { accepted: false as const, reason: "automation-suspended" as const }
                 : this.hasPendingActivationWork(command.taskId)
@@ -89,6 +91,16 @@ export class TaskArchiveStore {
       ).run(command.actor.id, command.idempotencyKey, command.taskId);
       return { claimed: true };
     });
+  }
+
+  private hasUnresolvedRelationships(taskId: string): boolean {
+    return this.#database.prepare(
+      `SELECT 1
+       FROM task_relationships relationship
+       JOIN tasks target ON target.id = relationship.target_task_id
+       WHERE relationship.source_task_id = ? AND target.column_id <> 'completion'
+       LIMIT 1`,
+    ).get(taskId) !== undefined;
   }
 
   completedTaskIds(boardId: string): string[] {

@@ -9,6 +9,7 @@ type UnscopedCommandKind =
   | "create-child-task"
   | "create-task-relationship"
   | "remove-task-relationship"
+  | "edit-task-relationship-resume-agent"
   | "mark-user-mention-addressed"
   | "dismiss-activation"
   | "dismiss-stale-activation"
