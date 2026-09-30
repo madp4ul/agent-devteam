@@ -144,6 +144,7 @@ export function ConversationHistory({
             <CoordinationComment
               key={key}
               id={key}
+              currentTaskId={conversation.taskId}
               item={item}
               body={item.presentation.body}
               inspectable={item.presentation.commentId !== undefined && agentInspectableContent.commentIds.includes(item.presentation.commentId)}
@@ -215,12 +216,14 @@ export function ConversationHistory({
 }
 
 function CoordinationComment({
+  currentTaskId,
   id,
   item,
   body,
   onCommentSource,
   inspectable,
 }: {
+  currentTaskId: string;
   id: string;
   item: CoordinationTranscriptItem;
   body: string;
@@ -231,12 +234,18 @@ function CoordinationComment({
     ? item.presentation.commentId
     : undefined;
   const exceptional = coordinationExceptionalPresentation(item);
+  const destination = item.presentation.kind === "coordination-comment" &&
+    item.presentation.taskId !== undefined && item.presentation.taskId !== currentTaskId
+    ? item.presentation.taskId : undefined;
   return (
     <article className={`transcript-coordination coordination-comment ${exceptional === undefined ? "" : "exceptional"}`} aria-label="Comment added">
       <header className="coordination-activity-heading">
         <strong>Comment added</strong>
         <span className="coordination-activity-actions">
-          {commentId === undefined || onCommentSource === undefined ? null : (
+          {destination === undefined ? null : (
+            <a href={`/tasks/${encodeURIComponent(destination)}`}>View destination task {destination}</a>
+          )}
+          {destination !== undefined || commentId === undefined || onCommentSource === undefined ? null : (
             <button type="button" className="secondary quiet-action" onClick={() => onCommentSource(commentId)}>
               View in task history
             </button>
@@ -427,6 +436,15 @@ function coordinationInspectionActivityPresentation(inspection: CoordinationInsp
       return {
         action: "List collaborators",
         facts: count === undefined ? [] : [{ kind: "value", label: "Result", value: `${count} ${count === 1 ? "collaborator" : "collaborators"}` }],
+      };
+    }
+    case "participants": {
+      return {
+        action: "List task participants",
+        facts: [
+          { kind: "task", label: "Task", task: { ...optionalLiteral("id", inspection.taskId) } },
+          ...(inspection.participantCount === undefined ? [] : [{ kind: "value" as const, label: "Result", value: `${inspection.participantCount} participants` }]),
+        ],
       };
     }
     case "board-summaries": {

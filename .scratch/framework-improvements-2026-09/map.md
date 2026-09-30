@@ -1,8 +1,9 @@
 # Framework improvement intake — September 2026
 
-This intake records twenty-one user-reported issues dictated on 2026-09-20,
+This intake records twenty-eight user-reported issues dictated on 2026-09-20,
 2026-09-23, 2026-09-26, and 2026-09-30. Nine of the original ten were reported as existing
 GitHub issues; issue 08 and issues 11–21 were added during the conversations.
+Issues 22–28 were supplied as existing GitHub issues on 2026-09-30.
 GitHub URLs and numbers were not supplied, and the originals were not fetched.
 The user's account is the source except where an issue explicitly records
 separate investigation evidence.
@@ -37,6 +38,13 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [19](issues/19-anchor-live-timeline-refresh-at-visible-top.md) | Anchor live timeline refresh at the top of the unobscured reading area | Implemented; user review |
 | [20](issues/20-bound-task-detail-projection-cost.md) | Keep task-detail load cost independent of unrelated task history | Implemented; user review and restart-based rollout verification |
 | [21](issues/21-link-to-task-comments-by-stable-address.md) | Link to comments on the current task or another task by stable address | Agree syntax and exact-comment navigation separately from issue 09 |
+| [22](issues/22-show-task-description-hidden-line-counts.md) | Count additional lines on task-description Show more | Extend the existing disclosure and verify rendered-line counts |
+| [23](issues/23-reflect-current-page-in-browser-tab-titles.md) | Distinguish framework views and tasks in browser tab titles | Agree title format and verify navigation/rename updates |
+| [24](issues/24-investigate-task-position-spacing-and-initial-reveal.md) | Investigate retained Task position gaps and description-dependent initial reveal | Check recent fixes and reproduce before proposing changes |
+| [25](issues/25-dock-add-comment-on-initial-load.md) | Position Add Comment correctly before the first scroll | Reproduce initial-load docking and correct initialization |
+| [26](issues/26-display-interruption-resume-instructions.md) | Show resume events and supplied instructions in timeline and conversations | Inspect retained evidence and specify both projections |
+| [27](issues/27-recover-stalled-work-without-user-attention.md) | Wake an agent when watched work stalls without required user attention | Define eligibility, recovery ownership, and loop prevention |
+| [28](issues/28-redesign-coordination-across-task-worktrees.md) | Reliably share and integrate parent/child work across task worktrees | Discuss source selection, task branches, synchronization, and integration |
 
 ## Workflow and relationships
 
@@ -84,6 +92,18 @@ Issue 20 is supported by a read-only projection investigation. Narrow the
 task-detail contract and remove cross-task history loading before considering a
 polling reduction; a slower poll alone would mask the confirmed projection
 cost. Any supporting indexes must follow the released migration workflow.
+
+Issue 22 refines issue 11 using the existing timeline/comment line-count precedent.
+Issues 24 and 25 share initial-layout investigation but remain separate reports:
+Task position spacing may already be fixed, while Add Comment should dock before
+any scroll event. Compare description lengths and expansion state in both.
+Issue 26 covers retained resume evidence in both timeline and conversation views.
+
+Issues 27 and 28 are open design work rather than ready implementation slices.
+Issue 27 must align with authoritative activation/attention lifecycle and issue
+12's instruction audit. Issue 28 revisits the original Git workspace lifecycle
+and should align with issue 09's cross-task tools; one branch per task and a
+symbolic parent-commit selector remain proposals until the design is agreed.
 
 For browser changes, apply repository dark/light appearance requirements and
 accessible controls. Any new icon-only button pattern uses shared decorative SVGs
@@ -147,6 +167,10 @@ and browser coverage of icon/button geometric centering.
 
 ## Comments
 
+- 2026-09-30: Added issues 22–28 after the user approved the read-only intake
+  draft and authorized file creation. All seven were described as GitHub issues;
+  references were not supplied. Issue 24 remains an unverified investigation,
+  and issues 27–28 retain their open design questions.
 - 2026-09-30: Added issue 21 from issue 09's pin/unpin context discussion;
   reference syntax and navigation design remain open for a separate session.
 - 2026-09-20: Recorded from the user's dictation; preserve the concrete examples

@@ -663,6 +663,7 @@ test("reply to an agent mention preserves the draft, avoids duplicates, and focu
     const detail = await response.json();
     detail.task.comments.push({
       id: "agent-requested-user",
+      originTask: { id: "T-0001", title: detail.task.title },
       body: "I need a decision from @user before continuing.",
       actor: { kind: "agent", id: "implementer" },
       occurredAt: "2026-08-09T12:30:00.000Z",
@@ -708,6 +709,7 @@ test("replying to several timeline comments preserves the viewport and draft sel
     for (let index = 0; index < 14; index += 1) {
       detail.task.comments.push({
         id: `multi-reply-comment-${index}`,
+        originTask: { id: "T-0001", title: detail.task.title },
         body: index >= 12
           ? `Reply source ${index + 1} asks @user for a decision.`
           : `Timeline context ${index + 1}.`,
@@ -747,6 +749,7 @@ test("reply preserves trailing draft whitespace and is absent without an active 
     const detail = await response.json();
     detail.task.comments.push({
       id: "whitespace-request",
+      originTask: { id: "T-0001", title: detail.task.title },
       body: "Please answer @user.",
       actor: { kind: "agent", id: "implementer" },
       occurredAt: "2026-08-09T12:32:00.000Z",

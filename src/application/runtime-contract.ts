@@ -72,6 +72,9 @@ export const coordinationToolNames = [
   "inspect_current_task",
   "inspect_operating_context",
   "add_comment",
+  // Historical names remain recognizable in retained transcripts, not MCP aliases.
+  "task.comment.add",
+  "task.participant.list",
   "move_current_task",
   "create_child_task",
   "add_dependency",
@@ -103,6 +106,7 @@ export type CoordinationTranscriptPresentation =
     }
   | {
       kind: "coordination-comment";
+      taskId?: string;
       body?: string;
       commentId?: string;
     }
@@ -163,6 +167,12 @@ export type CoordinationTranscriptPresentation =
       kind: "coordination-inspection";
       scope: "collaborators";
       collaboratorCount?: number;
+    }
+  | {
+      kind: "coordination-inspection";
+      scope: "participants";
+      taskId?: string;
+      participantCount?: number;
     }
   | {
       kind: "coordination-inspection";

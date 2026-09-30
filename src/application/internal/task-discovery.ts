@@ -12,6 +12,7 @@ import type {
   TaskAttachmentsQueryResult,
   TaskInspectionQueryResult,
   TaskInspectionView,
+  TaskParticipantsQueryResult,
   TaskOverviewView,
   UserTaskInspectionQueryResult,
   TaskOverviewsQuery,
@@ -132,6 +133,17 @@ export class TaskDiscovery {
     return this.queryTaskInspectionView(taskId, { audience: "agent" });
   }
 
+  queryTaskParticipants(taskId: string): TaskParticipantsQueryResult {
+    if (this.#startup.mode === "configuration-error") {
+      return { available: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
+    }
+    const task = this.#taskProjections.readTaskReferences([taskId])[0];
+    if (task === undefined || (!task.archived && !this.#taskProjections.isTaskInspectableByAgent(taskId))) {
+      return { available: false, reason: "not-found" };
+    }
+    return { available: true, participants: this.#taskProjections.readTaskParticipants(taskId) };
+  }
+
   queryTaskInspectionForUser(taskId: string): UserTaskInspectionQueryResult {
     return this.queryTaskInspectionView(taskId, { audience: "user" });
   }
@@ -220,6 +232,9 @@ export class TaskDiscovery {
         activation.status !== "completed" && activation.status !== "dismissed",
     );
     const automationSuspended = overview.automationSuspended;
+    const relatedTitles = new Map(this.#taskProjections.readTaskReferences(
+      [...new Set(task.relationships.flatMap(({ sourceTaskId, targetTaskId }) => [sourceTaskId, targetTaskId]))],
+    ).map(({ id, title }) => [id, title]));
     return {
         id: task.id,
         title: task.title,
@@ -229,7 +244,12 @@ export class TaskDiscovery {
         revision: task.revision,
         ...(task.archived ? { archived: true as const } : {}),
         comments: task.comments,
-        relationships: task.relationships,
+        relationships: task.relationships.map((relationship) => ({
+          ...relationship,
+          sourceTaskTitle: relatedTitles.get(relationship.sourceTaskId) ?? relationship.sourceTaskId,
+          targetTaskTitle: relatedTitles.get(relationship.targetTaskId) ?? relationship.targetTaskId,
+        })),
+        participants: this.#taskProjections.readTaskParticipants(task.id),
         waitingOn: overview.waitingOn,
         run: overview.run,
         unresolvedAttention: overview.unresolvedAttention,

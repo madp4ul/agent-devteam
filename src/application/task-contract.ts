@@ -41,6 +41,7 @@ export interface TaskCommentView {
   actor: Actor;
   occurredAt: string;
   attemptId?: string;
+  originTask?: { id: string; title: string };
 }
 
 export interface TaskRelationshipView {
@@ -110,7 +111,8 @@ export interface TaskInspectionView {
   revision: number;
   archived?: true;
   comments: TaskCommentView[];
-  relationships: TaskRelationshipView[];
+  relationships: (TaskRelationshipView & { sourceTaskTitle: string; targetTaskTitle: string })[];
+  participants: TaskParticipantView[];
   waitingOn: TaskOverviewView["waitingOn"];
   run: TaskOverviewView["run"];
   unresolvedAttention: TaskAttentionView[];
@@ -122,6 +124,26 @@ export interface TaskInspectionView {
   automationSuspended: boolean;
   onDemand: { activity: true; attachments: true };
 }
+
+export interface TaskParticipantView {
+  taskId: string;
+  agentId: string;
+  name: string;
+  role: string;
+  summary: string;
+  watchedColumns: { id: string; name: string }[];
+  execution: {
+    running: boolean;
+    queuedActivationCount: number;
+    failedActivationCount: number;
+    automationSuspended: boolean;
+  };
+}
+
+export type TaskParticipantsQueryResult =
+  | { available: true; participants: TaskParticipantView[] }
+  | { available: false; reason: "not-found" }
+  | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
 export interface UserTaskInspectionView extends TaskInspectionView {
   workspace: TaskWorkspaceView | null;
@@ -302,6 +324,8 @@ export interface AddTaskCommentCommand {
   body: string;
   actor: Actor;
   attemptId?: string;
+  /** Authenticated scope, not an agent-selected destination or author field. */
+  callerTaskId?: string;
   idempotencyKey: string;
 }
 
@@ -379,7 +403,7 @@ export type RemoveTaskRelationshipResult =
 export type AddTaskCommentResult =
   | { accepted: true; task: TaskView; comment: TaskCommentView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { accepted: false; reason: "not-found" | "archived-task" | "empty-comment" };
+  | { accepted: false; reason: "not-found" | "archived-task" | "empty-comment" | "idempotency-conflict" };
 
 export type MarkUserMentionAddressedResult =
   | { accepted: true; attentionReasonId: string; resolvedAt: string }

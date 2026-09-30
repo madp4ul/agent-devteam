@@ -1,11 +1,74 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+
+test("participant discovery exposes the process roster with task-local addresses and responsibilities", async (t) => {
+  const fixture = await createDiscoveryFixture();
+  await writeFile(fixture.processDefinitionPath,
+    (await readFile(fixture.processDefinitionPath, "utf8"))
+      .replace("boards:\n", "  - id: analyst\n    name: Analyst\n    role: Clarifies requirements\n    summary: Answers questions.\n    instructions: ./reviewer.md\nboards:\n"));
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery", columnId: "implementation", title: "Participant discovery",
+    description: "The reviewer has never participated here.", actor: { kind: "user", id: "paul" },
+    idempotencyKey: "discover-participants",
+  });
+  assert.ok(created.accepted);
+  const listed = application.queryTaskParticipants(created.task.id);
+  assert.ok(listed.available);
+  assert.deepEqual(listed.participants, [
+    {
+      taskId: created.task.id, agentId: "implementer", name: "Implementation Agent",
+      role: "Implements tasks", summary: "Builds scoped changes.",
+      watchedColumns: [{ id: "implementation", name: "Implementation" }],
+      execution: { running: false, queuedActivationCount: 1, failedActivationCount: 0, automationSuspended: false },
+    },
+    {
+      taskId: created.task.id, agentId: "reviewer", name: "Code Reviewer",
+      role: "Reviews tasks", summary: "Reviews completed changes.",
+      watchedColumns: [{ id: "review", name: "Review" }],
+      execution: { running: false, queuedActivationCount: 0, failedActivationCount: 0, automationSuspended: false },
+    },
+    {
+      taskId: created.task.id, agentId: "analyst", name: "Analyst",
+      role: "Clarifies requirements", summary: "Answers questions.", watchedColumns: [],
+      execution: { running: false, queuedActivationCount: 0, failedActivationCount: 0, automationSuspended: false },
+    },
+  ]);
+  const inspected = application.queryTaskInspection(created.task.id);
+  assert.ok(inspected.available);
+  assert.deepEqual(inspected.task.participants, listed.participants);
+  assert.doesNotMatch(JSON.stringify(listed), /conversationId|instructions|task.created/);
+  assert.deepEqual(application.queryTaskParticipants("missing"), { available: false, reason: "not-found" });
+});
+
+test("inspection labels related tasks without loading their discussion", async (t) => {
+  const fixture = await createDiscoveryFixture();
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+  const tasks = ["Parent scope", "Child work"].map((title) => application.createTask({
+    boardId: "delivery", columnId: "backlog", title, description: "Private related description",
+    actor: { kind: "user" as const, id: "paul" }, idempotencyKey: title,
+  }));
+  const [parent, child] = tasks;
+  assert.ok(parent?.accepted && child?.accepted);
+  const linked = application.createTaskRelationship({
+    type: "parent-child", sourceTaskId: parent.task.id, targetTaskId: child.task.id,
+    resumeAgentId: "implementer", actor: { kind: "user", id: "paul" }, idempotencyKey: "label-child",
+  });
+  assert.ok(linked.accepted);
+  const inspected = application.queryTaskInspection(parent.task.id);
+  assert.ok(inspected.available);
+  assert.deepEqual(inspected.task.relationships[0], {
+    ...linked.relationship, sourceTaskTitle: "Parent scope", targetTaskTitle: "Child work",
+  });
+});
 
 test("the user board projection returns complete browser-ready coordination state", async (t) => {
   const fixture = await createDiscoveryFixture();
@@ -665,7 +728,9 @@ test("full task inspection keeps history and attachments behind on-demand querie
   const inspection = application.queryTaskInspection(created.task.id);
   assert.equal(inspection.available, true);
   if (!inspection.available) return;
-  assert.deepEqual(inspection.task, {
+  const { participants, ...taskState } = inspection.task;
+  assert.equal(participants.length, 2);
+  assert.deepEqual(taskState, {
     id: "T-0001",
     title: "Inspect complete context",
     description: "The complete description remains available to every agent.",

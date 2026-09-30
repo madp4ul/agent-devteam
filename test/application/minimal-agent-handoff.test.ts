@@ -7,6 +7,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import { composeActivationPrompt } from "../../src/application/activation-prompt.ts";
 import type { AutomationClock } from "../../src/application/automation-contract.ts";
 import type {
   AgentRunOutcome,
@@ -24,6 +25,92 @@ import {
   createHandoffFixture,
   PausedRetryClock,
 } from "../support/handoff-fixture.ts";
+
+test("a participant consults the same agent on another task without duplicating the comment", async (t) => {
+  const fixture = await createHandoffFixture();
+  await writeFile(fixture.definitionPath,
+    (await readFile(fixture.definitionPath, "utf8")).replace(
+      "    columns:\n", "    columns:\n      - id: backlog\n        name: Backlog\n",
+    ));
+  const runtime = new ControlledAgentRuntime();
+  const options = {
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  };
+  let application = await CoordinationApplication.start(options);
+  t.after(() => application.close());
+  const origin = application.createTask({
+    boardId: "delivery", columnId: "implementation", title: "Child implementation",
+    description: "Consult the parent team.", actor: { kind: "user", id: "paul" },
+    idempotencyKey: "consult-origin",
+  });
+  const destination = application.createTask({
+    boardId: "delivery", columnId: "backlog", title: "Parent requirements",
+    description: "Answer child questions.", actor: { kind: "user", id: "paul" },
+    idempotencyKey: "consult-destination",
+  });
+  assert.ok(origin.accepted && destination.accepted);
+  await application.resumeAutomation();
+  const caller = await runtime.waitForRequest(1);
+  const sourceParticipants = application.queryTaskParticipants(origin.task.id);
+  assert.ok(sourceParticipants.available);
+  assert.equal(sourceParticipants.participants[0]?.execution.running, true);
+  const command = {
+    taskId: destination.task.id, body: "@implementer @user Please clarify the input.",
+    actor: { kind: "agent" as const, id: "implementer" },
+    attemptId: caller.attemptId, idempotencyKey: "consult-comment",
+  };
+  const added = application.addTaskComment(command);
+  assert.ok(added.accepted);
+  assert.deepEqual(added.comment.originTask, { id: origin.task.id, title: "Child implementation" });
+  assert.equal(added.comment.attemptId, caller.attemptId);
+  assert.deepEqual(application.addTaskComment(command), added);
+  assert.deepEqual(application.addTaskComment({ ...command, body: "Changed question" }), {
+    accepted: false, reason: "idempotency-conflict",
+  });
+  const source = application.queryTask(origin.task.id);
+  const target = application.queryTask(destination.task.id);
+  assert.ok(source.available && target.available);
+  assert.equal(source.task.comments.length, 0);
+  assert.equal(target.task.comments.length, 1);
+  assert.equal(target.task.activations.length, 1);
+  assert.equal(target.task.activations[0]?.targetAgentId, "implementer");
+  assert.equal(target.task.activations[0]?.status, "queued");
+  assert.equal(application.queryUserBoard().attention.flatMap((entry) => entry.reasons)
+    .filter((entry) => entry.type === "user-mention").length, 1);
+  runtime.complete({ status: "completed", summary: "Consulted parent", threadId: "child-thread" });
+  const recipient = await runtime.waitForRequest(2);
+  assert.equal(recipient.task.id, destination.task.id);
+  assert.equal(recipient.attempt.thread, "fresh");
+  assert.ok("originTask" in recipient.sourceEvent);
+  assert.deepEqual(recipient.sourceEvent.originTask, added.comment.originTask);
+  assert.match(composeActivationPrompt(recipient), /from task T-0001 \(Child implementation\)/);
+  const reply = application.addTaskComment({
+    taskId: origin.task.id, body: "@implementer Use the documented input format.",
+    actor: { kind: "agent", id: "implementer" }, attemptId: recipient.attemptId,
+    idempotencyKey: "consult-comment",
+  });
+  assert.ok(reply.accepted);
+  assert.deepEqual(reply.comment.originTask, { id: destination.task.id, title: "Parent requirements" });
+  const childAfterReply = application.queryTask(origin.task.id);
+  assert.ok(childAfterReply.available);
+  assert.equal(childAfterReply.task.activations[1]?.targetAgentId, "implementer");
+  assert.equal(childAfterReply.task.activations[1]?.reason.sourceEventId, reply.comment.id);
+  await application.pauseAutomation();
+  runtime.complete({ status: "completed", summary: "Answered child", threadId: "parent-thread" });
+  await application.waitForAutomationIdle();
+  await application.close();
+  application = await CoordinationApplication.start(options);
+  const persisted = application.queryTaskInspection(destination.task.id);
+  assert.ok(persisted.available);
+  assert.deepEqual(persisted.task.comments[0]?.originTask, added.comment.originTask);
+  assert.equal(persisted.task.comments[0]?.id, added.comment.id);
+});
 
 test("an agent comment and move hand work to the next watched-column agent", async (t) => {
   const fixture = await createHandoffFixture();

@@ -21,7 +21,39 @@ const productionMigrationIds = [
   initialReleasedMigrationId,
   boundTaskDetailLookupsMigrationId,
   relationshipResumeOwnersMigrationId,
+  "0004_cross_task_comment_provenance",
 ];
+
+test("released comments recover only evidenced origin without inventing legacy provenance", async (t) => {
+  const fixture = await createStartupFixture("comment-origin-upgrade");
+  const database = new DatabaseSync(fixture.databasePath);
+  initialReleasedMigration.apply(database);
+  database.prepare("INSERT INTO coordination_migrations (position, migration_id) VALUES (1, ?)")
+    .run(initialReleasedMigrationId);
+  database.exec(`
+    INSERT INTO runtime VALUES (1, 'Released schema process', 'legacy-version', 'paused', NULL);
+    INSERT INTO boards VALUES ('delivery', 'Delivery', 'Deliver work.', 0, 1);
+    INSERT INTO columns VALUES ('delivery', 'backlog', 'Backlog', 0, NULL, 0, 1);
+  `);
+  database.exec(await readFile(join(import.meta.dirname, "../fixtures/released-schema/0001-initial-released-schema-data.sql"), "utf8"));
+  database.prepare(`INSERT INTO task_comments (id, task_id, body, actor_kind, actor_id, occurred_at)
+    VALUES ('unknown-origin', 'released-task', 'No attempt evidence', 'agent', 'released-agent', '2026-01-01T00:04:00Z')`).run();
+  database.prepare(`INSERT INTO task_comments (id, task_id, body, actor_kind, actor_id, occurred_at, attempt_id)
+    VALUES ('mismatched-origin', 'released-task', 'Mismatched author', 'agent', 'another-agent', '2026-01-01T00:05:00Z', 'released-attempt')`).run();
+  database.close();
+  const contentDirectory = join(fixture.directory, "conversation-attachments", "content", "released-task", "released-conversation");
+  await mkdir(contentDirectory, { recursive: true });
+  await writeFile(join(contentDirectory, "released-conversation-attachment"), Buffer.alloc(17, "x"));
+  const application = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath });
+  t.after(() => application.close());
+  assert.equal(application.queryStartup().mode, "paused", JSON.stringify(application.queryStartup()));
+  const inspected = application.queryTaskInspection("released-task");
+  assert.ok(inspected.available);
+  assert.deepEqual(inspected.task.comments[0]?.originTask, { id: "released-task", title: "Retained released task" });
+  assert.equal(inspected.task.comments[0]?.id, "released-comment");
+  assert.equal(inspected.task.comments[1]?.originTask, undefined);
+  assert.equal(inspected.task.comments[2]?.originTask, undefined);
+});
 
 test("fresh startup applies the released migration registry and matches the current schema snapshot", async (t) => {
   const fixture = await createStartupFixture("fresh");

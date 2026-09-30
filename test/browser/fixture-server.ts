@@ -223,6 +223,7 @@ application.pauseAutomation();
 automationClock.reset();
 
 const userAttentionComment = application.addTaskComment({
+  callerTaskId: inspected.task.id,
   taskId: inspected.task.id,
   body: "@user Please confirm the completed handoff.",
   actor: { kind: "agent", id: "implementer" },

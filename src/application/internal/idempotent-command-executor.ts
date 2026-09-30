@@ -38,7 +38,7 @@ export type IdempotentCommandIdentity = (
       kind: "retire-agent-conversation";
       scope: readonly [taskId: string, conversationId: string];
     }
-) & { idempotencyKey: string };
+) & { idempotencyKey: string; caller?: readonly string[] };
 
 export interface IdempotentCommandScope {
   kind: "continue-agent-conversation";
@@ -58,12 +58,20 @@ export class IdempotentCommandExecutor {
     identity: IdempotentCommandIdentity,
     operation: () => Result,
     retain: RetentionPolicy<Result> = () => true,
+    check?: { request: string; onConflict: () => Result },
   ): Result {
     return this.#owner.transaction(() => {
+      const stored = this.#database.prepare(
+        "SELECT request_json FROM command_responses WHERE command_type = ? AND idempotency_key = ?",
+      ).get(serializeCommandType(identity), identity.idempotencyKey) as
+        { request_json: string | null } | undefined;
+      if (check !== undefined && stored !== undefined && stored.request_json !== check.request) {
+        return check.onConflict();
+      }
       const replay = this.replay<Result>(identity);
       if (replay !== undefined) return replay;
       const result = operation();
-      if (retain(result)) this.retain(identity, result);
+      if (retain(result)) this.retain(identity, result, check?.request);
       return result;
     });
   }
@@ -79,10 +87,10 @@ export class IdempotentCommandExecutor {
     return row === undefined ? undefined : JSON.parse(row.response_json) as Result;
   }
 
-  retain(identity: IdempotentCommandIdentity, result: unknown): void {
+  retain(identity: IdempotentCommandIdentity, result: unknown, request?: string): void {
     this.#database
-      .prepare("INSERT INTO command_responses VALUES (?, ?, ?)")
-      .run(serializeCommandType(identity), identity.idempotencyKey, JSON.stringify(result));
+      .prepare("INSERT INTO command_responses (command_type, idempotency_key, response_json, request_json) VALUES (?, ?, ?, ?)")
+      .run(serializeCommandType(identity), identity.idempotencyKey, JSON.stringify(result), request ?? null);
   }
 
   forgetScope(scope: IdempotentCommandScope): void {
@@ -96,5 +104,8 @@ export class IdempotentCommandExecutor {
 function serializeCommandType(
   identity: IdempotentCommandIdentity | IdempotentCommandScope,
 ): string {
+  if ("caller" in identity && identity.caller !== undefined) {
+    return JSON.stringify([identity.kind, identity.caller, identity.scope]);
+  }
   return [identity.kind, ...(identity.scope ?? [])].join(":");
 }

@@ -482,9 +482,11 @@ export class TaskCommandStore {
   }
 
   addTaskComment(command: AddTaskCommentCommand): AddTaskCommentResult {
-    return this.#idempotentCommands.execute({
+    const originTask = this.commentOrigin(command);
+    return this.#idempotentCommands.execute<AddTaskCommentResult>({
       kind: "add-task-comment",
-      scope: [command.taskId],
+      scope: [originTask?.id ?? command.callerTaskId ?? command.taskId],
+      caller: [command.actor.kind, command.actor.id],
       idempotencyKey: command.idempotencyKey,
     }, () => {
       const task = this.#projections.readTask(command.taskId);
@@ -492,22 +494,26 @@ export class TaskCommandStore {
       if (this.taskIsReadOnly(task)) {
         return { accepted: false, reason: "archived-task" };
       }
+      if (command.actor.kind === "agent" && !this.#projections.isTaskInspectableByAgent(task.id)) {
+        return { accepted: false, reason: "not-found" };
+      }
       if (command.body.trim().length === 0) {
         return { accepted: false, reason: "empty-comment" };
       }
-      const attemptId = this.validatedAgentAttemptId(command.taskId, command);
+      const attemptId = command.actor.kind === "agent" ? command.attemptId : undefined;
       const comment = {
         id: randomUUID(),
         body: command.body,
         actor: command.actor,
         occurredAt: new Date().toISOString(),
         ...(attemptId === undefined ? {} : { attemptId }),
+        ...(originTask === undefined ? {} : { originTask }),
       };
       this.#database
         .prepare(
           `INSERT INTO task_comments
-            (id, task_id, body, actor_kind, actor_id, occurred_at, attempt_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            (id, task_id, body, actor_kind, actor_id, occurred_at, attempt_id, origin_task_id, origin_task_title)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           comment.id,
@@ -517,6 +523,8 @@ export class TaskCommandStore {
           comment.actor.id,
           comment.occurredAt,
           comment.attemptId ?? null,
+          originTask?.id ?? null,
+          originTask?.title ?? null,
         );
       const mentions = this.readMentionTargets(comment.body);
       this.createMentionActivations(command.taskId, comment.id, mentions.agentIds);
@@ -530,7 +538,31 @@ export class TaskCommandStore {
       const updated = this.#projections.readTask(command.taskId);
       if (updated === undefined) throw new Error("Commented task could not be read back");
       return { accepted: true, task: updated, comment };
-    }, (result) => result.accepted);
+    }, (result) => result.accepted, {
+      request: JSON.stringify({ taskId: command.taskId, body: command.body }),
+      onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
+    });
+  }
+
+  private commentOrigin(command: AddTaskCommentCommand): { id: string; title: string } | undefined {
+    if (command.actor.kind !== "agent") return undefined;
+    if (command.attemptId === undefined) {
+      if (command.callerTaskId === undefined) return undefined;
+      const task = this.#database.prepare("SELECT id, title FROM tasks WHERE id = ?")
+        .get(command.callerTaskId) as { id: string; title: string } | undefined;
+      if (task === undefined) throw new Error("Agent action origin task is unavailable");
+      return { id: task.id, title: task.title };
+    }
+    const origin = this.#database.prepare(
+      `SELECT task.id, task.title FROM attempts attempt
+       JOIN activations activation ON activation.id = attempt.activation_id
+       JOIN tasks task ON task.id = activation.task_id
+       WHERE attempt.id = ? AND activation.target_agent_id = ? AND attempt.status = 'running'`,
+    ).get(command.attemptId, command.actor.id) as { id: string; title: string } | undefined;
+    if (origin === undefined || (command.callerTaskId !== undefined && origin.id !== command.callerTaskId)) {
+      throw new Error("Agent action attempt provenance is not current");
+    }
+    return { id: origin.id, title: origin.title };
   }
 
   private assertAgentAttemptProvenance(taskId: string, agentId: string, attemptId: string): void {

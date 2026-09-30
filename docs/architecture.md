@@ -80,6 +80,12 @@ user and agent interaction. It applies task, relationship, activation,
 attention, archival, and process-evolution rules, and exposes projections for
 inspection.
 
+Task participant queries combine the complete applied process-agent roster with
+task-local activation counts, running/suspension facts, and that board's watcher
+columns. This is shared with task inspection, without loading participant
+instructions, conversation IDs, or other tasks' histories. Inspection labels
+both relationship endpoints through bounded task-reference queries.
+
 Complete user-facing board and task-detail read projections are assembled
 inside this boundary before the web adapter serializes them. The adapter does
 not reconstruct those authoritative views by coordinating lower-level queries.
@@ -139,6 +145,18 @@ future continuation cannot be orphaned.
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
 state rather than silently replacing or adopting inconsistent data.
+
+Comments retain their destination separately from the author's concrete origin
+task and originating attempt. Authenticated comment writes validate the running
+caller against its origin and the destination against mapping/archival invariants.
+The destination alone receives the comment and ordinary mention effects; the
+source retains its tool transcript, not a second timeline entry. Retry responses
+for comments retain the normalized request and caller identity transactionally,
+so a reused key with changed payload rejects. Migration 0004 recovers legacy
+origin only through matching attempt/agent linkage; missing evidence stays unknown.
+[ADR 0020](adr/0020-coordinate-across-tasks-with-task-local-participant-identity.md)
+records the authority and identity trade-off. External comments remain standalone
+in the destination browser timeline when their originating attempt is not local.
 
 Persistence remains on the built-in synchronous `node:sqlite` driver with
 project-owned SQL. [ADR 0017](adr/0017-reconsider-drizzle-when-native-node-sqlite-and-strict-types-are-stable.md)

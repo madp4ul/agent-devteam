@@ -44,8 +44,9 @@ export function buildTimelineRecords(
   activity: TaskActivityView[],
   activations: ActivationView[],
 ): TimelineRecord[] {
+  const localAttemptIds = new Set(activations.flatMap((activation) => activation.attempts.map((attempt) => attempt.id)));
   const groupedCommentIds = new Set(
-    comments.flatMap((comment) => comment.attemptId === undefined ? [] : [comment.id]),
+    comments.flatMap((comment) => comment.attemptId !== undefined && localAttemptIds.has(comment.attemptId) ? [comment.id] : []),
   );
   const groupedActivityIds = new Set(
     activity.flatMap((entry) => entry.details.attemptId === undefined ? [] : [entry.id]),

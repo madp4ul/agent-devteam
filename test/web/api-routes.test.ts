@@ -99,7 +99,7 @@ test("agent routes authenticate before dispatch and derive current-task identity
     });
     assert.equal(query.status, 200);
 
-    const mutation = await fetch(`${server.baseUrl}/agent-api/current-task/comments`, {
+    const mutation = await fetch(`${server.baseUrl}/agent-api/tasks/current/comments`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({
@@ -112,6 +112,7 @@ test("agent routes authenticate before dispatch and derive current-task identity
     assert.equal(mutation.status, 200);
     assert.deepEqual(comments, [{
       taskId: "scoped-task",
+      callerTaskId: "scoped-task",
       body: "Scoped comment",
       idempotencyKey: "comment-key",
       actor: { kind: "agent", id: "agent-1" },

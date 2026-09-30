@@ -85,6 +85,7 @@ export function TaskTimeline({
     ? filterTimelineRecordsForAgents(records, agentInspectableContent)
     : records;
   const context: TimelineContext = {
+    taskId,
     comments,
     activity,
     activations,
@@ -186,6 +187,7 @@ export function TaskTimeline({
 }
 
 interface TimelineContext {
+  taskId: string;
   comments: TaskCommentView[];
   activity: TaskActivityView[];
   activations: ActivationView[];
@@ -418,6 +420,8 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
 }): ReactNode {
   const [replyPending, setReplyPending] = useState(false);
   const author = actorName(comment.actor, context.agents);
+  const externalOrigin = comment.originTask !== undefined && comment.originTask.id !== context.taskId
+    ? comment.originTask : undefined;
   const requestedAgentIds = [...new Set(context.activations
     .filter((activation) => activation.reason.type === "agent-mention" && activation.reason.sourceEventId === comment.id)
     .map((activation) => activation.targetAgentId))];
@@ -425,7 +429,7 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
   const userAttention = context.unresolvedAttention.find(
     (reason) => reason.type === "user-mention" && reason.sourceEventId === comment.id,
   );
-  const replyAgent = requestedUser && comment.actor.kind === "agent" &&
+  const replyAgent = comment.originTask?.id === context.taskId && requestedUser && comment.actor.kind === "agent" &&
     context.agents.some((agent) => agent.id === comment.actor.id)
     ? comment.actor.id
     : undefined;
@@ -439,6 +443,13 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
           {context.agentInspectableContent.commentIds.includes(comment.id) ? <AgentInspectableMarker /> : null}
         </span>
       </div>
+      {externalOrigin === undefined ? null : (
+        <p className="comment-origin">From <a href={`/tasks/${encodeURIComponent(externalOrigin.id)}`}>
+          {externalOrigin.id} · {externalOrigin.title}
+        </a></p>
+      )}
+      {comment.actor.kind === "agent" && comment.originTask === undefined
+        ? <p className="comment-origin">Origin task unknown</p> : null}
       <TextPreview
         id={`comment-${comment.id}`}
         text={comment.body}

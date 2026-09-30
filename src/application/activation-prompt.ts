@@ -3,6 +3,8 @@ import type { Actor, TaskActivityView, TaskCommentView } from "./task-contract.t
 
 export const FRAMEWORK_GUIDANCE = `You are one participant in a shared, board-based workflow. The task is the durable record that you, other agents, and the user use to coordinate work.
 
+An agent ID names a reusable process role. A participant is the pair of task ID and agent ID: the same agent ID on different tasks has independent conversation memory. All applied process agents are addressable on any mapped task; watchers assign normal responsibility, not eligibility. Comment mentions address the destination task's participants. An external author's origin task identifies where to post a reply to that participant; a local participant with the same ID is not that author.
+
 ## The board and this activation
 
 The task's current board column shows which role has primary workflow responsibility. A watched column names the agent that normally takes responsibility when a task enters it; an unwatched column is a deliberate waiting state.
@@ -17,7 +19,7 @@ Moving a task into a watched column transfers primary responsibility and normall
 
 Participant tokens shown under Available participants, such as \`@reviewer\`, are executable requests when you write them in a task comment. Use a token to request targeted work without transferring primary responsibility. Targeted work may be consultation, investigation, review, or a bounded change. When referring to a participant without requesting a response, write its plain display name without the \`@\` character, for example \`Code Reviewer\`; refer to the human as \`the user\`. Plain display names are non-executable prose. \`@user\` requests explicit human attention rather than an agent activation.
 
-Never mention yourself. Before requesting a participant, inspect current task state. Do not create another mention when an equivalent unfinished activation already asks that participant for the same response, and do not repeat unresolved user attention for the same need.
+Do not mention your own participant on your current task. The same agent ID on another task is a different participant. Do not create another mention when an equivalent unfinished activation already asks that participant for the same response, and do not repeat unresolved user attention for the same need.
 
 ## Finishing this turn
 
@@ -97,7 +99,7 @@ ${renderWorkflow(request)}
 
 You are ${request.agent.name}.
 Stable agent ID: ${request.agent.id}
-Authored task comments may refer to you as \`@${request.agent.id}\`. Do not use your own token.
+Authored task comments may refer to you as \`@${request.agent.id}\`. Do not use your own token on this task; it can address a different participant on another task.
 Role: ${request.agent.role}
 Summary: ${request.agent.summary}
 
@@ -267,16 +269,16 @@ function renderActivation(request: AgentRunRequest): string {
       const location = request.activationContext.sourceDelivery === "current-context"
         ? "rendered once in the task context above"
         : "already delivered earlier in this conversation";
-      return `You are running because ${renderActor(source.actor, request)} mentioned you in comment ${source.id}. A mention is a targeted request and did not transfer primary workflow responsibility.
+      return `You are running because ${renderCommentAuthor(source, request)} mentioned you in comment ${source.id}. A mention is a targeted request and did not transfer primary workflow responsibility.
 
 React to the complete source comment ${location}. If later activity has already satisfied it, do not repeat the work or create another handoff.`;
     }
-    return `You are running because ${renderActor(source.actor, request)} mentioned you in comment ${source.id}. A mention is a targeted request and did not transfer primary workflow responsibility.
+    return `You are running because ${renderCommentAuthor(source, request)} mentioned you in comment ${source.id}. A mention is a targeted request and did not transfer primary workflow responsibility.
 
 React to the expectation expressed in this source comment in the context of later task activity. If later activity has already satisfied it, do not repeat the work or create another handoff.
 
 Source comment ${source.id}
-Author: ${renderActor(source.actor, request)}
+Author: ${renderCommentAuthor(source, request)}
 Created: ${renderTimestamp(source.occurredAt)}
 Comment:
 ${source.body}`;
@@ -374,7 +376,13 @@ function renderComment(
   comment: Exclude<AgentRunRequest["sourceEvent"], TaskActivityView>,
   request: AgentRunRequest,
 ): string {
-  return `Comment ${comment.id}\nAuthor: ${renderActor(comment.actor, request)}\nCreated: ${renderTimestamp(comment.occurredAt)}\n${comment.body}`;
+  return `Comment ${comment.id}\nAuthor: ${renderCommentAuthor(comment, request)}\nCreated: ${renderTimestamp(comment.occurredAt)}\n${comment.body}`;
+}
+
+function renderCommentAuthor(comment: { actor: Actor; originTask?: { id: string; title: string } }, request: AgentRunRequest): string {
+  const author = renderActor(comment.actor, request);
+  return comment.originTask !== undefined && comment.originTask.id !== request.task.id
+    ? `${author} from task ${comment.originTask.id} (${comment.originTask.title})` : author;
 }
 
 function renderSourceActivity(label: string, activity: TaskActivityView, request: AgentRunRequest): string {

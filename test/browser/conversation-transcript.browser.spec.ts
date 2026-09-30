@@ -12,6 +12,21 @@ import {
   test,
 } from "./browser-fixture.ts";
 
+test("an outbound comment transcript points to its destination instead of local history", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    await fulfillConversationTranscript(route, [{
+      id: "outbound-comment", kind: "coordination", tool: "task.comment.add", status: "succeeded",
+      summary: "T-0099: comment", evidence: {},
+      presentation: { kind: "coordination-comment", taskId: "T-0099", commentId: "external-uuid", body: "Question for the parent team." },
+    }]);
+  });
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const comment = page.getByRole("dialog", { name: "Agent conversation" }).getByRole("article", { name: "Comment added" });
+  await expect(comment.getByRole("link", { name: "View destination task T-0099" })).toHaveAttribute("href", "/tasks/T-0099");
+  await expect(comment.getByRole("button", { name: "View in task history" })).toHaveCount(0);
+});
+
 test("conversation messages render Markdown and commands remain quiet but inspectable", async ({ page }) => {
   const codexMarkdown = "Reviewed **two risks**.\n\n- Preserve source\n- Keep [evidence](https://example.com/evidence)";
   const userMarkdown = "Please run `pnpm test` before the **handoff**.";

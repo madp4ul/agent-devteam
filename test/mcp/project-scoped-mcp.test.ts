@@ -24,9 +24,65 @@ import {
   type CodexClientOptionsLike,
 } from "../../src/runtime/codex-agent-runtime.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
+import { ControlledAgentRuntime, createHandoffFixture } from "../support/handoff-fixture.ts";
 
 const execFileAsync = promisify(execFile);
 type CodexEventLike = any;
+
+test("authenticated cross-task comments preserve caller scope and normalize current retries", async (t) => {
+  const fixture = await createHandoffFixture();
+  await writeFile(fixture.definitionPath, (await readFile(fixture.definitionPath, "utf8"))
+    .replace("    columns:\n", "    columns:\n      - id: backlog\n        name: Backlog\n"));
+  const runtime = new ControlledAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
+    runtimeDispatch: { projectRepositoryPath: fixture.repositoryPath, taskWorkspaceRoot: fixture.workspaceRoot, agentRuntime: runtime },
+  });
+  t.after(() => application.close());
+  const source = application.createTask({
+    boardId: "delivery", columnId: "implementation", title: "Caller team", description: "Ask another team",
+    actor: { kind: "user", id: "paul" }, idempotencyKey: "http-source",
+  });
+  const target = application.createTask({
+    boardId: "delivery", columnId: "backlog", title: "Destination team", description: "Respond here",
+    actor: { kind: "user", id: "paul" }, idempotencyKey: "http-destination",
+  });
+  assert.ok(source.accepted && target.accepted);
+  await application.resumeAutomation();
+  const caller = await runtime.waitForRequest(1);
+  const scopes = new AgentToolScopeRegistry();
+  const token = scopes.issue({ taskId: source.task.id, agentId: "implementer", attemptId: caller.attemptId });
+  const server = await startWebServer(application, { host: "127.0.0.1", port: 0, agentToolScopes: scopes });
+  t.after(() => server.close());
+  const post = (taskId: string, body: object, bearer = token) => fetch(`${server.baseUrl}/agent-api/tasks/${taskId}/comments`, {
+    method: "POST", headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  const payload = {
+    body: "Question from caller team", idempotencyKey: "http-key",
+    actor: { kind: "agent", id: "reviewer" }, originTaskId: target.task.id, attemptId: "spoofed",
+  };
+  const cross = await post(target.task.id, payload);
+  assert.equal(cross.status, 200);
+  const crossResult = await cross.json();
+  assert.deepEqual(await (await post(target.task.id, payload)).json(), crossResult);
+  assert.deepEqual(await (await post(source.task.id, payload)).json(), { accepted: false, reason: "idempotency-conflict" });
+  const local = await post("current", { body: "Local note", idempotencyKey: "http-local" });
+  assert.equal(local.status, 200);
+  assert.deepEqual(await (await post(source.task.id, { body: "Local note", idempotencyKey: "http-local" })).json(), await local.json());
+  const mismatched = scopes.issue({ taskId: target.task.id, agentId: "implementer", attemptId: caller.attemptId });
+  assert.ok((await post(target.task.id, { body: "Wrong scope", idempotencyKey: "wrong-scope" }, mismatched)).status >= 400);
+  const wrongAgent = scopes.issue({ taskId: source.task.id, agentId: "reviewer", attemptId: caller.attemptId });
+  assert.ok((await post(target.task.id, { body: "Wrong agent", idempotencyKey: "wrong-agent" }, wrongAgent)).status >= 400);
+  const destination = application.queryTaskInspection(target.task.id);
+  assert.ok(destination.available);
+  assert.equal(destination.task.comments.length, 1);
+  assert.deepEqual(destination.task.comments[0]?.actor, { kind: "agent", id: "implementer" });
+  assert.deepEqual(destination.task.comments[0]?.originTask, { id: source.task.id, title: "Caller team" });
+  assert.equal(destination.task.comments[0]?.attemptId, caller.attemptId);
+  await application.pauseAutomation();
+  runtime.complete({ status: "completed", summary: "Consulted", threadId: "http-caller-thread" });
+  await application.waitForAutomationIdle();
+});
 
 test("the project MCP exposes bounded discovery and explicit relationship coordination", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "coordination-mcp-"));
@@ -122,6 +178,19 @@ boards:
   await client.connect(transport);
   t.after(() => client.close());
 
+  const crossComment = await client.callTool({
+    name: "task.comment.add",
+    arguments: { taskId: "T-0002", body: "@reviewer @user Consult from the implementation team.", idempotencyKey: "cross-comment" },
+  });
+  assert.equal(crossComment.isError, undefined);
+  const destination = application.queryTask("T-0002");
+  assert.ok(destination.available);
+  assert.equal(destination.task.comments.length, 1);
+  assert.equal(destination.task.comments[0]?.actor.id, "implementer");
+  assert.deepEqual(destination.task.comments[0]?.originTask, { id: created.task.id, title: "Use scoped tools" });
+  const participants = await client.callTool({ name: "task.participant.list", arguments: { taskId: "current" } });
+  assert.equal(JSON.parse(textContent(participants.content)).participants.length, 2);
+
   const listed = await client.listTools();
   assert.deepEqual(
     listed.tools.map((tool) => tool.name),
@@ -132,10 +201,10 @@ boards:
       "inspect_task",
       "list_task_activity",
       "list_task_attachments",
-      "list_collaborators",
+      "task.participant.list",
       "inspect_current_task",
       "inspect_operating_context",
-      "add_comment",
+      "task.comment.add",
       "move_current_task",
       "create_child_task",
       "add_dependency",
@@ -161,7 +230,7 @@ boards:
         "inspect_task",
         "list_task_activity",
         "list_task_attachments",
-        "list_collaborators",
+        "task.participant.list",
         "inspect_current_task",
         "inspect_operating_context",
       ].map((name) => [
@@ -175,7 +244,7 @@ boards:
       inspect_task: ["taskId"],
       list_task_activity: ["taskId"],
       list_task_attachments: ["taskId"],
-      list_collaborators: [],
+      "task.participant.list": ["taskId"],
       inspect_current_task: [],
       inspect_operating_context: [],
     },
@@ -193,7 +262,8 @@ boards:
     | undefined;
   assert.equal(listTaskProperties?.columnIds?.minItems, 1);
   assert.equal(listTaskProperties?.pageSize?.maximum, 50);
-  assert.deepEqual(Object.keys(toolByName.get("add_comment")?.inputSchema.properties ?? {}), [
+  assert.deepEqual(Object.keys(toolByName.get("task.comment.add")?.inputSchema.properties ?? {}), [
+    "taskId",
     "body",
     "idempotencyKey",
   ]);
@@ -229,7 +299,7 @@ boards:
     ["summary"],
   );
   assert.equal(
-    ["add_comment", "move_current_task", "create_child_task", "add_dependency", "report_permission_block"].some(
+    ["move_current_task", "create_child_task", "add_dependency", "report_permission_block"].some(
       (name) => "taskId" in (toolByName.get(name)?.inputSchema.properties ?? {}),
     ),
     false,
@@ -358,7 +428,7 @@ boards:
     attachments: [],
   });
 
-  const collaborators = await client.callTool({ name: "list_collaborators", arguments: {} });
+  const collaborators = await client.callTool({ name: "task.participant.list", arguments: { taskId: "current" } });
   assert.match(textContent(collaborators.content), /Implementation Agent/);
   assert.doesNotMatch(textContent(collaborators.content), /Implement and hand off/);
 
@@ -445,7 +515,7 @@ boards:
       crossTaskAfterRemoval.task.relationships.some(({ id }) => id === crossTaskRelationship.relationship.id),
       false,
     );
-    assert.equal(crossTaskAfterRemoval.task.activations.length, 0);
+    assert.deepEqual(crossTaskAfterRemoval.task.activations, destination.task.activations);
   }
   const childResult = await client.callTool({
     name: "create_child_task",
@@ -518,8 +588,8 @@ boards:
   assert.deepEqual(afterInertMove.task.activity, beforeInertMove.task.activity);
   assert.deepEqual(afterInertMove.task.activations, beforeInertMove.task.activations);
 
-  const commentResult = await client.callTool({ name: "add_comment", arguments: commentArguments });
-  const repeatedCommentResult = await client.callTool({ name: "add_comment", arguments: commentArguments });
+  const commentResult = await client.callTool({ name: "task.comment.add", arguments: { ...commentArguments, taskId: "current" } });
+  const repeatedCommentResult = await client.callTool({ name: "task.comment.add", arguments: { ...commentArguments, taskId: "current" } });
   const commentPayload = JSON.parse(textContent(commentResult.content)) as {
     accepted: true;
     taskId: string;
@@ -588,6 +658,19 @@ boards:
   assert.equal(afterInertReplay.task.revision, updated.task.revision);
   assert.deepEqual(afterInertReplay.task.activity, updated.task.activity);
   assert.deepEqual(afterInertReplay.task.activations, updated.task.activations);
+
+  const reviewerToken = scopes.issue({ taskId: created.task.id, agentId: "reviewer" });
+  const otherCaller = await fetch(`${server.baseUrl}/agent-api/tasks/T-0002/comments`, {
+    method: "POST", headers: { authorization: `Bearer ${reviewerToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ body: "Independent participant using the same key.", idempotencyKey: "cross-comment" }),
+  });
+  assert.equal(otherCaller.status, 200);
+  const secondComment = await otherCaller.json() as { commentId: string };
+  assert.notEqual(secondComment.commentId, JSON.parse(textContent(crossComment.content)).commentId);
+  const afterCollision = application.queryTask("T-0002");
+  assert.ok(afterCollision.available);
+  assert.equal(afterCollision.task.comments.length, 2);
+  assert.equal(afterCollision.task.comments[1]?.actor.id, "reviewer");
 
   const runtimeTask = application.createTask({
     boardId: "delivery",
@@ -835,8 +918,9 @@ function controlledMcpClient(options: CodexClientOptionsLike) {
           const inspected = await client.callTool({ name: "inspect_current_task", arguments: {} });
           const current = JSON.parse(textContent(inspected.content)) as { revision: number };
           const commented = await client.callTool({
-            name: "add_comment",
+            name: "task.comment.add",
             arguments: {
+              taskId: "current",
               body: "Controlled assembled MCP handoff complete.",
               idempotencyKey: "controlled-assembled-comment",
             },
@@ -853,7 +937,7 @@ function controlledMcpClient(options: CodexClientOptionsLike) {
             events: codexEvents(
               { type: "thread.started", thread_id: "controlled-assembled-thread" },
               completedMcpItem("inspect_current_task", inspected.content),
-              completedMcpItem("add_comment", commented.content),
+              completedMcpItem("task.comment.add", commented.content),
               completedMcpItem("move_current_task", moved.content),
               {
                 type: "item.completed",

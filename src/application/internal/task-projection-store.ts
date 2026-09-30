@@ -17,6 +17,7 @@ import type {
   TaskActivityView,
   TaskOverviewView,
   TaskRelationshipView,
+  TaskParticipantView,
   TaskView,
 } from "../task-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
@@ -519,6 +520,39 @@ export class TaskProjectionStore {
       .get(taskId) !== undefined;
   }
 
+  readTaskParticipants(taskId: string): TaskParticipantView[] {
+    const agents = this.#database.prepare(`
+      SELECT agent.id, agent.name, agent.role, agent.summary, task.automation_suspended,
+             COALESCE(state.running, 0) AS running,
+             COALESCE(state.queued, 0) AS queued, COALESCE(state.failed, 0) AS failed
+      FROM agents agent JOIN tasks task ON task.id = ?
+      LEFT JOIN (
+        SELECT target_agent_id,
+               MAX(status = 'running') AS running,
+               SUM(status = 'queued') AS queued, SUM(status = 'failed') AS failed
+        FROM activations WHERE task_id = ? GROUP BY target_agent_id
+      ) state ON state.target_agent_id = agent.id
+      WHERE agent.applied = 1 ORDER BY agent.rowid
+    `).all(taskId, taskId) as Array<{
+      id: string; name: string; role: string; summary: string;
+      automation_suspended: number; running: number; queued: number; failed: number;
+    }>;
+    const watchers = this.#database.prepare(`
+      SELECT column.id, column.name, column.watching_agent_id
+      FROM columns column JOIN tasks task ON task.board_id = column.board_id
+      WHERE task.id = ? AND column.applied = 1 ORDER BY column.position
+    `).all(taskId) as Array<{ id: string; name: string; watching_agent_id: string | null }>;
+    return agents.map((agent) => ({
+      taskId, agentId: agent.id, name: agent.name, role: agent.role, summary: agent.summary,
+      watchedColumns: watchers.filter((column) => column.watching_agent_id === agent.id)
+        .map(({ id, name }) => ({ id, name })),
+      execution: {
+        running: agent.running === 1, queuedActivationCount: agent.queued,
+        failedActivationCount: agent.failed, automationSuspended: agent.automation_suspended === 1,
+      },
+    }));
+  }
+
   readSourceEvent(id: string): TaskActivityView | TaskView["comments"][number] | undefined {
     const row = this.#database
       .prepare(
@@ -547,9 +581,12 @@ export class TaskProjectionStore {
     }
     const comment = this.#database
       .prepare(
-        `SELECT id, body, actor_kind, actor_id, occurred_at, attempt_id
-         FROM task_comments
-         WHERE id = ?`,
+        `SELECT comment.id, comment.body, comment.actor_kind, comment.actor_id,
+                comment.occurred_at, comment.attempt_id, comment.origin_task_id,
+                COALESCE(origin.title, comment.origin_task_title) AS origin_task_title
+         FROM task_comments comment
+         LEFT JOIN tasks origin ON origin.id = comment.origin_task_id
+         WHERE comment.id = ?`,
       )
       .get(id) as
       | {
@@ -559,6 +596,8 @@ export class TaskProjectionStore {
           actor_id: string;
           occurred_at: string;
           attempt_id: string | null;
+          origin_task_id: string | null;
+          origin_task_title: string | null;
         }
       | undefined;
     return comment === undefined
@@ -569,6 +608,9 @@ export class TaskProjectionStore {
           actor: { kind: comment.actor_kind, id: comment.actor_id },
           occurredAt: comment.occurred_at,
           ...(comment.attempt_id === null ? {} : { attemptId: comment.attempt_id }),
+          ...(comment.origin_task_id === null ? {} : {
+            originTask: { id: comment.origin_task_id, title: comment.origin_task_title ?? comment.origin_task_id },
+          }),
         };
   }
 
@@ -817,10 +859,13 @@ export class TaskProjectionStore {
   private readTaskComments(taskId: string): TaskView["comments"] {
     const rows = this.#database
       .prepare(
-        `SELECT id, body, actor_kind, actor_id, occurred_at, attempt_id
-         FROM task_comments
-         WHERE task_id = ?
-         ORDER BY sequence`,
+        `SELECT comment.id, comment.body, comment.actor_kind, comment.actor_id,
+                comment.occurred_at, comment.attempt_id, comment.origin_task_id,
+                COALESCE(origin.title, comment.origin_task_title) AS origin_task_title
+         FROM task_comments comment
+         LEFT JOIN tasks origin ON origin.id = comment.origin_task_id
+         WHERE comment.task_id = ?
+         ORDER BY comment.sequence`,
       )
       .all(taskId) as Array<{
       id: string;
@@ -829,6 +874,8 @@ export class TaskProjectionStore {
       actor_id: string;
       occurred_at: string;
       attempt_id: string | null;
+      origin_task_id: string | null;
+      origin_task_title: string | null;
     }>;
     return rows.map((row) => ({
       id: row.id,
@@ -836,6 +883,9 @@ export class TaskProjectionStore {
       actor: { kind: row.actor_kind, id: row.actor_id },
       occurredAt: row.occurred_at,
       ...(row.attempt_id === null ? {} : { attemptId: row.attempt_id }),
+      ...(row.origin_task_id === null ? {} : {
+        originTask: { id: row.origin_task_id, title: row.origin_task_title ?? row.origin_task_id },
+      }),
     }));
   }
 }

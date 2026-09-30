@@ -58,6 +58,7 @@ export function sendAgentQuery(
     | ReturnType<CoordinationApplication["queryTaskOverviews"]>
     | ReturnType<CoordinationApplication["queryArchivedTaskOverviews"]>
     | ReturnType<CoordinationApplication["queryTaskInspection"]>
+    | ReturnType<CoordinationApplication["queryTaskParticipants"]>
     | ReturnType<CoordinationApplication["queryTaskActivity"]>
     | ReturnType<CoordinationApplication["queryTaskAttachments"]>
     | ReturnType<CoordinationApplication["queryCollaborators"]>,

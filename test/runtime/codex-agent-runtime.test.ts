@@ -84,7 +84,7 @@ test("a fresh activation prompt composes framework, process, role, task, and tri
   assert.match(prompt, /2\. Review \(review\) — watched by Code Reviewer \(`@reviewer`\)/);
   assert.match(prompt, /3\. Completion \(completion\) — unwatched/);
   assert.match(prompt, /Stable agent ID: implementer/);
-  assert.match(prompt, /Authored task comments may refer to you as `@implementer`\. Do not use your own token\./);
+  assert.match(prompt, /Authored task comments may refer to you as `@implementer`\. Do not use your own token on this task/);
   assert.match(prompt, /`@reviewer` — Code Reviewer/);
   assert.doesNotMatch(prompt, /`@implementer` — Implementation Agent/);
   assert.match(prompt, /`@user` — human process owner/);

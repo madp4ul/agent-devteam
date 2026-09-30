@@ -56,11 +56,14 @@ function coordinationProjection(
 ): { presentation: CoordinationTranscriptPresentation; summary?: string } {
   const transition = recordValue(result?.transition);
   const rejection = status === "rejected" ? rejectionMessage(result) : undefined;
-  const taskId = stringValue(transition?.taskId) ?? stringValue(result?.taskId) ?? run.taskId;
-  if (tool === "add_comment") {
+  const requestedTaskId = stringValue(arguments_?.taskId);
+  const taskId = stringValue(transition?.taskId) ?? stringValue(result?.taskId) ??
+    (requestedTaskId === "current" ? run.taskId : requestedTaskId) ?? run.taskId;
+  if (tool === "add_comment" || tool === "task.comment.add") {
     const body = stringValue(arguments_?.body);
     return projected({
       kind: "coordination-comment",
+      ...(tool === "task.comment.add" && (requestedTaskId !== undefined || result?.taskId !== undefined) ? { taskId } : {}),
       ...optionalString("body", body),
       ...optionalString("commentId", result?.commentId),
     }, withRejection(`${taskId}: comment`, rejection));
@@ -126,6 +129,14 @@ function coordinationProjection(
       scope: "collaborators",
       ...(collaborators === undefined ? {} : { collaboratorCount: collaborators.length }),
     }, "Collaborator directory");
+  }
+  if (tool === "task.participant.list") {
+    const participants = Array.isArray(result?.participants) ? result.participants : undefined;
+    return projected({
+      kind: "coordination-inspection", scope: "participants",
+      ...(requestedTaskId === undefined ? {} : { taskId }),
+      ...(participants === undefined ? {} : { participantCount: participants.length }),
+    }, `${taskId}: participants`);
   }
   if (tool === "inspect_current_task") {
     const column = recordValue(result?.column);
@@ -235,6 +246,7 @@ function semanticStatus(
 function requiresAuthoritativeAcceptance(tool: CoordinationToolName): boolean {
   switch (tool) {
     case "add_comment":
+    case "task.comment.add":
     case "move_current_task":
     case "create_child_task":
     case "add_dependency":
@@ -249,6 +261,7 @@ function requiresAuthoritativeAcceptance(tool: CoordinationToolName): boolean {
     case "list_task_activity":
     case "list_task_attachments":
     case "list_collaborators":
+    case "task.participant.list":
     case "inspect_current_task":
     case "inspect_operating_context":
       return false;

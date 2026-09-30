@@ -20,7 +20,7 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Use summaries and explicit-column pages to discover only relevant work. Read tools can inspect shared project tasks. Mutations remain scoped to the activation's current task and must be idempotent.",
+      "Read tools can inspect shared project tasks. Comments and relationship reassignment/removal support cross-task coordination; other mutations remain current-task scoped. current always identifies the caller's task. Mutation keys identify an intended operation across retries.",
   },
 );
 
@@ -91,12 +91,12 @@ server.registerTool(
 );
 
 server.registerTool(
-  "list_collaborators",
+  "task.participant.list",
   {
-    description: "List collaborator names and summaries without loading their instructions.",
-    inputSchema: {},
+    description: "List every applied process agent with its address, role, watcher responsibilities and execution state on this task. Same agent ID on another task has independent memory. taskId is current or a concrete task ID.",
+    inputSchema: { taskId: z.string().min(1) },
   },
-  async () => callAgentApi("GET", "/agent-api/collaborators"),
+  async ({ taskId }) => callAgentApi("GET", `/agent-api/tasks/${encodeURIComponent(taskId)}/participants`),
 );
 
 server.registerTool(
@@ -120,15 +120,16 @@ server.registerTool(
 );
 
 server.registerTool(
-  "add_comment",
+  "task.comment.add",
   {
-    description: "Add an authored agent comment to the current task idempotently.",
+    description: "Append a comment on a mapped mutable project task. taskId is current or a concrete ID. Mentions address participants on the destination task, including the same agent ID on a different task. The author and origin are derived from the caller. Exact retries with the same key replay; changed payloads reject.",
     inputSchema: {
+      taskId: z.string().min(1),
       body: z.string().min(1),
       idempotencyKey: z.string().min(1),
     },
   },
-  async (arguments_) => callAgentApi("POST", "/agent-api/current-task/comments", arguments_),
+  async ({ taskId, ...arguments_ }) => callAgentApi("POST", `/agent-api/tasks/${encodeURIComponent(taskId)}/comments`, arguments_),
 );
 
 server.registerTool(

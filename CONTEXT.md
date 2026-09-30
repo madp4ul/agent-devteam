@@ -135,8 +135,17 @@ queries, cannot have agent runs, and can be moved back to a defined column only
 by the user.
 
 **Agent**:
-An autonomous participant with a focused responsibility. An agent is activated
-by relevant board activity and contributes its concern to the shared task.
+A reusable process role with a stable identity and focused responsibility.
+Its task-local participants contribute that concern to shared work.
+
+**Participant**:
+One agent on one task, identified by the pair of task ID and agent ID. Participants
+with the same agent ID on different tasks have independent conversation memory.
+
+**Comment origin**:
+The participant's task from which an agent authored a comment, distinct from the
+destination task where the comment belongs. An unknown historical origin is not
+an assertion that the author belonged to the destination task.
 
 **Agent run**:
 One active execution of an agent for a task. Several runs of the same agent may
@@ -324,7 +333,8 @@ A short description of an agent's responsibility that helps other agents know
 when to involve it.
 
 **Agent directory**:
-The names and summaries of the agents available to collaborate in a process.
+The names and summaries of all applied process agents available to collaborate.
+Board watchers describe normal responsibility, not which agents are addressable.
 
 **Process**:
 The shared rules for how agents coordinate across all boards. It describes the
@@ -367,8 +377,10 @@ task's current column is watched, unwatched, or final. An agent mention on an
 unmapped task remains authored text but creates no activation.
 Canonical participant tokens are executable coordination requests, not merely
 typographic references. Descriptive prose uses the participant's display name
-without `@`; an agent must not write a token for itself or for a participant
+without `@`; an agent must not write a token for its own task-local participant or for a participant
 whose response is not actually requested.
+Mentions address the comment's destination task; the same agent ID on a different
+task refers to another participant, including when replying to an external author.
 Tokens inside inline code remain illustrative text rather than executable
 coordination requests.
 

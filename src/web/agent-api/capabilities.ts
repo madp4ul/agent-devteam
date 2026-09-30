@@ -5,6 +5,7 @@ export type AgentCoordinationCapabilities = Pick<CoordinationApplication,
   | "queryTaskOverviews"
   | "queryArchivedTaskOverviews"
   | "queryTaskInspection"
+  | "queryTaskParticipants"
   | "queryTaskActivity"
   | "queryTaskAttachments"
   | "queryCollaborators"

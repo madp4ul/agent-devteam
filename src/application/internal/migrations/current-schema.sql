@@ -177,7 +177,7 @@ CREATE TABLE columns (
 CREATE TABLE command_responses (
       command_type TEXT NOT NULL,
       idempotency_key TEXT NOT NULL,
-      response_json TEXT NOT NULL,
+      response_json TEXT NOT NULL, request_json TEXT,
       PRIMARY KEY (command_type, idempotency_key)
     );
 
@@ -281,7 +281,7 @@ CREATE TABLE task_comments (
       actor_id TEXT NOT NULL,
       occurred_at TEXT NOT NULL,
       attempt_id TEXT REFERENCES attempts(id) ON DELETE SET NULL
-    );
+    , origin_task_id TEXT, origin_task_title TEXT);
 
 -- table task_numbers on task_numbers
 CREATE TABLE task_numbers (

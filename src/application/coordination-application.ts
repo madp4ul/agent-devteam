@@ -93,6 +93,7 @@ import type {
   TaskAttachmentsQueryResult,
   TaskInspectionView,
   TaskInspectionQueryResult,
+  TaskParticipantsQueryResult,
   TaskOverviewView,
   TaskOverviewsQuery,
   TaskOverviewsQueryResult,
@@ -802,6 +803,10 @@ export class CoordinationApplication {
 
   queryCollaborators(): CollaboratorsQueryResult {
     return this.#discovery.queryCollaborators();
+  }
+
+  queryTaskParticipants(taskId: string): TaskParticipantsQueryResult {
+    return this.#discovery.queryTaskParticipants(taskId);
   }
 
   queryOperatingContext(scope: {

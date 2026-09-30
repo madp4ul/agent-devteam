@@ -1,5 +1,35 @@
 import { contrastRatio, expect, test } from "./browser-fixture.ts";
 
+test("external participant comments remain visible with origin title and task address in both themes", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.task.comments.unshift({
+      id: "external-comment", body: "@user Clarification from the parent team.",
+      actor: { kind: "agent", id: "implementer" }, occurredAt: new Date().toISOString(),
+      attemptId: "attempt-on-another-task", originTask: { id: "T-0099", title: "Parent requirements" },
+    });
+    detail.agentInspectableContent.commentIds.push("external-comment");
+    detail.task.comments.unshift({
+      id: "unknown-origin-comment", body: "@user Legacy question with no origin evidence.",
+      actor: { kind: "agent", id: "implementer" }, occurredAt: new Date().toISOString(),
+    });
+    await route.fulfill({ response, json: detail });
+  });
+  await page.goto("/tasks/T-0001");
+  const comment = page.locator('[data-timeline-record="external-comment"]');
+  for (const theme of ["dark", "light"] as const) {
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await expect(comment).toContainText("Clarification from the parent team.");
+    await expect(comment).toContainText("Implementation Agent");
+    const origin = comment.getByRole("link", { name: "T-0099 · Parent requirements" });
+    await expect(origin).toHaveAttribute("href", "/tasks/T-0099");
+    expect(await contrastRatio(origin)).toBeGreaterThanOrEqual(4.5);
+    await expect(comment.getByRole("button", { name: /Reply/ })).toHaveCount(0);
+    await expect(page.locator('[data-timeline-record="unknown-origin-comment"]').getByRole("button", { name: /Reply/ })).toHaveCount(0);
+  }
+});
+
 test("task details give narrative history more desktop room without crowding the sidebar", async ({ page }) => {
   const representativeContent = [
     "Representative narrative history should use the added horizontal room without forcing supporting controls out of view.",

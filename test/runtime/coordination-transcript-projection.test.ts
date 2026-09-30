@@ -8,6 +8,19 @@ import {
 import { coordinationTranscriptItem } from "../../src/runtime/coordination-tool-transcript.ts";
 import { coordinationCall, coordinationResult, transcriptRun } from "../support/coordination-transcript-fixture.ts";
 
+test("cross-task comments retain their destination in the source tool transcript", () => {
+  const projected = coordinationTranscriptItem(coordinationCall({
+    tool: "task.comment.add", status: "completed",
+    requestedFacts: { taskId: "T-parent", body: "@analyst Please clarify." },
+    authoritativeFacts: { accepted: true, taskId: "T-parent", commentId: "comment-uuid" },
+  }), "completed", transcriptRun("attempt-child", "T-child"));
+  assert.ok(projected);
+  assert.equal(projected.summary, "T-parent: comment");
+  assert.deepEqual(projected.presentation, {
+    kind: "coordination-comment", taskId: "T-parent", body: "@analyst Please clarify.", commentId: "comment-uuid",
+  });
+});
+
 test("every known coordination tool projects valid authoritative facts over requested fallbacks", () => {
   const run = transcriptRun("attempt-matrix", "T-current");
   const cases = [
@@ -106,6 +119,18 @@ test("every known coordination tool projects valid authoritative facts over requ
       requestedFacts: { body: "Requested body" },
       authoritativeFacts: { accepted: true, commentId: "comment-7" },
       expected: { kind: "coordination-comment", body: "Requested body", commentId: "comment-7" },
+    },
+    {
+      tool: "task.comment.add",
+      requestedFacts: { taskId: "current", body: "Requested body" },
+      authoritativeFacts: { accepted: true, taskId: "T-current", commentId: "comment-7" },
+      expected: { kind: "coordination-comment", taskId: "T-current", body: "Requested body", commentId: "comment-7" },
+    },
+    {
+      tool: "task.participant.list",
+      requestedFacts: { taskId: "current" },
+      authoritativeFacts: { available: true, participants: [{ taskId: "T-current", agentId: "reviewer" }] },
+      expected: { kind: "coordination-inspection", scope: "participants", taskId: "T-current", participantCount: 1 },
     },
     {
       tool: "move_current_task",
@@ -231,6 +256,8 @@ test("every known coordination tool has a typed presentation even when evidence 
     inspect_current_task: { kind: "coordination-inspection", scope: "current-task" },
     inspect_operating_context: { kind: "coordination-inspection", scope: "operating-context" },
     add_comment: { kind: "coordination-comment" },
+    "task.comment.add": { kind: "coordination-comment" },
+    "task.participant.list": { kind: "coordination-inspection", scope: "participants" },
     move_current_task: { kind: "coordination-task-move" },
     create_child_task: { kind: "coordination-child-task" },
     add_dependency: { kind: "coordination-dependency" },
@@ -249,6 +276,8 @@ test("every known coordination tool has a typed presentation even when evidence 
     inspect_current_task: "succeeded",
     inspect_operating_context: "succeeded",
     add_comment: "failed",
+    "task.comment.add": "failed",
+    "task.participant.list": "succeeded",
     move_current_task: "failed",
     create_child_task: "failed",
     add_dependency: "failed",

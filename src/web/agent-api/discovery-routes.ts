@@ -9,6 +9,7 @@ type DiscoveryCapabilities = Pick<AgentCoordinationCapabilities,
   | "queryTaskOverviews"
   | "queryArchivedTaskOverviews"
   | "queryTaskInspection"
+  | "queryTaskParticipants"
   | "queryTaskActivity"
   | "queryTaskAttachments"
   | "queryCollaborators"
@@ -38,6 +39,9 @@ export function registerDiscoveryRoutes(
   });
   dispatcher.register("GET", "/agent-api/tasks/:taskId/attachments", "agent/discovery", ({ response, params }) => {
     sendAgentQuery(response, application.queryTaskAttachments(params.taskId));
+  });
+  dispatcher.register("GET", "/agent-api/tasks/:taskId/participants", "agent/discovery", ({ response, params, scope }) => {
+    sendAgentQuery(response, application.queryTaskParticipants(params.taskId === "current" ? scope.taskId : params.taskId));
   });
   dispatcher.register("GET", "/agent-api/tasks/:taskId", "agent/discovery", ({ response, params }) => {
     sendAgentQuery(response, application.queryTaskInspection(params.taskId));

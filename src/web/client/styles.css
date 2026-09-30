@@ -552,6 +552,7 @@ body.movement-map-dragging, body.movement-map-dragging * { user-select: none !im
 .timeline-source-target { box-shadow: 0 0 0 3px rgb(84 124 155 / 24%); transition: box-shadow .2s ease; }
 .entry-meta { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .entry-meta time, .timeline-entry small { color: var(--muted); font-size: .72rem; }
+.comment-origin { color: var(--muted); background: var(--comment-soft); font-size: .78rem; overflow-wrap: anywhere; }
 .timeline-entry p { margin: .55rem 0; }
 .timeline details { margin-top: .8rem; }
 .timeline summary { color: var(--forest); font-weight: 700; cursor: pointer; }

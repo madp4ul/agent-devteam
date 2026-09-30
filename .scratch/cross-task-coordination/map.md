@@ -37,3 +37,9 @@ Issue 15's accepted relationship ownership/scheduling semantics remain the basel
 - 2026-09-30: Product grilling synthesized into a concrete contract and six delivery
   slices. Implementation remains open. targetWords defaults to 2000 as an engineering
   default; whole records/pins can exceed it. Cursor checkpoint-stop behavior is mandatory.
+- 2026-09-30: [01](issues/01-cross-task-comments-and-participant-discovery.md) delivered
+  cross-task comments, task-local participant discovery, durable origin attribution,
+  guarded comment retries, and browser/runtime presentation. Full non-browser suite
+  337 passed/4 skipped, affected browser suites 44 passed, typecheck/build passed;
+  Standards and Spec reviews have no outstanding findings. Changes await user review
+  unstaged. Tickets 02 and 03 are now unblocked; no later slice has been started.

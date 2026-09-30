@@ -348,7 +348,7 @@ test("agent consultation can round-trip in watched and Completion columns withou
   );
 });
 
-test("an agent mention on an unmapped task remains authored text without creating an activation", async (t) => {
+test("unmapped tasks reject agent comments while user-authored mentions remain inert", async (t) => {
   const fixture = await createFixture("unmapped-mention");
   const first = await CoordinationApplication.start(fixture);
   const created = first.createTask({
@@ -402,11 +402,19 @@ boards:
     actor: { kind: "agent", id: "implementer" },
     idempotencyKey: "comment-on-unmapped-task",
   });
-  assert.equal(commented.accepted, true);
-  if (!commented.accepted) return;
-  assert.equal(commented.task.comments.at(-1)?.body, "@reviewer this request must remain visible but inert.");
+  assert.deepEqual(commented, { accepted: false, reason: "not-found" });
+  assert.deepEqual(restarted.queryTaskParticipants(created.task.id), { available: false, reason: "not-found" });
+  const userComment = restarted.addTaskComment({
+    taskId: created.task.id,
+    body: "@reviewer this request must remain visible but inert.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "user-comment-on-unmapped-task",
+  });
+  assert.equal(userComment.accepted, true);
+  if (!userComment.accepted) return;
+  assert.equal(userComment.task.comments.at(-1)?.body, "@reviewer this request must remain visible but inert.");
   assert.deepEqual(
-    commented.task.activations.map((activation) => activation.targetAgentId),
+    userComment.task.activations.map((activation) => activation.targetAgentId),
     ["implementer"],
   );
 });

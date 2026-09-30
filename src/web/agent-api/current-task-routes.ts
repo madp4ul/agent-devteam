@@ -36,10 +36,11 @@ export function registerCurrentTaskRoutes(
     if (!result.available) sendJson(response, 403, result);
     else sendJson(response, 200, result.context);
   });
-  dispatcher.register("POST", "/agent-api/current-task/comments", "agent/current-task", async ({ request, response, scope }) => {
+  dispatcher.register("POST", "/agent-api/tasks/:taskId/comments", "agent/current-task", async ({ request, response, scope, params }) => {
     const body = await readJsonBody(request);
     const result = application.addTaskComment({
-      taskId: scope.taskId,
+      taskId: params.taskId === "current" ? scope.taskId : params.taskId,
+      callerTaskId: scope.taskId,
       body: stringField(body, "body"),
       idempotencyKey: stringField(body, "idempotencyKey"),
       actor: { kind: "agent", id: scope.agentId },
