@@ -20,7 +20,7 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Read tools can inspect shared project tasks. Comments and relationship reassignment/removal support cross-task coordination; other mutations remain current-task scoped. current always identifies the caller's task. Mutation keys identify an intended operation across retries.",
+      "Tools operate on mapped mutable project tasks across boards. current always identifies the caller's task; self resolves to the caller's stable agent ID. Keys identify intended mutations across retries: exact normalized requests replay, changed requests reject. Task participants have independent memory across tasks. Execution, archival and process controls remain user-owned.",
   },
 );
 
@@ -133,23 +133,49 @@ server.registerTool(
 );
 
 server.registerTool(
-  "move_current_task",
+  "task.create",
   {
-    description: "Move the current task to a named destination column idempotently.",
+    description: "Create independent work in an explicit board and column, with ordinary watcher activation.",
     inputSchema: {
+      boardId: z.string().min(1), columnId: z.string().min(1), title: z.string().min(1),
+      description: z.string().min(1), idempotencyKey: z.string().min(1),
+    },
+  },
+  async (arguments_) => callAgentApi("POST", "/agent-api/tasks", arguments_),
+);
+
+server.registerTool(
+  "task.edit",
+  {
+    description: "Edit supplied title/description on current or a concrete task ID. Omitted fields stay unchanged; supply at least one field. Revision conflicts return compact current state.",
+    inputSchema: {
+      taskId: z.string().min(1), expectedRevision: z.number().int().min(1),
+      title: z.string().min(1).optional(), description: z.string().min(1).optional(), idempotencyKey: z.string().min(1),
+    },
+  },
+  async ({ taskId, ...body }) => callAgentApi("PATCH", `/agent-api/tasks/${encodeURIComponent(taskId)}`, body),
+);
+
+server.registerTool(
+  "task.move",
+  {
+    description: "Move current or a concrete task ID within its board with ordinary watcher effects. A same-column move is an inert success. Requires the task's revision.",
+    inputSchema: {
+      taskId: z.string().min(1),
       destinationColumnId: z.string().min(1),
       expectedRevision: z.number().int().min(1),
       idempotencyKey: z.string().min(1),
     },
   },
-  async (arguments_) => callAgentApi("POST", "/agent-api/current-task/move", arguments_),
+  async ({ taskId, ...body }) => callAgentApi("POST", `/agent-api/tasks/${encodeURIComponent(taskId)}/move`, body),
 );
 
 server.registerTool(
-  "create_child_task",
+  "task.child.create",
   {
-    description: "Create a child of the current task in a chosen board column.",
+    description: "Atomically create new child work and an outgoing parent-child relationship from current or a concrete task ID. resumeAgent is self or an applied agent ID; completion later queues that owner.",
     inputSchema: {
+      taskId: z.string().min(1),
       boardId: z.string().min(1),
       columnId: z.string().min(1),
       title: z.string().min(1),
@@ -159,24 +185,34 @@ server.registerTool(
       idempotencyKey: z.string().min(1),
     },
   },
-  async (arguments_) => callAgentApi("POST", "/agent-api/current-task/children", arguments_),
+  async ({ taskId, ...body }) => callAgentApi("POST", `/agent-api/tasks/${encodeURIComponent(taskId)}/children`, body),
 );
 
 server.registerTool(
-  "add_dependency",
+  "task.child.add",
   {
-    description: "Make the current task depend on another task.",
+    description: "Attach an existing child to current or a concrete parent task ID without creating a task. resumeAgent is self or an applied agent ID; removal wakes nobody.",
+    inputSchema: { taskId: z.string().min(1), childTaskId: z.string().min(1), resumeAgent: z.string().min(1), idempotencyKey: z.string().min(1) },
+  },
+  async ({ taskId, ...body }) => callAgentApi("POST", `/agent-api/tasks/${encodeURIComponent(taskId)}/child-relationships`, body),
+);
+
+server.registerTool(
+  "task.dependency.add",
+  {
+    description: "Add an outgoing dependency from current or a concrete source task ID to existing project work. resumeAgent is self or an applied agent ID. Relating completed work does not synthesize a past completion activation.",
     inputSchema: {
+      taskId: z.string().min(1),
       targetTaskId: z.string().min(1),
       resumeAgent: z.string().min(1),
       idempotencyKey: z.string().min(1),
     },
   },
-  async (arguments_) => callAgentApi("POST", "/agent-api/current-task/dependencies", arguments_),
+  async ({ taskId, ...body }) => callAgentApi("POST", `/agent-api/tasks/${encodeURIComponent(taskId)}/dependencies`, body),
 );
 
 server.registerTool(
-  "set_relationship_resume_agent",
+  "task.relationship.resume_agent.update",
   {
     description: "Change who reassesses a waiting task when an unresolved relationship is satisfied. Use current or a concrete source task ID.",
     inputSchema: {
@@ -194,7 +230,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "remove_relationship",
+  "task.relationship.remove",
   {
     description: "Remove a mistaken relationship from current or a concrete task without waking its resume agent.",
     inputSchema: {

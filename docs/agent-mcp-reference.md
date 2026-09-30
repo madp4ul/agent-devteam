@@ -1,10 +1,7 @@
 # Agent MCP tool reference
 
 The `coordination` MCP server exposes the tools below. Read tools may inspect
-shared project state. Most mutation tools are bound to the activation's current
-task. Relationship reassignment and removal accept `current` or a concrete
-source-task ID so agents can coordinate relationships on any active task.
-`task.comment.add` also accepts any mapped mutable project task. Its required
+shared project state. Task mutations accept any mapped mutable project task. Their required
 `taskId` is `current` or a concrete ID; `current` always means the caller's task,
 not the last inspected destination. This reference describes the delivered
 surface during the staged redesign; remaining tool renames/history paging are
@@ -15,10 +12,10 @@ Every result is JSON in one MCP text-content item. Rejected queries and
 mutations set the MCP error flag and return the same JSON rejection used by the
 agent API. Mutation `idempotencyKey` values make an exact retry return the
 original result without repeating the change.
-Comments additionally retain the normalized target/body and caller participant:
+Mutations retain their normalized target/payload and caller participant:
 changed payloads with a reused key reject `idempotency-conflict`, while independent
-callers cannot replay each other's outcomes. These checks are not yet generalized
-to the remaining mutation tools.
+callers cannot replay each other's outcomes. Exact edit/move retries replay before
+checking a now-advanced task revision. `self` resolves to the caller's stable agent ID.
 
 | Tool | Input | Does | Successful result |
 | --- | --- | --- | --- |
@@ -32,11 +29,14 @@ to the remaining mutation tools.
 | `inspect_current_task` | none | Reads the complete current task assigned to this activation. | `TaskInspection` directly, without an `available` wrapper. |
 | `inspect_operating_context` | none | Recovers the complete current framework, process, board, owning-role instructions, and participant identity for the authorized running attempt. | `{ attemptId, taskId, frameworkInstructions, process, board, owningAgent, participants }` directly. |
 | `task.comment.add` | `taskId` (`current` or concrete), `body`, `idempotencyKey` | Appends a comment on any mapped mutable project task; mentions create ordinary destination activations or user attention. Caller provenance is derived, not supplied. | `{ accepted: true, taskId, revision, commentId }` |
-| `move_current_task` | `destinationColumnId`, `expectedRevision`, `idempotencyKey` | Revision-checks and moves the current task; a watched destination normally creates its activation. Requesting the current column is an inert success. | `{ accepted: true, revision, transition: { taskId, fromColumnId, toColumnId } }`; an inert result also includes `outcome: "already-in-column"`. |
-| `create_child_task` | `boardId`, `columnId`, `title`, `description`, `resumeAgent`, optional `startingRef`, `idempotencyKey` | Creates a child task and explicitly assigns the agent that should reassess the parent when the child completes. `resumeAgent` is `self` or an agent ID. | `{ accepted: true, task: { id, boardId, columnId, revision } }` |
-| `add_dependency` | `targetTaskId`, `resumeAgent`, `idempotencyKey` | Makes the current task wait on another task and explicitly assigns its resume agent. `resumeAgent` is `self` or an agent ID. | `{ accepted: true, relationship }` |
-| `set_relationship_resume_agent` | `taskId`, `relationshipId`, `resumeAgent`, `idempotencyKey` | Changes the resume agent of an unresolved relationship. `taskId` is `current` or the source task ID; `resumeAgent` is `self` or an agent ID. | `{ accepted: true, relationship, sourceTask, targetTask }` |
-| `remove_relationship` | `taskId`, `relationshipId`, `idempotencyKey` | Removes a mistaken relationship without waking its resume agent. `taskId` is `current` or the source task ID. | `{ accepted: true, relationship, sourceTask, targetTask }` |
+| `task.create` | `boardId`, `columnId`, `title`, `description`, `idempotencyKey` | Creates independent work with ordinary watcher effects. | `{ accepted: true, task: { id, title, boardId, columnId, revision } }` |
+| `task.edit` | `taskId`, `expectedRevision`, optional `title`/`description`, `idempotencyKey` | Updates only supplied fields; requires at least one field. | `{ accepted: true, task: { id, title, boardId, columnId, revision } }` |
+| `task.move` | `taskId`, `destinationColumnId`, `expectedRevision`, `idempotencyKey` | Revision-checks and moves within the selected task's board; watcher effects remain ordinary. Same-column requests are inert. | `{ accepted: true, revision, transition: { taskId, fromColumnId, toColumnId } }`; an inert result also includes `outcome: "already-in-column"`. |
+| `task.child.create` | `taskId`, `boardId`, `columnId`, `title`, `description`, `resumeAgent`, optional `startingRef`, `idempotencyKey` | Creates a child and outgoing relationship atomically; taskId selects the parent. | `{ accepted: true, task: { id, title, boardId, columnId, revision } }` |
+| `task.child.add` | `taskId`, `childTaskId`, `resumeAgent`, `idempotencyKey` | Attaches existing child work without creating another task. | `{ accepted: true, relationship }` |
+| `task.dependency.add` | `taskId`, `targetTaskId`, `resumeAgent`, `idempotencyKey` | Adds an outgoing dependency with an explicit resume owner. | `{ accepted: true, relationship }` |
+| `task.relationship.resume_agent.update` | `taskId`, `relationshipId`, `resumeAgent`, `idempotencyKey` | Reassigns an unresolved outgoing relationship; does not retarget queued activations. | `{ accepted: true, relationship }` |
+| `task.relationship.remove` | `taskId`, `relationshipId`, `idempotencyKey` | Removes an outgoing relationship without deleting tasks or waking an agent. | `{ accepted: true, relationship }` |
 | `report_permission_block` | `summary` | Marks this run outcome as permission-blocked after a required action is denied. | `{ accepted: true, taskId }` |
 
 ## Returned records
@@ -65,7 +65,9 @@ to the remaining mutation tools.
 
 Query rejections use `{ available: false, reason, ... }`. Mutation rejections
 use `{ accepted: false, reason, ... }`. A move rejected for `revision-conflict`
-also returns `currentTask` so the agent can reassess or inspect again.
+also returns compact `currentTask { id, title, boardId, columnId, revision }`, never
+history. Edit conflicts use the same projection. Existing-task mutation subjects
+require `current` or a concrete ID. Relationship commands do not require revisions.
 
 ## Participant identity and communication
 

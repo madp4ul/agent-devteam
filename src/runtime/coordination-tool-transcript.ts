@@ -149,12 +149,20 @@ function coordinationProjection(
       ...optionalString("columnName", column?.name),
     }, `${taskId}: current task inspection`);
   }
-  if (tool === "create_child_task") {
+  if (tool === "task.create" || tool === "task.edit") {
+    const task = taskIdentity(result?.task);
+    return projected({ kind: "coordination-task-change", action: tool === "task.create" ? "created" : "edited",
+      task: { ...optionalString("id", task?.id ?? (tool === "task.edit" ? taskId : undefined)),
+        ...optionalString("title", task?.title ?? arguments_?.title) },
+    }, withRejection(`${task?.id ?? taskId}: ${tool === "task.create" ? "created" : "edited"}`, rejection));
+  }
+  if (tool === "create_child_task" || tool === "task.child.create") {
     const task = taskIdentity(result?.task);
     const childId = stringValue(recordValue(result?.task)?.id);
     const columnId = stringValue(arguments_?.columnId);
     return projected({
       kind: "coordination-child-task",
+      ...(tool === "task.child.create" ? { parentTaskId: taskId } : {}),
       task: {
         ...optionalString("id", task?.id),
         ...optionalString("title", task?.title ?? arguments_?.title),
@@ -165,35 +173,37 @@ function coordinationProjection(
       rejection,
     ));
   }
-  if (tool === "add_dependency") {
+  if (tool === "add_dependency" || tool === "task.dependency.add" || tool === "task.child.add") {
     const relationship = recordValue(result?.relationship);
     return projected({
       kind: "coordination-dependency",
+      ...(tool === "task.child.add" ? { relationshipType: "parent-child" as const } : {}),
       sourceTask: {
-        id: stringValue(relationship?.sourceTaskId) ?? run.taskId,
+        id: stringValue(relationship?.sourceTaskId) ?? taskId,
       },
       targetTask: {
-        ...optionalString("id", relationship?.targetTaskId ?? arguments_?.targetTaskId),
+        ...optionalString("id", relationship?.targetTaskId ??
+          ((arguments_?.targetTaskId ?? arguments_?.childTaskId) === "current" ? run.taskId : arguments_?.targetTaskId ?? arguments_?.childTaskId)),
       },
     }, withRejection(
       `${taskId}: dependency on ${stringValue(arguments_?.targetTaskId) ?? "requested task"}`,
       rejection,
     ));
   }
-  if (tool === "set_relationship_resume_agent") {
+  if (tool === "set_relationship_resume_agent" || tool === "task.relationship.resume_agent.update") {
     return projected({
       kind: "coordination-relationship-change",
       action: "resume-agent-changed",
-      task: { ...optionalString("id", arguments_?.taskId) },
+      task: { id: taskId },
       ...optionalString("relationshipId", arguments_?.relationshipId),
       ...optionalString("resumeAgentId", arguments_?.resumeAgent),
     }, withRejection(`${taskId}: relationship resume agent changed`, rejection));
   }
-  if (tool === "remove_relationship") {
+  if (tool === "remove_relationship" || tool === "task.relationship.remove") {
     return projected({
       kind: "coordination-relationship-change",
       action: "removed",
-      task: { ...optionalString("id", arguments_?.taskId) },
+      task: { id: taskId },
       ...optionalString("relationshipId", arguments_?.relationshipId),
     }, withRejection(`${taskId}: relationship removed`, rejection));
   }
@@ -204,11 +214,12 @@ function coordinationProjection(
       withRejection(`${taskId}: permission block`, rejection),
     );
   }
-  if (tool === "move_current_task") {
+  if (tool === "move_current_task" || tool === "task.move") {
     const fromColumnId = stringValue(transition?.fromColumnId);
     const toColumnId = stringValue(transition?.toColumnId) ?? stringValue(arguments_?.destinationColumnId);
     return projected({
       kind: "coordination-task-move",
+      ...(tool === "task.move" ? { taskId } : {}),
       ...(fromColumnId === undefined ? {} : { fromColumnId }),
       ...(toColumnId === undefined ? {} : { toColumnId }),
     }, withRejection(
@@ -247,6 +258,14 @@ function requiresAuthoritativeAcceptance(tool: CoordinationToolName): boolean {
   switch (tool) {
     case "add_comment":
     case "task.comment.add":
+    case "task.create":
+    case "task.edit":
+    case "task.move":
+    case "task.child.create":
+    case "task.child.add":
+    case "task.dependency.add":
+    case "task.relationship.resume_agent.update":
+    case "task.relationship.remove":
     case "move_current_task":
     case "create_child_task":
     case "add_dependency":

@@ -221,7 +221,7 @@ class ScriptedDeliveryRuntime implements AgentRuntime {
   }
 
   async #comment(request: AgentRunRequest, body: string): Promise<void> {
-    const response = await fetch(`${this.#requireBaseUrl()}/agent-api/current-task/comments`, {
+    const response = await fetch(`${this.#requireBaseUrl()}/agent-api/tasks/current/comments`, {
       method: "POST",
       headers: this.#headers(request),
       body: JSON.stringify({ body, idempotencyKey: `proof-comment-${this.agentIds.length}` }),
@@ -235,7 +235,7 @@ class ScriptedDeliveryRuntime implements AgentRuntime {
     });
     if (!currentResponse.ok) throw new Error(await currentResponse.text());
     const current = await currentResponse.json() as { revision: number };
-    const response = await fetch(`${this.#requireBaseUrl()}/agent-api/current-task/move`, {
+    const response = await fetch(`${this.#requireBaseUrl()}/agent-api/tasks/current/move`, {
       method: "POST",
       headers: this.#headers(request),
       body: JSON.stringify({

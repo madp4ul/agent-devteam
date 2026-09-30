@@ -5,6 +5,14 @@ import type { ActivationView } from "../../src/application/automation-contract.t
 import type { TaskActivityView, TaskCommentView } from "../../src/application/task-contract.ts";
 import { buildTimelineRecords, filterTimelineRecordsForAgents } from "../../src/web/client/timeline-model.ts";
 
+test("cross-task mutation activity stays visible when its attempt belongs to another task", () => {
+  const activity = activityEntry("cross-move", "task.moved", "2026-01-01T10:05:00.000Z", {
+    attemptId: "foreign-attempt", originTaskId: "T-origin", fromColumnId: "implementation", toColumnId: "review",
+  });
+  const records = buildTimelineRecords([], [activity], []);
+  assert.deepEqual(records.map((record) => record.key), ["activity-cross-move"]);
+});
+
 test("timeline groups explicit attempt work and orders top-level records by start", () => {
   const activation = activationWithAttempts();
   const comments: TaskCommentView[] = [

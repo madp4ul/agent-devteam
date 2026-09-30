@@ -75,6 +75,14 @@ export const coordinationToolNames = [
   // Historical names remain recognizable in retained transcripts, not MCP aliases.
   "task.comment.add",
   "task.participant.list",
+  "task.create",
+  "task.edit",
+  "task.move",
+  "task.child.create",
+  "task.child.add",
+  "task.dependency.add",
+  "task.relationship.resume_agent.update",
+  "task.relationship.remove",
   "move_current_task",
   "create_child_task",
   "add_dependency",
@@ -101,6 +109,7 @@ export interface CoordinationTranscriptEvidence {
 export type CoordinationTranscriptPresentation =
   | {
       kind: "coordination-task-move";
+      taskId?: string;
       fromColumnId?: string;
       toColumnId?: string;
     }
@@ -112,13 +121,20 @@ export type CoordinationTranscriptPresentation =
     }
   | {
       kind: "coordination-child-task";
+      parentTaskId?: string;
       task: CoordinationTaskIdentity;
       columnId?: string;
     }
   | {
       kind: "coordination-dependency";
+      relationshipType?: "parent-child";
       sourceTask: CoordinationTaskIdentity & { id: string };
       targetTask: CoordinationTaskIdentity;
+    }
+  | {
+      kind: "coordination-task-change";
+      action: "created" | "edited";
+      task: CoordinationTaskIdentity;
     }
   | {
       kind: "coordination-relationship-change";

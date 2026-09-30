@@ -62,29 +62,38 @@ export class TaskCommandStore {
   }
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
-    return this.#idempotentCommands.execute({
+    const origin = this.agentCommandOrigin(command);
+    return this.#idempotentCommands.execute<BoardMutationResult>({
       kind: "create-task",
+      caller: [command.actor.kind, command.actor.id, origin?.id ?? ""],
       idempotencyKey: command.idempotencyKey,
     }, () => {
       const rejection = this.taskCreationRejection(command);
       if (rejection !== undefined) return rejection;
 
-      const task = this.insertTask(command, {});
+      const task = this.insertTask(command, this.agentActivityProvenance(command, origin));
       return { accepted: true, task };
-    }, (result) => result.accepted);
+    }, (result) => result.accepted, {
+      request: JSON.stringify({ boardId: command.boardId, columnId: command.columnId, title: command.title, description: command.description }),
+      onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
+    });
   }
 
   createChildTask(command: CreateChildTaskCommand): BoardMutationResult {
-    return this.#idempotentCommands.execute({
+    const origin = this.agentCommandOrigin(command);
+    return this.#idempotentCommands.execute<BoardMutationResult>({
       kind: "create-child-task",
+      caller: [command.actor.kind, command.actor.id, origin?.id ?? command.parentTaskId],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      const attemptId = this.validatedAgentAttemptId(command.parentTaskId, command);
       if (this.#projections.readTask(command.parentTaskId) === undefined) {
         return { accepted: false, reason: "not-found" };
       }
       if (this.taskIsReadOnly(this.#projections.readTask(command.parentTaskId)!)) {
         return { accepted: false, reason: "archived-task" };
+      }
+      if (command.actor.kind === "agent" && !this.#projections.isTaskInspectableByAgent(command.parentTaskId)) {
+        return { accepted: false, reason: "not-found" };
       }
       const rejection = this.taskCreationRejection(command);
       if (rejection !== undefined) return rejection;
@@ -97,7 +106,7 @@ export class TaskCommandStore {
 
       const task = this.insertTask(
         command,
-        { parentTaskId: command.parentTaskId },
+        { parentTaskId: command.parentTaskId, ...this.agentActivityProvenance(command, origin) },
         command.startingRef?.trim(),
       );
       this.insertRelationship(
@@ -106,18 +115,26 @@ export class TaskCommandStore {
         task.id,
         command.resumeAgentId,
         command.actor,
-        attemptId,
+        this.agentActivityProvenance(command, origin),
       );
       const updated = this.#projections.readTask(task.id);
       if (updated === undefined) throw new Error("Created child task could not be read back");
       return { accepted: true, task: updated };
-    }, (result) => result.accepted);
+    }, (result) => result.accepted, {
+      request: JSON.stringify({ parentTaskId: command.parentTaskId, boardId: command.boardId, columnId: command.columnId,
+        title: command.title, description: command.description, resumeAgentId: command.resumeAgentId, startingRef: command.startingRef?.trim() }),
+      onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
+    });
   }
 
   editTask(command: EditTaskCommand): BoardMutationResult {
-    return this.#idempotentCommands.execute({
+    const origin = this.agentCommandOrigin(command);
+    const title = command.title?.trim();
+    const description = command.description?.trim();
+    return this.#idempotentCommands.execute<BoardMutationResult>({
       kind: "edit-task",
-      scope: [command.taskId],
+      scope: [origin?.id ?? command.taskId],
+      caller: [command.actor.kind, command.actor.id],
       idempotencyKey: command.idempotencyKey,
     }, () => {
       const currentTask = this.#projections.readTask(command.taskId);
@@ -125,13 +142,19 @@ export class TaskCommandStore {
       if (this.taskIsReadOnly(currentTask)) {
         return { accepted: false, reason: "archived-task" };
       }
+      if (command.actor.kind === "agent" && !this.#projections.isTaskInspectableByAgent(command.taskId)) {
+        return { accepted: false, reason: "not-found" };
+      }
       if (currentTask.revision !== command.expectedRevision) {
         return { accepted: false, reason: "revision-conflict", currentTask };
       }
-      if (command.title.trim().length === 0) {
+      if (title === undefined && description === undefined) {
+        return { accepted: false, reason: "no-changes" };
+      }
+      if (title === "") {
         return { accepted: false, reason: "empty-title" };
       }
-      if (command.description.trim().length === 0) {
+      if (description === "") {
         return { accepted: false, reason: "empty-description" };
       }
       this.#database
@@ -140,23 +163,28 @@ export class TaskCommandStore {
            SET title = ?, description = ?, revision = revision + 1
            WHERE id = ?`,
         )
-        .run(command.title.trim(), command.description.trim(), command.taskId);
+        .run(title ?? currentTask.title, description ?? currentTask.description, command.taskId);
       this.#activityJournal.append(
         command.taskId,
         "task.edited",
         command.actor,
-        {},
+        this.agentActivityProvenance(command, origin),
       );
       const task = this.#projections.readTask(command.taskId);
       if (task === undefined) throw new Error("Edited task could not be read back");
       return { accepted: true, task };
-    }, (result) => result.accepted);
+    }, (result) => result.accepted, {
+      request: JSON.stringify({ taskId: command.taskId, title, description, expectedRevision: command.expectedRevision }),
+      onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
+    });
   }
 
   moveTask(command: MoveTaskCommand): MoveTaskResult {
-    return this.#idempotentCommands.execute({
+    const origin = this.agentCommandOrigin(command);
+    return this.#idempotentCommands.execute<MoveTaskResult>({
       kind: "move-task",
-      scope: [command.taskId],
+      scope: [origin?.id ?? command.taskId],
+      caller: [command.actor.kind, command.actor.id],
       idempotencyKey: command.idempotencyKey,
     }, () => {
       const currentTask = this.#projections.readTask(command.taskId);
@@ -164,14 +192,14 @@ export class TaskCommandStore {
       if (this.taskIsReadOnly(currentTask)) {
         return { accepted: false, reason: "archived-task" };
       }
-      const attemptId = this.validatedAgentAttemptId(command.taskId, command);
-      if (currentTask.revision !== command.expectedRevision) {
-        return { accepted: false, reason: "revision-conflict", currentTask };
-      }
+      const attemptId = command.actor.kind === "agent" ? command.attemptId : undefined;
       const mapped = this.#database.prepare("SELECT 1 FROM mapped_tasks WHERE id = ?")
         .get(command.taskId);
       if (command.actor.kind !== "user" && mapped === undefined) {
-        return { accepted: false, reason: "unmapped-task-user-only" };
+        return { accepted: false, reason: "not-found" };
+      }
+      if (currentTask.revision !== command.expectedRevision) {
+        return { accepted: false, reason: "revision-conflict", currentTask };
       }
       if (currentTask.columnId === command.destinationColumnId) {
         return { accepted: false, reason: "invalid-destination" };
@@ -208,7 +236,7 @@ export class TaskCommandStore {
         {
           fromColumnId: currentTask.columnId,
           toColumnId: command.destinationColumnId,
-          ...(attemptId === undefined ? {} : { attemptId }),
+          ...this.agentActivityProvenance(command, origin),
         },
       );
       this.#notifications.recordColumnEntry(
@@ -257,25 +285,29 @@ export class TaskCommandStore {
           toColumnId: command.destinationColumnId,
         },
       };
-    }, (result) => result.accepted);
+    }, (result) => result.accepted, {
+      request: JSON.stringify({ taskId: command.taskId, destinationColumnId: command.destinationColumnId, expectedRevision: command.expectedRevision }),
+      onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
+    });
   }
 
   resolveInertMove(command: MoveTaskCommand): InertMoveTaskResult | MoveTaskResult | undefined {
-    return this.#idempotentCommands.execute({
+    const origin = this.agentCommandOrigin(command);
+    return this.#idempotentCommands.execute<InertMoveTaskResult | MoveTaskResult | undefined>({
       kind: "move-task",
-      scope: [command.taskId],
+      scope: [origin?.id ?? command.taskId],
+      caller: [command.actor.kind, command.actor.id],
       idempotencyKey: command.idempotencyKey,
     }, () => {
       const currentTask = this.#projections.readTask(command.taskId);
       if (
         currentTask === undefined ||
-        currentTask.archived ||
+        this.taskIsReadOnly(currentTask) ||
         currentTask.revision !== command.expectedRevision ||
         currentTask.columnId !== command.destinationColumnId
       ) {
         return undefined;
       }
-      this.validatedAgentAttemptId(command.taskId, command);
       const mapped = this.#database.prepare("SELECT 1 FROM mapped_tasks WHERE id = ?")
         .get(command.taskId);
       if (mapped === undefined) return undefined;
@@ -289,15 +321,19 @@ export class TaskCommandStore {
           toColumnId: currentTask.columnId,
         },
       };
-    }, (result) => result !== undefined);
+    }, (result) => result !== undefined && result.accepted, {
+      request: JSON.stringify({ taskId: command.taskId, destinationColumnId: command.destinationColumnId, expectedRevision: command.expectedRevision }),
+      onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
+    });
   }
 
   createTaskRelationship(command: CreateTaskRelationshipCommand): TaskRelationshipMutationResult {
-    return this.#idempotentCommands.execute({
+    const origin = this.agentCommandOrigin(command);
+    return this.#idempotentCommands.execute<TaskRelationshipMutationResult>({
       kind: "create-task-relationship",
+      caller: [command.actor.kind, command.actor.id, origin?.id ?? command.sourceTaskId],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      const attemptId = this.validatedAgentAttemptId(command.sourceTaskId, command);
       const sourceTask = this.#projections.readTask(command.sourceTaskId);
       const targetTask = this.#projections.readTask(command.targetTaskId);
       let result: TaskRelationshipMutationResult;
@@ -308,6 +344,9 @@ export class TaskCommandStore {
         this.taskIsReadOnly(targetTask)
       ) {
         result = { accepted: false, reason: "archived-task" };
+      } else if (command.actor.kind === "agent" &&
+        (!this.#projections.isTaskInspectableByAgent(sourceTask.id) || !this.#projections.isTaskInspectableByAgent(targetTask.id))) {
+        result = { accepted: false, reason: "not-found" };
       } else if (command.sourceTaskId === command.targetTaskId) {
         result = { accepted: false, reason: "self-relationship" };
       } else if (!this.agentIsApplied(command.resumeAgentId)) {
@@ -328,7 +367,7 @@ export class TaskCommandStore {
             command.targetTaskId,
             command.resumeAgentId,
             command.actor,
-            attemptId,
+            this.agentActivityProvenance(command, origin),
           );
           result = {
             accepted: true,
@@ -339,21 +378,28 @@ export class TaskCommandStore {
         }
       }
       return result;
+    }, (result) => result.accepted, {
+      request: JSON.stringify({ type: command.type, sourceTaskId: command.sourceTaskId,
+        targetTaskId: command.targetTaskId, resumeAgentId: command.resumeAgentId }),
+      onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
     });
   }
 
   removeTaskRelationship(command: RemoveTaskRelationshipCommand): RemoveTaskRelationshipResult {
-    return this.#idempotentCommands.execute({
+    const origin = this.agentCommandOrigin(command);
+    return this.#idempotentCommands.execute<RemoveTaskRelationshipResult>({
       kind: "remove-task-relationship",
+      caller: [command.actor.kind, command.actor.id, origin?.id ?? command.taskId],
       idempotencyKey: command.idempotencyKey,
     }, () => {
       const currentTask = this.#projections.readTask(command.taskId);
-      this.assertAgentAttemptAllowsCrossTaskAction(command);
       let result: RemoveTaskRelationshipResult;
       if (currentTask === undefined) {
         result = { accepted: false, reason: "not-found" };
       } else if (this.taskIsReadOnly(currentTask)) {
         result = { accepted: false, reason: "archived-task" };
+      } else if (command.actor.kind === "agent" && !this.#projections.isTaskInspectableByAgent(command.taskId)) {
+        result = { accepted: false, reason: "not-found" };
       } else {
         const row = this.#database
           .prepare(
@@ -372,9 +418,14 @@ export class TaskCommandStore {
             target_task_id: string;
             resume_agent_id: string | null;
           } | undefined;
-        if (row === undefined) {
+        if (row === undefined || (command.actor.kind === "agent" && row.source_task_id !== command.taskId)) {
           result = { accepted: false, reason: "relationship-conflict" };
         } else {
+          if (command.actor.kind === "agent") {
+            const target = this.#projections.readTask(row.target_task_id)!;
+            if (this.taskIsReadOnly(target)) return { accepted: false, reason: "archived-task" };
+            if (!this.#projections.isTaskInspectableByAgent(target.id)) return { accepted: false, reason: "not-found" };
+          }
           const relationship: TaskRelationshipView = {
             id: row.id,
             type: row.type,
@@ -388,14 +439,14 @@ export class TaskCommandStore {
             row.source_task_id,
             "relationship.removed",
             command.actor,
-            this.relationshipActivityDetails(relationship, "source", row.target_task_id),
+            this.relationshipActivityDetails(relationship, "source", row.target_task_id, this.agentActivityProvenance(command, origin)),
             occurredAt,
           );
           this.#activityJournal.append(
             row.target_task_id,
             "relationship.removed",
             command.actor,
-            this.relationshipActivityDetails(relationship, "target", row.source_task_id),
+            this.relationshipActivityDetails(relationship, "target", row.source_task_id, this.agentActivityProvenance(command, origin)),
             occurredAt,
           );
           result = {
@@ -407,20 +458,27 @@ export class TaskCommandStore {
         }
       }
       return result;
+    }, (result) => result.accepted, {
+      request: JSON.stringify({ taskId: command.taskId, relationshipId: command.relationshipId }),
+      onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
     });
   }
 
   editTaskRelationshipResumeAgent(
     command: EditTaskRelationshipResumeAgentCommand,
   ): EditTaskRelationshipResumeAgentResult {
-    return this.#idempotentCommands.execute({
+    const origin = this.agentCommandOrigin(command);
+    return this.#idempotentCommands.execute<EditTaskRelationshipResumeAgentResult>({
       kind: "edit-task-relationship-resume-agent",
+      caller: [command.actor.kind, command.actor.id, origin?.id ?? command.taskId],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      this.assertAgentAttemptAllowsCrossTaskAction(command);
       const currentTask = this.#projections.readTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
       if (this.taskIsReadOnly(currentTask)) return { accepted: false, reason: "archived-task" };
+      if (command.actor.kind === "agent" && !this.#projections.isTaskInspectableByAgent(command.taskId)) {
+        return { accepted: false, reason: "not-found" };
+      }
       if (!this.agentIsApplied(command.resumeAgentId)) {
         return { accepted: false, reason: "resume-agent-not-found" };
       }
@@ -440,6 +498,11 @@ export class TaskCommandStore {
         target_column_id: string;
       } | undefined;
       if (row === undefined) return { accepted: false, reason: "relationship-conflict" };
+      if (command.actor.kind === "agent") {
+        const target = this.#projections.readTask(row.target_task_id)!;
+        if (this.taskIsReadOnly(target)) return { accepted: false, reason: "archived-task" };
+        if (!this.#projections.isTaskInspectableByAgent(target.id)) return { accepted: false, reason: "not-found" };
+      }
       if (row.target_column_id === "completion") {
         return { accepted: false, reason: "relationship-satisfied" };
       }
@@ -455,6 +518,7 @@ export class TaskCommandStore {
       };
       const occurredAt = new Date().toISOString();
       const change = {
+        ...this.agentActivityProvenance(command, origin),
         previousResumeAgentId: row.resume_agent_id ?? "",
         resumeAgentId: command.resumeAgentId,
       };
@@ -478,11 +542,14 @@ export class TaskCommandStore {
         sourceTask: this.#projections.readTask(row.source_task_id)!,
         targetTask: this.#projections.readTask(row.target_task_id)!,
       };
+    }, (result) => result.accepted, {
+      request: JSON.stringify({ taskId: command.taskId, relationshipId: command.relationshipId, resumeAgentId: command.resumeAgentId }),
+      onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
     });
   }
 
   addTaskComment(command: AddTaskCommentCommand): AddTaskCommentResult {
-    const originTask = this.commentOrigin(command);
+    const originTask = this.agentCommandOrigin(command);
     return this.#idempotentCommands.execute<AddTaskCommentResult>({
       kind: "add-task-comment",
       scope: [originTask?.id ?? command.callerTaskId ?? command.taskId],
@@ -544,7 +611,7 @@ export class TaskCommandStore {
     });
   }
 
-  private commentOrigin(command: AddTaskCommentCommand): { id: string; title: string } | undefined {
+  private agentCommandOrigin(command: { actor: Actor; attemptId?: string; callerTaskId?: string }): { id: string; title: string } | undefined {
     if (command.actor.kind !== "agent") return undefined;
     if (command.attemptId === undefined) {
       if (command.callerTaskId === undefined) return undefined;
@@ -565,40 +632,15 @@ export class TaskCommandStore {
     return { id: origin.id, title: origin.title };
   }
 
-  private assertAgentAttemptProvenance(taskId: string, agentId: string, attemptId: string): void {
-    const attempt = this.#database
-      .prepare(
-        `SELECT 1
-         FROM attempts attempt
-         JOIN activations activation ON activation.id = attempt.activation_id
-         WHERE attempt.id = ? AND activation.task_id = ?
-           AND activation.target_agent_id = ? AND attempt.status = 'running'`,
-      )
-      .get(attemptId, taskId, agentId);
-    if (attempt === undefined) throw new Error("Agent action attempt provenance is not current");
-  }
-
-  private validatedAgentAttemptId(
-    taskId: string,
+  private agentActivityProvenance(
     command: { actor: Actor; attemptId?: string },
-  ): string | undefined {
-    const attemptId = command.actor.kind === "agent" ? command.attemptId : undefined;
-    if (attemptId !== undefined) {
-      this.assertAgentAttemptProvenance(taskId, command.actor.id, attemptId);
-    }
-    return attemptId;
-  }
-
-  private assertAgentAttemptAllowsCrossTaskAction(command: { actor: Actor; attemptId?: string }): void {
-    if (command.actor.kind !== "agent") return;
-    if (command.attemptId === undefined) return;
-    const attempt = this.#database.prepare(
-      `SELECT 1 FROM attempts attempt
-       JOIN activations activation ON activation.id = attempt.activation_id
-       WHERE attempt.id = ? AND activation.target_agent_id = ?
-         AND attempt.status = 'running'`,
-    ).get(command.attemptId, command.actor.id);
-    if (attempt === undefined) throw new Error("Agent action attempt provenance is not current");
+    origin?: { id: string; title: string },
+  ): Record<string, string> {
+    if (command.actor.kind !== "agent") return {};
+    return {
+      ...(command.attemptId === undefined ? {} : { attemptId: command.attemptId }),
+      ...(origin === undefined ? {} : { originTaskId: origin.id, originTaskTitle: origin.title }),
+    };
   }
 
   private agentIsApplied(agentId: string): boolean {
@@ -712,7 +754,7 @@ export class TaskCommandStore {
     targetTaskId: string,
     resumeAgentId: string,
     actor: Actor,
-    sourceAttemptId?: string,
+    provenance: Record<string, string> = {},
   ): TaskRelationshipView {
     const relationship: TaskRelationshipView = {
       id: randomUUID(),
@@ -732,14 +774,13 @@ export class TaskCommandStore {
       relationship,
       "source",
       targetTaskId,
-      {
-      ...(sourceAttemptId === undefined ? {} : { attemptId: sourceAttemptId }),
-      },
+      provenance,
     ));
     this.#activityJournal.append(targetTaskId, "relationship.created", actor, this.relationshipActivityDetails(
       relationship,
       "target",
       sourceTaskId,
+      provenance,
     ));
     return relationship;
   }
@@ -785,9 +826,10 @@ export class TaskCommandStore {
          JOIN activations activation ON activation.id = attempt.activation_id
          WHERE attempt.id = ? AND attempt.status = 'running'
            AND activation.reason_type IN ('agent-mention', 'user-follow-up')
+           AND activation.task_id = ?
            AND activation.target_agent_id = ?`,
       )
-      .get(currentAttemptId, destination.watching_agent_id) !== undefined;
+      .get(currentAttemptId, taskId, destination.watching_agent_id) !== undefined;
     if (runningAgentIsClaimingResponsibility) return;
     const occurredAt = new Date().toISOString();
     this.#activationCreation.createOrdinary({

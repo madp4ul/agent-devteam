@@ -43,3 +43,11 @@ Issue 15's accepted relationship ownership/scheduling semantics remain the basel
   337 passed/4 skipped, affected browser suites 44 passed, typecheck/build passed;
   Standards and Spec reviews have no outstanding findings. Changes await user review
   unstaged. Tickets 02 and 03 are now unblocked; no later slice has been started.
+- 2026-09-30: [02](issues/02-generalize-task-and-relationship-commands.md) delivered
+  generalized task creation/editing/movement and outgoing relationship commands,
+  guarded caller-scoped retries, compact MCP responses, concrete origin activity,
+  and destination-aware transcript/timeline presentation. Cross-task watcher entry
+  remains distinct from a local responsibility claim. Non-browser suite: 345 passed,
+  4 skipped; affected browser coverage: 33 passed including the focused repaired
+  delivery proof; typecheck/build passed. Standards and Spec reviews are clear.
+  Changes await user review unstaged; no ticket 03+ work has been started.

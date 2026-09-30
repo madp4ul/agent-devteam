@@ -338,21 +338,33 @@ function coordinationActivityPresentation(item: CoordinationTranscriptItem): {
     accessibleLabel = action;
   } else if (childTask !== undefined) {
     action = accessibleLabel = "Create child task";
-    facts = childTaskFacts(childTask.task, childTask.columnId);
+    facts = [
+      ...(childTask.parentTaskId === undefined ? [] : [{ kind: "task" as const, label: "Parent", task: { id: childTask.parentTaskId } }]),
+      ...childTaskFacts(childTask.task, childTask.columnId),
+    ];
   } else if (dependency !== undefined) {
-    action = accessibleLabel = "Add dependency";
-    facts = dependencyFacts(dependency.sourceTask, dependency.targetTask);
+    action = accessibleLabel = dependency.relationshipType === "parent-child" ? "Add existing child" : "Add dependency";
+    facts = dependency.relationshipType === "parent-child" ? [
+      { kind: "task", label: "Parent", task: dependency.sourceTask },
+      { kind: "task", label: "Child", task: dependency.targetTask },
+    ] : dependencyFacts(dependency.sourceTask, dependency.targetTask);
   } else if (permissionBlock !== undefined) {
     action = accessibleLabel = "Report permission block";
     facts = permissionBlock.reason === undefined
       ? []
       : [{ kind: "value", label: "Reason", value: permissionBlock.reason }];
   } else switch (item.presentation.kind) {
+    case "coordination-task-change": {
+      action = accessibleLabel = item.presentation.action === "created" ? "Create task" : "Edit task";
+      facts = [{ kind: "task", label: "Task", task: item.presentation.task }];
+      break;
+    }
     case "coordination-task-move": {
       const from = item.presentation.fromColumnId;
       const to = item.presentation.toColumnId;
-      action = accessibleLabel = "Move current task";
+      action = accessibleLabel = item.presentation.taskId === undefined ? "Move current task" : "Move task";
       facts = [
+        ...(item.presentation.taskId === undefined ? [] : [{ kind: "task" as const, label: "Task", task: { id: item.presentation.taskId } }]),
         ...(from === undefined
           ? []
           : [{ kind: "value" as const, label: "From", value: humanizeIdentifier(from) }]),

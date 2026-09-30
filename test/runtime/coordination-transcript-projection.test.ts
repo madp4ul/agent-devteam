@@ -8,6 +8,18 @@ import {
 import { coordinationTranscriptItem } from "../../src/runtime/coordination-tool-transcript.ts";
 import { coordinationCall, coordinationResult, transcriptRun } from "../support/coordination-transcript-fixture.ts";
 
+test("generalized mutations retain concrete destinations instead of the caller task", () => {
+  const projected = coordinationTranscriptItem({ type: "mcp_tool_call", server: "coordination",
+    tool: "task.move", arguments: { taskId: "T-other", destinationColumnId: "review" },
+    result: coordinationResult({ accepted: true, transition: {
+      taskId: "T-other", fromColumnId: "implementation", toColumnId: "review",
+    } }),
+  }, "completed", transcriptRun("attempt-caller", "T-caller"));
+  assert.ok(projected);
+  assert.deepEqual(projected.presentation, { kind: "coordination-task-move", taskId: "T-other",
+    fromColumnId: "implementation", toColumnId: "review" });
+});
+
 test("cross-task comments retain their destination in the source tool transcript", () => {
   const projected = coordinationTranscriptItem(coordinationCall({
     tool: "task.comment.add", status: "completed",
@@ -258,6 +270,14 @@ test("every known coordination tool has a typed presentation even when evidence 
     add_comment: { kind: "coordination-comment" },
     "task.comment.add": { kind: "coordination-comment" },
     "task.participant.list": { kind: "coordination-inspection", scope: "participants" },
+    "task.create": { kind: "coordination-task-change" },
+    "task.edit": { kind: "coordination-task-change" },
+    "task.move": { kind: "coordination-task-move" },
+    "task.child.create": { kind: "coordination-child-task" },
+    "task.child.add": { kind: "coordination-dependency" },
+    "task.dependency.add": { kind: "coordination-dependency" },
+    "task.relationship.resume_agent.update": { kind: "coordination-relationship-change" },
+    "task.relationship.remove": { kind: "coordination-relationship-change" },
     move_current_task: { kind: "coordination-task-move" },
     create_child_task: { kind: "coordination-child-task" },
     add_dependency: { kind: "coordination-dependency" },
@@ -278,6 +298,14 @@ test("every known coordination tool has a typed presentation even when evidence 
     add_comment: "failed",
     "task.comment.add": "failed",
     "task.participant.list": "succeeded",
+    "task.create": "failed",
+    "task.edit": "failed",
+    "task.move": "failed",
+    "task.child.create": "failed",
+    "task.child.add": "failed",
+    "task.dependency.add": "failed",
+    "task.relationship.resume_agent.update": "failed",
+    "task.relationship.remove": "failed",
     move_current_task: "failed",
     create_child_task: "failed",
     add_dependency: "failed",

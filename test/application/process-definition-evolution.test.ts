@@ -672,7 +672,7 @@ test("only the user can recover an unmapped task into a defined column", async (
     idempotencyKey: "agent-cannot-remap",
   });
   assert.equal(rejected.accepted, false);
-  if (!rejected.accepted) assert.equal(rejected.reason, "unmapped-task-user-only");
+  if (!rejected.accepted) assert.equal(rejected.reason, "not-found");
   const recovered = changed.moveTask({
     taskId: created.task.id,
     destinationColumnId: "backlog",

@@ -195,9 +195,17 @@ and proceeds only after the user resumes it.
 
 For each run, the Codex adapter starts or resumes a thread in the task's Git
 workspace. A per-attempt MCP adapter lets that agent inspect relevant project
-coordination state. Most mutations remain current-task scoped; the explicit
-relationship reassignment and removal operations accept `current` or a concrete
-active source-task ID. Every activation belongs to
+coordination state. Task content, movement, comments, and outgoing relationship
+mutations accept `current` or a concrete mapped mutable project task ID;
+independent creation instead requires an explicit board and column. The adapter
+derives caller task, agent and attempt separately from the selected destination.
+The core validates that running caller on its origin, retains concrete activity
+provenance, and guards caller/operation-scoped retry keys against changed
+normalized requests. Exact success replays precede revision checks. Agent conflicts
+expose compact current state without history. Cross-task moves preserve ordinary
+watcher activation; the mention/follow-up responsibility-claim exception applies
+only when the moving attempt belongs to that same destination task.
+Every activation belongs to
 a durable task-scoped agent conversation. Ordinary activation reasons select
 the current conversation for the stable task-and-agent pair, while explicit
 user follow-ups select their addressed conversation, including a retired one.

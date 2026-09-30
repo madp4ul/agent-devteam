@@ -29,6 +29,53 @@ import { ControlledAgentRuntime, createHandoffFixture } from "../support/handoff
 const execFileAsync = promisify(execFile);
 type CodexEventLike = any;
 
+test("scoped task mutations reject archived and unmapped destinations with compact errors", async (t) => {
+  const fixture = await createHandoffFixture();
+  const definition = (await readFile(fixture.definitionPath, "utf8"))
+    .replace("    columns:\n", "    columns:\n      - id: backlog\n        name: Backlog\n");
+  await writeFile(fixture.definitionPath, definition);
+  const options = { processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath };
+  let application = await CoordinationApplication.start(options);
+  const create = (title: string, columnId = "backlog") => {
+    const result = application.createTask({ boardId: "delivery", columnId, title, description: title,
+      actor: { kind: "user", id: "paul" }, idempotencyKey: title });
+    assert.ok(result.accepted); return result.task;
+  };
+  const origin = create("Origin");
+  const archive = create("Archive");
+  assert.ok(application.moveTask({ taskId: archive.id, destinationColumnId: "completion", expectedRevision: 1,
+    actor: { kind: "user", id: "paul" }, idempotencyKey: "complete-archive" }).accepted);
+  assert.ok((await application.archiveTask({ taskId: archive.id, actor: { kind: "user", id: "paul" }, idempotencyKey: "archive" })).accepted);
+  const unmapped = create("Unmapped", "review");
+  await application.close();
+  await writeFile(fixture.definitionPath, definition.replace("      - id: review\n        name: Review\n        watchingAgent: reviewer\n", ""));
+  application = await CoordinationApplication.start(options);
+  t.after(() => application.close());
+  const scopes = new AgentToolScopeRegistry();
+  const token = scopes.issue({ taskId: origin.id, agentId: "implementer" });
+  const server = await startWebServer(application, { host: "127.0.0.1", port: 0, agentToolScopes: scopes });
+  t.after(() => server.close());
+  for (const [taskId, reason] of [[archive.id, "archived-task"], [unmapped.id, "not-found"], ["T-foreign", "not-found"]] as const) {
+    const requests = [
+      ["PATCH", `tasks/${taskId}`, { title: "No edit", expectedRevision: 1 }],
+      ["POST", `tasks/${taskId}/move`, { destinationColumnId: "backlog", expectedRevision: 1 }],
+      ["POST", `tasks/${taskId}/children`, { boardId: "delivery", columnId: "backlog", title: "No child", description: "No child", resumeAgent: "self" }],
+      ["POST", `tasks/${taskId}/child-relationships`, { childTaskId: origin.id, resumeAgent: "self" }],
+      ["POST", `tasks/${taskId}/dependencies`, { targetTaskId: origin.id, resumeAgent: "self" }],
+      ["PATCH", `tasks/${taskId}/relationships/unknown/resume-agent`, { resumeAgent: "self" }],
+      ["DELETE", `tasks/${taskId}/relationships/unknown`, {}],
+    ] as const;
+    for (const [method, path, body] of requests) {
+      const response = await fetch(`${server.baseUrl}/agent-api/${path}`, { method,
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ ...body, idempotencyKey: path }),
+      });
+      assert.ok(response.status >= 400);
+      assert.deepEqual(await response.json(), { accepted: false, reason });
+    }
+  }
+});
+
 test("authenticated cross-task comments preserve caller scope and normalize current retries", async (t) => {
   const fixture = await createHandoffFixture();
   await writeFile(fixture.definitionPath, (await readFile(fixture.definitionPath, "utf8"))
@@ -73,6 +120,40 @@ test("authenticated cross-task comments preserve caller scope and normalize curr
   assert.ok((await post(target.task.id, { body: "Wrong scope", idempotencyKey: "wrong-scope" }, mismatched)).status >= 400);
   const wrongAgent = scopes.issue({ taskId: source.task.id, agentId: "reviewer", attemptId: caller.attemptId });
   assert.ok((await post(target.task.id, { body: "Wrong agent", idempotencyKey: "wrong-agent" }, wrongAgent)).status >= 400);
+  const mutate = (method: string, path: string, body: object, bearer = token) => fetch(`${server.baseUrl}/agent-api/${path}`, {
+    method, headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  const spoof = { actor: { kind: "agent", id: "reviewer" }, callerTaskId: target.task.id, attemptId: "spoof" };
+  const crossEdit = await mutate("PATCH", `tasks/${target.task.id}`, {
+    title: "Edited by caller", expectedRevision: 1, idempotencyKey: "cross-edit", ...spoof,
+  });
+  assert.equal(crossEdit.status, 200);
+  const linked = await mutate("POST", `tasks/${target.task.id}/dependencies`, {
+    targetTaskId: "current", resumeAgent: "self", idempotencyKey: "cross-dependency", ...spoof,
+  });
+  assert.equal(linked.status, 201);
+  const relationship = (await linked.json() as { relationship: { id: string; sourceTaskId: string; targetTaskId: string; resumeAgentId: string } }).relationship;
+  assert.equal(relationship.sourceTaskId, target.task.id);
+  assert.equal(relationship.targetTaskId, source.task.id);
+  assert.equal(relationship.resumeAgentId, "implementer");
+  const creation = { boardId: "delivery", columnId: "backlog", title: "No unauthorized creation", description: "Work", resumeAgent: "self", idempotencyKey: "scope-creation" };
+  const requests = [
+    ["PATCH", `tasks/${target.task.id}`, { title: "No", expectedRevision: 2, idempotencyKey: "scope-edit" }],
+    ["POST", `tasks/${target.task.id}/move`, { destinationColumnId: "backlog", expectedRevision: 2, idempotencyKey: "scope-move" }],
+    ["POST", "tasks", creation], ["POST", `tasks/${target.task.id}/children`, creation],
+    ["POST", `tasks/${target.task.id}/child-relationships`, { childTaskId: "current", resumeAgent: "self", idempotencyKey: "scope-child-add" }],
+    ["POST", `tasks/${target.task.id}/dependencies`, { targetTaskId: "current", resumeAgent: "self", idempotencyKey: "scope-dependency" }],
+    ["PATCH", `tasks/${target.task.id}/relationships/${relationship.id}/resume-agent`, { resumeAgent: "reviewer", idempotencyKey: "scope-owner" }],
+    ["DELETE", `tasks/${target.task.id}/relationships/${relationship.id}`, { idempotencyKey: "scope-remove" }],
+  ] as const;
+  for (const [method, path, body] of requests) {
+    for (const bearer of [mismatched, wrongAgent, "foreign-project-token"]) {
+      assert.ok((await mutate(method, path, body, bearer)).status >= 400, `${method} ${path} must validate caller provenance`);
+    }
+  }
+  const editActivity = application.queryTask(target.task.id);
+  assert.ok(editActivity.available);
+  assert.deepEqual(editActivity.task.activity.find((entry) => entry.type === "task.edited")?.actor, { kind: "agent", id: "implementer" });
   const destination = application.queryTaskInspection(target.task.id);
   assert.ok(destination.available);
   assert.equal(destination.task.comments.length, 1);
@@ -178,6 +259,19 @@ boards:
   await client.connect(transport);
   t.after(() => client.close());
 
+  const edited = await client.callTool({ name: "task.edit", arguments: {
+    taskId: "T-0002", title: "Revised elsewhere", expectedRevision: 1, idempotencyKey: "cross-edit",
+  } });
+  assert.equal(edited.isError, undefined);
+  assert.deepEqual(JSON.parse(textContent(edited.content)).task, {
+    id: "T-0002", title: "Revised elsewhere", boardId: "delivery", columnId: "implementation", revision: 2,
+  });
+  const conflict = await client.callTool({ name: "task.edit", arguments: {
+    taskId: "T-0002", description: "Too late", expectedRevision: 1, idempotencyKey: "stale-edit",
+  } });
+  assert.equal(conflict.isError, true);
+  assert.equal(JSON.parse(textContent(conflict.content)).currentTask.comments, undefined);
+
   const crossComment = await client.callTool({
     name: "task.comment.add",
     arguments: { taskId: "T-0002", body: "@reviewer @user Consult from the implementation team.", idempotencyKey: "cross-comment" },
@@ -205,11 +299,14 @@ boards:
       "inspect_current_task",
       "inspect_operating_context",
       "task.comment.add",
-      "move_current_task",
-      "create_child_task",
-      "add_dependency",
-      "set_relationship_resume_agent",
-      "remove_relationship",
+      "task.create",
+      "task.edit",
+      "task.move",
+      "task.child.create",
+      "task.child.add",
+      "task.dependency.add",
+      "task.relationship.resume_agent.update",
+      "task.relationship.remove",
       "report_permission_block",
     ],
   );
@@ -267,12 +364,14 @@ boards:
     "body",
     "idempotencyKey",
   ]);
-  assert.deepEqual(Object.keys(toolByName.get("move_current_task")?.inputSchema.properties ?? {}), [
+  assert.deepEqual(Object.keys(toolByName.get("task.move")?.inputSchema.properties ?? {}), [
+    "taskId",
     "destinationColumnId",
     "expectedRevision",
     "idempotencyKey",
   ]);
-  assert.deepEqual(Object.keys(toolByName.get("create_child_task")?.inputSchema.properties ?? {}), [
+  assert.deepEqual(Object.keys(toolByName.get("task.child.create")?.inputSchema.properties ?? {}), [
+    "taskId",
     "boardId",
     "columnId",
     "title",
@@ -281,17 +380,18 @@ boards:
     "startingRef",
     "idempotencyKey",
   ]);
-  assert.deepEqual(Object.keys(toolByName.get("add_dependency")?.inputSchema.properties ?? {}), [
+  assert.deepEqual(Object.keys(toolByName.get("task.dependency.add")?.inputSchema.properties ?? {}), [
+    "taskId",
     "targetTaskId",
     "resumeAgent",
     "idempotencyKey",
   ]);
   assert.deepEqual(
-    Object.keys(toolByName.get("set_relationship_resume_agent")?.inputSchema.properties ?? {}),
+    Object.keys(toolByName.get("task.relationship.resume_agent.update")?.inputSchema.properties ?? {}),
     ["taskId", "relationshipId", "resumeAgent", "idempotencyKey"],
   );
   assert.deepEqual(
-    Object.keys(toolByName.get("remove_relationship")?.inputSchema.properties ?? {}),
+    Object.keys(toolByName.get("task.relationship.remove")?.inputSchema.properties ?? {}),
     ["taskId", "relationshipId", "idempotencyKey"],
   );
   assert.deepEqual(
@@ -299,7 +399,7 @@ boards:
     ["summary"],
   );
   assert.equal(
-    ["move_current_task", "create_child_task", "add_dependency", "report_permission_block"].some(
+    ["task.create", "report_permission_block"].some(
       (name) => "taskId" in (toolByName.get(name)?.inputSchema.properties ?? {}),
     ),
     false,
@@ -437,12 +537,13 @@ boards:
   assert.equal(inspectedTask.id, created.task.id);
 
   const dependencyArguments = {
+    taskId: "current",
     targetTaskId: "T-0002",
     resumeAgent: "self",
     idempotencyKey: "agent-dependency",
   };
-  const dependencyResult = await client.callTool({ name: "add_dependency", arguments: dependencyArguments });
-  const repeatedDependencyResult = await client.callTool({ name: "add_dependency", arguments: dependencyArguments });
+  const dependencyResult = await client.callTool({ name: "task.dependency.add", arguments: dependencyArguments });
+  const repeatedDependencyResult = await client.callTool({ name: "task.dependency.add", arguments: dependencyArguments });
   const dependencyPayload = JSON.parse(textContent(dependencyResult.content)) as {
     accepted: true;
     relationship: {
@@ -468,7 +569,7 @@ boards:
     dependencyPayload,
   );
   const targetSideRemoval = await client.callTool({
-    name: "remove_relationship",
+    name: "task.relationship.remove",
     arguments: {
       taskId: "T-0002",
       relationshipId: dependencyPayload.relationship.id,
@@ -478,7 +579,7 @@ boards:
   assert.equal(targetSideRemoval.isError, true);
   assert.match(textContent(targetSideRemoval.content), /relationship-conflict/);
   const reassignedCrossTaskRelationship = await client.callTool({
-    name: "set_relationship_resume_agent",
+    name: "task.relationship.resume_agent.update",
     arguments: {
       taskId: "T-0002",
       relationshipId: crossTaskRelationship.relationship.id,
@@ -494,7 +595,7 @@ boards:
   assert.equal(reassignedPayload.accepted, true);
   assert.equal(reassignedPayload.relationship.resumeAgentId, "implementer");
   const removedCrossTaskRelationship = await client.callTool({
-    name: "remove_relationship",
+    name: "task.relationship.remove",
     arguments: {
       taskId: "T-0002",
       relationshipId: crossTaskRelationship.relationship.id,
@@ -518,8 +619,9 @@ boards:
     assert.deepEqual(crossTaskAfterRemoval.task.activations, destination.task.activations);
   }
   const childResult = await client.callTool({
-    name: "create_child_task",
+    name: "task.child.create",
     arguments: {
+      taskId: "current",
       boardId: "delivery",
       columnId: "implementation",
       title: "Scoped child",
@@ -533,14 +635,16 @@ boards:
     accepted: true,
     task: {
       id: "T-0005",
+      title: "Scoped child",
       boardId: "delivery",
       columnId: "implementation",
       revision: 1,
     },
   });
   const rejectedCompletedChild = await client.callTool({
-    name: "create_child_task",
+    name: "task.child.create",
     arguments: {
+      taskId: "current",
       boardId: "delivery",
       columnId: "completion",
       title: "Completed at creation",
@@ -553,6 +657,7 @@ boards:
   assert.deepEqual(JSON.parse(textContent(rejectedCompletedChild.content)), {
     accepted: false,
     reason: "completion-is-not-starting-column",
+    explanation: "Tasks cannot be created in Completion; create in a workflow column and move to Completion when finished.",
   });
 
   const commentArguments = {
@@ -563,8 +668,9 @@ boards:
   assert.equal(beforeInertMove.available, true);
   if (!beforeInertMove.available) return;
   const inertMoveResult = await client.callTool({
-    name: "move_current_task",
+    name: "task.move",
     arguments: {
+      taskId: "current",
       destinationColumnId: "implementation",
       expectedRevision: inspectedTask.revision,
       idempotencyKey: "agent-inert-move",
@@ -604,8 +710,9 @@ boards:
   });
   assert.deepEqual(JSON.parse(textContent(repeatedCommentResult.content)), commentPayload);
   const moveResult = await client.callTool({
-    name: "move_current_task",
+    name: "task.move",
     arguments: {
+      taskId: "current",
       destinationColumnId: "review",
       expectedRevision: inspectedTask.revision,
       idempotencyKey: "agent-move",
@@ -639,8 +746,9 @@ boards:
     ],
   );
   const repeatedInertMoveResult = await client.callTool({
-    name: "move_current_task",
+    name: "task.move",
     arguments: {
+      taskId: "current",
       destinationColumnId: "implementation",
       expectedRevision: inspectedTask.revision,
       idempotencyKey: "agent-inert-move",
@@ -706,7 +814,7 @@ boards:
     threadId: "controlled-assembled-thread",
   });
   const moveTranscriptItem = (await runtime.read("controlled-assembled-attempt"))
-    ?.find((item) => item.kind === "coordination" && item.tool === "move_current_task");
+    ?.find((item) => item.kind === "coordination" && item.tool === "task.move");
   assert.equal(moveTranscriptItem?.kind, "coordination");
   assert.equal(moveTranscriptItem?.status, "succeeded");
   assert.equal(moveTranscriptItem?.evidence.rawStatus, "completed");
@@ -719,9 +827,33 @@ boards:
   assert.deepEqual(runtimeUpdated.task.comments.map((comment) => comment.body), [
     "Controlled assembled MCP handoff complete.",
   ]);
+  const independentArgs = { boardId: "delivery", columnId: "implementation", title: "Independent MCP work",
+    description: "No source task", idempotencyKey: "independent-mcp" };
+  const independent = await client.callTool({ name: "task.create", arguments: independentArgs });
+  assert.equal(independent.isError, undefined);
+  const independentTask = JSON.parse(textContent(independent.content)).task;
+  assert.deepEqual(await client.callTool({ name: "task.create", arguments: independentArgs }), independent);
+  assert.equal((await client.callTool({ name: "task.create", arguments: { ...independentArgs, title: "Changed" } })).isError, true);
+  const existingChildArgs = { taskId: "T-0002", childTaskId: independentTask.id, resumeAgent: "self", idempotencyKey: "existing-child" };
+  const existingChild = await client.callTool({ name: "task.child.add", arguments: existingChildArgs });
+  assert.equal(existingChild.isError, undefined);
+  assert.deepEqual(JSON.parse(textContent(existingChild.content)).relationship, {
+    id: JSON.parse(textContent(existingChild.content)).relationship.id, type: "parent-child",
+    sourceTaskId: "T-0002", targetTaskId: independentTask.id, resumeAgentId: "implementer",
+  });
+  const explicitOwner = await client.callTool({ name: "task.child.add", arguments: { ...existingChildArgs, resumeAgent: "implementer" } });
+  assert.deepEqual(explicitOwner, existingChild);
+  const concrete = await client.callTool({ name: "task.edit", arguments: { taskId: "current", description: "Updated caller",
+    expectedRevision: 2, idempotencyKey: "normalized-edit" } });
+  assert.equal(concrete.isError, undefined);
+  assert.deepEqual(await client.callTool({ name: "task.edit", arguments: { taskId: created.task.id, description: "Updated caller",
+    expectedRevision: 2, idempotencyKey: "normalized-edit" } }), concrete);
+  for (const name of ["move_current_task", "create_child_task", "add_dependency", "set_relationship_resume_agent", "remove_relationship"]) {
+    assert.equal((await client.callTool({ name, arguments: {} })).isError, true);
+  }
 });
 
-test("move_current_task reports a mentioned agent's responsibility claim without a redundant activation", async (t) => {
+test("task.move reports a mentioned agent's responsibility claim without a redundant activation", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "coordination-mcp-mention-claim-"));
   const repositoryPath = join(directory, "project");
   await execFileAsync("git", ["init", "--initial-branch=main", repositoryPath]);
@@ -848,8 +980,9 @@ boards:
   assert.deepEqual(operatingPayload.participants.map(({ id }) => id), ["implementer"]);
 
   const result = await client.callTool({
-    name: "move_current_task",
+    name: "task.move",
     arguments: {
+      taskId: "current",
       destinationColumnId: "implementation",
       expectedRevision: mentioned.task.revision,
       idempotencyKey: "claim-through-mcp",
@@ -926,8 +1059,9 @@ function controlledMcpClient(options: CodexClientOptionsLike) {
             },
           });
           const moved = await client.callTool({
-            name: "move_current_task",
+            name: "task.move",
             arguments: {
+              taskId: "current",
               destinationColumnId: "review",
               expectedRevision: current.revision,
               idempotencyKey: "controlled-assembled-move",
@@ -938,7 +1072,7 @@ function controlledMcpClient(options: CodexClientOptionsLike) {
               { type: "thread.started", thread_id: "controlled-assembled-thread" },
               completedMcpItem("inspect_current_task", inspected.content),
               completedMcpItem("task.comment.add", commented.content),
-              completedMcpItem("move_current_task", moved.content),
+              completedMcpItem("task.move", moved.content),
               {
                 type: "item.completed",
                 item: { type: "agent_message", text: "Controlled assembled handoff complete." },

@@ -11,6 +11,8 @@ export type AgentCoordinationCapabilities = Pick<CoordinationApplication,
   | "queryCollaborators"
   | "queryOperatingContext"
   | "addTaskComment"
+  | "createTask"
+  | "editTask"
   | "resolveInertTaskMove"
   | "moveTask"
   | "createChildTask"

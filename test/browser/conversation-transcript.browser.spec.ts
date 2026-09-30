@@ -12,6 +12,33 @@ import {
   test,
 } from "./browser-fixture.ts";
 
+test("generalized mutation transcripts link the affected task in both themes", async ({ page }) => {
+  await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+    await fulfillConversationTranscript(route, [
+      { id: "cross-move", kind: "coordination", tool: "task.move", status: "succeeded", evidence: {},
+        presentation: { kind: "coordination-task-move", taskId: "T-0099", fromColumnId: "implementation", toColumnId: "review" } },
+      { id: "cross-edit", kind: "coordination", tool: "task.edit", status: "succeeded", evidence: {},
+        presentation: { kind: "coordination-task-change", action: "edited", task: { id: "T-0099", title: "Parent requirements" } } },
+      { id: "child-add", kind: "coordination", tool: "task.child.add", status: "succeeded", evidence: {},
+        presentation: { kind: "coordination-dependency", relationshipType: "parent-child", sourceTask: { id: "T-0099" }, targetTask: { id: "T-0088" } } },
+    ]);
+  });
+  await page.goto("/tasks/T-0001");
+  await page.getByRole("button", { name: "View conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+  for (const theme of ["dark", "light"] as const) {
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await expect(dialog.getByRole("article", { name: "Move task" })).toContainText("Review");
+    await expect(dialog.getByRole("article", { name: "Edit task" })).toContainText("Parent requirements");
+    const child = dialog.getByRole("article", { name: "Add existing child" });
+    await expect(child).toContainText("Parent");
+    await expect(child).toContainText("Child");
+    const link = child.getByRole("link", { name: "T-0088" });
+    await expect(link).toHaveAttribute("href", "/tasks/T-0088");
+    expect(await contrastRatio(link)).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
 test("an outbound comment transcript points to its destination instead of local history", async ({ page }) => {
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     await fulfillConversationTranscript(route, [{

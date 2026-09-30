@@ -21,8 +21,10 @@ timeline event or duplicate comment.
 This avoids conflating agents with the same ID but independent memory. Replies
 to an external participant go to its origin task. Another running agent does not
 lock comments or authorize interruption; direct execution controls, archival,
-and global settings remain user-only. Comment retry identity is scoped to the
-caller participant and operation, with normalized target/body retained alongside
+and global settings remain user-only. Mutation retry identity is scoped to the
+caller participant and operation, with normalized target/payload retained alongside
 the response in the same transaction; exact retries replay and changed payloads
-reject. Other cross-task mutations and bounded history are separate delivery
-slices, not already implemented by this decision's first comment/discovery slice.
+reject. Task content, movement, creation and outgoing relationships use the same
+caller/destination separation. Agent responses expose compact mutation facts;
+browser commands retain their rich user projections. Bounded history remains a
+separate delivery slice.

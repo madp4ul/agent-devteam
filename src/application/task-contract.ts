@@ -264,6 +264,9 @@ export interface CreateTaskCommand {
   title: string;
   description: string;
   actor: Actor;
+  attemptId?: string;
+  /** Trusted caller scope, never a model-selected subject. */
+  callerTaskId?: string;
   idempotencyKey: string;
 }
 
@@ -280,6 +283,7 @@ export interface MoveTaskCommand {
   expectedRevision: number;
   actor: Actor;
   attemptId?: string;
+  callerTaskId?: string;
   idempotencyKey: string;
 }
 
@@ -290,6 +294,7 @@ export interface CreateTaskRelationshipCommand {
   resumeAgentId: string;
   actor: Actor;
   attemptId?: string;
+  callerTaskId?: string;
   idempotencyKey: string;
 }
 
@@ -298,6 +303,7 @@ export interface RemoveTaskRelationshipCommand {
   relationshipId: string;
   actor: Actor;
   attemptId?: string;
+  callerTaskId?: string;
   idempotencyKey: string;
 }
 
@@ -307,15 +313,18 @@ export interface EditTaskRelationshipResumeAgentCommand {
   resumeAgentId: string;
   actor: Actor;
   attemptId?: string;
+  callerTaskId?: string;
   idempotencyKey: string;
 }
 
 export interface EditTaskCommand {
   taskId: string;
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
   expectedRevision: number;
   actor: Actor;
+  attemptId?: string;
+  callerTaskId?: string;
   idempotencyKey: string;
 }
 
@@ -371,7 +380,7 @@ export type ArchiveCompletedTasksResult =
 export type BoardMutationResult =
   | { accepted: true; task: TaskView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { accepted: false; reason: "not-found" | "invalid-destination" | "completion-is-not-starting-column" | "invalid-starting-ref" | "archived-task" | "unmapped-task-user-only" | "empty-title" | "empty-description" | "resume-agent-not-found" }
+  | { accepted: false; reason: "not-found" | "invalid-destination" | "completion-is-not-starting-column" | "invalid-starting-ref" | "archived-task" | "unmapped-task-user-only" | "empty-title" | "empty-description" | "resume-agent-not-found" | "no-changes" | "idempotency-conflict" }
   | { accepted: false; reason: "revision-conflict"; currentTask: TaskView };
 
 export type MoveTaskResult =
@@ -388,17 +397,17 @@ export type InertMoveTaskResult = {
 export type TaskRelationshipMutationResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { accepted: false; reason: "not-found" | "archived-task" | "self-relationship" | "duplicate-relationship" | "resume-agent-not-found" };
+  | { accepted: false; reason: "not-found" | "archived-task" | "self-relationship" | "duplicate-relationship" | "resume-agent-not-found" | "idempotency-conflict" };
 
 export type EditTaskRelationshipResumeAgentResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { accepted: false; reason: "not-found" | "archived-task" | "relationship-conflict" | "relationship-satisfied" | "resume-agent-not-found" };
+  | { accepted: false; reason: "not-found" | "archived-task" | "relationship-conflict" | "relationship-satisfied" | "resume-agent-not-found" | "idempotency-conflict" };
 
 export type RemoveTaskRelationshipResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { accepted: false; reason: "not-found" | "archived-task" | "relationship-conflict" };
+  | { accepted: false; reason: "not-found" | "archived-task" | "relationship-conflict" | "idempotency-conflict" };
 
 export type AddTaskCommentResult =
   | { accepted: true; task: TaskView; comment: TaskCommentView }

@@ -68,12 +68,15 @@ test("agent route catalog is separate and accounts for discovery and current-tas
     "GET /agent-api/tasks/:taskId/attachments",
     "GET /agent-api/tasks/:taskId/participants",
     "GET /agent-api/tasks/archive",
+    "PATCH /agent-api/tasks/:taskId",
     "PATCH /agent-api/tasks/:taskId/relationships/:relationshipId/resume-agent",
-    "POST /agent-api/current-task/children",
-    "POST /agent-api/current-task/dependencies",
-    "POST /agent-api/current-task/move",
     "POST /agent-api/current-task/permission-block",
+    "POST /agent-api/tasks",
+    "POST /agent-api/tasks/:taskId/child-relationships",
+    "POST /agent-api/tasks/:taskId/children",
     "POST /agent-api/tasks/:taskId/comments",
+    "POST /agent-api/tasks/:taskId/dependencies",
+    "POST /agent-api/tasks/:taskId/move",
     "POST /agent-api/tasks/query",
   ]);
   assert.ok(routes.every((route) => route.owner.startsWith("agent/") && route.template.startsWith("/agent-api/")));

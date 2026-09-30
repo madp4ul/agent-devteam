@@ -49,7 +49,7 @@ export function buildTimelineRecords(
     comments.flatMap((comment) => comment.attemptId !== undefined && localAttemptIds.has(comment.attemptId) ? [comment.id] : []),
   );
   const groupedActivityIds = new Set(
-    activity.flatMap((entry) => entry.details.attemptId === undefined ? [] : [entry.id]),
+    activity.flatMap((entry) => entry.details.attemptId !== undefined && localAttemptIds.has(entry.details.attemptId) ? [entry.id] : []),
   );
   const attempts = activations.flatMap((activation) =>
     activation.attempts.map((attempt, index): TimelineRecord => ({
