@@ -1,8 +1,8 @@
 # Framework improvement intake — September 2026
 
-This intake records twenty user-reported issues dictated on 2026-09-20,
-2026-09-23, and 2026-09-26. Nine of the original ten were reported as existing
-GitHub issues; issue 08 and issues 11–20 were added during the conversations.
+This intake records twenty-one user-reported issues dictated on 2026-09-20,
+2026-09-23, 2026-09-26, and 2026-09-30. Nine of the original ten were reported as existing
+GitHub issues; issue 08 and issues 11–21 were added during the conversations.
 GitHub URLs and numbers were not supplied, and the originals were not fetched.
 The user's account is the source except where an issue explicitly records
 separate investigation evidence.
@@ -24,10 +24,10 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [06](issues/06-attach-files-to-tasks-and-comments.md) | Attach files directly to tasks and comments | Grill ownership, lifetime, and agent file access |
 | [07](issues/07-keep-task-movement-controls-accessible.md) | Sticky Move Task controls and one-click next-column movement | Clarify next-column edge cases, then specify the UI change |
 | [08](issues/08-use-full-height-conversation-dialog.md) | Use the browser's full height for the conversation dialog | Implemented; user review |
-| [09](issues/09-redesign-cross-task-mcp-capabilities.md) | Inventory and redesign MCP tools for broad board collaboration | Wayfinder / grill-with-docs for capabilities and invariants |
-| [10](issues/10-address-agents-on-other-tasks.md) | Address the correct task-scoped agent participant | Resolve addressing within issue 09's capability design |
+| [09](issues/09-redesign-cross-task-mcp-capabilities.md) | Inventory and redesign MCP tools for broad board collaboration | Design resolved; six cross-task coordination delivery slices published |
+| [10](issues/10-address-agents-on-other-tasks.md) | Address the correct task-scoped agent participant | Design resolved within issue 09; implementation/regression delivery open |
 | [11](issues/11-collapse-long-task-descriptions.md) | Collapse task descriptions longer than 15 lines behind Show more / Show less | Implemented; user review |
-| [12](issues/12-audit-agent-instructions-with-user.md) | Audit all agent instructions for unintended restrictions | User and agent review the instruction inventory together before any edits |
+| [12](issues/12-audit-agent-instructions-with-user.md) | Audit all agent instructions for unintended restrictions | After issue 09's instruction refinement is delivered, review the resulting inventory with the user |
 | [13](issues/13-support-tables-in-markdown-content.md) | Render tables in every Markdown content surface without widening the UI | Implemented; user review |
 | [14](issues/14-avoid-redundant-activation-after-follow-up-move.md) | Do not reactivate a running follow-up agent when it moves into its watched column | Extend and verify the existing mention-activation exception semantics |
 | [15](issues/15-redesign-blockers-around-explicit-resume-agents.md) | Replace task-wide execution blocking with explicit per-relationship resume responsibility | Implemented; user review |
@@ -36,6 +36,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [18](issues/18-widen-task-detail-content.md) | Give long task-detail content more horizontal room | Inspect representative content and agree the desktop width |
 | [19](issues/19-anchor-live-timeline-refresh-at-visible-top.md) | Anchor live timeline refresh at the top of the unobscured reading area | Implemented; user review |
 | [20](issues/20-bound-task-detail-projection-cost.md) | Keep task-detail load cost independent of unrelated task history | Implemented; user review and restart-based rollout verification |
+| [21](issues/21-link-to-task-comments-by-stable-address.md) | Link to comments on the current task or another task by stable address | Agree syntax and exact-comment navigation separately from issue 09 |
 
 ## Workflow and relationships
 
@@ -54,6 +55,8 @@ evaluate MCP changes later but is not a prerequisite for 09 or 10.
 
 Issues 11 and 13 both affect rendered Markdown and should share renderer/layout
 coverage where practical, but either may be delivered independently. Issue 12
+depends on delivery of issue 09's framework-guidance and MCP-description refinement
+so its user review does not cover wording scheduled for replacement. It
 requires the user's direct participation: do not turn it into an autonomous
 implementation task or change instructions without reviewing the findings and
 proposed wording with the user. Issue 14 should build on the narrow running
@@ -88,6 +91,14 @@ and browser coverage of icon/button geometric centering.
 
 ## Decisions so far
 
+- [09](issues/09-redesign-cross-task-mcp-capabilities.md) and
+  [10](issues/10-address-agents-on-other-tasks.md): grilling resolved project-wide
+  coordination, destination-local participant addressing, explicit task selectors,
+  REST-inspired MCP names, whole-record paged history, and shared curated pins.
+  [Specification](../cross-task-coordination/spec.md) and
+  [six delivery slices](../cross-task-coordination/map.md) preserve exact cursor,
+  attribution, retry, and pin examples. Design is complete; implementation remains
+  open. Intake 12 waits for delivered guidance and its final verification (05/06).
 - [18](issues/18-widen-task-detail-content.md): widened task details from
   `76rem` to `86rem` and shifted the desktop primary/sidebar allocation from
   2:1 to 7:3, adding about 81–147 px to representative narrative content while
@@ -136,6 +147,8 @@ and browser coverage of icon/button geometric centering.
 
 ## Comments
 
+- 2026-09-30: Added issue 21 from issue 09's pin/unpin context discussion;
+  reference syntax and navigation design remain open for a separate session.
 - 2026-09-20: Recorded from the user's dictation; preserve the concrete examples
   when converting these reports into specifications.
 - 2026-09-23: Added issues 11–14 from a second dictation. Three further issues

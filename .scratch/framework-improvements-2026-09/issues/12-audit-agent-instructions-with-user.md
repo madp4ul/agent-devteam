@@ -2,8 +2,8 @@
 
 **Type:** grilling
 **Status:** open
-**Blocked by:** None.
-**Next step:** Inventory the effective instructions, then review them interactively with the user.
+**Blocked by:** [05 — Delivered activation/guidance refinement](../../cross-task-coordination/issues/05-compose-bounded-activation-updates-and-net-pin-changes.md) and [06 — Assembled verification](../../cross-task-coordination/issues/06-verify-complete-mcp-contract-and-publish-reference.md), following issue 09's resolved design.
+**Next step:** After issue 09's instruction refinement is delivered, inventory the effective instructions and review them interactively with the user.
 
 > **User involvement required:** This is not an autonomous implementation task.
 > If asked to run an implementation skill or otherwise execute this ticket
@@ -52,5 +52,9 @@ an independently rewritten instruction set.
 
 ## Comments
 
+- 2026-09-30: User requested that this review follow issue 09's framework guidance
+  and MCP-description refinement so the user reviews the resulting instructions,
+  not wording that the redesign will replace. Dependency includes implementation
+  of that refinement, not merely completion of issue 09's design discussion.
 - 2026-09-23: Added from user dictation. The user explicitly asked to be reminded
   of their required involvement if they later request autonomous implementation.

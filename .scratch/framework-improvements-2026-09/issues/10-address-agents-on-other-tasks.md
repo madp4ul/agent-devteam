@@ -1,10 +1,9 @@
 # 10 — Address the correct agent participant on another task through MCP
 
 **Type:** grilling
-**Status:** open
-**Blocked by:** [09 — Cross-task MCP capability decisions](09-redesign-cross-task-mcp-capabilities.md)
-  for final addressing design; scenario analysis can inform that work immediately.
-**Next step:** Define task-scoped addressing and delivery with the broader MCP redesign.
+**Status:** resolved
+**Blocked by:** None; issue 09's addressing decisions are resolved.
+**Next step:** Deliver the cross-task participant/comment implementation and assembled regressions.
 
 ## Concrete failure scenario
 
@@ -42,7 +41,48 @@ lineages. Do not redefine an agent identity as its role display name alone.
 - [ ] Publish agreed addressing decisions and implementation/regression tickets
   linked to issue 09's specification.
 
-## Open design alternatives
+## Agreed direction from issue 09
+
+- Address participants by (taskId, agentId); conversation IDs remain internal.
+  The same stable agent definition on two tasks has separate conversational memory.
+- Send information by posting on the destination task with its ordinary canonical
+  agent mention. The comment and resulting activation belong to that task only.
+  In the motivating scenario, the child agent posts on the parent and mentions
+  the analyst there, reaching the parent's participant rather than the child's.
+- Retain origin task/agent/attempt metadata. Display the origin task title and ID
+  for external authors; redundant same-task attribution can be omitted.
+- Reply to an external author on its origin task with the canonical agent mention.
+  Explain this routing rule and independent memory explicitly in agent guidance.
+- Task inspection includes a compact participant section; a dedicated participant
+  listing offers the same information without full task details. Eligible agents
+  derive from the applied process definition; boards assign column responsibilities
+  without restricting addressable agents. Addresses and execution state are task-specific.
+- Busy state is advisory, not a mutation lock. Use ordinary mention scheduling
+  and internal current-lineage resolution; the final specification defines absent,
+  retired, busy, and removed recipient behavior without agent-selected conversations.
+- Archived tasks are read-only for agents, unmapped tasks require user recovery,
+  and direct conversation/execution management remains user-only.
+
+See [issue 09](09-redesign-cross-task-mcp-capabilities.md) for the broader accepted
+decisions. The design is resolved with specification and implementation/regression
+slices published; delivery and assembled scenario verification remain open.
+
+## Answer
+
+2026-09-30: Addressing is defined in the
+[specification](../../cross-task-coordination/spec.md), incorporating the motivating
+parent/child analyst scenario. Comments and mentions belong to the destination;
+authorship retains source task/title/agent/attempt, and replies return to that source
+task. All declared agents remain addressable; their memory/state is task-specific.
+
+Delivery is assigned to
+[01 — Cross-task comments and discovery](../../cross-task-coordination/issues/01-cross-task-comments-and-participant-discovery.md)
+and [06 — Assembled verification](../../cross-task-coordination/issues/06-verify-complete-mcp-contract-and-publish-reference.md).
+Conversation continuity/source delivery is covered by
+[05](../../cross-task-coordination/issues/05-compose-bounded-activation-updates-and-net-pin-changes.md).
+This resolves the design, not the still-open implementation/regression work.
+
+## Original design alternatives
 
 Task-qualified mention syntax, explicit MCP target arguments, and commenting on
 the destination task are candidate approaches. None was selected during intake.
@@ -51,5 +91,7 @@ or another interaction and explain how it affects responsibility and task moveme
 
 ## Comments
 
+- 2026-09-30: Recorded addressing decisions accepted during issue 09's grilling;
+  unresolved behavior and implementation follow-through remain open.
 - 2026-09-20: User-described GitHub issue; retained separately from the broad tool
   inventory so its concrete failure scenario and identity requirements remain visible.
