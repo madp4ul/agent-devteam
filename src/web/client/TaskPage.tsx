@@ -15,6 +15,7 @@ import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { Loading } from "./Loading.tsx";
+import { usePageTitle } from "./page-title.ts";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { TextPreview } from "./TextPreview.tsx";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
@@ -24,6 +25,7 @@ import { useTaskMovement } from "./task-movement.ts";
 import { TaskTimeline } from "./Timeline.tsx";
 import { PinnedComments } from "./PinnedComments.tsx";
 import { TaskWorkspacePanel } from "./TaskWorkspacePanel.tsx";
+import { TaskHeaderTitle } from "./TaskHeaderTitle.tsx";
 import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
 import { TaskRelationshipsPanel } from "./TaskRelationshipsPanel.tsx";
 import { TaskAttentionPanel } from "./TaskAttentionPanel.tsx";
@@ -54,6 +56,7 @@ export function TaskPage({
   notifications: DesktopNotificationControl;
 }): ReactNode {
   const [detail, setDetail] = useState<BrowserTaskDetail>();
+  const [loadFailure, setLoadFailure] = useState<"unavailable" | "error">();
   const [editing, setEditing] = useState(false);
   const [expandedDescriptionTaskId, setExpandedDescriptionTaskId] = useState<string>();
   const [archivalPending, setArchivalPending] = useState(false);
@@ -62,6 +65,7 @@ export function TaskPage({
   const [commentReplyIntent, setCommentReplyIntent] = useState<TaskCommentReplyIntent>();
   const pendingTimelineAnchor = useRef<TimelineViewportAnchor | null>(null);
   const taskDetailRef = useRef<HTMLElement>(null);
+  const taskHeadingRef = useRef<HTMLHeadingElement>(null);
   const pendingTextSelection = useRef<CapturedTextSelection | null>(null);
   const refreshLatest = useLatestRefresh<BrowserTaskDetail, "interactive" | "polling">(
     () => readTask(taskId),
@@ -74,15 +78,25 @@ export function TaskPage({
         document.querySelector(".transcript-content"),
       );
       setDetail(next);
+      setLoadFailure(undefined);
     },
   );
   const refresh = useCallback(() => refreshLatest("interactive"), [refreshLatest]);
   const poll = useCallback(() => refreshLatest("polling"), [refreshLatest]);
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
+  usePageTitle(detail === undefined
+    ? `${loadFailure === "unavailable" ? "Task unavailable"
+      : loadFailure === "error" ? "Unable to load task" : "Loading task"} (${taskId})`
+    : `${detail.task.title} (${detail.task.id})`);
+  const onLoadError = useCallback((error: unknown): void => {
+    setLoadFailure(error instanceof ApiError && (error.status === 404 || error.status === 409)
+      ? "unavailable" : "error");
+    setFeedback({ role: "alert", text: errorMessage(error) });
+  }, [setFeedback]);
 
   useEffect(() => {
-    void refresh().catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
-  }, [refresh, setFeedback, taskId]);
+    void refresh().catch(onLoadError);
+  }, [refresh, onLoadError, taskId]);
   useLayoutEffect(() => {
     const timelineAnchor = pendingTimelineAnchor.current;
     restoreTimelineViewportAnchor(timelineAnchor);
@@ -104,7 +118,7 @@ export function TaskPage({
   usePolling(
     poll,
     1_000,
-    (error) => setFeedback({ role: "alert", text: errorMessage(error) }),
+    onLoadError,
   );
 
   const back = (event: React.MouseEvent<HTMLAnchorElement>): void => {
@@ -191,7 +205,10 @@ export function TaskPage({
   return (
     <div className="app-shell task-shell">
       <header className="topbar detail-topbar">
-        <a href="/" className="back-link" onClick={back}>← Back to board</a>
+        <div className="task-header-context">
+          <a href="/" className="back-link" onClick={back}>← Back to board</a>
+          <TaskHeaderTitle title={task.title} headingRef={taskHeadingRef} />
+        </div>
         <AutomationControls
           automation={detail.automation}
           activeRuns={detail.activeRuns}
@@ -212,7 +229,7 @@ export function TaskPage({
               <div className="agent-inspectable-heading">
                 <div>
                   <p className="eyebrow">{task.id}{task.archived ? " · Archived" : ""}</p>
-                  <h1>{task.title}</h1>
+                  <h1 ref={taskHeadingRef}>{task.title}</h1>
                 </div>
                 {inspectableTaskFields.has("title") ? <AgentInspectableMarker /> : null}
               </div>

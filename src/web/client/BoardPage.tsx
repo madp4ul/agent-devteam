@@ -17,6 +17,7 @@ import { AutomationControls } from "./AutomationControls.tsx";
 import { errorMessage } from "./feedback.ts";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { Loading } from "./Loading.tsx";
+import { usePageTitle } from "./page-title.ts";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import type { Navigate, NavigationState } from "./navigation.ts";
@@ -73,6 +74,11 @@ export function BoardPage({
   const refresh = useLatestRefresh(readBoard, setState);
   const processImpact = state?.startup.mode === "paused" ? state.startup.processImpact : undefined;
   const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
+  usePageTitle(state === undefined
+    ? (feedback?.role === "alert" ? "Unable to load boards" : "Loading boards")
+    : state.startup.mode === "configuration-error"
+      ? "Configuration error"
+      : `Boards · ${state.startup.processName}`);
   const loadArchivedTasks = useCallback(async () => {
     const sequence = ++archivedLoadSequence.current;
     try {

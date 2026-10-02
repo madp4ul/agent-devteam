@@ -39,9 +39,9 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [20](issues/20-bound-task-detail-projection-cost.md) | Keep task-detail load cost independent of unrelated task history | Implemented; user review and restart-based rollout verification |
 | [21](issues/21-link-to-task-comments-by-stable-address.md) | Link to comments on the current task or another task by stable address | Agree syntax and exact-comment navigation separately from issue 09 |
 | [22](issues/22-show-task-description-hidden-line-counts.md) | Count additional lines on task-description Show more | Extend the existing disclosure and verify rendered-line counts |
-| [23](issues/23-reflect-current-page-in-browser-tab-titles.md) | Distinguish framework views and tasks in browser tab titles | Agree title format and verify navigation/rename updates |
+| [23](issues/23-reflect-current-page-in-browser-tab-titles.md) | Distinguish framework views and tasks in browser tab titles | Implemented; user review |
 | [24](issues/24-investigate-task-position-spacing-and-initial-reveal.md) | Investigate retained Task position gaps and description-dependent initial reveal | Check recent fixes and reproduce before proposing changes |
-| [25](issues/25-dock-add-comment-on-initial-load.md) | Position Add Comment correctly before the first scroll | Reproduce initial-load docking and correct initialization |
+| [25](issues/25-dock-add-comment-on-initial-load.md) | Position Add Comment correctly before the first scroll | Implemented; user review |
 | [26](issues/26-display-interruption-resume-instructions.md) | Show resume events and supplied instructions in timeline and conversations | Inspect retained evidence and specify both projections |
 | [27](issues/27-recover-stalled-work-without-user-attention.md) | Wake an agent when watched work stalls without required user attention | Define eligibility, recovery ownership, and loop prevention |
 | [28](issues/28-redesign-coordination-across-task-worktrees.md) | Reliably share and integrate parent/child work across task worktrees | Discuss source selection, task branches, synchronization, and integration |
@@ -164,6 +164,16 @@ and browser coverage of icon/button geometric centering.
   completion queues its own ordered, relationship-specific activation. Removal
   creates history but no wake-up, while migration and removed-agent repair use
   the existing startup-impact workflow.
+
+- [25](issues/25-dock-add-comment-on-initial-load.md): implemented composer docking
+  remeasurement after initial description collapse, layout changes, and live
+  section insertion/removal, with dark/light browser geometry coverage before
+  scrolling. Task position spacing remains tracked independently in issue 24.
+
+- [23](issues/23-reflect-current-page-in-browser-tab-titles.md): implemented
+  task title and ID with application identity in tab titles; board titles name
+  the process. Loading/error fallbacks and navigation/live rename browser
+  checks prevent stale page identity. Ready for user review.
 
 ## Comments
 

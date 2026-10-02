@@ -83,7 +83,7 @@ export function TaskCommentComposition({
     if (placeholder === null) return;
     let dockingThresholdHeight = panel.getBoundingClientRect().height;
     let docked = false;
-    const synchronizeHeight = (): void => synchronizeComposerHeight(panel, flow);
+    let animationFrame: number | undefined;
     const synchronizeDocking = (): void => {
       const slotBounds = placeholder.getBoundingClientRect();
       const flowBounds = flow.getBoundingClientRect();
@@ -94,16 +94,42 @@ export function TaskCommentComposition({
       panel.classList.toggle("comment-panel-docked", docked);
     };
     const synchronizeLayout = (): void => {
-      synchronizeHeight();
+      synchronizeComposerHeight(panel, flow);
       synchronizeDocking();
     };
+    const scheduleLayout = (): void => {
+      if (animationFrame !== undefined) return;
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = undefined;
+        synchronizeLayout();
+      });
+    };
     synchronizeLayout();
-    const observer = new ResizeObserver(synchronizeHeight);
-    observer.observe(panel, { box: "border-box" });
+    const observer = new ResizeObserver(scheduleLayout);
+    // The description and activity above this flow can move it without resizing
+    // the composer (including when the initial description preview collapses).
+    const column = flow.parentElement;
+    const observeSections = (): void => {
+      observer.disconnect();
+      observer.observe(panel, { box: "border-box" });
+      if (column === null) return;
+      observer.observe(column, { box: "border-box" });
+      for (const section of column.children) observer.observe(section, { box: "border-box" });
+    };
+    observeSections();
+    const sectionObserver = new MutationObserver(() => {
+      observeSections();
+      scheduleLayout();
+    });
+    if (column !== null) sectionObserver.observe(column, { childList: true });
+    document.fonts?.addEventListener("loadingdone", scheduleLayout);
     window.addEventListener("scroll", synchronizeDocking, { passive: true });
     window.addEventListener("resize", synchronizeLayout);
     return () => {
       observer.disconnect();
+      sectionObserver.disconnect();
+      if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame);
+      document.fonts?.removeEventListener("loadingdone", scheduleLayout);
       window.removeEventListener("scroll", synchronizeDocking);
       window.removeEventListener("resize", synchronizeLayout);
       panel.classList.remove("comment-panel-docked");
