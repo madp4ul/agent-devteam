@@ -30,7 +30,7 @@ for (const theme of ["dark", "light"] as const) {
         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
         const composer = page.getByRole("region", { name: "Add comment" });
         await expect(composer).toBeAttached();
-        if (longDescription) await expect(page.getByRole("button", { name: "Show more", exact: true })).toBeVisible();
+        if (longDescription) await expect(page.getByRole("region", { name: "Description" }).getByRole("button", { name: /^Show \d+ more lines?$/ })).toBeVisible();
         await expect.poll(() => composer.evaluate((panel) => {
           const flow = panel.closest(".comment-timeline-flow")!;
           const bounds = panel.getBoundingClientRect();
@@ -68,7 +68,7 @@ for (const theme of ["dark", "light"] as const) {
     const draft = composer.getByRole("textbox", { name: "Comment" });
     await expectDocked(composer, true);
     await draft.fill("Keep this draft through layout updates.");
-    await page.getByRole("button", { name: "Show more", exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+    await page.getByRole("region", { name: "Description" }).getByRole("button", { name: /^Show \d+ more lines?$/ }).evaluate((button: HTMLButtonElement) => button.click());
     await expectDocked(composer, false);
     await page.getByRole("button", { name: "Show less", exact: true }).evaluate((button: HTMLButtonElement) => button.click());
     await expectDocked(composer, true);

@@ -181,6 +181,12 @@ and browser coverage of icon/button geometric centering.
   the process. Loading/error fallbacks and navigation/live rename browser
   checks prevent stale page identity. Ready for user review.
 
+- [22](issues/22-show-task-description-hidden-line-counts.md): task-description
+  disclosure now shows the hidden rendered-line count, including correct
+  grouping of mixed prose and inline code. Browser coverage verifies responsive
+  and font changes, live refresh persistence, keyboard controls, and both themes.
+  Full unit and browser suites pass; ready for user review.
+
 ## Comments
 
 - 2026-09-30: Added issues 22–28 after the user approved the read-only intake

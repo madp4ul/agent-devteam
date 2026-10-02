@@ -12,7 +12,6 @@ export function TextPreview({
   className,
   markdownClassName,
   renderedLineLimit,
-  collapsedLabel,
 }: {
   id: string;
   text: string;
@@ -23,7 +22,6 @@ export function TextPreview({
   className?: string;
   markdownClassName?: string;
   renderedLineLimit?: number;
-  collapsedLabel?: string;
 }): ReactNode {
   const ref = useRef<HTMLDivElement>(null);
   const topBeforeToggle = useRef<number | undefined>(undefined);
@@ -117,7 +115,7 @@ export function TextPreview({
         >
           {expanded
             ? "Show less"
-            : collapsedLabel ?? `Show ${hiddenLineCount} more ${hiddenLineCount === 1 ? "line" : "lines"}`}
+            : `Show ${hiddenLineCount} more ${hiddenLineCount === 1 ? "line" : "lines"}`}
         </button>
       )}
     </div>
@@ -134,9 +132,14 @@ function limitToRenderedLines(element: HTMLDivElement, lineLimit: number): numbe
     range.selectNodeContents(walker.currentNode);
     for (const rect of range.getClientRects()) {
       if (rect.height === 0) continue;
-      const existingLine = renderedLines.find((line) => Math.abs(line.top - rect.top) <= 0.5);
+      // Inline formatting can shift a fragment's top within the same visual row.
+      const existingLine = renderedLines.find((line) =>
+        Math.min(line.bottom, rect.bottom) - Math.max(line.top, rect.top) > 0.5);
       if (existingLine === undefined) renderedLines.push({ top: rect.top, bottom: rect.bottom });
-      else existingLine.bottom = Math.max(existingLine.bottom, rect.bottom);
+      else {
+        existingLine.top = Math.min(existingLine.top, rect.top);
+        existingLine.bottom = Math.max(existingLine.bottom, rect.bottom);
+      }
     }
   }
   renderedLines.sort((left, right) => left.top - right.top);

@@ -304,7 +304,6 @@ export function TaskPage({
                 className="task-description-prose"
                 markdownClassName="description"
                 renderedLineLimit={15}
-                collapsedLabel="Show more"
               />
             </section>
 
