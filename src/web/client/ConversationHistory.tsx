@@ -6,6 +6,8 @@ import { ActivityStatusMark, isExceptionalActivityStatus } from "./ActivityStatu
 import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { MarkdownContent } from "./MarkdownContent.tsx";
+import { ResumeInstructions } from "./ResumeInstructions.tsx";
+import { RelativeTime } from "./RelativeTime.tsx";
 import { conversationAttachmentUrl } from "./api.ts";
 import { formatFileSize } from "./file-size.ts";
 
@@ -62,6 +64,14 @@ export function ConversationHistory({
           <p className="eyebrow">Replacement context</p>
           <p>{entry.reason}</p>
         </section>
+      ) : entry.kind === "resume" ? (
+        <article key={entry.activity.id} className="conversation-message user-message" data-conversation-resume={entry.activity.id}>
+          <div className="entry-meta">
+            <strong>Conversation resumed</strong>
+            <RelativeTime value={entry.activity.occurredAt} />
+          </div>
+          <ResumeInstructions activity={entry.activity} />
+        </article>
       ) : entry.kind === "retirement" ? (
         <section key={`retirement-${entry.retirement.occurredAt}`} className="conversation-system-note" role="note">
           <p className="eyebrow">Conversation retired</p>

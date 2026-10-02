@@ -125,6 +125,15 @@ next ordinary activation creates the pair's replacement and receives that
 reason once with initial operating guidance, current task state, all pins and a
 bounded recent history page rather than its entire accumulated discussion.
 
+Interruption resumes retain the normalized continuation instructions (including
+an explicit empty value), user attribution and interrupted-attempt identity in
+the immutable activity journal. Pending activation instructions remain runtime
+delivery state; timeline and conversation reads use the journal after delivery
+clears that pending value. Conversation history places each resume after its
+interrupted attempt and before the subsequent run, including while still queued.
+Historical resumes without retained instructions report unavailable evidence.
+See [ADR 0022](adr/0022-retain-interruption-resume-instructions-in-activity.md).
+
 Conversation attachment bytes live beside SQLite in a framework-owned content
 store under the same bound project state root. Pending uploads are temporary;
 submission binds their metadata to one authored message in the continuation

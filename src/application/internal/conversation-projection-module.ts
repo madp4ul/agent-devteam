@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import type { ActivationView } from "../automation-contract.ts";
+import type { TaskActivityView } from "../task-contract.ts";
 import type {
   AgentConversationIndexEntry,
   AgentConversationMessageView,
@@ -59,6 +60,11 @@ interface ConversationRun {
   sourceMessageId?: string;
   attempt: AttemptView;
   transcript: AgentConversationTranscriptView;
+}
+
+interface ConversationResume {
+  activity: TaskActivityView;
+  interruptedAttemptId: string | undefined;
 }
 
 const conversationMessageColumns = "id, conversation_id, body, actor_id, occurred_at";
@@ -250,7 +256,7 @@ export class ConversationProjectionModule {
       replacesConversationId: row.replaces_conversation_id,
       replacementReason: row.replacement_reason,
       retirementAvailability: this.#retirementAvailability(row),
-      history: this.#readHistory(activations, runs, messages, retirement),
+      history: this.#readHistory(activations, runs, messages, retirement, this.#readResumes(row.task_id, row.id)),
     };
   }
 
@@ -259,6 +265,7 @@ export class ConversationProjectionModule {
     runs: ConversationRun[],
     messages: AgentConversationMessageView[],
     retirement: AgentConversationView["retirement"],
+    resumes: ConversationResume[],
   ): AgentConversationView["history"] {
     const messagesById = new Map(messages.map((message) => [message.id, message]));
     const runsByActivation = Map.groupBy(runs, (run) => run.activationId);
@@ -279,6 +286,14 @@ export class ConversationProjectionModule {
         : "body" in nonMessageSource
           ? { kind: "activation", activationId: activation.id, status: activation.status, attemptIds, occurredAt, reason: activation.reason, source: { kind: "comment", comment: nonMessageSource } }
           : { kind: "activation", activationId: activation.id, status: activation.status, attemptIds, occurredAt, reason: activation.reason, source: { kind: "activity", activity: nonMessageSource } };
+      const resumesByAttempt = Map.groupBy(
+        resumes.filter(({ activity }) => activity.details.activationId === activation.id),
+        ({ activity, interruptedAttemptId }) => interruptedAttemptId ?? activationRuns.findLast(
+          ({ attempt }) => attempt.status === "interrupted" && attempt.completedAt !== null && attempt.completedAt <= activity.occurredAt,
+        )?.attempt.id,
+      );
+      const resumeEntries = (attemptId: string | undefined): AgentConversationView["history"] =>
+        (resumesByAttempt.get(attemptId) ?? []).map(({ activity }) => ({ kind: "resume", activationId: activation.id, activity }));
       const items = activationRuns.flatMap((run) => [
         ...(run.attempt.threadContinuity === "replaced" ? [{
           kind: "continuity-loss" as const,
@@ -293,8 +308,9 @@ export class ConversationProjectionModule {
               item,
             }))
           : []),
+        ...resumeEntries(run.attempt.id),
       ]);
-      return [{ occurredAt, entries: [cause, ...items] }];
+      return [{ occurredAt, entries: [cause, ...items, ...resumeEntries(undefined)] }];
     });
     const systemGroups: Array<{ occurredAt: string; entries: AgentConversationView["history"] }> = [
       ...(retirement === null ? [] : [{
@@ -305,6 +321,31 @@ export class ConversationProjectionModule {
     return [...groups, ...systemGroups]
       .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
       .flatMap(({ entries }) => entries);
+  }
+
+  #readResumes(taskId: string, conversationId: string): ConversationResume[] {
+    const rows = this.#database.prepare(
+      `SELECT activity.id,
+              (SELECT json_extract(suspension.details_json, '$.attemptId')
+               FROM activity_ledger suspension
+               WHERE suspension.task_id = activity.task_id AND suspension.type = 'automation.suspended'
+                 AND json_extract(suspension.details_json, '$.activationId') = activation.id
+                 AND suspension.sequence < activity.sequence
+               ORDER BY suspension.sequence DESC LIMIT 1) AS interrupted_attempt_id
+       FROM activity_ledger activity
+       JOIN activations activation ON activation.id = json_extract(activity.details_json, '$.activationId')
+       WHERE activity.task_id = ? AND activation.conversation_id = ?
+         AND activity.type = 'automation.resumed'
+         AND coalesce(json_extract(activity.details_json, '$.resolution'), '') <> 'dismissed'
+       ORDER BY activity.sequence`,
+    ).all(taskId, conversationId) as Array<{ id: string; interrupted_attempt_id: string | null }>;
+    return rows.flatMap(({ id, interrupted_attempt_id }) => {
+      const activity = this.#taskProjections.readSourceEvent(id);
+      return activity === undefined || "body" in activity ? [] : [{
+        activity,
+        interruptedAttemptId: activity.details.interruptedAttemptId ?? interrupted_attempt_id ?? undefined,
+      }];
+    });
   }
 
   readConversationCostEstimate(conversationId: string): AggregatedTokenCost {

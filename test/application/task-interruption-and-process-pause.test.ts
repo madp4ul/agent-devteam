@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
 import type { AutomationClock } from "../../src/application/automation-contract.ts";
@@ -149,6 +150,8 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
       (activity) => activity.type === "automation.resumed",
     );
     assert.deepEqual(continuedActivity?.actor, { kind: "user", id: "paul" });
+    assert.equal(continuedActivity?.details.continuationMessage, "");
+    assert.equal(continuedActivity?.details.interruptedAttemptId, first.attemptId);
   }
   const second = await runtime.waitForRequest(2);
   assert.equal(second.activationId, first.activationId);
@@ -182,12 +185,27 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   }
   const secondContinue = application.continueInterruptedTask({
     taskId: created.task.id,
-    message: "Finish after the second interruption.",
+    message: "  Finish after the **second interruption**.\n\n- Keep the evidence.  ",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "continue-second-interruption",
   });
   assert.equal(secondContinue.accepted, true);
-  await runtime.waitForRequest(3);
+  const third = await runtime.waitForRequest(3);
+  assert.equal(third.attempt.continuationMessage, "Finish after the **second interruption**.\n\n- Keep the evidence.");
+  const conversationId = twiceInterrupted.task.activations[0]!.conversationId!;
+  const beforeReload = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.ok(beforeReload.available);
+  const resumes = beforeReload.conversation.history.filter((entry) => entry.kind === "resume");
+  assert.equal(resumes.length, 2);
+  assert.equal(resumes[0]!.activity.details.continuationMessage, "");
+  assert.equal(resumes[1]!.activity.details.continuationMessage, third.attempt.continuationMessage);
+  assert.equal(resumes[1]!.activity.details.interruptedAttemptId, second.attemptId);
+  assert.deepEqual(resumes[1]!.activity.actor, { kind: "user", id: "paul" });
+  const historyOrder = beforeReload.conversation.history.map((entry) => entry.kind === "resume"
+    ? `resume:${entry.activity.details.interruptedAttemptId}`
+    : entry.kind === "item" ? `item:${entry.attemptId}` : entry.kind);
+  assert.deepEqual(historyOrder, ["activation", `item:${first.attemptId}`, `resume:${first.attemptId}`,
+    `item:${second.attemptId}`, `resume:${second.attemptId}`, `item:${third.attemptId}`]);
   runtime.complete({ status: "completed", summary: "Continued safely.", threadId: "thread-1" });
   await application.waitForAutomationIdle();
   application.close();
@@ -196,11 +214,37 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
     databasePath: fixture.databasePath,
   });
   t.after(() => restarted.close());
+  const reloaded = await restarted.queryAgentConversation(created.task.id, conversationId);
+  assert.ok(reloaded.available);
+  assert.deepEqual(reloaded.conversation.history.filter((entry) => entry.kind === "resume"), resumes);
+  const reloadedTask = restarted.queryTask(created.task.id);
+  assert.ok(reloadedTask.available);
+  assert.deepEqual(reloadedTask.task.activity.filter(({ type }) => type === "automation.resumed"),
+    resumes.map(({ activity }) => activity));
   assert.deepEqual(await restarted.queryAttemptTranscript(first.attemptId), {
     available: true,
     threadId: "thread-1",
     items: [{ kind: "message", role: "agent", text: "Attempt 1 interruptible evidence." }],
   });
+  // Seed the historical event shape, with a resumed run starting in the same
+  // millisecond. Journal sequence must preserve association without guessing text.
+  const historicalDatabase = new DatabaseSync(fixture.databasePath);
+  try {
+    historicalDatabase.prepare("UPDATE activity_ledger SET details_json = ? WHERE id = ?")
+      .run(JSON.stringify({ activationId: first.activationId }), resumes[0]!.activity.id);
+    historicalDatabase.prepare("UPDATE attempts SET started_at = ? WHERE id = ?")
+      .run(resumes[0]!.activity.occurredAt, second.attemptId);
+  } finally {
+    historicalDatabase.close();
+  }
+  const historical = await restarted.queryAgentConversation(created.task.id, conversationId);
+  assert.ok(historical.available);
+  const historicalResumes = historical.conversation.history.filter((entry) => entry.kind === "resume");
+  assert.equal(historicalResumes[0]!.activity.details.continuationMessage, undefined);
+  const historicalOrder = historical.conversation.history.map((entry) => entry.kind === "resume"
+    ? entry.activity.id : entry.kind === "item" ? entry.attemptId : entry.kind);
+  assert.deepEqual(historicalOrder, ["activation", first.attemptId, resumes[0]!.activity.id,
+    second.attemptId, resumes[1]!.activity.id, third.attemptId]);
 });
 
 test("user dismisses an interrupted head and releases later work in Completion", async (t) => {

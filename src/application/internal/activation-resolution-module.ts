@@ -222,6 +222,9 @@ export class ActivationResolutionModule {
       const continuationMessage = command.message.trim().length === 0
         ? null
         : command.message.trim();
+      const interruptedAttempt = this.#database.prepare(
+        "SELECT id FROM attempts WHERE activation_id = ? ORDER BY rowid DESC LIMIT 1",
+      ).get(row.suspended_activation_id) as { id: string } | undefined;
       this.#database
         .prepare("UPDATE activations SET continuation_message = ? WHERE id = ?")
         .run(continuationMessage, row.suspended_activation_id);
@@ -237,7 +240,11 @@ export class ActivationResolutionModule {
         command.taskId,
         "automation.resumed",
         command.actor,
-        { activationId: row.suspended_activation_id },
+        {
+          activationId: row.suspended_activation_id,
+          continuationMessage: continuationMessage ?? "",
+          ...(interruptedAttempt === undefined ? {} : { interruptedAttemptId: interruptedAttempt.id }),
+        },
         occurredAt,
       );
       return { accepted: true as const, activationId: row.suspended_activation_id };

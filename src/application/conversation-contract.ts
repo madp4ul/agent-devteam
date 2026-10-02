@@ -52,6 +52,7 @@ export type AgentConversationHistoryEntry =
   | { kind: "message"; activationId: string; status: ActivationView["status"]; attemptIds: string[]; message: AgentConversationMessageView }
   | { kind: "item"; activationId: string; attemptId: string; item: AttemptTranscriptItem }
   | { kind: "retirement"; retirement: AgentConversationRetirementView }
+  | { kind: "resume"; activationId: string; activity: TaskActivityView }
   | { kind: "continuity-loss"; occurredAt: string; reason: string };
 
 export type AgentConversationQueryResult =

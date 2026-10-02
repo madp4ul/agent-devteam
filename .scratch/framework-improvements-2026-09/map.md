@@ -42,7 +42,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [23](issues/23-reflect-current-page-in-browser-tab-titles.md) | Distinguish framework views and tasks in browser tab titles | Implemented; user review |
 | [24](issues/24-investigate-task-position-spacing-and-initial-reveal.md) | Investigate retained Task position gaps and description-dependent initial reveal | Check recent fixes and reproduce before proposing changes |
 | [25](issues/25-dock-add-comment-on-initial-load.md) | Position Add Comment correctly before the first scroll | Implemented; user review |
-| [26](issues/26-display-interruption-resume-instructions.md) | Show resume events and supplied instructions in timeline and conversations | Inspect retained evidence and specify both projections |
+| [26](issues/26-display-interruption-resume-instructions.md) | Show resume events and supplied instructions in timeline and conversations | Implemented; user review |
 | [27](issues/27-recover-stalled-work-without-user-attention.md) | Wake an agent when watched work stalls without required user attention | Define eligibility, recovery ownership, and loop prevention |
 | [28](issues/28-redesign-coordination-across-task-worktrees.md) | Reliably share and integrate parent/child work across task worktrees | Discuss source selection, task branches, synchronization, and integration |
 
@@ -110,6 +110,12 @@ accessible controls. Any new icon-only button pattern uses shared decorative SVG
 and browser coverage of icon/button geometric centering.
 
 ## Decisions so far
+
+- [26](issues/26-display-interruption-resume-instructions.md): interruption resumes
+  retain exact runtime instructions and user provenance in immutable activity.
+  Timeline and conversation disclose formatted text, distinguish empty resumes
+  from unavailable historical evidence, and preserve repeated-cycle ordering
+  through interrupted-attempt linkage and historical suspension sequence.
 
 - [09](issues/09-redesign-cross-task-mcp-capabilities.md) and
   [10](issues/10-address-agents-on-other-tasks.md): grilling resolved project-wide

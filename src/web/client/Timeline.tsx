@@ -21,6 +21,7 @@ import { CommentPinButton } from "./CommentPinButton.tsx";
 import { CommentActionIcon } from "./CommentActionIcon.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
+import { ResumeInstructions } from "./ResumeInstructions.tsx";
 import { TextPreview } from "./TextPreview.tsx";
 import {
   buildTimelineRecords,
@@ -553,7 +554,9 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
           {context.agentInspectableContent.activityIds.includes(activity.id) ? <AgentInspectableMarker /> : null}
         </span>
       </div>
-      {pinChange ? <div className="pin-activity-reference">
+      {activity.type === "automation.resumed" && activity.details.resolution !== "dismissed" ? (
+        <ResumeInstructions activity={activity} />
+      ) : pinChange ? <div className="pin-activity-reference">
         {pinnedComment === undefined ? <p>Comment {activity.details.commentId ?? "unavailable"}</p> : <>
           <TextPreview id={`activity-${activity.id}`} text={pinnedComment.body}
             expanded={expanded} onExpanded={onExpanded} renderedLineLimit={2}
@@ -730,7 +733,9 @@ function activityDescription(activity: TaskActivityView, columns: TimelineColumn
       : "The selected activation will not run.";
   }
   if (activity.type === "automation.suspended") return "The interrupted activation remains first in line until continued.";
-  if (activity.type === "automation.resumed") return "The interrupted activation was continued.";
+  if (activity.type === "automation.resumed") return activity.details.resolution === "dismissed"
+    ? "The interrupted activation was dismissed; task automation may advance."
+    : "The interrupted activation was continued.";
   if (activity.type === "task.archived") return "Removed from the active board while retaining coordination history.";
   if (activity.type === "task.unarchived") return "Returned to the active board in its retained workflow position.";
   if (activity.type === "conversation.retired") {
