@@ -1,0 +1,272 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" role="img" aria-labelledby="title desc">
+<title id="title">Net code growth per newly resolved ticket</title><desc id="desc">Between ends of resolution plateaus; includes intervening work; negative values mean net removal</desc>
+<style>text{font-family:Arial,sans-serif;fill:#cbd5e1;font-size:14px}.grid{stroke:#334155;stroke-width:1}.line{fill:none;stroke-width:2.5;stroke-linejoin:round}</style>
+<rect width="1100" height="520" rx="12" fill="#101827"/>
+<text x="30" y="32" style="font-size:22px;fill:#f1f5f9">Net code growth per newly resolved ticket</text>
+<text x="30" y="56">Between ends of resolution plateaus; includes intervening work; negative values mean net removal</text>
+<path class="grid" d="M100,435.00h965"/>
+<text x="88" y="440.00" text-anchor="end">-226</text>
+<path class="grid" d="M100,367.00h965"/>
+<text x="88" y="372.00" text-anchor="end">149</text>
+<path class="grid" d="M100,299.00h965"/>
+<text x="88" y="304.00" text-anchor="end">524</text>
+<path class="grid" d="M100,231.00h965"/>
+<text x="88" y="236.00" text-anchor="end">898</text>
+<path class="grid" d="M100,163.00h965"/>
+<text x="88" y="168.00" text-anchor="end">1,273</text>
+<path class="grid" d="M100,95.00h965"/>
+<text x="88" y="100.00" text-anchor="end">1,648</text>
+<path class="grid" d="M100.00,95v340"/>
+<text x="100.00" y="460" text-anchor="middle">0</text>
+<path class="grid" d="M260.83,95v340"/>
+<text x="260.83" y="460" text-anchor="middle">24</text>
+<path class="grid" d="M421.67,95v340"/>
+<text x="421.67" y="460" text-anchor="middle">48</text>
+<path class="grid" d="M582.50,95v340"/>
+<text x="582.50" y="460" text-anchor="middle">72</text>
+<path class="grid" d="M743.33,95v340"/>
+<text x="743.33" y="460" text-anchor="middle">96</text>
+<path class="grid" d="M904.17,95v340"/>
+<text x="904.17" y="460" text-anchor="middle">120</text>
+<path class="grid" d="M1065.00,95v340"/>
+<text x="1065.00" y="460" text-anchor="middle">144</text>
+<path stroke="#94a3b8" d="M100,393.94h965"/>
+<polyline class="line" stroke="#60a5fa" points="106.70,165.62 113.40,276.42 120.10,258.29 126.81,256.30 133.51,113.21 140.21,341.35 146.91,266.99 153.61,416.79 160.31,370.18 167.01,393.03 173.72,307.43 180.42,374.90 187.12,389.95 193.82,306.53 200.52,290.75 207.22,276.42 213.92,387.59 220.62,319.04 227.33,327.56 234.03,393.21 240.73,361.29 247.43,236.53 254.13,364.01 260.83,385.78 267.53,342.80 274.24,356.94 280.94,301.99 287.64,291.66 294.34,389.58 301.04,354.40 307.74,391.58 314.44,393.94 321.15,387.77 327.85,359.84 334.55,341.53 341.25,388.86 347.95,381.60 354.65,390.85 361.35,352.77 368.06,272.80 374.76,326.66 388.16,388.41 401.56,393.66 408.26,277.15 414.97,344.97 421.67,362.20 428.37,312.51 435.07,392.49 441.77,367.46 461.88,390.01 475.28,388.68 481.98,391.76 488.68,391.40 495.38,393.21 502.08,371.81 508.78,373.26 515.49,352.59 548.99,384.65 569.10,395.69 582.50,393.94 589.20,334.46 595.90,332.82 602.60,387.95 616.01,371.54 622.71,329.92 629.41,329.20 636.11,379.25 642.81,376.71 649.51,386.32 676.32,392.76 683.02,390.13 689.72,337.36 696.42,393.94 703.12,227.82 709.83,373.63 723.23,393.94 729.93,367.10 756.74,388.72 763.44,381.24 770.14,348.96 776.84,310.34 796.94,393.94 803.65,357.85 810.35,381.24 817.05,347.87 823.75,389.04 830.45,390.31 837.15,389.58 843.85,397.20 850.56,379.61 857.26,385.96 863.96,386.68 870.66,376.35 884.06,373.26 904.17,392.06 910.87,393.94 917.57,379.97 924.27,385.05 930.97,391.03 937.67,347.15 944.38,386.86 951.08,393.75 957.78,378.52 964.48,385.23 971.18,393.94 977.88,289.84 984.58,378.52 991.28,366.37 997.99,390.49 1004.69,274.79 1011.39,352.59 1018.09,361.29 1044.90,382.56 1051.60,383.78 1065.00,385.05"/>
+<circle cx="106.70" cy="165.62" r="2.5" fill="#60a5fa"><title>f5e1f3f to e5d98ff | 1 tickets | 1,259.0 lines / ticket</title></circle>
+<circle cx="113.40" cy="276.42" r="2.5" fill="#60a5fa"><title>e5d98ff to 2633fc6 | 1 tickets | 648.0 lines / ticket</title></circle>
+<circle cx="120.10" cy="258.29" r="2.5" fill="#60a5fa"><title>2633fc6 to ce3cb58 | 1 tickets | 748.0 lines / ticket</title></circle>
+<circle cx="126.81" cy="256.30" r="2.5" fill="#60a5fa"><title>ce3cb58 to 1af72df | 1 tickets | 759.0 lines / ticket</title></circle>
+<circle cx="133.51" cy="113.21" r="2.5" fill="#60a5fa"><title>1af72df to a61642a | 1 tickets | 1,548.0 lines / ticket</title></circle>
+<circle cx="140.21" cy="341.35" r="2.5" fill="#60a5fa"><title>a61642a to 427788e | 1 tickets | 290.0 lines / ticket</title></circle>
+<circle cx="146.91" cy="266.99" r="2.5" fill="#60a5fa"><title>427788e to 3b6c7b7 | 1 tickets | 700.0 lines / ticket</title></circle>
+<circle cx="153.61" cy="416.79" r="2.5" fill="#60a5fa"><title>3b6c7b7 to e15f9fb | 1 tickets | -126.0 lines / ticket</title></circle>
+<circle cx="160.31" cy="370.18" r="2.5" fill="#60a5fa"><title>e15f9fb to b45e4b8 | 1 tickets | 131.0 lines / ticket</title></circle>
+<circle cx="167.01" cy="393.03" r="2.5" fill="#60a5fa"><title>b45e4b8 to 7ad944e | 1 tickets | 5.0 lines / ticket</title></circle>
+<circle cx="173.72" cy="307.43" r="2.5" fill="#60a5fa"><title>7ad944e to 033a105 | 1 tickets | 477.0 lines / ticket</title></circle>
+<circle cx="180.42" cy="374.90" r="2.5" fill="#60a5fa"><title>033a105 to c2b4b94 | 1 tickets | 105.0 lines / ticket</title></circle>
+<circle cx="187.12" cy="389.95" r="2.5" fill="#60a5fa"><title>c2b4b94 to dbfd041 | 1 tickets | 22.0 lines / ticket</title></circle>
+<circle cx="193.82" cy="306.53" r="2.5" fill="#60a5fa"><title>dbfd041 to 20f575f | 1 tickets | 482.0 lines / ticket</title></circle>
+<circle cx="200.52" cy="290.75" r="2.5" fill="#60a5fa"><title>20f575f to 71fdff4 | 1 tickets | 569.0 lines / ticket</title></circle>
+<circle cx="207.22" cy="276.42" r="2.5" fill="#60a5fa"><title>71fdff4 to fa1a640 | 1 tickets | 648.0 lines / ticket</title></circle>
+<circle cx="213.92" cy="387.59" r="2.5" fill="#60a5fa"><title>fa1a640 to 616d99d | 1 tickets | 35.0 lines / ticket</title></circle>
+<circle cx="220.62" cy="319.04" r="2.5" fill="#60a5fa"><title>616d99d to beee068 | 1 tickets | 413.0 lines / ticket</title></circle>
+<circle cx="227.33" cy="327.56" r="2.5" fill="#60a5fa"><title>beee068 to d38bb34 | 1 tickets | 366.0 lines / ticket</title></circle>
+<circle cx="234.03" cy="393.21" r="2.5" fill="#60a5fa"><title>d38bb34 to f048168 | 1 tickets | 4.0 lines / ticket</title></circle>
+<circle cx="240.73" cy="361.29" r="2.5" fill="#60a5fa"><title>f048168 to 3d57c87 | 1 tickets | 180.0 lines / ticket</title></circle>
+<circle cx="247.43" cy="236.53" r="2.5" fill="#60a5fa"><title>3d57c87 to 577d400 | 1 tickets | 868.0 lines / ticket</title></circle>
+<circle cx="254.13" cy="364.01" r="2.5" fill="#60a5fa"><title>577d400 to fe6693e | 1 tickets | 165.0 lines / ticket</title></circle>
+<circle cx="260.83" cy="385.78" r="2.5" fill="#60a5fa"><title>fe6693e to 4144727 | 1 tickets | 45.0 lines / ticket</title></circle>
+<circle cx="267.53" cy="342.80" r="2.5" fill="#60a5fa"><title>4144727 to 07515c3 | 1 tickets | 282.0 lines / ticket</title></circle>
+<circle cx="274.24" cy="356.94" r="2.5" fill="#60a5fa"><title>07515c3 to e547cd2 | 1 tickets | 204.0 lines / ticket</title></circle>
+<circle cx="280.94" cy="301.99" r="2.5" fill="#60a5fa"><title>e547cd2 to 13b20ac | 1 tickets | 507.0 lines / ticket</title></circle>
+<circle cx="287.64" cy="291.66" r="2.5" fill="#60a5fa"><title>13b20ac to ad2ba76 | 1 tickets | 564.0 lines / ticket</title></circle>
+<circle cx="294.34" cy="389.58" r="2.5" fill="#60a5fa"><title>ad2ba76 to 3997dca | 1 tickets | 24.0 lines / ticket</title></circle>
+<circle cx="301.04" cy="354.40" r="2.5" fill="#60a5fa"><title>3997dca to 59b5d5e | 1 tickets | 218.0 lines / ticket</title></circle>
+<circle cx="307.74" cy="391.58" r="2.5" fill="#60a5fa"><title>59b5d5e to ac78063 | 1 tickets | 13.0 lines / ticket</title></circle>
+<circle cx="314.44" cy="393.94" r="2.5" fill="#60a5fa"><title>ac78063 to 79b8f67 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="321.15" cy="387.77" r="2.5" fill="#60a5fa"><title>79b8f67 to 51545bf | 1 tickets | 34.0 lines / ticket</title></circle>
+<circle cx="327.85" cy="359.84" r="2.5" fill="#60a5fa"><title>51545bf to a152aea | 1 tickets | 188.0 lines / ticket</title></circle>
+<circle cx="334.55" cy="341.53" r="2.5" fill="#60a5fa"><title>a152aea to 8ca28d9 | 1 tickets | 289.0 lines / ticket</title></circle>
+<circle cx="341.25" cy="388.86" r="2.5" fill="#60a5fa"><title>8ca28d9 to b361d56 | 1 tickets | 28.0 lines / ticket</title></circle>
+<circle cx="347.95" cy="381.60" r="2.5" fill="#60a5fa"><title>b361d56 to a637f03 | 1 tickets | 68.0 lines / ticket</title></circle>
+<circle cx="354.65" cy="390.85" r="2.5" fill="#60a5fa"><title>a637f03 to 0e47e61 | 1 tickets | 17.0 lines / ticket</title></circle>
+<circle cx="361.35" cy="352.77" r="2.5" fill="#60a5fa"><title>0e47e61 to d88b1c5 | 1 tickets | 227.0 lines / ticket</title></circle>
+<circle cx="368.06" cy="272.80" r="2.5" fill="#60a5fa"><title>d88b1c5 to 3f5b881 | 1 tickets | 668.0 lines / ticket</title></circle>
+<circle cx="374.76" cy="326.66" r="2.5" fill="#60a5fa"><title>3f5b881 to 3269fcd | 1 tickets | 371.0 lines / ticket</title></circle>
+<circle cx="388.16" cy="388.41" r="2.5" fill="#60a5fa"><title>3269fcd to b4bf5bb | 2 tickets | 30.5 lines / ticket</title></circle>
+<circle cx="401.56" cy="393.66" r="2.5" fill="#60a5fa"><title>b4bf5bb to 094042a | 2 tickets | 1.5 lines / ticket</title></circle>
+<circle cx="408.26" cy="277.15" r="2.5" fill="#60a5fa"><title>094042a to 35412e6 | 1 tickets | 644.0 lines / ticket</title></circle>
+<circle cx="414.97" cy="344.97" r="2.5" fill="#60a5fa"><title>35412e6 to f7f3231 | 1 tickets | 270.0 lines / ticket</title></circle>
+<circle cx="421.67" cy="362.20" r="2.5" fill="#60a5fa"><title>f7f3231 to 5772036 | 1 tickets | 175.0 lines / ticket</title></circle>
+<circle cx="428.37" cy="312.51" r="2.5" fill="#60a5fa"><title>5772036 to ddf3074 | 1 tickets | 449.0 lines / ticket</title></circle>
+<circle cx="435.07" cy="392.49" r="2.5" fill="#60a5fa"><title>ddf3074 to d4d8712 | 1 tickets | 8.0 lines / ticket</title></circle>
+<circle cx="441.77" cy="367.46" r="2.5" fill="#60a5fa"><title>d4d8712 to dcb5d47 | 1 tickets | 146.0 lines / ticket</title></circle>
+<circle cx="461.88" cy="390.01" r="2.5" fill="#60a5fa"><title>dcb5d47 to a85bb76 | 3 tickets | 21.7 lines / ticket</title></circle>
+<circle cx="475.28" cy="388.68" r="2.5" fill="#60a5fa"><title>a85bb76 to bf4b74f | 2 tickets | 29.0 lines / ticket</title></circle>
+<circle cx="481.98" cy="391.76" r="2.5" fill="#60a5fa"><title>bf4b74f to c3dccb1 | 1 tickets | 12.0 lines / ticket</title></circle>
+<circle cx="488.68" cy="391.40" r="2.5" fill="#60a5fa"><title>c3dccb1 to 588c05d | 1 tickets | 14.0 lines / ticket</title></circle>
+<circle cx="495.38" cy="393.21" r="2.5" fill="#60a5fa"><title>588c05d to c5da964 | 1 tickets | 4.0 lines / ticket</title></circle>
+<circle cx="502.08" cy="371.81" r="2.5" fill="#60a5fa"><title>c5da964 to f556770 | 1 tickets | 122.0 lines / ticket</title></circle>
+<circle cx="508.78" cy="373.26" r="2.5" fill="#60a5fa"><title>f556770 to bb79590 | 1 tickets | 114.0 lines / ticket</title></circle>
+<circle cx="515.49" cy="352.59" r="2.5" fill="#60a5fa"><title>bb79590 to 037d0bf | 1 tickets | 228.0 lines / ticket</title></circle>
+<circle cx="548.99" cy="384.65" r="2.5" fill="#60a5fa"><title>037d0bf to a171ffb | 5 tickets | 51.2 lines / ticket</title></circle>
+<circle cx="569.10" cy="395.69" r="2.5" fill="#60a5fa"><title>a171ffb to 4b73b5b | 3 tickets | -9.7 lines / ticket</title></circle>
+<circle cx="582.50" cy="393.94" r="2.5" fill="#60a5fa"><title>4b73b5b to fc3504c | 2 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="589.20" cy="334.46" r="2.5" fill="#60a5fa"><title>fc3504c to 0f0ee69 | 1 tickets | 328.0 lines / ticket</title></circle>
+<circle cx="595.90" cy="332.82" r="2.5" fill="#60a5fa"><title>0f0ee69 to c12a13a | 1 tickets | 337.0 lines / ticket</title></circle>
+<circle cx="602.60" cy="387.95" r="2.5" fill="#60a5fa"><title>c12a13a to 0bea795 | 1 tickets | 33.0 lines / ticket</title></circle>
+<circle cx="616.01" cy="371.54" r="2.5" fill="#60a5fa"><title>0bea795 to be466bb | 2 tickets | 123.5 lines / ticket</title></circle>
+<circle cx="622.71" cy="329.92" r="2.5" fill="#60a5fa"><title>be466bb to 9597a02 | 1 tickets | 353.0 lines / ticket</title></circle>
+<circle cx="629.41" cy="329.20" r="2.5" fill="#60a5fa"><title>9597a02 to 81ec477 | 1 tickets | 357.0 lines / ticket</title></circle>
+<circle cx="636.11" cy="379.25" r="2.5" fill="#60a5fa"><title>81ec477 to 74ba638 | 1 tickets | 81.0 lines / ticket</title></circle>
+<circle cx="642.81" cy="376.71" r="2.5" fill="#60a5fa"><title>74ba638 to f597cf0 | 1 tickets | 95.0 lines / ticket</title></circle>
+<circle cx="649.51" cy="386.32" r="2.5" fill="#60a5fa"><title>f597cf0 to 2fc20ae | 1 tickets | 42.0 lines / ticket</title></circle>
+<circle cx="676.32" cy="392.76" r="2.5" fill="#60a5fa"><title>2fc20ae to b6f5ba7 | 4 tickets | 6.5 lines / ticket</title></circle>
+<circle cx="683.02" cy="390.13" r="2.5" fill="#60a5fa"><title>b6f5ba7 to b82b38a | 1 tickets | 21.0 lines / ticket</title></circle>
+<circle cx="689.72" cy="337.36" r="2.5" fill="#60a5fa"><title>b82b38a to fbe902d | 1 tickets | 312.0 lines / ticket</title></circle>
+<circle cx="696.42" cy="393.94" r="2.5" fill="#60a5fa"><title>fbe902d to 9b4e6b2 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="703.12" cy="227.82" r="2.5" fill="#60a5fa"><title>9b4e6b2 to 6af327d | 1 tickets | 916.0 lines / ticket</title></circle>
+<circle cx="709.83" cy="373.63" r="2.5" fill="#60a5fa"><title>6af327d to fe6fe19 | 1 tickets | 112.0 lines / ticket</title></circle>
+<circle cx="723.23" cy="393.94" r="2.5" fill="#60a5fa"><title>fe6fe19 to bf1768d | 2 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="729.93" cy="367.10" r="2.5" fill="#60a5fa"><title>bf1768d to 0ef478f | 1 tickets | 148.0 lines / ticket</title></circle>
+<circle cx="756.74" cy="388.72" r="2.5" fill="#60a5fa"><title>0ef478f to 6d38e40 | 4 tickets | 28.8 lines / ticket</title></circle>
+<circle cx="763.44" cy="381.24" r="2.5" fill="#60a5fa"><title>6d38e40 to d393100 | 1 tickets | 70.0 lines / ticket</title></circle>
+<circle cx="770.14" cy="348.96" r="2.5" fill="#60a5fa"><title>d393100 to 4197ccc | 1 tickets | 248.0 lines / ticket</title></circle>
+<circle cx="776.84" cy="310.34" r="2.5" fill="#60a5fa"><title>4197ccc to 64891a3 | 1 tickets | 461.0 lines / ticket</title></circle>
+<circle cx="796.94" cy="393.94" r="2.5" fill="#60a5fa"><title>64891a3 to 65988e3 | 3 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="803.65" cy="357.85" r="2.5" fill="#60a5fa"><title>65988e3 to 81488cc | 1 tickets | 199.0 lines / ticket</title></circle>
+<circle cx="810.35" cy="381.24" r="2.5" fill="#60a5fa"><title>81488cc to d9bcfdb | 1 tickets | 70.0 lines / ticket</title></circle>
+<circle cx="817.05" cy="347.87" r="2.5" fill="#60a5fa"><title>d9bcfdb to ef7e86e | 1 tickets | 254.0 lines / ticket</title></circle>
+<circle cx="823.75" cy="389.04" r="2.5" fill="#60a5fa"><title>ef7e86e to f5199b0 | 1 tickets | 27.0 lines / ticket</title></circle>
+<circle cx="830.45" cy="390.31" r="2.5" fill="#60a5fa"><title>f5199b0 to 9e106d1 | 1 tickets | 20.0 lines / ticket</title></circle>
+<circle cx="837.15" cy="389.58" r="2.5" fill="#60a5fa"><title>9e106d1 to f2d9a89 | 1 tickets | 24.0 lines / ticket</title></circle>
+<circle cx="843.85" cy="397.20" r="2.5" fill="#60a5fa"><title>f2d9a89 to e856974 | 1 tickets | -18.0 lines / ticket</title></circle>
+<circle cx="850.56" cy="379.61" r="2.5" fill="#60a5fa"><title>e856974 to 14aebe3 | 1 tickets | 79.0 lines / ticket</title></circle>
+<circle cx="857.26" cy="385.96" r="2.5" fill="#60a5fa"><title>14aebe3 to f6b1172 | 1 tickets | 44.0 lines / ticket</title></circle>
+<circle cx="863.96" cy="386.68" r="2.5" fill="#60a5fa"><title>f6b1172 to 07ec501 | 1 tickets | 40.0 lines / ticket</title></circle>
+<circle cx="870.66" cy="376.35" r="2.5" fill="#60a5fa"><title>07ec501 to 366e4d2 | 1 tickets | 97.0 lines / ticket</title></circle>
+<circle cx="884.06" cy="373.26" r="2.5" fill="#60a5fa"><title>366e4d2 to 3a43c39 | 2 tickets | 114.0 lines / ticket</title></circle>
+<circle cx="904.17" cy="392.06" r="2.5" fill="#60a5fa"><title>3a43c39 to dfa79da | 3 tickets | 10.3 lines / ticket</title></circle>
+<circle cx="910.87" cy="393.94" r="2.5" fill="#60a5fa"><title>dfa79da to d907c52 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="917.57" cy="379.97" r="2.5" fill="#60a5fa"><title>d907c52 to 4590b2e | 1 tickets | 77.0 lines / ticket</title></circle>
+<circle cx="924.27" cy="385.05" r="2.5" fill="#60a5fa"><title>4590b2e to dfb8e3f | 1 tickets | 49.0 lines / ticket</title></circle>
+<circle cx="930.97" cy="391.03" r="2.5" fill="#60a5fa"><title>dfb8e3f to 1844d64 | 1 tickets | 16.0 lines / ticket</title></circle>
+<circle cx="937.67" cy="347.15" r="2.5" fill="#60a5fa"><title>1844d64 to 3ed6240 | 1 tickets | 258.0 lines / ticket</title></circle>
+<circle cx="944.38" cy="386.86" r="2.5" fill="#60a5fa"><title>3ed6240 to d9e63fd | 1 tickets | 39.0 lines / ticket</title></circle>
+<circle cx="951.08" cy="393.75" r="2.5" fill="#60a5fa"><title>d9e63fd to 22d3dec | 1 tickets | 1.0 lines / ticket</title></circle>
+<circle cx="957.78" cy="378.52" r="2.5" fill="#60a5fa"><title>22d3dec to 1523bca | 1 tickets | 85.0 lines / ticket</title></circle>
+<circle cx="964.48" cy="385.23" r="2.5" fill="#60a5fa"><title>1523bca to dc2bad8 | 1 tickets | 48.0 lines / ticket</title></circle>
+<circle cx="971.18" cy="393.94" r="2.5" fill="#60a5fa"><title>dc2bad8 to ccf2429 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="977.88" cy="289.84" r="2.5" fill="#60a5fa"><title>ccf2429 to 0f51156 | 1 tickets | 574.0 lines / ticket</title></circle>
+<circle cx="984.58" cy="378.52" r="2.5" fill="#60a5fa"><title>0f51156 to ba71ca3 | 1 tickets | 85.0 lines / ticket</title></circle>
+<circle cx="991.28" cy="366.37" r="2.5" fill="#60a5fa"><title>ba71ca3 to d5cfb15 | 1 tickets | 152.0 lines / ticket</title></circle>
+<circle cx="997.99" cy="390.49" r="2.5" fill="#60a5fa"><title>d5cfb15 to 8029e33 | 1 tickets | 19.0 lines / ticket</title></circle>
+<circle cx="1004.69" cy="274.79" r="2.5" fill="#60a5fa"><title>8029e33 to 8c4d031 | 1 tickets | 657.0 lines / ticket</title></circle>
+<circle cx="1011.39" cy="352.59" r="2.5" fill="#60a5fa"><title>8c4d031 to dbeb48b | 1 tickets | 228.0 lines / ticket</title></circle>
+<circle cx="1018.09" cy="361.29" r="2.5" fill="#60a5fa"><title>dbeb48b to fd5b3dd | 1 tickets | 180.0 lines / ticket</title></circle>
+<circle cx="1044.90" cy="382.56" r="2.5" fill="#60a5fa"><title>fd5b3dd to 6ee0b0b | 4 tickets | 62.8 lines / ticket</title></circle>
+<circle cx="1051.60" cy="383.78" r="2.5" fill="#60a5fa"><title>6ee0b0b to c54f043 | 1 tickets | 56.0 lines / ticket</title></circle>
+<circle cx="1065.00" cy="385.05" r="2.5" fill="#60a5fa"><title>c54f043 to 023c071 | 2 tickets | 49.0 lines / ticket</title></circle>
+<path stroke="#60a5fa" stroke-width="3" d="M100,78h25"/>
+<text x="133" y="83">Production growth / ticket</text>
+<polyline class="line" stroke="#fbbf24" points="106.70,248.13 113.40,288.76 120.10,208.24 126.81,286.04 133.51,321.76 140.21,288.76 146.91,292.56 153.61,389.40 160.31,355.49 167.01,388.68 173.72,335.54 180.42,289.12 187.12,393.94 193.82,278.24 200.52,283.68 207.22,309.61 213.92,374.17 220.62,271.35 227.33,343.52 234.03,385.23 240.73,364.56 247.43,174.69 254.13,369.09 260.83,371.27 267.53,330.83 274.24,344.79 280.94,339.17 287.64,323.21 294.34,380.52 301.04,329.38 307.74,316.86 314.44,341.16 321.15,354.58 327.85,352.95 334.55,362.20 341.25,383.60 347.95,376.89 354.65,357.12 361.35,362.02 368.06,246.32 374.76,315.41 388.16,375.80 401.56,385.23 408.26,346.24 414.97,370.72 421.67,349.51 428.37,300.91 435.07,362.20 441.77,343.52 461.88,386.32 475.28,382.60 481.98,393.94 488.68,388.50 495.38,386.50 502.08,354.95 508.78,376.89 515.49,366.73 548.99,393.94 569.10,392.24 582.50,377.43 589.20,306.71 595.90,338.99 602.60,393.94 616.01,370.81 622.71,301.09 629.41,310.70 636.11,342.43 642.81,330.65 649.51,363.83 676.32,378.25 683.02,390.67 689.72,335.18 696.42,393.94 703.12,289.12 709.83,385.05 723.23,393.94 729.93,383.78 756.74,360.80 763.44,359.66 770.14,335.18 776.84,270.62 796.94,393.94 803.65,374.71 810.35,359.66 817.05,327.02 823.75,393.94 830.45,393.94 837.15,360.57 843.85,393.94 850.56,343.89 857.26,356.58 863.96,321.22 870.66,365.10 884.06,353.50 904.17,374.53 910.87,376.16 917.57,393.94 924.27,360.75 930.97,377.98 937.67,357.30 944.38,366.73 951.08,380.15 957.78,374.71 964.48,345.88 971.18,353.68 977.88,307.43 984.58,370.18 991.28,337.18 997.99,359.30 1004.69,236.17 1011.39,331.19 1018.09,318.86 1044.90,382.19 1051.60,378.34 1065.00,366.37"/>
+<circle cx="106.70" cy="248.13" r="2.5" fill="#fbbf24"><title>f5e1f3f to e5d98ff | 1 tickets | 804.0 lines / ticket</title></circle>
+<circle cx="113.40" cy="288.76" r="2.5" fill="#fbbf24"><title>e5d98ff to 2633fc6 | 1 tickets | 580.0 lines / ticket</title></circle>
+<circle cx="120.10" cy="208.24" r="2.5" fill="#fbbf24"><title>2633fc6 to ce3cb58 | 1 tickets | 1,024.0 lines / ticket</title></circle>
+<circle cx="126.81" cy="286.04" r="2.5" fill="#fbbf24"><title>ce3cb58 to 1af72df | 1 tickets | 595.0 lines / ticket</title></circle>
+<circle cx="133.51" cy="321.76" r="2.5" fill="#fbbf24"><title>1af72df to a61642a | 1 tickets | 398.0 lines / ticket</title></circle>
+<circle cx="140.21" cy="288.76" r="2.5" fill="#fbbf24"><title>a61642a to 427788e | 1 tickets | 580.0 lines / ticket</title></circle>
+<circle cx="146.91" cy="292.56" r="2.5" fill="#fbbf24"><title>427788e to 3b6c7b7 | 1 tickets | 559.0 lines / ticket</title></circle>
+<circle cx="153.61" cy="389.40" r="2.5" fill="#fbbf24"><title>3b6c7b7 to e15f9fb | 1 tickets | 25.0 lines / ticket</title></circle>
+<circle cx="160.31" cy="355.49" r="2.5" fill="#fbbf24"><title>e15f9fb to b45e4b8 | 1 tickets | 212.0 lines / ticket</title></circle>
+<circle cx="167.01" cy="388.68" r="2.5" fill="#fbbf24"><title>b45e4b8 to 7ad944e | 1 tickets | 29.0 lines / ticket</title></circle>
+<circle cx="173.72" cy="335.54" r="2.5" fill="#fbbf24"><title>7ad944e to 033a105 | 1 tickets | 322.0 lines / ticket</title></circle>
+<circle cx="180.42" cy="289.12" r="2.5" fill="#fbbf24"><title>033a105 to c2b4b94 | 1 tickets | 578.0 lines / ticket</title></circle>
+<circle cx="187.12" cy="393.94" r="2.5" fill="#fbbf24"><title>c2b4b94 to dbfd041 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="193.82" cy="278.24" r="2.5" fill="#fbbf24"><title>dbfd041 to 20f575f | 1 tickets | 638.0 lines / ticket</title></circle>
+<circle cx="200.52" cy="283.68" r="2.5" fill="#fbbf24"><title>20f575f to 71fdff4 | 1 tickets | 608.0 lines / ticket</title></circle>
+<circle cx="207.22" cy="309.61" r="2.5" fill="#fbbf24"><title>71fdff4 to fa1a640 | 1 tickets | 465.0 lines / ticket</title></circle>
+<circle cx="213.92" cy="374.17" r="2.5" fill="#fbbf24"><title>fa1a640 to 616d99d | 1 tickets | 109.0 lines / ticket</title></circle>
+<circle cx="220.62" cy="271.35" r="2.5" fill="#fbbf24"><title>616d99d to beee068 | 1 tickets | 676.0 lines / ticket</title></circle>
+<circle cx="227.33" cy="343.52" r="2.5" fill="#fbbf24"><title>beee068 to d38bb34 | 1 tickets | 278.0 lines / ticket</title></circle>
+<circle cx="234.03" cy="385.23" r="2.5" fill="#fbbf24"><title>d38bb34 to f048168 | 1 tickets | 48.0 lines / ticket</title></circle>
+<circle cx="240.73" cy="364.56" r="2.5" fill="#fbbf24"><title>f048168 to 3d57c87 | 1 tickets | 162.0 lines / ticket</title></circle>
+<circle cx="247.43" cy="174.69" r="2.5" fill="#fbbf24"><title>3d57c87 to 577d400 | 1 tickets | 1,209.0 lines / ticket</title></circle>
+<circle cx="254.13" cy="369.09" r="2.5" fill="#fbbf24"><title>577d400 to fe6693e | 1 tickets | 137.0 lines / ticket</title></circle>
+<circle cx="260.83" cy="371.27" r="2.5" fill="#fbbf24"><title>fe6693e to 4144727 | 1 tickets | 125.0 lines / ticket</title></circle>
+<circle cx="267.53" cy="330.83" r="2.5" fill="#fbbf24"><title>4144727 to 07515c3 | 1 tickets | 348.0 lines / ticket</title></circle>
+<circle cx="274.24" cy="344.79" r="2.5" fill="#fbbf24"><title>07515c3 to e547cd2 | 1 tickets | 271.0 lines / ticket</title></circle>
+<circle cx="280.94" cy="339.17" r="2.5" fill="#fbbf24"><title>e547cd2 to 13b20ac | 1 tickets | 302.0 lines / ticket</title></circle>
+<circle cx="287.64" cy="323.21" r="2.5" fill="#fbbf24"><title>13b20ac to ad2ba76 | 1 tickets | 390.0 lines / ticket</title></circle>
+<circle cx="294.34" cy="380.52" r="2.5" fill="#fbbf24"><title>ad2ba76 to 3997dca | 1 tickets | 74.0 lines / ticket</title></circle>
+<circle cx="301.04" cy="329.38" r="2.5" fill="#fbbf24"><title>3997dca to 59b5d5e | 1 tickets | 356.0 lines / ticket</title></circle>
+<circle cx="307.74" cy="316.86" r="2.5" fill="#fbbf24"><title>59b5d5e to ac78063 | 1 tickets | 425.0 lines / ticket</title></circle>
+<circle cx="314.44" cy="341.16" r="2.5" fill="#fbbf24"><title>ac78063 to 79b8f67 | 1 tickets | 291.0 lines / ticket</title></circle>
+<circle cx="321.15" cy="354.58" r="2.5" fill="#fbbf24"><title>79b8f67 to 51545bf | 1 tickets | 217.0 lines / ticket</title></circle>
+<circle cx="327.85" cy="352.95" r="2.5" fill="#fbbf24"><title>51545bf to a152aea | 1 tickets | 226.0 lines / ticket</title></circle>
+<circle cx="334.55" cy="362.20" r="2.5" fill="#fbbf24"><title>a152aea to 8ca28d9 | 1 tickets | 175.0 lines / ticket</title></circle>
+<circle cx="341.25" cy="383.60" r="2.5" fill="#fbbf24"><title>8ca28d9 to b361d56 | 1 tickets | 57.0 lines / ticket</title></circle>
+<circle cx="347.95" cy="376.89" r="2.5" fill="#fbbf24"><title>b361d56 to a637f03 | 1 tickets | 94.0 lines / ticket</title></circle>
+<circle cx="354.65" cy="357.12" r="2.5" fill="#fbbf24"><title>a637f03 to 0e47e61 | 1 tickets | 203.0 lines / ticket</title></circle>
+<circle cx="361.35" cy="362.02" r="2.5" fill="#fbbf24"><title>0e47e61 to d88b1c5 | 1 tickets | 176.0 lines / ticket</title></circle>
+<circle cx="368.06" cy="246.32" r="2.5" fill="#fbbf24"><title>d88b1c5 to 3f5b881 | 1 tickets | 814.0 lines / ticket</title></circle>
+<circle cx="374.76" cy="315.41" r="2.5" fill="#fbbf24"><title>3f5b881 to 3269fcd | 1 tickets | 433.0 lines / ticket</title></circle>
+<circle cx="388.16" cy="375.80" r="2.5" fill="#fbbf24"><title>3269fcd to b4bf5bb | 2 tickets | 100.0 lines / ticket</title></circle>
+<circle cx="401.56" cy="385.23" r="2.5" fill="#fbbf24"><title>b4bf5bb to 094042a | 2 tickets | 48.0 lines / ticket</title></circle>
+<circle cx="408.26" cy="346.24" r="2.5" fill="#fbbf24"><title>094042a to 35412e6 | 1 tickets | 263.0 lines / ticket</title></circle>
+<circle cx="414.97" cy="370.72" r="2.5" fill="#fbbf24"><title>35412e6 to f7f3231 | 1 tickets | 128.0 lines / ticket</title></circle>
+<circle cx="421.67" cy="349.51" r="2.5" fill="#fbbf24"><title>f7f3231 to 5772036 | 1 tickets | 245.0 lines / ticket</title></circle>
+<circle cx="428.37" cy="300.91" r="2.5" fill="#fbbf24"><title>5772036 to ddf3074 | 1 tickets | 513.0 lines / ticket</title></circle>
+<circle cx="435.07" cy="362.20" r="2.5" fill="#fbbf24"><title>ddf3074 to d4d8712 | 1 tickets | 175.0 lines / ticket</title></circle>
+<circle cx="441.77" cy="343.52" r="2.5" fill="#fbbf24"><title>d4d8712 to dcb5d47 | 1 tickets | 278.0 lines / ticket</title></circle>
+<circle cx="461.88" cy="386.32" r="2.5" fill="#fbbf24"><title>dcb5d47 to a85bb76 | 3 tickets | 42.0 lines / ticket</title></circle>
+<circle cx="475.28" cy="382.60" r="2.5" fill="#fbbf24"><title>a85bb76 to bf4b74f | 2 tickets | 62.5 lines / ticket</title></circle>
+<circle cx="481.98" cy="393.94" r="2.5" fill="#fbbf24"><title>bf4b74f to c3dccb1 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="488.68" cy="388.50" r="2.5" fill="#fbbf24"><title>c3dccb1 to 588c05d | 1 tickets | 30.0 lines / ticket</title></circle>
+<circle cx="495.38" cy="386.50" r="2.5" fill="#fbbf24"><title>588c05d to c5da964 | 1 tickets | 41.0 lines / ticket</title></circle>
+<circle cx="502.08" cy="354.95" r="2.5" fill="#fbbf24"><title>c5da964 to f556770 | 1 tickets | 215.0 lines / ticket</title></circle>
+<circle cx="508.78" cy="376.89" r="2.5" fill="#fbbf24"><title>f556770 to bb79590 | 1 tickets | 94.0 lines / ticket</title></circle>
+<circle cx="515.49" cy="366.73" r="2.5" fill="#fbbf24"><title>bb79590 to 037d0bf | 1 tickets | 150.0 lines / ticket</title></circle>
+<circle cx="548.99" cy="393.94" r="2.5" fill="#fbbf24"><title>037d0bf to a171ffb | 5 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="569.10" cy="392.24" r="2.5" fill="#fbbf24"><title>a171ffb to 4b73b5b | 3 tickets | 9.3 lines / ticket</title></circle>
+<circle cx="582.50" cy="377.43" r="2.5" fill="#fbbf24"><title>4b73b5b to fc3504c | 2 tickets | 91.0 lines / ticket</title></circle>
+<circle cx="589.20" cy="306.71" r="2.5" fill="#fbbf24"><title>fc3504c to 0f0ee69 | 1 tickets | 481.0 lines / ticket</title></circle>
+<circle cx="595.90" cy="338.99" r="2.5" fill="#fbbf24"><title>0f0ee69 to c12a13a | 1 tickets | 303.0 lines / ticket</title></circle>
+<circle cx="602.60" cy="393.94" r="2.5" fill="#fbbf24"><title>c12a13a to 0bea795 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="616.01" cy="370.81" r="2.5" fill="#fbbf24"><title>0bea795 to be466bb | 2 tickets | 127.5 lines / ticket</title></circle>
+<circle cx="622.71" cy="301.09" r="2.5" fill="#fbbf24"><title>be466bb to 9597a02 | 1 tickets | 512.0 lines / ticket</title></circle>
+<circle cx="629.41" cy="310.70" r="2.5" fill="#fbbf24"><title>9597a02 to 81ec477 | 1 tickets | 459.0 lines / ticket</title></circle>
+<circle cx="636.11" cy="342.43" r="2.5" fill="#fbbf24"><title>81ec477 to 74ba638 | 1 tickets | 284.0 lines / ticket</title></circle>
+<circle cx="642.81" cy="330.65" r="2.5" fill="#fbbf24"><title>74ba638 to f597cf0 | 1 tickets | 349.0 lines / ticket</title></circle>
+<circle cx="649.51" cy="363.83" r="2.5" fill="#fbbf24"><title>f597cf0 to 2fc20ae | 1 tickets | 166.0 lines / ticket</title></circle>
+<circle cx="676.32" cy="378.25" r="2.5" fill="#fbbf24"><title>2fc20ae to b6f5ba7 | 4 tickets | 86.5 lines / ticket</title></circle>
+<circle cx="683.02" cy="390.67" r="2.5" fill="#fbbf24"><title>b6f5ba7 to b82b38a | 1 tickets | 18.0 lines / ticket</title></circle>
+<circle cx="689.72" cy="335.18" r="2.5" fill="#fbbf24"><title>b82b38a to fbe902d | 1 tickets | 324.0 lines / ticket</title></circle>
+<circle cx="696.42" cy="393.94" r="2.5" fill="#fbbf24"><title>fbe902d to 9b4e6b2 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="703.12" cy="289.12" r="2.5" fill="#fbbf24"><title>9b4e6b2 to 6af327d | 1 tickets | 578.0 lines / ticket</title></circle>
+<circle cx="709.83" cy="385.05" r="2.5" fill="#fbbf24"><title>6af327d to fe6fe19 | 1 tickets | 49.0 lines / ticket</title></circle>
+<circle cx="723.23" cy="393.94" r="2.5" fill="#fbbf24"><title>fe6fe19 to bf1768d | 2 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="729.93" cy="383.78" r="2.5" fill="#fbbf24"><title>bf1768d to 0ef478f | 1 tickets | 56.0 lines / ticket</title></circle>
+<circle cx="756.74" cy="360.80" r="2.5" fill="#fbbf24"><title>0ef478f to 6d38e40 | 4 tickets | 182.8 lines / ticket</title></circle>
+<circle cx="763.44" cy="359.66" r="2.5" fill="#fbbf24"><title>6d38e40 to d393100 | 1 tickets | 189.0 lines / ticket</title></circle>
+<circle cx="770.14" cy="335.18" r="2.5" fill="#fbbf24"><title>d393100 to 4197ccc | 1 tickets | 324.0 lines / ticket</title></circle>
+<circle cx="776.84" cy="270.62" r="2.5" fill="#fbbf24"><title>4197ccc to 64891a3 | 1 tickets | 680.0 lines / ticket</title></circle>
+<circle cx="796.94" cy="393.94" r="2.5" fill="#fbbf24"><title>64891a3 to 65988e3 | 3 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="803.65" cy="374.71" r="2.5" fill="#fbbf24"><title>65988e3 to 81488cc | 1 tickets | 106.0 lines / ticket</title></circle>
+<circle cx="810.35" cy="359.66" r="2.5" fill="#fbbf24"><title>81488cc to d9bcfdb | 1 tickets | 189.0 lines / ticket</title></circle>
+<circle cx="817.05" cy="327.02" r="2.5" fill="#fbbf24"><title>d9bcfdb to ef7e86e | 1 tickets | 369.0 lines / ticket</title></circle>
+<circle cx="823.75" cy="393.94" r="2.5" fill="#fbbf24"><title>ef7e86e to f5199b0 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="830.45" cy="393.94" r="2.5" fill="#fbbf24"><title>f5199b0 to 9e106d1 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="837.15" cy="360.57" r="2.5" fill="#fbbf24"><title>9e106d1 to f2d9a89 | 1 tickets | 184.0 lines / ticket</title></circle>
+<circle cx="843.85" cy="393.94" r="2.5" fill="#fbbf24"><title>f2d9a89 to e856974 | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="850.56" cy="343.89" r="2.5" fill="#fbbf24"><title>e856974 to 14aebe3 | 1 tickets | 276.0 lines / ticket</title></circle>
+<circle cx="857.26" cy="356.58" r="2.5" fill="#fbbf24"><title>14aebe3 to f6b1172 | 1 tickets | 206.0 lines / ticket</title></circle>
+<circle cx="863.96" cy="321.22" r="2.5" fill="#fbbf24"><title>f6b1172 to 07ec501 | 1 tickets | 401.0 lines / ticket</title></circle>
+<circle cx="870.66" cy="365.10" r="2.5" fill="#fbbf24"><title>07ec501 to 366e4d2 | 1 tickets | 159.0 lines / ticket</title></circle>
+<circle cx="884.06" cy="353.50" r="2.5" fill="#fbbf24"><title>366e4d2 to 3a43c39 | 2 tickets | 223.0 lines / ticket</title></circle>
+<circle cx="904.17" cy="374.53" r="2.5" fill="#fbbf24"><title>3a43c39 to dfa79da | 3 tickets | 107.0 lines / ticket</title></circle>
+<circle cx="910.87" cy="376.16" r="2.5" fill="#fbbf24"><title>dfa79da to d907c52 | 1 tickets | 98.0 lines / ticket</title></circle>
+<circle cx="917.57" cy="393.94" r="2.5" fill="#fbbf24"><title>d907c52 to 4590b2e | 1 tickets | 0.0 lines / ticket</title></circle>
+<circle cx="924.27" cy="360.75" r="2.5" fill="#fbbf24"><title>4590b2e to dfb8e3f | 1 tickets | 183.0 lines / ticket</title></circle>
+<circle cx="930.97" cy="377.98" r="2.5" fill="#fbbf24"><title>dfb8e3f to 1844d64 | 1 tickets | 88.0 lines / ticket</title></circle>
+<circle cx="937.67" cy="357.30" r="2.5" fill="#fbbf24"><title>1844d64 to 3ed6240 | 1 tickets | 202.0 lines / ticket</title></circle>
+<circle cx="944.38" cy="366.73" r="2.5" fill="#fbbf24"><title>3ed6240 to d9e63fd | 1 tickets | 150.0 lines / ticket</title></circle>
+<circle cx="951.08" cy="380.15" r="2.5" fill="#fbbf24"><title>d9e63fd to 22d3dec | 1 tickets | 76.0 lines / ticket</title></circle>
+<circle cx="957.78" cy="374.71" r="2.5" fill="#fbbf24"><title>22d3dec to 1523bca | 1 tickets | 106.0 lines / ticket</title></circle>
+<circle cx="964.48" cy="345.88" r="2.5" fill="#fbbf24"><title>1523bca to dc2bad8 | 1 tickets | 265.0 lines / ticket</title></circle>
+<circle cx="971.18" cy="353.68" r="2.5" fill="#fbbf24"><title>dc2bad8 to ccf2429 | 1 tickets | 222.0 lines / ticket</title></circle>
+<circle cx="977.88" cy="307.43" r="2.5" fill="#fbbf24"><title>ccf2429 to 0f51156 | 1 tickets | 477.0 lines / ticket</title></circle>
+<circle cx="984.58" cy="370.18" r="2.5" fill="#fbbf24"><title>0f51156 to ba71ca3 | 1 tickets | 131.0 lines / ticket</title></circle>
+<circle cx="991.28" cy="337.18" r="2.5" fill="#fbbf24"><title>ba71ca3 to d5cfb15 | 1 tickets | 313.0 lines / ticket</title></circle>
+<circle cx="997.99" cy="359.30" r="2.5" fill="#fbbf24"><title>d5cfb15 to 8029e33 | 1 tickets | 191.0 lines / ticket</title></circle>
+<circle cx="1004.69" cy="236.17" r="2.5" fill="#fbbf24"><title>8029e33 to 8c4d031 | 1 tickets | 870.0 lines / ticket</title></circle>
+<circle cx="1011.39" cy="331.19" r="2.5" fill="#fbbf24"><title>8c4d031 to dbeb48b | 1 tickets | 346.0 lines / ticket</title></circle>
+<circle cx="1018.09" cy="318.86" r="2.5" fill="#fbbf24"><title>dbeb48b to fd5b3dd | 1 tickets | 414.0 lines / ticket</title></circle>
+<circle cx="1044.90" cy="382.19" r="2.5" fill="#fbbf24"><title>fd5b3dd to 6ee0b0b | 4 tickets | 64.8 lines / ticket</title></circle>
+<circle cx="1051.60" cy="378.34" r="2.5" fill="#fbbf24"><title>6ee0b0b to c54f043 | 1 tickets | 86.0 lines / ticket</title></circle>
+<circle cx="1065.00" cy="366.37" r="2.5" fill="#fbbf24"><title>c54f043 to 023c071 | 2 tickets | 152.0 lines / ticket</title></circle>
+<path stroke="#fbbf24" stroke-width="3" d="M360,78h25"/>
+<text x="393" y="83">Test growth / ticket</text>
+<text x="582.5" y="496" text-anchor="middle">Cumulative resolved implementation tickets</text>
+<text transform="translate(24,265.0) rotate(-90)" text-anchor="middle">Net nonblank lines / new ticket</text>
+</svg>

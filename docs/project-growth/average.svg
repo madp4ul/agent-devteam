@@ -1,0 +1,405 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" role="img" aria-labelledby="title desc">
+<title id="title">Code retained per resolved ticket</title><desc id="desc">Total source lines / cumulative implementation tickets; this is a stock average, not marginal growth</desc>
+<style>text{font-family:Arial,sans-serif;fill:#cbd5e1;font-size:14px}.grid{stroke:#334155;stroke-width:1}.line{fill:none;stroke-width:2.5;stroke-linejoin:round}</style>
+<rect width="1100" height="520" rx="12" fill="#101827"/>
+<text x="30" y="32" style="font-size:22px;fill:#f1f5f9">Code retained per resolved ticket</text>
+<text x="30" y="56">Total source lines / cumulative implementation tickets; this is a stock average, not marginal growth</text>
+<path class="grid" d="M100,435.00h965"/>
+<text x="88" y="440.00" text-anchor="end">0</text>
+<path class="grid" d="M100,367.00h965"/>
+<text x="88" y="372.00" text-anchor="end">267</text>
+<path class="grid" d="M100,299.00h965"/>
+<text x="88" y="304.00" text-anchor="end">534</text>
+<path class="grid" d="M100,231.00h965"/>
+<text x="88" y="236.00" text-anchor="end">801</text>
+<path class="grid" d="M100,163.00h965"/>
+<text x="88" y="168.00" text-anchor="end">1,068</text>
+<path class="grid" d="M100,95.00h965"/>
+<text x="88" y="100.00" text-anchor="end">1,335</text>
+<path class="grid" d="M100.00,95v340"/>
+<text x="100.00" y="460" text-anchor="middle">0</text>
+<path class="grid" d="M260.83,95v340"/>
+<text x="260.83" y="460" text-anchor="middle">24</text>
+<path class="grid" d="M421.67,95v340"/>
+<text x="421.67" y="460" text-anchor="middle">48</text>
+<path class="grid" d="M582.50,95v340"/>
+<text x="582.50" y="460" text-anchor="middle">72</text>
+<path class="grid" d="M743.33,95v340"/>
+<text x="743.33" y="460" text-anchor="middle">96</text>
+<path class="grid" d="M904.17,95v340"/>
+<text x="904.17" y="460" text-anchor="middle">120</text>
+<path class="grid" d="M1065.00,95v340"/>
+<text x="1065.00" y="460" text-anchor="middle">144</text>
+<polyline class="line" stroke="#60a5fa" points="106.70,435.00 106.70,114.25 106.70,114.25 106.70,114.25 106.70,114.25 113.40,192.08 113.40,192.08 120.10,209.53 126.81,226.15 126.81,217.55 126.81,217.55 133.51,182.17 133.51,182.17 140.21,211.99 140.21,211.99 146.91,218.37 153.61,249.59 153.61,249.46 153.61,249.46 160.31,266.37 167.01,283.11 173.72,285.87 180.42,296.07 187.12,306.32 193.82,306.74 200.52,305.63 207.22,303.40 213.92,311.02 213.92,310.61 213.92,310.61 220.62,311.68 227.33,315.03 227.33,313.26 234.03,319.30 240.73,322.62 247.43,325.11 247.43,325.01 247.43,324.80 247.43,317.68 254.13,320.95 254.13,320.95 260.83,325.23 260.83,325.23 267.53,326.97 267.53,326.74 267.53,326.74 274.24,329.40 274.24,329.46 274.24,328.91 274.24,328.91 280.94,329.42 280.94,328.05 280.94,328.05 287.64,327.58 287.64,326.55 287.64,326.74 294.34,330.26 294.34,330.26 301.04,331.90 307.74,335.12 314.44,338.24 321.15,340.91 327.85,342.20 327.85,342.27 327.85,342.27 334.55,342.82 341.25,345.18 347.95,347.14 354.65,349.34 361.35,350.21 361.35,350.05 361.35,350.05 361.35,350.05 368.06,347.92 374.76,348.02 374.76,347.83 374.76,347.74 388.16,351.44 401.56,355.13 401.56,355.13 408.26,353.30 414.97,353.58 421.67,354.34 428.37,354.21 428.37,353.66 435.07,355.24 441.77,356.15 441.77,356.08 461.88,360.15 475.28,362.56 481.98,363.78 488.68,365.41 488.68,364.95 495.38,366.12 502.08,366.75 508.78,367.39 515.49,367.54 548.99,371.60 569.10,374.43 582.50,376.11 582.50,376.11 582.50,376.11 589.20,375.77 595.90,375.41 595.90,375.41 595.90,375.41 602.60,376.09 616.01,377.30 616.01,376.81 622.71,376.40 629.41,375.99 636.11,376.47 636.11,376.47 642.81,376.89 649.51,377.47 676.32,380.07 683.02,380.64 689.72,380.46 689.72,380.35 696.42,380.97 703.12,381.38 703.12,381.42 703.12,378.98 709.83,379.28 709.83,379.28 709.83,379.28 723.23,380.48 729.93,380.66 756.74,382.57 763.44,382.92 763.44,382.92 770.14,382.88 770.14,382.88 770.14,382.81 776.84,383.01 776.84,382.25 776.84,382.17 796.94,383.69 803.65,383.70 810.35,384.01 810.35,384.01 817.05,383.88 817.05,383.88 823.75,384.29 823.75,384.29 830.45,384.71 837.15,385.11 843.85,385.60 843.85,385.60 850.56,385.87 857.26,386.20 863.96,386.54 870.66,386.75 884.06,387.08 904.17,388.21 910.87,388.59 917.57,388.81 917.57,388.81 917.57,388.81 924.27,389.09 930.97,389.43 937.67,389.26 944.38,389.55 944.38,389.55 951.08,389.90 957.78,390.09 964.48,390.34 971.18,390.68 977.88,389.94 977.88,389.91 984.58,390.08 991.28,390.13 997.99,390.46 997.99,390.43 997.99,390.43 1004.69,389.52 1004.69,389.52 1011.39,389.43 1018.09,389.42 1044.90,390.26 1051.60,390.48 1065.00,390.92"/>
+<circle cx="106.70" cy="435.00" r="2.5" fill="#60a5fa"><title>2492ef8 | 2026-08-02 | ticket 14 | 0 lines | 1 tickets</title></circle>
+<circle cx="106.70" cy="114.25" r="2.5" fill="#60a5fa"><title>5d903a0 | 2026-08-02 | first coordinator | 1,259 lines | 1 tickets</title></circle>
+<circle cx="106.70" cy="114.25" r="2.5" fill="#60a5fa"><title>d64da04 | 2026-08-02 | add | 1,259 lines | 1 tickets</title></circle>
+<circle cx="106.70" cy="114.25" r="2.5" fill="#60a5fa"><title>dbbf7da | 2026-08-02 | adr 2 | 1,259 lines | 1 tickets</title></circle>
+<circle cx="106.70" cy="114.25" r="2.5" fill="#60a5fa"><title>e5d98ff | 2026-08-02 | setup instructions | 1,259 lines | 1 tickets</title></circle>
+<circle cx="113.40" cy="192.08" r="2.5" fill="#60a5fa"><title>8bf8e29 | 2026-08-02 | ticket 16 done | 1,907 lines | 2 tickets</title></circle>
+<circle cx="113.40" cy="192.08" r="2.5" fill="#60a5fa"><title>2633fc6 | 2026-08-02 | adr 3 | 1,907 lines | 2 tickets</title></circle>
+<circle cx="120.10" cy="209.53" r="2.5" fill="#60a5fa"><title>ce3cb58 | 2026-08-02 | ticket 17 | 2,655 lines | 3 tickets</title></circle>
+<circle cx="126.81" cy="226.15" r="2.5" fill="#60a5fa"><title>975da61 | 2026-08-02 | resolve 18 | 3,279 lines | 4 tickets</title></circle>
+<circle cx="126.81" cy="217.55" r="2.5" fill="#60a5fa"><title>8251169 | 2026-08-02 | split large code files | 3,414 lines | 4 tickets</title></circle>
+<circle cx="126.81" cy="217.55" r="2.5" fill="#60a5fa"><title>1af72df | 2026-08-02 | add refactoring ticket | 3,414 lines | 4 tickets</title></circle>
+<circle cx="133.51" cy="182.17" r="2.5" fill="#60a5fa"><title>817bce7 | 2026-08-03 | resolve 19 - react app | 4,962 lines | 5 tickets</title></circle>
+<circle cx="133.51" cy="182.17" r="2.5" fill="#60a5fa"><title>a61642a | 2026-08-03 | Document bugs | 4,962 lines | 5 tickets</title></circle>
+<circle cx="140.21" cy="211.99" r="2.5" fill="#60a5fa"><title>336d1e0 | 2026-08-03 | resolve issue 30 - failed mcp and worktree activation | 5,252 lines | 6 tickets</title></circle>
+<circle cx="140.21" cy="211.99" r="2.5" fill="#60a5fa"><title>427788e | 2026-08-08 | refinement | 5,252 lines | 6 tickets</title></circle>
+<circle cx="146.91" cy="218.37" r="2.5" fill="#60a5fa"><title>3b6c7b7 | 2026-08-08 | resolve 20 | 5,952 lines | 7 tickets</title></circle>
+<circle cx="153.61" cy="249.59" r="2.5" fill="#60a5fa"><title>7de3845 | 2026-08-08 | resolve 29 | 5,822 lines | 8 tickets</title></circle>
+<circle cx="153.61" cy="249.46" r="2.5" fill="#60a5fa"><title>c936475 | 2026-08-08 | Resolve next | 5,826 lines | 8 tickets</title></circle>
+<circle cx="153.61" cy="249.46" r="2.5" fill="#60a5fa"><title>e15f9fb | 2026-08-08 | more issues | 5,826 lines | 8 tickets</title></circle>
+<circle cx="160.31" cy="266.37" r="2.5" fill="#60a5fa"><title>b45e4b8 | 2026-08-08 | resolve 36 | 5,957 lines | 9 tickets</title></circle>
+<circle cx="167.01" cy="283.11" r="2.5" fill="#60a5fa"><title>7ad944e | 2026-08-08 | resolve 15 | 5,962 lines | 10 tickets</title></circle>
+<circle cx="173.72" cy="285.87" r="2.5" fill="#60a5fa"><title>033a105 | 2026-08-08 | resolve 21 | 6,439 lines | 11 tickets</title></circle>
+<circle cx="180.42" cy="296.07" r="2.5" fill="#60a5fa"><title>c2b4b94 | 2026-08-08 | resolve 22 | 6,544 lines | 12 tickets</title></circle>
+<circle cx="187.12" cy="306.32" r="2.5" fill="#60a5fa"><title>dbfd041 | 2026-08-08 | resolve 41 | 6,566 lines | 13 tickets</title></circle>
+<circle cx="193.82" cy="306.74" r="2.5" fill="#60a5fa"><title>20f575f | 2026-08-08 | resolve 23 | 7,048 lines | 14 tickets</title></circle>
+<circle cx="200.52" cy="305.63" r="2.5" fill="#60a5fa"><title>71fdff4 | 2026-08-08 | resolve 24 | 7,617 lines | 15 tickets</title></circle>
+<circle cx="207.22" cy="303.40" r="2.5" fill="#60a5fa"><title>fa1a640 | 2026-08-08 | resolve 25 | 8,265 lines | 16 tickets</title></circle>
+<circle cx="213.92" cy="311.02" r="2.5" fill="#60a5fa"><title>6411600 | 2026-08-08 | resolve 43 | 8,273 lines | 17 tickets</title></circle>
+<circle cx="213.92" cy="310.61" r="2.5" fill="#60a5fa"><title>9273ca2 | 2026-08-08 | Update 43 | 8,300 lines | 17 tickets</title></circle>
+<circle cx="213.92" cy="310.61" r="2.5" fill="#60a5fa"><title>616d99d | 2026-08-08 | Create 45 | 8,300 lines | 17 tickets</title></circle>
+<circle cx="220.62" cy="311.68" r="2.5" fill="#60a5fa"><title>beee068 | 2026-08-09 | resolve 26 | 8,713 lines | 18 tickets</title></circle>
+<circle cx="227.33" cy="315.03" r="2.5" fill="#60a5fa"><title>fd163b4 | 2026-08-09 | resolve 31 - 1 | 8,947 lines | 19 tickets</title></circle>
+<circle cx="227.33" cy="313.26" r="2.5" fill="#60a5fa"><title>d38bb34 | 2026-08-09 | resolve 31 - vs code | 9,079 lines | 19 tickets</title></circle>
+<circle cx="234.03" cy="319.30" r="2.5" fill="#60a5fa"><title>f048168 | 2026-08-09 | resolve 44 | 9,083 lines | 20 tickets</title></circle>
+<circle cx="240.73" cy="322.62" r="2.5" fill="#60a5fa"><title>3d57c87 | 2026-08-09 | RESOLVE 45 | 9,263 lines | 21 tickets</title></circle>
+<circle cx="247.43" cy="325.11" r="2.5" fill="#60a5fa"><title>83abfd5 | 2026-08-09 | resolve 32 1 | 9,489 lines | 22 tickets</title></circle>
+<circle cx="247.43" cy="325.01" r="2.5" fill="#60a5fa"><title>4d47922 | 2026-08-09 | improvements 32 | 9,498 lines | 22 tickets</title></circle>
+<circle cx="247.43" cy="324.80" r="2.5" fill="#60a5fa"><title>79ce55f | 2026-08-09 | improvements 32 2 | 9,516 lines | 22 tickets</title></circle>
+<circle cx="247.43" cy="317.68" r="2.5" fill="#60a5fa"><title>577d400 | 2026-08-09 | issue 27 first messy implementation | 10,131 lines | 22 tickets</title></circle>
+<circle cx="254.13" cy="320.95" r="2.5" fill="#60a5fa"><title>1351004 | 2026-08-09 | reswolve 32 proper | 10,296 lines | 23 tickets</title></circle>
+<circle cx="254.13" cy="320.95" r="2.5" fill="#60a5fa"><title>fe6693e | 2026-08-09 | new issues | 10,296 lines | 23 tickets</title></circle>
+<circle cx="260.83" cy="325.23" r="2.5" fill="#60a5fa"><title>73f8ff7 | 2026-08-10 | resolve 46 | 10,341 lines | 24 tickets</title></circle>
+<circle cx="260.83" cy="325.23" r="2.5" fill="#60a5fa"><title>4144727 | 2026-08-10 | grill 33 | 10,341 lines | 24 tickets</title></circle>
+<circle cx="267.53" cy="326.97" r="2.5" fill="#60a5fa"><title>09f1cd5 | 2026-08-10 | resolve 33 | 10,601 lines | 25 tickets</title></circle>
+<circle cx="267.53" cy="326.74" r="2.5" fill="#60a5fa"><title>3d99a0e | 2026-08-10 | improve 33 | 10,623 lines | 25 tickets</title></circle>
+<circle cx="267.53" cy="326.74" r="2.5" fill="#60a5fa"><title>07515c3 | 2026-08-10 | refinement | 10,623 lines | 25 tickets</title></circle>
+<circle cx="274.24" cy="329.40" r="2.5" fill="#60a5fa"><title>ddd851e | 2026-08-10 | resolve 47 1 | 10,777 lines | 26 tickets</title></circle>
+<circle cx="274.24" cy="329.46" r="2.5" fill="#60a5fa"><title>e919c5f | 2026-08-10 | improve 47 | 10,771 lines | 26 tickets</title></circle>
+<circle cx="274.24" cy="328.91" r="2.5" fill="#60a5fa"><title>021592b | 2026-08-10 | complete 47 | 10,827 lines | 26 tickets</title></circle>
+<circle cx="274.24" cy="328.91" r="2.5" fill="#60a5fa"><title>e547cd2 | 2026-08-10 | grill 37 | 10,827 lines | 26 tickets</title></circle>
+<circle cx="280.94" cy="329.42" r="2.5" fill="#60a5fa"><title>bd59f90 | 2026-08-10 | resolve 37 | 11,189 lines | 27 tickets</title></circle>
+<circle cx="280.94" cy="328.05" r="2.5" fill="#60a5fa"><title>6725da0 | 2026-08-10 | improve 37 | 11,334 lines | 27 tickets</title></circle>
+<circle cx="280.94" cy="328.05" r="2.5" fill="#60a5fa"><title>13b20ac | 2026-08-10 | finakize 37 | 11,334 lines | 27 tickets</title></circle>
+<circle cx="287.64" cy="327.58" r="2.5" fill="#60a5fa"><title>5db7a93 | 2026-08-11 | refine 48 | 11,806 lines | 28 tickets</title></circle>
+<circle cx="287.64" cy="326.55" r="2.5" fill="#60a5fa"><title>2dcc49b | 2026-08-11 | finalize 48 | 11,919 lines | 28 tickets</title></circle>
+<circle cx="287.64" cy="326.74" r="2.5" fill="#60a5fa"><title>ad2ba76 | 2026-08-11 | finalize 48 2 | 11,898 lines | 28 tickets</title></circle>
+<circle cx="294.34" cy="330.26" r="2.5" fill="#60a5fa"><title>375b4c3 | 2026-08-11 | resolve 49 | 11,922 lines | 29 tickets</title></circle>
+<circle cx="294.34" cy="330.26" r="2.5" fill="#60a5fa"><title>3997dca | 2026-08-11 | refinement | 11,922 lines | 29 tickets</title></circle>
+<circle cx="301.04" cy="331.90" r="2.5" fill="#60a5fa"><title>59b5d5e | 2026-08-11 | resolve 38 | 12,140 lines | 30 tickets</title></circle>
+<circle cx="307.74" cy="335.12" r="2.5" fill="#60a5fa"><title>ac78063 | 2026-08-11 | resolve 52 | 12,153 lines | 31 tickets</title></circle>
+<circle cx="314.44" cy="338.24" r="2.5" fill="#60a5fa"><title>79b8f67 | 2026-08-11 | resolve 28 | 12,153 lines | 32 tickets</title></circle>
+<circle cx="321.15" cy="340.91" r="2.5" fill="#60a5fa"><title>51545bf | 2026-08-11 | resolve 51 54 | 12,187 lines | 33 tickets</title></circle>
+<circle cx="327.85" cy="342.20" r="2.5" fill="#60a5fa"><title>88648ec | 2026-08-12 | resolve 53 | 12,384 lines | 34 tickets</title></circle>
+<circle cx="327.85" cy="342.27" r="2.5" fill="#60a5fa"><title>dee76ff | 2026-08-12 | resolve 53 2 | 12,375 lines | 34 tickets</title></circle>
+<circle cx="327.85" cy="342.27" r="2.5" fill="#60a5fa"><title>a152aea | 2026-08-13 | try harden against accidental user mention | 12,375 lines | 34 tickets</title></circle>
+<circle cx="334.55" cy="342.82" r="2.5" fill="#60a5fa"><title>8ca28d9 | 2026-08-13 | resolve 55 | 12,664 lines | 35 tickets</title></circle>
+<circle cx="341.25" cy="345.18" r="2.5" fill="#60a5fa"><title>b361d56 | 2026-08-13 | resolve 56 | 12,692 lines | 36 tickets</title></circle>
+<circle cx="347.95" cy="347.14" r="2.5" fill="#60a5fa"><title>a637f03 | 2026-08-13 | resolve 39 | 12,760 lines | 37 tickets</title></circle>
+<circle cx="354.65" cy="349.34" r="2.5" fill="#60a5fa"><title>0e47e61 | 2026-08-13 | resolve 40 | 12,777 lines | 38 tickets</title></circle>
+<circle cx="361.35" cy="350.21" r="2.5" fill="#60a5fa"><title>596fe40 | 2026-08-13 | resolve 35 | 12,980 lines | 39 tickets</title></circle>
+<circle cx="361.35" cy="350.05" r="2.5" fill="#60a5fa"><title>ab97e80 | 2026-08-13 | resolve 35 improvements | 13,004 lines | 39 tickets</title></circle>
+<circle cx="361.35" cy="350.05" r="2.5" fill="#60a5fa"><title>cf93b58 | 2026-08-13 | new spec | 13,004 lines | 39 tickets</title></circle>
+<circle cx="361.35" cy="350.05" r="2.5" fill="#60a5fa"><title>d88b1c5 | 2026-08-13 | conversation issues | 13,004 lines | 39 tickets</title></circle>
+<circle cx="368.06" cy="347.92" r="2.5" fill="#60a5fa"><title>3f5b881 | 2026-08-13 | resolve 34 | 13,672 lines | 40 tickets</title></circle>
+<circle cx="374.76" cy="348.02" r="2.5" fill="#60a5fa"><title>fde8c56 | 2026-08-13 | resolve 50 | 13,997 lines | 41 tickets</title></circle>
+<circle cx="374.76" cy="347.83" r="2.5" fill="#60a5fa"><title>c0f5a1d | 2026-08-13 | improve 50 | 14,029 lines | 41 tickets</title></circle>
+<circle cx="374.76" cy="347.74" r="2.5" fill="#60a5fa"><title>3269fcd | 2026-08-13 | create 57 | 14,043 lines | 41 tickets</title></circle>
+<circle cx="388.16" cy="351.44" r="2.5" fill="#60a5fa"><title>b4bf5bb | 2026-08-14 | resolve 60 64 | 14,104 lines | 43 tickets</title></circle>
+<circle cx="401.56" cy="355.13" r="2.5" fill="#60a5fa"><title>d133a6b | 2026-08-14 | resolve 58 61 | 14,107 lines | 45 tickets</title></circle>
+<circle cx="401.56" cy="355.13" r="2.5" fill="#60a5fa"><title>094042a | 2026-08-14 | refine 59 | 14,107 lines | 45 tickets</title></circle>
+<circle cx="408.26" cy="353.30" r="2.5" fill="#60a5fa"><title>35412e6 | 2026-08-14 | resolve 59 | 14,751 lines | 46 tickets</title></circle>
+<circle cx="414.97" cy="353.58" r="2.5" fill="#60a5fa"><title>f7f3231 | 2026-08-15 | resolve conv 1 | 15,021 lines | 47 tickets</title></circle>
+<circle cx="421.67" cy="354.34" r="2.5" fill="#60a5fa"><title>5772036 | 2026-08-15 | resolve conv 2 | 15,196 lines | 48 tickets</title></circle>
+<circle cx="428.37" cy="354.21" r="2.5" fill="#60a5fa"><title>12682b9 | 2026-08-15 | resolve cov 3 | 15,538 lines | 49 tickets</title></circle>
+<circle cx="428.37" cy="353.66" r="2.5" fill="#60a5fa"><title>ddf3074 | 2026-08-15 | resolve conv 3 improvements | 15,645 lines | 49 tickets</title></circle>
+<circle cx="435.07" cy="355.24" r="2.5" fill="#60a5fa"><title>d4d8712 | 2026-08-15 | resolve conv 4 | 15,653 lines | 50 tickets</title></circle>
+<circle cx="441.77" cy="356.15" r="2.5" fill="#60a5fa"><title>f52882d | 2026-08-15 | resolve conv 5 | 15,785 lines | 51 tickets</title></circle>
+<circle cx="441.77" cy="356.08" r="2.5" fill="#60a5fa"><title>dcb5d47 | 2026-08-15 | maintenance 2 | 15,799 lines | 51 tickets</title></circle>
+<circle cx="461.88" cy="360.15" r="2.5" fill="#60a5fa"><title>a85bb76 | 2026-08-15 | maintenance 3 | 15,864 lines | 54 tickets</title></circle>
+<circle cx="475.28" cy="362.56" r="2.5" fill="#60a5fa"><title>bf4b74f | 2026-08-15 | resolve 5 | 15,922 lines | 56 tickets</title></circle>
+<circle cx="481.98" cy="363.78" r="2.5" fill="#60a5fa"><title>c3dccb1 | 2026-08-15 | resolve 6 | 15,934 lines | 57 tickets</title></circle>
+<circle cx="488.68" cy="365.41" r="2.5" fill="#60a5fa"><title>fc1fe11 | 2026-08-15 | resolve 7 | 15,842 lines | 58 tickets</title></circle>
+<circle cx="488.68" cy="364.95" r="2.5" fill="#60a5fa"><title>588c05d | 2026-08-15 | resolve 8 | 15,948 lines | 58 tickets</title></circle>
+<circle cx="495.38" cy="366.12" r="2.5" fill="#60a5fa"><title>c5da964 | 2026-08-15 | resolve conv 7 | 15,952 lines | 59 tickets</title></circle>
+<circle cx="502.08" cy="366.75" r="2.5" fill="#60a5fa"><title>f556770 | 2026-08-15 | resolve 67 | 16,074 lines | 60 tickets</title></circle>
+<circle cx="508.78" cy="367.39" r="2.5" fill="#60a5fa"><title>bb79590 | 2026-08-15 | resolve 66 | 16,188 lines | 61 tickets</title></circle>
+<circle cx="515.49" cy="367.54" r="2.5" fill="#60a5fa"><title>037d0bf | 2026-08-16 | resolve 57 | 16,416 lines | 62 tickets</title></circle>
+<circle cx="548.99" cy="371.60" r="2.5" fill="#60a5fa"><title>a171ffb | 2026-08-20 | resolve 8-12 maintainability | 16,672 lines | 67 tickets</title></circle>
+<circle cx="569.10" cy="374.43" r="2.5" fill="#60a5fa"><title>4b73b5b | 2026-08-20 | resolve maintenace 13-15 | 16,643 lines | 70 tickets</title></circle>
+<circle cx="582.50" cy="376.11" r="2.5" fill="#60a5fa"><title>80728a8 | 2026-08-20 | resolve maintenance 16-17 | 16,643 lines | 72 tickets</title></circle>
+<circle cx="582.50" cy="376.11" r="2.5" fill="#60a5fa"><title>e8fc2d8 | 2026-08-21 | continue agent conversations | 16,643 lines | 72 tickets</title></circle>
+<circle cx="582.50" cy="376.11" r="2.5" fill="#60a5fa"><title>fc3504c | 2026-08-21 | new tasks | 16,643 lines | 72 tickets</title></circle>
+<circle cx="589.20" cy="375.77" r="2.5" fill="#60a5fa"><title>0f0ee69 | 2026-08-22 | resolve continue conversations  1 | 16,971 lines | 73 tickets</title></circle>
+<circle cx="595.90" cy="375.41" r="2.5" fill="#60a5fa"><title>10a9423 | 2026-08-22 | resolve agent conversation continuation 2 | 17,307 lines | 74 tickets</title></circle>
+<circle cx="595.90" cy="375.41" r="2.5" fill="#60a5fa"><title>58b87d9 | 2026-08-22 | add new tickets | 17,307 lines | 74 tickets</title></circle>
+<circle cx="595.90" cy="375.41" r="2.5" fill="#60a5fa"><title>c12a13a | 2026-08-22 | resolve 69 | 17,308 lines | 74 tickets</title></circle>
+<circle cx="602.60" cy="376.09" r="2.5" fill="#60a5fa"><title>0bea795 | 2026-08-22 | resolve maintenance 18 | 17,341 lines | 75 tickets</title></circle>
+<circle cx="616.01" cy="377.30" r="2.5" fill="#60a5fa"><title>0c0bfc3 | 2026-08-22 | resolve conversation display 1 | 17,438 lines | 77 tickets</title></circle>
+<circle cx="616.01" cy="376.81" r="2.5" fill="#60a5fa"><title>be466bb | 2026-08-22 | resolve conv 2 improvements | 17,588 lines | 77 tickets</title></circle>
+<circle cx="622.71" cy="376.40" r="2.5" fill="#60a5fa"><title>9597a02 | 2026-08-22 | resolve display 2 | 17,941 lines | 78 tickets</title></circle>
+<circle cx="629.41" cy="375.99" r="2.5" fill="#60a5fa"><title>81ec477 | 2026-08-22 | resolve 3 | 18,298 lines | 79 tickets</title></circle>
+<circle cx="636.11" cy="376.47" r="2.5" fill="#60a5fa"><title>66e083d | 2026-08-22 | resolve 4 | 18,380 lines | 80 tickets</title></circle>
+<circle cx="636.11" cy="376.47" r="2.5" fill="#60a5fa"><title>74ba638 | 2026-08-22 | resolve 4 proper | 18,379 lines | 80 tickets</title></circle>
+<circle cx="642.81" cy="376.89" r="2.5" fill="#60a5fa"><title>f597cf0 | 2026-08-22 | resolve 72 | 18,474 lines | 81 tickets</title></circle>
+<circle cx="649.51" cy="377.47" r="2.5" fill="#60a5fa"><title>2fc20ae | 2026-08-22 | resolve 65 | 18,516 lines | 82 tickets</title></circle>
+<circle cx="676.32" cy="380.07" r="2.5" fill="#60a5fa"><title>b6f5ba7 | 2026-08-22 | maintenance 1-4 | 18,542 lines | 86 tickets</title></circle>
+<circle cx="683.02" cy="380.64" r="2.5" fill="#60a5fa"><title>b82b38a | 2026-08-22 | resolve maintenance improvement | 18,563 lines | 87 tickets</title></circle>
+<circle cx="689.72" cy="380.46" r="2.5" fill="#60a5fa"><title>1bb6466 | 2026-08-22 | resolve 70 | 18,840 lines | 88 tickets</title></circle>
+<circle cx="689.72" cy="380.35" r="2.5" fill="#60a5fa"><title>fbe902d | 2026-08-23 | resolve 70 better | 18,875 lines | 88 tickets</title></circle>
+<circle cx="696.42" cy="380.97" r="2.5" fill="#60a5fa"><title>9b4e6b2 | 2026-08-23 | refinement | 18,875 lines | 89 tickets</title></circle>
+<circle cx="703.12" cy="381.38" r="2.5" fill="#60a5fa"><title>7f1b00c | 2026-08-23 | resolve conversations 8 | 18,943 lines | 90 tickets</title></circle>
+<circle cx="703.12" cy="381.42" r="2.5" fill="#60a5fa"><title>1a51734 | 2026-08-23 | restore commands | 18,929 lines | 90 tickets</title></circle>
+<circle cx="703.12" cy="378.98" r="2.5" fill="#60a5fa"><title>6af327d | 2026-08-23 | resolve 68 | 19,791 lines | 90 tickets</title></circle>
+<circle cx="709.83" cy="379.28" r="2.5" fill="#60a5fa"><title>02b8519 | 2026-08-24 | resolve 73 | 19,903 lines | 91 tickets</title></circle>
+<circle cx="709.83" cy="379.28" r="2.5" fill="#60a5fa"><title>77a106f | 2026-08-24 | add 74 | 19,903 lines | 91 tickets</title></circle>
+<circle cx="709.83" cy="379.28" r="2.5" fill="#60a5fa"><title>fe6fe19 | 2026-08-24 | add 75 | 19,903 lines | 91 tickets</title></circle>
+<circle cx="723.23" cy="380.48" r="2.5" fill="#60a5fa"><title>bf1768d | 2026-08-25 | resolve some tickets | 19,903 lines | 93 tickets</title></circle>
+<circle cx="729.93" cy="380.66" r="2.5" fill="#60a5fa"><title>0ef478f | 2026-08-25 | resolve 74 75 | 20,051 lines | 94 tickets</title></circle>
+<circle cx="756.74" cy="382.57" r="2.5" fill="#60a5fa"><title>6d38e40 | 2026-08-26 | resolve maintenance round 3 | 20,166 lines | 98 tickets</title></circle>
+<circle cx="763.44" cy="382.92" r="2.5" fill="#60a5fa"><title>18a3a77 | 2026-08-26 | resolve 76 | 20,236 lines | 99 tickets</title></circle>
+<circle cx="763.44" cy="382.92" r="2.5" fill="#60a5fa"><title>d393100 | 2026-08-26 | complete 76 testd | 20,236 lines | 99 tickets</title></circle>
+<circle cx="770.14" cy="382.88" r="2.5" fill="#60a5fa"><title>f421585 | 2026-08-26 | resolve 77 | 20,459 lines | 100 tickets</title></circle>
+<circle cx="770.14" cy="382.88" r="2.5" fill="#60a5fa"><title>95ac031 | 2026-08-26 | add 83 | 20,459 lines | 100 tickets</title></circle>
+<circle cx="770.14" cy="382.81" r="2.5" fill="#60a5fa"><title>4197ccc | 2026-08-26 | resolve 81 | 20,484 lines | 100 tickets</title></circle>
+<circle cx="776.84" cy="383.01" r="2.5" fill="#60a5fa"><title>4b86ced | 2026-08-27 | resolve 80 | 20,609 lines | 101 tickets</title></circle>
+<circle cx="776.84" cy="382.25" r="2.5" fill="#60a5fa"><title>05c7f01 | 2026-08-27 | resolve 83 | 20,911 lines | 101 tickets</title></circle>
+<circle cx="776.84" cy="382.17" r="2.5" fill="#60a5fa"><title>64891a3 | 2026-08-28 | resolve 82 | 20,945 lines | 101 tickets</title></circle>
+<circle cx="796.94" cy="383.69" r="2.5" fill="#60a5fa"><title>65988e3 | 2026-08-29 | resolve not maintained tickets | 20,945 lines | 104 tickets</title></circle>
+<circle cx="803.65" cy="383.70" r="2.5" fill="#60a5fa"><title>81488cc | 2026-08-29 | resolve 78 | 21,144 lines | 105 tickets</title></circle>
+<circle cx="810.35" cy="384.01" r="2.5" fill="#60a5fa"><title>b258c2d | 2026-08-29 | resolve 79 | 21,214 lines | 106 tickets</title></circle>
+<circle cx="810.35" cy="384.01" r="2.5" fill="#60a5fa"><title>d9bcfdb | 2026-08-29 | research | 21,214 lines | 106 tickets</title></circle>
+<circle cx="817.05" cy="383.88" r="2.5" fill="#60a5fa"><title>c32bb52 | 2026-08-29 | resolve 85 86 | 21,468 lines | 107 tickets</title></circle>
+<circle cx="817.05" cy="383.88" r="2.5" fill="#60a5fa"><title>ef7e86e | 2026-08-29 | new maintenance tickets | 21,468 lines | 107 tickets</title></circle>
+<circle cx="823.75" cy="384.29" r="2.5" fill="#60a5fa"><title>bb4502d | 2026-08-30 | resolve 88 | 21,495 lines | 108 tickets</title></circle>
+<circle cx="823.75" cy="384.29" r="2.5" fill="#60a5fa"><title>f5199b0 | 2026-08-30 | create maintenance tickets | 21,495 lines | 108 tickets</title></circle>
+<circle cx="830.45" cy="384.71" r="2.5" fill="#60a5fa"><title>9e106d1 | 2026-08-30 | resolve 91 | 21,515 lines | 109 tickets</title></circle>
+<circle cx="837.15" cy="385.11" r="2.5" fill="#60a5fa"><title>f2d9a89 | 2026-08-31 | resolve 92 | 21,539 lines | 110 tickets</title></circle>
+<circle cx="843.85" cy="385.60" r="2.5" fill="#60a5fa"><title>de6d8a1 | 2026-08-31 | resolve 93 | 21,521 lines | 111 tickets</title></circle>
+<circle cx="843.85" cy="385.60" r="2.5" fill="#60a5fa"><title>e856974 | 2026-08-31 | add migrations | 21,521 lines | 111 tickets</title></circle>
+<circle cx="850.56" cy="385.87" r="2.5" fill="#60a5fa"><title>14aebe3 | 2026-08-31 | resolve 94 | 21,600 lines | 112 tickets</title></circle>
+<circle cx="857.26" cy="386.20" r="2.5" fill="#60a5fa"><title>f6b1172 | 2026-08-31 | resolve 95 | 21,644 lines | 113 tickets</title></circle>
+<circle cx="863.96" cy="386.54" r="2.5" fill="#60a5fa"><title>07ec501 | 2026-08-31 | resolve 96 | 21,684 lines | 114 tickets</title></circle>
+<circle cx="870.66" cy="386.75" r="2.5" fill="#60a5fa"><title>366e4d2 | 2026-08-31 | resolve migrations 1 | 21,781 lines | 115 tickets</title></circle>
+<circle cx="884.06" cy="387.08" r="2.5" fill="#60a5fa"><title>3a43c39 | 2026-08-31 | resolve migrations 2 | 22,009 lines | 117 tickets</title></circle>
+<circle cx="904.17" cy="388.21" r="2.5" fill="#60a5fa"><title>dfa79da | 2026-09-02 | resolve verification 1-3 | 22,040 lines | 120 tickets</title></circle>
+<circle cx="910.87" cy="388.59" r="2.5" fill="#60a5fa"><title>d907c52 | 2026-09-02 | resolve more maintenance | 22,040 lines | 121 tickets</title></circle>
+<circle cx="917.57" cy="388.81" r="2.5" fill="#60a5fa"><title>c2c4a91 | 2026-09-02 | resolve maintenance more | 22,117 lines | 122 tickets</title></circle>
+<circle cx="917.57" cy="388.81" r="2.5" fill="#60a5fa"><title>0e7363c | 2026-09-15 | updated codex sdk for astra | 22,117 lines | 122 tickets</title></circle>
+<circle cx="917.57" cy="388.81" r="2.5" fill="#60a5fa"><title>4590b2e | 2026-09-20 | new tickets | 22,117 lines | 122 tickets</title></circle>
+<circle cx="924.27" cy="389.09" r="2.5" fill="#60a5fa"><title>dfb8e3f | 2026-09-20 | resolve new tickets 03 | 22,166 lines | 123 tickets</title></circle>
+<circle cx="930.97" cy="389.43" r="2.5" fill="#60a5fa"><title>1844d64 | 2026-09-22 | resolve 02 | 22,182 lines | 124 tickets</title></circle>
+<circle cx="937.67" cy="389.26" r="2.5" fill="#60a5fa"><title>3ed6240 | 2026-09-22 | resolve 05 | 22,440 lines | 125 tickets</title></circle>
+<circle cx="944.38" cy="389.55" r="2.5" fill="#60a5fa"><title>590178b | 2026-09-23 | resolve 07 | 22,479 lines | 126 tickets</title></circle>
+<circle cx="944.38" cy="389.55" r="2.5" fill="#60a5fa"><title>d9e63fd | 2026-09-23 | nnew tickets | 22,479 lines | 126 tickets</title></circle>
+<circle cx="951.08" cy="389.90" r="2.5" fill="#60a5fa"><title>22d3dec | 2026-09-23 | resolve 08 | 22,480 lines | 127 tickets</title></circle>
+<circle cx="957.78" cy="390.09" r="2.5" fill="#60a5fa"><title>1523bca | 2026-09-23 | resolve 11 | 22,565 lines | 128 tickets</title></circle>
+<circle cx="964.48" cy="390.34" r="2.5" fill="#60a5fa"><title>dc2bad8 | 2026-09-24 | resolve 13 | 22,613 lines | 129 tickets</title></circle>
+<circle cx="971.18" cy="390.68" r="2.5" fill="#60a5fa"><title>ccf2429 | 2026-09-24 | resolve 14 | 22,613 lines | 130 tickets</title></circle>
+<circle cx="977.88" cy="389.94" r="2.5" fill="#60a5fa"><title>41a3aaf | 2026-09-25 | resolve 16 | 23,167 lines | 131 tickets</title></circle>
+<circle cx="977.88" cy="389.91" r="2.5" fill="#60a5fa"><title>0f51156 | 2026-09-26 | resolve 16 2 | 23,187 lines | 131 tickets</title></circle>
+<circle cx="984.58" cy="390.08" r="2.5" fill="#60a5fa"><title>ba71ca3 | 2026-09-26 | resolve 19 | 23,272 lines | 132 tickets</title></circle>
+<circle cx="991.28" cy="390.13" r="2.5" fill="#60a5fa"><title>d5cfb15 | 2026-09-27 | resolve 20 | 23,424 lines | 133 tickets</title></circle>
+<circle cx="997.99" cy="390.46" r="2.5" fill="#60a5fa"><title>b5c83d4 | 2026-09-27 | resolve 18 | 23,424 lines | 134 tickets</title></circle>
+<circle cx="997.99" cy="390.43" r="2.5" fill="#60a5fa"><title>15da8a9 | 2026-09-27 | minor fix | 23,443 lines | 134 tickets</title></circle>
+<circle cx="997.99" cy="390.43" r="2.5" fill="#60a5fa"><title>8029e33 | 2026-09-28 | refinement | 23,443 lines | 134 tickets</title></circle>
+<circle cx="1004.69" cy="389.52" r="2.5" fill="#60a5fa"><title>664e460 | 2026-09-29 | resolve 15 | 24,100 lines | 135 tickets</title></circle>
+<circle cx="1004.69" cy="389.52" r="2.5" fill="#60a5fa"><title>8c4d031 | 2026-09-30 | refine agent instructions | 24,100 lines | 135 tickets</title></circle>
+<circle cx="1011.39" cy="389.43" r="2.5" fill="#60a5fa"><title>dbeb48b | 2026-09-30 | resolve 01 | 24,328 lines | 136 tickets</title></circle>
+<circle cx="1018.09" cy="389.42" r="2.5" fill="#60a5fa"><title>fd5b3dd | 2026-09-30 | resolve 2 | 24,508 lines | 137 tickets</title></circle>
+<circle cx="1044.90" cy="390.26" r="2.5" fill="#60a5fa"><title>6ee0b0b | 2026-10-02 | resolve 9-10, complete mcp tool rework | 24,759 lines | 141 tickets</title></circle>
+<circle cx="1051.60" cy="390.48" r="2.5" fill="#60a5fa"><title>c54f043 | 2026-10-02 | resolve 07 | 24,815 lines | 142 tickets</title></circle>
+<circle cx="1065.00" cy="390.92" r="2.5" fill="#60a5fa"><title>023c071 | 2026-10-02 | resolve 23 25 | 24,913 lines | 144 tickets</title></circle>
+<path stroke="#60a5fa" stroke-width="3" d="M100,78h25"/>
+<text x="133" y="83">Production / ticket</text>
+<polyline class="line" stroke="#fbbf24" points="106.70,435.00 106.70,235.01 106.70,235.01 106.70,235.01 106.70,230.17 113.40,258.70 113.40,258.70 120.10,230.51 126.81,243.73 126.81,243.73 126.81,243.73 133.51,261.71 133.51,261.71 140.21,265.96 140.21,265.96 146.91,269.76 153.61,290.35 153.61,289.62 153.61,289.62 160.31,299.77 167.01,312.56 173.72,316.23 180.42,313.86 187.12,323.18 193.82,319.55 200.52,316.92 207.22,316.90 213.92,323.28 213.92,322.21 213.92,322.21 220.62,318.91 227.33,322.14 227.33,321.29 234.03,326.37 240.73,329.57 247.43,327.99 247.43,327.42 247.43,327.09 247.43,320.37 254.13,323.83 254.13,323.83 260.83,327.14 260.83,327.14 267.53,328.03 267.53,327.91 267.53,327.91 274.24,330.02 274.24,329.78 274.24,329.37 274.24,329.37 280.94,331.50 280.94,330.86 280.94,330.43 287.64,331.50 287.64,330.61 287.64,330.62 294.34,333.57 294.34,333.57 301.04,333.92 307.74,333.69 314.44,334.54 321.15,335.91 327.85,337.15 327.85,337.13 327.85,337.13 334.55,338.65 341.25,340.93 347.95,342.82 354.65,343.89 361.35,345.41 361.35,345.07 361.35,345.07 361.35,345.07 368.06,342.14 374.76,342.35 374.76,341.71 374.76,341.71 388.16,344.86 401.56,348.33 401.56,348.33 408.26,348.76 414.97,349.90 421.67,350.37 428.37,349.80 428.37,349.43 435.07,350.25 441.77,350.69 441.77,350.52 461.88,354.62 475.28,356.92 481.98,358.29 488.68,359.48 488.68,359.48 495.38,360.59 502.08,360.91 508.78,361.73 515.49,362.30 548.99,367.73 569.10,370.51 582.50,371.65 582.50,371.65 582.50,371.65 589.20,370.84 595.90,370.91 595.90,370.91 595.90,370.67 602.60,371.53 616.01,372.49 616.01,372.33 622.71,371.46 629.41,370.79 636.11,370.82 636.11,370.68 642.81,370.38 649.51,370.65 676.32,372.62 683.02,373.28 689.72,373.24 689.72,373.05 696.42,373.74 703.12,373.80 703.12,373.80 703.12,372.79 709.83,373.33 709.83,373.33 709.83,373.33 723.23,374.66 729.93,375.15 756.74,375.69 763.44,376.10 763.44,375.81 770.14,376.01 770.14,376.01 770.14,375.57 776.84,375.50 776.84,374.73 776.84,374.45 796.94,376.19 803.65,376.50 810.35,376.59 810.35,376.59 817.05,376.26 817.05,376.26 823.75,376.80 823.75,376.80 830.45,377.34 837.15,377.44 843.85,377.95 843.85,377.95 850.56,377.84 857.26,377.88 863.96,377.48 870.66,377.63 884.06,377.64 904.17,378.39 910.87,378.65 917.57,379.12 917.57,379.12 917.57,379.12 924.27,379.19 930.97,379.46 937.67,379.49 944.38,379.63 944.38,379.63 951.08,379.91 957.78,380.13 964.48,380.03 971.18,380.02 977.88,379.52 977.88,379.51 984.58,379.68 991.28,379.50 997.99,379.74 997.99,379.55 997.99,379.55 1004.69,378.32 1004.69,378.32 1011.39,378.09 1018.09,377.73 1044.90,378.89 1051.60,379.13 1065.00,379.37"/>
+<circle cx="106.70" cy="435.00" r="2.5" fill="#fbbf24"><title>2492ef8 | 2026-08-02 | ticket 14 | 0 lines | 1 tickets</title></circle>
+<circle cx="106.70" cy="235.01" r="2.5" fill="#fbbf24"><title>5d903a0 | 2026-08-02 | first coordinator | 785 lines | 1 tickets</title></circle>
+<circle cx="106.70" cy="235.01" r="2.5" fill="#fbbf24"><title>d64da04 | 2026-08-02 | add | 785 lines | 1 tickets</title></circle>
+<circle cx="106.70" cy="235.01" r="2.5" fill="#fbbf24"><title>dbbf7da | 2026-08-02 | adr 2 | 785 lines | 1 tickets</title></circle>
+<circle cx="106.70" cy="230.17" r="2.5" fill="#fbbf24"><title>e5d98ff | 2026-08-02 | setup instructions | 804 lines | 1 tickets</title></circle>
+<circle cx="113.40" cy="258.70" r="2.5" fill="#fbbf24"><title>8bf8e29 | 2026-08-02 | ticket 16 done | 1,384 lines | 2 tickets</title></circle>
+<circle cx="113.40" cy="258.70" r="2.5" fill="#fbbf24"><title>2633fc6 | 2026-08-02 | adr 3 | 1,384 lines | 2 tickets</title></circle>
+<circle cx="120.10" cy="230.51" r="2.5" fill="#fbbf24"><title>ce3cb58 | 2026-08-02 | ticket 17 | 2,408 lines | 3 tickets</title></circle>
+<circle cx="126.81" cy="243.73" r="2.5" fill="#fbbf24"><title>975da61 | 2026-08-02 | resolve 18 | 3,003 lines | 4 tickets</title></circle>
+<circle cx="126.81" cy="243.73" r="2.5" fill="#fbbf24"><title>8251169 | 2026-08-02 | split large code files | 3,003 lines | 4 tickets</title></circle>
+<circle cx="126.81" cy="243.73" r="2.5" fill="#fbbf24"><title>1af72df | 2026-08-02 | add refactoring ticket | 3,003 lines | 4 tickets</title></circle>
+<circle cx="133.51" cy="261.71" r="2.5" fill="#fbbf24"><title>817bce7 | 2026-08-03 | resolve 19 - react app | 3,401 lines | 5 tickets</title></circle>
+<circle cx="133.51" cy="261.71" r="2.5" fill="#fbbf24"><title>a61642a | 2026-08-03 | Document bugs | 3,401 lines | 5 tickets</title></circle>
+<circle cx="140.21" cy="265.96" r="2.5" fill="#fbbf24"><title>336d1e0 | 2026-08-03 | resolve issue 30 - failed mcp and worktree activation | 3,981 lines | 6 tickets</title></circle>
+<circle cx="140.21" cy="265.96" r="2.5" fill="#fbbf24"><title>427788e | 2026-08-08 | refinement | 3,981 lines | 6 tickets</title></circle>
+<circle cx="146.91" cy="269.76" r="2.5" fill="#fbbf24"><title>3b6c7b7 | 2026-08-08 | resolve 20 | 4,540 lines | 7 tickets</title></circle>
+<circle cx="153.61" cy="290.35" r="2.5" fill="#fbbf24"><title>7de3845 | 2026-08-08 | resolve 29 | 4,542 lines | 8 tickets</title></circle>
+<circle cx="153.61" cy="289.62" r="2.5" fill="#fbbf24"><title>c936475 | 2026-08-08 | Resolve next | 4,565 lines | 8 tickets</title></circle>
+<circle cx="153.61" cy="289.62" r="2.5" fill="#fbbf24"><title>e15f9fb | 2026-08-08 | more issues | 4,565 lines | 8 tickets</title></circle>
+<circle cx="160.31" cy="299.77" r="2.5" fill="#fbbf24"><title>b45e4b8 | 2026-08-08 | resolve 36 | 4,777 lines | 9 tickets</title></circle>
+<circle cx="167.01" cy="312.56" r="2.5" fill="#fbbf24"><title>7ad944e | 2026-08-08 | resolve 15 | 4,806 lines | 10 tickets</title></circle>
+<circle cx="173.72" cy="316.23" r="2.5" fill="#fbbf24"><title>033a105 | 2026-08-08 | resolve 21 | 5,128 lines | 11 tickets</title></circle>
+<circle cx="180.42" cy="313.86" r="2.5" fill="#fbbf24"><title>c2b4b94 | 2026-08-08 | resolve 22 | 5,706 lines | 12 tickets</title></circle>
+<circle cx="187.12" cy="323.18" r="2.5" fill="#fbbf24"><title>dbfd041 | 2026-08-08 | resolve 41 | 5,706 lines | 13 tickets</title></circle>
+<circle cx="193.82" cy="319.55" r="2.5" fill="#fbbf24"><title>20f575f | 2026-08-08 | resolve 23 | 6,344 lines | 14 tickets</title></circle>
+<circle cx="200.52" cy="316.92" r="2.5" fill="#fbbf24"><title>71fdff4 | 2026-08-08 | resolve 24 | 6,952 lines | 15 tickets</title></circle>
+<circle cx="207.22" cy="316.90" r="2.5" fill="#fbbf24"><title>fa1a640 | 2026-08-08 | resolve 25 | 7,417 lines | 16 tickets</title></circle>
+<circle cx="213.92" cy="323.28" r="2.5" fill="#fbbf24"><title>6411600 | 2026-08-08 | resolve 43 | 7,455 lines | 17 tickets</title></circle>
+<circle cx="213.92" cy="322.21" r="2.5" fill="#fbbf24"><title>9273ca2 | 2026-08-08 | Update 43 | 7,526 lines | 17 tickets</title></circle>
+<circle cx="213.92" cy="322.21" r="2.5" fill="#fbbf24"><title>616d99d | 2026-08-08 | Create 45 | 7,526 lines | 17 tickets</title></circle>
+<circle cx="220.62" cy="318.91" r="2.5" fill="#fbbf24"><title>beee068 | 2026-08-09 | resolve 26 | 8,202 lines | 18 tickets</title></circle>
+<circle cx="227.33" cy="322.14" r="2.5" fill="#fbbf24"><title>fd163b4 | 2026-08-09 | resolve 31 - 1 | 8,417 lines | 19 tickets</title></circle>
+<circle cx="227.33" cy="321.29" r="2.5" fill="#fbbf24"><title>d38bb34 | 2026-08-09 | resolve 31 - vs code | 8,480 lines | 19 tickets</title></circle>
+<circle cx="234.03" cy="326.37" r="2.5" fill="#fbbf24"><title>f048168 | 2026-08-09 | resolve 44 | 8,528 lines | 20 tickets</title></circle>
+<circle cx="240.73" cy="329.57" r="2.5" fill="#fbbf24"><title>3d57c87 | 2026-08-09 | RESOLVE 45 | 8,690 lines | 21 tickets</title></circle>
+<circle cx="247.43" cy="327.99" r="2.5" fill="#fbbf24"><title>83abfd5 | 2026-08-09 | resolve 32 1 | 9,241 lines | 22 tickets</title></circle>
+<circle cx="247.43" cy="327.42" r="2.5" fill="#fbbf24"><title>4d47922 | 2026-08-09 | improvements 32 | 9,290 lines | 22 tickets</title></circle>
+<circle cx="247.43" cy="327.09" r="2.5" fill="#fbbf24"><title>79ce55f | 2026-08-09 | improvements 32 2 | 9,318 lines | 22 tickets</title></circle>
+<circle cx="247.43" cy="320.37" r="2.5" fill="#fbbf24"><title>577d400 | 2026-08-09 | issue 27 first messy implementation | 9,899 lines | 22 tickets</title></circle>
+<circle cx="254.13" cy="323.83" r="2.5" fill="#fbbf24"><title>1351004 | 2026-08-09 | reswolve 32 proper | 10,036 lines | 23 tickets</title></circle>
+<circle cx="254.13" cy="323.83" r="2.5" fill="#fbbf24"><title>fe6693e | 2026-08-09 | new issues | 10,036 lines | 23 tickets</title></circle>
+<circle cx="260.83" cy="327.14" r="2.5" fill="#fbbf24"><title>73f8ff7 | 2026-08-10 | resolve 46 | 10,161 lines | 24 tickets</title></circle>
+<circle cx="260.83" cy="327.14" r="2.5" fill="#fbbf24"><title>4144727 | 2026-08-10 | grill 33 | 10,161 lines | 24 tickets</title></circle>
+<circle cx="267.53" cy="328.03" r="2.5" fill="#fbbf24"><title>09f1cd5 | 2026-08-10 | resolve 33 | 10,497 lines | 25 tickets</title></circle>
+<circle cx="267.53" cy="327.91" r="2.5" fill="#fbbf24"><title>3d99a0e | 2026-08-10 | improve 33 | 10,509 lines | 25 tickets</title></circle>
+<circle cx="267.53" cy="327.91" r="2.5" fill="#fbbf24"><title>07515c3 | 2026-08-10 | refinement | 10,509 lines | 25 tickets</title></circle>
+<circle cx="274.24" cy="330.02" r="2.5" fill="#fbbf24"><title>ddd851e | 2026-08-10 | resolve 47 1 | 10,714 lines | 26 tickets</title></circle>
+<circle cx="274.24" cy="329.78" r="2.5" fill="#fbbf24"><title>e919c5f | 2026-08-10 | improve 47 | 10,738 lines | 26 tickets</title></circle>
+<circle cx="274.24" cy="329.37" r="2.5" fill="#fbbf24"><title>021592b | 2026-08-10 | complete 47 | 10,780 lines | 26 tickets</title></circle>
+<circle cx="274.24" cy="329.37" r="2.5" fill="#fbbf24"><title>e547cd2 | 2026-08-10 | grill 37 | 10,780 lines | 26 tickets</title></circle>
+<circle cx="280.94" cy="331.50" r="2.5" fill="#fbbf24"><title>bd59f90 | 2026-08-10 | resolve 37 | 10,969 lines | 27 tickets</title></circle>
+<circle cx="280.94" cy="330.86" r="2.5" fill="#fbbf24"><title>6725da0 | 2026-08-10 | improve 37 | 11,037 lines | 27 tickets</title></circle>
+<circle cx="280.94" cy="330.43" r="2.5" fill="#fbbf24"><title>13b20ac | 2026-08-10 | finakize 37 | 11,082 lines | 27 tickets</title></circle>
+<circle cx="287.64" cy="331.50" r="2.5" fill="#fbbf24"><title>5db7a93 | 2026-08-11 | refine 48 | 11,375 lines | 28 tickets</title></circle>
+<circle cx="287.64" cy="330.61" r="2.5" fill="#fbbf24"><title>2dcc49b | 2026-08-11 | finalize 48 | 11,473 lines | 28 tickets</title></circle>
+<circle cx="287.64" cy="330.62" r="2.5" fill="#fbbf24"><title>ad2ba76 | 2026-08-11 | finalize 48 2 | 11,472 lines | 28 tickets</title></circle>
+<circle cx="294.34" cy="333.57" r="2.5" fill="#fbbf24"><title>375b4c3 | 2026-08-11 | resolve 49 | 11,546 lines | 29 tickets</title></circle>
+<circle cx="294.34" cy="333.57" r="2.5" fill="#fbbf24"><title>3997dca | 2026-08-11 | refinement | 11,546 lines | 29 tickets</title></circle>
+<circle cx="301.04" cy="333.92" r="2.5" fill="#fbbf24"><title>59b5d5e | 2026-08-11 | resolve 38 | 11,902 lines | 30 tickets</title></circle>
+<circle cx="307.74" cy="333.69" r="2.5" fill="#fbbf24"><title>ac78063 | 2026-08-11 | resolve 52 | 12,327 lines | 31 tickets</title></circle>
+<circle cx="314.44" cy="334.54" r="2.5" fill="#fbbf24"><title>79b8f67 | 2026-08-11 | resolve 28 | 12,618 lines | 32 tickets</title></circle>
+<circle cx="321.15" cy="335.91" r="2.5" fill="#fbbf24"><title>51545bf | 2026-08-11 | resolve 51 54 | 12,835 lines | 33 tickets</title></circle>
+<circle cx="327.85" cy="337.15" r="2.5" fill="#fbbf24"><title>88648ec | 2026-08-12 | resolve 53 | 13,059 lines | 34 tickets</title></circle>
+<circle cx="327.85" cy="337.13" r="2.5" fill="#fbbf24"><title>dee76ff | 2026-08-12 | resolve 53 2 | 13,061 lines | 34 tickets</title></circle>
+<circle cx="327.85" cy="337.13" r="2.5" fill="#fbbf24"><title>a152aea | 2026-08-13 | try harden against accidental user mention | 13,061 lines | 34 tickets</title></circle>
+<circle cx="334.55" cy="338.65" r="2.5" fill="#fbbf24"><title>8ca28d9 | 2026-08-13 | resolve 55 | 13,236 lines | 35 tickets</title></circle>
+<circle cx="341.25" cy="340.93" r="2.5" fill="#fbbf24"><title>b361d56 | 2026-08-13 | resolve 56 | 13,293 lines | 36 tickets</title></circle>
+<circle cx="347.95" cy="342.82" r="2.5" fill="#fbbf24"><title>a637f03 | 2026-08-13 | resolve 39 | 13,387 lines | 37 tickets</title></circle>
+<circle cx="354.65" cy="343.89" r="2.5" fill="#fbbf24"><title>0e47e61 | 2026-08-13 | resolve 40 | 13,590 lines | 38 tickets</title></circle>
+<circle cx="361.35" cy="345.41" r="2.5" fill="#fbbf24"><title>596fe40 | 2026-08-13 | resolve 35 | 13,714 lines | 39 tickets</title></circle>
+<circle cx="361.35" cy="345.07" r="2.5" fill="#fbbf24"><title>ab97e80 | 2026-08-13 | resolve 35 improvements | 13,766 lines | 39 tickets</title></circle>
+<circle cx="361.35" cy="345.07" r="2.5" fill="#fbbf24"><title>cf93b58 | 2026-08-13 | new spec | 13,766 lines | 39 tickets</title></circle>
+<circle cx="361.35" cy="345.07" r="2.5" fill="#fbbf24"><title>d88b1c5 | 2026-08-13 | conversation issues | 13,766 lines | 39 tickets</title></circle>
+<circle cx="368.06" cy="342.14" r="2.5" fill="#fbbf24"><title>3f5b881 | 2026-08-13 | resolve 34 | 14,580 lines | 40 tickets</title></circle>
+<circle cx="374.76" cy="342.35" r="2.5" fill="#fbbf24"><title>fde8c56 | 2026-08-13 | resolve 50 | 14,910 lines | 41 tickets</title></circle>
+<circle cx="374.76" cy="341.71" r="2.5" fill="#fbbf24"><title>c0f5a1d | 2026-08-13 | improve 50 | 15,013 lines | 41 tickets</title></circle>
+<circle cx="374.76" cy="341.71" r="2.5" fill="#fbbf24"><title>3269fcd | 2026-08-13 | create 57 | 15,013 lines | 41 tickets</title></circle>
+<circle cx="388.16" cy="344.86" r="2.5" fill="#fbbf24"><title>b4bf5bb | 2026-08-14 | resolve 60 64 | 15,213 lines | 43 tickets</title></circle>
+<circle cx="401.56" cy="348.33" r="2.5" fill="#fbbf24"><title>d133a6b | 2026-08-14 | resolve 58 61 | 15,309 lines | 45 tickets</title></circle>
+<circle cx="401.56" cy="348.33" r="2.5" fill="#fbbf24"><title>094042a | 2026-08-14 | refine 59 | 15,309 lines | 45 tickets</title></circle>
+<circle cx="408.26" cy="348.76" r="2.5" fill="#fbbf24"><title>35412e6 | 2026-08-14 | resolve 59 | 15,572 lines | 46 tickets</title></circle>
+<circle cx="414.97" cy="349.90" r="2.5" fill="#fbbf24"><title>f7f3231 | 2026-08-15 | resolve conv 1 | 15,700 lines | 47 tickets</title></circle>
+<circle cx="421.67" cy="350.37" r="2.5" fill="#fbbf24"><title>5772036 | 2026-08-15 | resolve conv 2 | 15,945 lines | 48 tickets</title></circle>
+<circle cx="428.37" cy="349.80" r="2.5" fill="#fbbf24"><title>12682b9 | 2026-08-15 | resolve cov 3 | 16,387 lines | 49 tickets</title></circle>
+<circle cx="428.37" cy="349.43" r="2.5" fill="#fbbf24"><title>ddf3074 | 2026-08-15 | resolve conv 3 improvements | 16,458 lines | 49 tickets</title></circle>
+<circle cx="435.07" cy="350.25" r="2.5" fill="#fbbf24"><title>d4d8712 | 2026-08-15 | resolve conv 4 | 16,633 lines | 50 tickets</title></circle>
+<circle cx="441.77" cy="350.69" r="2.5" fill="#fbbf24"><title>f52882d | 2026-08-15 | resolve conv 5 | 16,877 lines | 51 tickets</title></circle>
+<circle cx="441.77" cy="350.52" r="2.5" fill="#fbbf24"><title>dcb5d47 | 2026-08-15 | maintenance 2 | 16,911 lines | 51 tickets</title></circle>
+<circle cx="461.88" cy="354.62" r="2.5" fill="#fbbf24"><title>a85bb76 | 2026-08-15 | maintenance 3 | 17,037 lines | 54 tickets</title></circle>
+<circle cx="475.28" cy="356.92" r="2.5" fill="#fbbf24"><title>bf4b74f | 2026-08-15 | resolve 5 | 17,162 lines | 56 tickets</title></circle>
+<circle cx="481.98" cy="358.29" r="2.5" fill="#fbbf24"><title>c3dccb1 | 2026-08-15 | resolve 6 | 17,162 lines | 57 tickets</title></circle>
+<circle cx="488.68" cy="359.48" r="2.5" fill="#fbbf24"><title>fc1fe11 | 2026-08-15 | resolve 7 | 17,192 lines | 58 tickets</title></circle>
+<circle cx="488.68" cy="359.48" r="2.5" fill="#fbbf24"><title>588c05d | 2026-08-15 | resolve 8 | 17,192 lines | 58 tickets</title></circle>
+<circle cx="495.38" cy="360.59" r="2.5" fill="#fbbf24"><title>c5da964 | 2026-08-15 | resolve conv 7 | 17,233 lines | 59 tickets</title></circle>
+<circle cx="502.08" cy="360.91" r="2.5" fill="#fbbf24"><title>f556770 | 2026-08-15 | resolve 67 | 17,448 lines | 60 tickets</title></circle>
+<circle cx="508.78" cy="361.73" r="2.5" fill="#fbbf24"><title>bb79590 | 2026-08-15 | resolve 66 | 17,542 lines | 61 tickets</title></circle>
+<circle cx="515.49" cy="362.30" r="2.5" fill="#fbbf24"><title>037d0bf | 2026-08-16 | resolve 57 | 17,692 lines | 62 tickets</title></circle>
+<circle cx="548.99" cy="367.73" r="2.5" fill="#fbbf24"><title>a171ffb | 2026-08-20 | resolve 8-12 maintainability | 17,692 lines | 67 tickets</title></circle>
+<circle cx="569.10" cy="370.51" r="2.5" fill="#fbbf24"><title>4b73b5b | 2026-08-20 | resolve maintenace 13-15 | 17,720 lines | 70 tickets</title></circle>
+<circle cx="582.50" cy="371.65" r="2.5" fill="#fbbf24"><title>80728a8 | 2026-08-20 | resolve maintenance 16-17 | 17,902 lines | 72 tickets</title></circle>
+<circle cx="582.50" cy="371.65" r="2.5" fill="#fbbf24"><title>e8fc2d8 | 2026-08-21 | continue agent conversations | 17,902 lines | 72 tickets</title></circle>
+<circle cx="582.50" cy="371.65" r="2.5" fill="#fbbf24"><title>fc3504c | 2026-08-21 | new tasks | 17,902 lines | 72 tickets</title></circle>
+<circle cx="589.20" cy="370.84" r="2.5" fill="#fbbf24"><title>0f0ee69 | 2026-08-22 | resolve continue conversations  1 | 18,383 lines | 73 tickets</title></circle>
+<circle cx="595.90" cy="370.91" r="2.5" fill="#fbbf24"><title>10a9423 | 2026-08-22 | resolve agent conversation continuation 2 | 18,615 lines | 74 tickets</title></circle>
+<circle cx="595.90" cy="370.91" r="2.5" fill="#fbbf24"><title>58b87d9 | 2026-08-22 | add new tickets | 18,615 lines | 74 tickets</title></circle>
+<circle cx="595.90" cy="370.67" r="2.5" fill="#fbbf24"><title>c12a13a | 2026-08-22 | resolve 69 | 18,686 lines | 74 tickets</title></circle>
+<circle cx="602.60" cy="371.53" r="2.5" fill="#fbbf24"><title>0bea795 | 2026-08-22 | resolve maintenance 18 | 18,686 lines | 75 tickets</title></circle>
+<circle cx="616.01" cy="372.49" r="2.5" fill="#fbbf24"><title>0c0bfc3 | 2026-08-22 | resolve conversation display 1 | 18,892 lines | 77 tickets</title></circle>
+<circle cx="616.01" cy="372.33" r="2.5" fill="#fbbf24"><title>be466bb | 2026-08-22 | resolve conv 2 improvements | 18,941 lines | 77 tickets</title></circle>
+<circle cx="622.71" cy="371.46" r="2.5" fill="#fbbf24"><title>9597a02 | 2026-08-22 | resolve display 2 | 19,453 lines | 78 tickets</title></circle>
+<circle cx="629.41" cy="370.79" r="2.5" fill="#fbbf24"><title>81ec477 | 2026-08-22 | resolve 3 | 19,912 lines | 79 tickets</title></circle>
+<circle cx="636.11" cy="370.82" r="2.5" fill="#fbbf24"><title>66e083d | 2026-08-22 | resolve 4 | 20,154 lines | 80 tickets</title></circle>
+<circle cx="636.11" cy="370.68" r="2.5" fill="#fbbf24"><title>74ba638 | 2026-08-22 | resolve 4 proper | 20,196 lines | 80 tickets</title></circle>
+<circle cx="642.81" cy="370.38" r="2.5" fill="#fbbf24"><title>f597cf0 | 2026-08-22 | resolve 72 | 20,545 lines | 81 tickets</title></circle>
+<circle cx="649.51" cy="370.65" r="2.5" fill="#fbbf24"><title>2fc20ae | 2026-08-22 | resolve 65 | 20,711 lines | 82 tickets</title></circle>
+<circle cx="676.32" cy="372.62" r="2.5" fill="#fbbf24"><title>b6f5ba7 | 2026-08-22 | maintenance 1-4 | 21,057 lines | 86 tickets</title></circle>
+<circle cx="683.02" cy="373.28" r="2.5" fill="#fbbf24"><title>b82b38a | 2026-08-22 | resolve maintenance improvement | 21,075 lines | 87 tickets</title></circle>
+<circle cx="689.72" cy="373.24" r="2.5" fill="#fbbf24"><title>1bb6466 | 2026-08-22 | resolve 70 | 21,332 lines | 88 tickets</title></circle>
+<circle cx="689.72" cy="373.05" r="2.5" fill="#fbbf24"><title>fbe902d | 2026-08-23 | resolve 70 better | 21,399 lines | 88 tickets</title></circle>
+<circle cx="696.42" cy="373.74" r="2.5" fill="#fbbf24"><title>9b4e6b2 | 2026-08-23 | refinement | 21,399 lines | 89 tickets</title></circle>
+<circle cx="703.12" cy="373.80" r="2.5" fill="#fbbf24"><title>7f1b00c | 2026-08-23 | resolve conversations 8 | 21,618 lines | 90 tickets</title></circle>
+<circle cx="703.12" cy="373.80" r="2.5" fill="#fbbf24"><title>1a51734 | 2026-08-23 | restore commands | 21,619 lines | 90 tickets</title></circle>
+<circle cx="703.12" cy="372.79" r="2.5" fill="#fbbf24"><title>6af327d | 2026-08-23 | resolve 68 | 21,977 lines | 90 tickets</title></circle>
+<circle cx="709.83" cy="373.33" r="2.5" fill="#fbbf24"><title>02b8519 | 2026-08-24 | resolve 73 | 22,026 lines | 91 tickets</title></circle>
+<circle cx="709.83" cy="373.33" r="2.5" fill="#fbbf24"><title>77a106f | 2026-08-24 | add 74 | 22,026 lines | 91 tickets</title></circle>
+<circle cx="709.83" cy="373.33" r="2.5" fill="#fbbf24"><title>fe6fe19 | 2026-08-24 | add 75 | 22,026 lines | 91 tickets</title></circle>
+<circle cx="723.23" cy="374.66" r="2.5" fill="#fbbf24"><title>bf1768d | 2026-08-25 | resolve some tickets | 22,026 lines | 93 tickets</title></circle>
+<circle cx="729.93" cy="375.15" r="2.5" fill="#fbbf24"><title>0ef478f | 2026-08-25 | resolve 74 75 | 22,082 lines | 94 tickets</title></circle>
+<circle cx="756.74" cy="375.69" r="2.5" fill="#fbbf24"><title>6d38e40 | 2026-08-26 | resolve maintenance round 3 | 22,813 lines | 98 tickets</title></circle>
+<circle cx="763.44" cy="376.10" r="2.5" fill="#fbbf24"><title>18a3a77 | 2026-08-26 | resolve 76 | 22,889 lines | 99 tickets</title></circle>
+<circle cx="763.44" cy="375.81" r="2.5" fill="#fbbf24"><title>d393100 | 2026-08-26 | complete 76 testd | 23,002 lines | 99 tickets</title></circle>
+<circle cx="770.14" cy="376.01" r="2.5" fill="#fbbf24"><title>f421585 | 2026-08-26 | resolve 77 | 23,155 lines | 100 tickets</title></circle>
+<circle cx="770.14" cy="376.01" r="2.5" fill="#fbbf24"><title>95ac031 | 2026-08-26 | add 83 | 23,155 lines | 100 tickets</title></circle>
+<circle cx="770.14" cy="375.57" r="2.5" fill="#fbbf24"><title>4197ccc | 2026-08-26 | resolve 81 | 23,326 lines | 100 tickets</title></circle>
+<circle cx="776.84" cy="375.50" r="2.5" fill="#fbbf24"><title>4b86ced | 2026-08-27 | resolve 80 | 23,588 lines | 101 tickets</title></circle>
+<circle cx="776.84" cy="374.73" r="2.5" fill="#fbbf24"><title>05c7f01 | 2026-08-27 | resolve 83 | 23,895 lines | 101 tickets</title></circle>
+<circle cx="776.84" cy="374.45" r="2.5" fill="#fbbf24"><title>64891a3 | 2026-08-28 | resolve 82 | 24,006 lines | 101 tickets</title></circle>
+<circle cx="796.94" cy="376.19" r="2.5" fill="#fbbf24"><title>65988e3 | 2026-08-29 | resolve not maintained tickets | 24,006 lines | 104 tickets</title></circle>
+<circle cx="803.65" cy="376.50" r="2.5" fill="#fbbf24"><title>81488cc | 2026-08-29 | resolve 78 | 24,112 lines | 105 tickets</title></circle>
+<circle cx="810.35" cy="376.59" r="2.5" fill="#fbbf24"><title>b258c2d | 2026-08-29 | resolve 79 | 24,301 lines | 106 tickets</title></circle>
+<circle cx="810.35" cy="376.59" r="2.5" fill="#fbbf24"><title>d9bcfdb | 2026-08-29 | research | 24,301 lines | 106 tickets</title></circle>
+<circle cx="817.05" cy="376.26" r="2.5" fill="#fbbf24"><title>c32bb52 | 2026-08-29 | resolve 85 86 | 24,670 lines | 107 tickets</title></circle>
+<circle cx="817.05" cy="376.26" r="2.5" fill="#fbbf24"><title>ef7e86e | 2026-08-29 | new maintenance tickets | 24,670 lines | 107 tickets</title></circle>
+<circle cx="823.75" cy="376.80" r="2.5" fill="#fbbf24"><title>bb4502d | 2026-08-30 | resolve 88 | 24,670 lines | 108 tickets</title></circle>
+<circle cx="823.75" cy="376.80" r="2.5" fill="#fbbf24"><title>f5199b0 | 2026-08-30 | create maintenance tickets | 24,670 lines | 108 tickets</title></circle>
+<circle cx="830.45" cy="377.34" r="2.5" fill="#fbbf24"><title>9e106d1 | 2026-08-30 | resolve 91 | 24,670 lines | 109 tickets</title></circle>
+<circle cx="837.15" cy="377.44" r="2.5" fill="#fbbf24"><title>f2d9a89 | 2026-08-31 | resolve 92 | 24,854 lines | 110 tickets</title></circle>
+<circle cx="843.85" cy="377.95" r="2.5" fill="#fbbf24"><title>de6d8a1 | 2026-08-31 | resolve 93 | 24,854 lines | 111 tickets</title></circle>
+<circle cx="843.85" cy="377.95" r="2.5" fill="#fbbf24"><title>e856974 | 2026-08-31 | add migrations | 24,854 lines | 111 tickets</title></circle>
+<circle cx="850.56" cy="377.84" r="2.5" fill="#fbbf24"><title>14aebe3 | 2026-08-31 | resolve 94 | 25,130 lines | 112 tickets</title></circle>
+<circle cx="857.26" cy="377.88" r="2.5" fill="#fbbf24"><title>f6b1172 | 2026-08-31 | resolve 95 | 25,336 lines | 113 tickets</title></circle>
+<circle cx="863.96" cy="377.48" r="2.5" fill="#fbbf24"><title>07ec501 | 2026-08-31 | resolve 96 | 25,737 lines | 114 tickets</title></circle>
+<circle cx="870.66" cy="377.63" r="2.5" fill="#fbbf24"><title>366e4d2 | 2026-08-31 | resolve migrations 1 | 25,896 lines | 115 tickets</title></circle>
+<circle cx="884.06" cy="377.64" r="2.5" fill="#fbbf24"><title>3a43c39 | 2026-08-31 | resolve migrations 2 | 26,342 lines | 117 tickets</title></circle>
+<circle cx="904.17" cy="378.39" r="2.5" fill="#fbbf24"><title>dfa79da | 2026-09-02 | resolve verification 1-3 | 26,663 lines | 120 tickets</title></circle>
+<circle cx="910.87" cy="378.65" r="2.5" fill="#fbbf24"><title>d907c52 | 2026-09-02 | resolve more maintenance | 26,761 lines | 121 tickets</title></circle>
+<circle cx="917.57" cy="379.12" r="2.5" fill="#fbbf24"><title>c2c4a91 | 2026-09-02 | resolve maintenance more | 26,761 lines | 122 tickets</title></circle>
+<circle cx="917.57" cy="379.12" r="2.5" fill="#fbbf24"><title>0e7363c | 2026-09-15 | updated codex sdk for astra | 26,761 lines | 122 tickets</title></circle>
+<circle cx="917.57" cy="379.12" r="2.5" fill="#fbbf24"><title>4590b2e | 2026-09-20 | new tickets | 26,761 lines | 122 tickets</title></circle>
+<circle cx="924.27" cy="379.19" r="2.5" fill="#fbbf24"><title>dfb8e3f | 2026-09-20 | resolve new tickets 03 | 26,944 lines | 123 tickets</title></circle>
+<circle cx="930.97" cy="379.46" r="2.5" fill="#fbbf24"><title>1844d64 | 2026-09-22 | resolve 02 | 27,032 lines | 124 tickets</title></circle>
+<circle cx="937.67" cy="379.49" r="2.5" fill="#fbbf24"><title>3ed6240 | 2026-09-22 | resolve 05 | 27,234 lines | 125 tickets</title></circle>
+<circle cx="944.38" cy="379.63" r="2.5" fill="#fbbf24"><title>590178b | 2026-09-23 | resolve 07 | 27,384 lines | 126 tickets</title></circle>
+<circle cx="944.38" cy="379.63" r="2.5" fill="#fbbf24"><title>d9e63fd | 2026-09-23 | nnew tickets | 27,384 lines | 126 tickets</title></circle>
+<circle cx="951.08" cy="379.91" r="2.5" fill="#fbbf24"><title>22d3dec | 2026-09-23 | resolve 08 | 27,460 lines | 127 tickets</title></circle>
+<circle cx="957.78" cy="380.13" r="2.5" fill="#fbbf24"><title>1523bca | 2026-09-23 | resolve 11 | 27,566 lines | 128 tickets</title></circle>
+<circle cx="964.48" cy="380.03" r="2.5" fill="#fbbf24"><title>dc2bad8 | 2026-09-24 | resolve 13 | 27,831 lines | 129 tickets</title></circle>
+<circle cx="971.18" cy="380.02" r="2.5" fill="#fbbf24"><title>ccf2429 | 2026-09-24 | resolve 14 | 28,053 lines | 130 tickets</title></circle>
+<circle cx="977.88" cy="379.52" r="2.5" fill="#fbbf24"><title>41a3aaf | 2026-09-25 | resolve 16 | 28,525 lines | 131 tickets</title></circle>
+<circle cx="977.88" cy="379.51" r="2.5" fill="#fbbf24"><title>0f51156 | 2026-09-26 | resolve 16 2 | 28,530 lines | 131 tickets</title></circle>
+<circle cx="984.58" cy="379.68" r="2.5" fill="#fbbf24"><title>ba71ca3 | 2026-09-26 | resolve 19 | 28,661 lines | 132 tickets</title></circle>
+<circle cx="991.28" cy="379.50" r="2.5" fill="#fbbf24"><title>d5cfb15 | 2026-09-27 | resolve 20 | 28,974 lines | 133 tickets</title></circle>
+<circle cx="997.99" cy="379.74" r="2.5" fill="#fbbf24"><title>b5c83d4 | 2026-09-27 | resolve 18 | 29,065 lines | 134 tickets</title></circle>
+<circle cx="997.99" cy="379.55" r="2.5" fill="#fbbf24"><title>15da8a9 | 2026-09-27 | minor fix | 29,165 lines | 134 tickets</title></circle>
+<circle cx="997.99" cy="379.55" r="2.5" fill="#fbbf24"><title>8029e33 | 2026-09-28 | refinement | 29,165 lines | 134 tickets</title></circle>
+<circle cx="1004.69" cy="378.32" r="2.5" fill="#fbbf24"><title>664e460 | 2026-09-29 | resolve 15 | 30,035 lines | 135 tickets</title></circle>
+<circle cx="1004.69" cy="378.32" r="2.5" fill="#fbbf24"><title>8c4d031 | 2026-09-30 | refine agent instructions | 30,035 lines | 135 tickets</title></circle>
+<circle cx="1011.39" cy="378.09" r="2.5" fill="#fbbf24"><title>dbeb48b | 2026-09-30 | resolve 01 | 30,381 lines | 136 tickets</title></circle>
+<circle cx="1018.09" cy="377.73" r="2.5" fill="#fbbf24"><title>fd5b3dd | 2026-09-30 | resolve 2 | 30,795 lines | 137 tickets</title></circle>
+<circle cx="1044.90" cy="378.89" r="2.5" fill="#fbbf24"><title>6ee0b0b | 2026-10-02 | resolve 9-10, complete mcp tool rework | 31,054 lines | 141 tickets</title></circle>
+<circle cx="1051.60" cy="379.13" r="2.5" fill="#fbbf24"><title>c54f043 | 2026-10-02 | resolve 07 | 31,140 lines | 142 tickets</title></circle>
+<circle cx="1065.00" cy="379.37" r="2.5" fill="#fbbf24"><title>023c071 | 2026-10-02 | resolve 23 25 | 31,444 lines | 144 tickets</title></circle>
+<path stroke="#fbbf24" stroke-width="3" d="M360,78h25"/>
+<text x="393" y="83">Tests / ticket</text>
+<text x="582.5" y="496" text-anchor="middle">Cumulative resolved implementation tickets</text>
+<text transform="translate(24,265.0) rotate(-90)" text-anchor="middle">Nonblank source lines / ticket</text>
+</svg>

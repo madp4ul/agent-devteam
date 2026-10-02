@@ -1,0 +1,1338 @@
+[
+  {
+    "commit": "78a5f0998b4e5653939de17b89de2ebbc769639c",
+    "date": "2026-07-30",
+    "path": ".scratch/agent-coordination-framework/issues/02-determine-codex-integration-boundary.md",
+    "identity": ".scratch/agent-coordination-framework/issues/02-determine-codex-integration-boundary.md",
+    "implementation": false,
+    "type": "wayfinder:research"
+  },
+  {
+    "commit": "78a5f0998b4e5653939de17b89de2ebbc769639c",
+    "date": "2026-07-30",
+    "path": ".scratch/agent-coordination-framework/issues/03-determine-board-ui-foundation.md",
+    "identity": ".scratch/agent-coordination-framework/issues/03-determine-board-ui-foundation.md",
+    "implementation": false,
+    "type": "wayfinder:research"
+  },
+  {
+    "commit": "f6c81c6057979d25fc44f7e6c64173aa22ffa9f2",
+    "date": "2026-07-30",
+    "path": ".scratch/agent-coordination-framework/issues/01-define-first-usable-workflow.md",
+    "identity": ".scratch/agent-coordination-framework/issues/01-define-first-usable-workflow.md",
+    "implementation": false,
+    "type": "wayfinder:grilling"
+  },
+  {
+    "commit": "bfacd7de311fc02fb39acec52a313620e2b25eba",
+    "date": "2026-07-31",
+    "path": ".scratch/agent-coordination-framework/issues/04-define-process-authoring-experience.md",
+    "identity": ".scratch/agent-coordination-framework/issues/04-define-process-authoring-experience.md",
+    "implementation": false,
+    "type": "wayfinder:prototype"
+  },
+  {
+    "commit": "dac879bcc45dd9b0884f4de938f29593c9ce10f6",
+    "date": "2026-08-01",
+    "path": ".scratch/agent-coordination-framework/issues/05-define-agent-run-lifecycle.md",
+    "identity": ".scratch/agent-coordination-framework/issues/05-define-agent-run-lifecycle.md",
+    "implementation": false,
+    "type": "wayfinder:grilling"
+  },
+  {
+    "commit": "f010ac3a13a653db91908de52fd90420660e0dfd",
+    "date": "2026-08-01",
+    "path": ".scratch/agent-coordination-framework/issues/06-define-board-interactions.md",
+    "identity": ".scratch/agent-coordination-framework/issues/06-define-board-interactions.md",
+    "implementation": false,
+    "type": "wayfinder:prototype"
+  },
+  {
+    "commit": "194bda99482924b144a4420b521a4174861ca8cd",
+    "date": "2026-08-01",
+    "path": ".scratch/agent-coordination-framework/issues/07-define-durable-board-state.md",
+    "identity": ".scratch/agent-coordination-framework/issues/07-define-durable-board-state.md",
+    "implementation": false,
+    "type": "wayfinder:grilling"
+  },
+  {
+    "commit": "a83b0c6e3af43b7ca225fc0d91663084ae428e94",
+    "date": "2026-08-01",
+    "path": ".scratch/agent-coordination-framework/issues/08-define-git-workspace-lifecycle.md",
+    "identity": ".scratch/agent-coordination-framework/issues/08-define-git-workspace-lifecycle.md",
+    "implementation": false,
+    "type": "wayfinder:prototype"
+  },
+  {
+    "commit": "717eb1f531b7e65e6ba2fcec67333a3969b22417",
+    "date": "2026-08-01",
+    "path": ".scratch/agent-coordination-framework/issues/09-define-safety-boundaries.md",
+    "identity": ".scratch/agent-coordination-framework/issues/09-define-safety-boundaries.md",
+    "implementation": false,
+    "type": "wayfinder:grilling"
+  },
+  {
+    "commit": "d6edffd3ae4deda4f512026767d20f0202e27511",
+    "date": "2026-08-01",
+    "path": ".scratch/agent-coordination-framework/issues/10-define-process-definition-evolution.md",
+    "identity": ".scratch/agent-coordination-framework/issues/10-define-process-definition-evolution.md",
+    "implementation": false,
+    "type": "wayfinder:grilling"
+  },
+  {
+    "commit": "d37be712b672883febb786748d386081af94e1c0",
+    "date": "2026-08-01",
+    "path": ".scratch/agent-coordination-framework/issues/11-define-automation-observability-and-recovery.md",
+    "identity": ".scratch/agent-coordination-framework/issues/11-define-automation-observability-and-recovery.md",
+    "implementation": false,
+    "type": "wayfinder:prototype"
+  },
+  {
+    "commit": "455799e9da273348470762cfa446f7243d323ca9",
+    "date": "2026-08-01",
+    "path": ".scratch/agent-coordination-framework/issues/12-define-user-notification-delivery.md",
+    "identity": ".scratch/agent-coordination-framework/issues/12-define-user-notification-delivery.md",
+    "implementation": false,
+    "type": "wayfinder:grilling"
+  },
+  {
+    "commit": "a26c65bfb6e4152615dd103080546eedf680fc89",
+    "date": "2026-08-01",
+    "path": ".scratch/agent-coordination-framework/issues/13-validate-end-to-end-product-design.md",
+    "identity": ".scratch/agent-coordination-framework/issues/12-validate-end-to-end-product-design.md",
+    "implementation": false,
+    "type": "wayfinder:prototype"
+  },
+  {
+    "commit": "2492ef87f41650a9729740e07fdf6df9486c1880",
+    "date": "2026-08-02",
+    "path": ".scratch/agent-coordination-framework/issues/14-establish-board-foundation.md",
+    "identity": ".scratch/agent-coordination-framework/issues/14-establish-board-foundation.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "8bf8e291032cc51809285d0b22e0470fb4b7c318",
+    "date": "2026-08-02",
+    "path": ".scratch/agent-coordination-framework/issues/16-execute-first-task-activation.md",
+    "identity": ".scratch/agent-coordination-framework/issues/16-execute-first-task-activation.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "ce3cb584947d91345247477c8627057c25126e41",
+    "date": "2026-08-02",
+    "path": ".scratch/agent-coordination-framework/issues/17-complete-minimal-codex-handoff.md",
+    "identity": ".scratch/agent-coordination-framework/issues/17-complete-minimal-codex-handoff.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "975da616bcebf0febc62e73d974f245ca6b3d1df",
+    "date": "2026-08-02",
+    "path": ".scratch/agent-coordination-framework/issues/18-let-agents-discover-shared-work.md",
+    "identity": ".scratch/agent-coordination-framework/issues/18-let-agents-discover-shared-work.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "817bce7645d85cf0666a4da54fac28f2e5498937",
+    "date": "2026-08-03",
+    "path": ".scratch/agent-coordination-framework/issues/19-inspect-and-control-task.md",
+    "identity": ".scratch/agent-coordination-framework/issues/19-inspect-and-control-task.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "336d1e0188fcac94ee800deeac6c21f88ad8f255",
+    "date": "2026-08-03",
+    "path": ".scratch/agent-coordination-framework/issues/30-make-real-run-coordination-calls-reliable.md",
+    "identity": ".scratch/agent-coordination-framework/issues/30-make-real-run-coordination-calls-reliable.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "3b6c7b7993f67f178c9e4f9e8658ff1450de15e4",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/20-consult-agents-notify-user.md",
+    "identity": ".scratch/agent-coordination-framework/issues/20-consult-agents-notify-user.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "7de3845cfc9a5dc70fa60f971a82a81a97133ab9",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/29-decompose-coordination-persistence.md",
+    "identity": ".scratch/agent-coordination-framework/issues/29-decompose-coordination-persistence.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "b45e4b8ff7ba94cf873c42ae50957c2c96b713a2",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/36-configure-agent-models-and-reasoning.md",
+    "identity": ".scratch/agent-coordination-framework/issues/36-configure-agent-models-and-reasoning.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "7ad944e17623d3de928a018da0ad8551dc0a291a",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/15-start-validated-paused-process.md",
+    "identity": ".scratch/agent-coordination-framework/issues/15-start-validated-paused-process.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "033a105eede751629e03686d385296d87558597e",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/21-split-relate-unblock-work.md",
+    "identity": ".scratch/agent-coordination-framework/issues/21-split-relate-unblock-work.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "c2b4b94bbbd3ac596bbafab4cccfc5e6175af716",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/22-prevent-conflicting-duplicate-changes.md",
+    "identity": ".scratch/agent-coordination-framework/issues/22-prevent-conflicting-duplicate-changes.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "dbfd041eded83666fe222e798a6c7c1cb2fd459f",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/41-separate-task-projections-from-commands.md",
+    "identity": ".scratch/agent-coordination-framework/issues/41-separate-task-projections-from-commands.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "20f575f5a46642dc06eaed0d1d7c896573f9c51b",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/23-recover-queued-work-after-restart.md",
+    "identity": ".scratch/agent-coordination-framework/issues/23-recover-queued-work-after-restart.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "71fdff45efa7a5044821d6271b512f13b1d407a4",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/24-recover-failed-permission-blocked-attempts.md",
+    "identity": ".scratch/agent-coordination-framework/issues/24-recover-failed-permission-blocked-attempts.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "fa1a640cfc42271c14466d7df5bbbded8440d97b",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/25-interrupt-tasks-pause-process.md",
+    "identity": ".scratch/agent-coordination-framework/issues/25-interrupt-tasks-pause-process.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "64116006a83d6258e1925e0634ef177806e62f93",
+    "date": "2026-08-08",
+    "path": ".scratch/agent-coordination-framework/issues/43-surface-suspended-task-action-on-board.md",
+    "identity": ".scratch/agent-coordination-framework/issues/43-surface-suspended-task-action-on-board.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "beee068255ecb0dcf246ff3716207002fefcc9b3",
+    "date": "2026-08-09",
+    "path": ".scratch/agent-coordination-framework/issues/26-evolve-process-definitions-safely.md",
+    "identity": ".scratch/agent-coordination-framework/issues/26-evolve-process-definitions-safely.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "fd163b4241f0dde595fa1ef29f0148b3e7ae4130",
+    "date": "2026-08-09",
+    "path": ".scratch/agent-coordination-framework/issues/31-expose-task-workspace.md",
+    "identity": ".scratch/agent-coordination-framework/issues/31-expose-task-workspace.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "f04816856e1040c1f560587c94d0a4a5ebd5d72d",
+    "date": "2026-08-09",
+    "path": ".scratch/agent-coordination-framework/issues/44-preserve-board-scroll-during-refresh.md",
+    "identity": ".scratch/agent-coordination-framework/issues/44-preserve-board-scroll-during-refresh.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "3d57c8782ba9840b23efe34c03d546e25e3e0a10",
+    "date": "2026-08-09",
+    "path": ".scratch/agent-coordination-framework/issues/45-add-compact-row-board-layout.md",
+    "identity": ".scratch/agent-coordination-framework/issues/45-add-compact-row-board-layout.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "83abfd5b50086e12ca4821b03c181629e8b07c9b",
+    "date": "2026-08-09",
+    "path": ".scratch/agent-coordination-framework/issues/32-observe-running-attempts-live.md",
+    "identity": ".scratch/agent-coordination-framework/issues/32-observe-running-attempts-live.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "1351004dbda326f015aeec60febf6335c6bae7eb",
+    "date": "2026-08-09",
+    "path": ".scratch/agent-coordination-framework/issues/27-archive-tasks-without-losing-work.md",
+    "identity": ".scratch/agent-coordination-framework/issues/27-archive-tasks-without-losing-work.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "73f8ff7510dc5b8e7329d66fdc65e9bec821ca2c",
+    "date": "2026-08-10",
+    "path": ".scratch/agent-coordination-framework/issues/46-prevent-completion-task-creation.md",
+    "identity": ".scratch/agent-coordination-framework/issues/46-prevent-completion-task-creation.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "09f1cd56436e81b1fda458a74c2bb65416dd5c5a",
+    "date": "2026-08-10",
+    "path": ".scratch/agent-coordination-framework/issues/33-show-live-task-workspace-git-state.md",
+    "identity": ".scratch/agent-coordination-framework/issues/33-show-live-task-workspace-git-state.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "ddd851e62b577854927d0f99720635577c9a6ad4",
+    "date": "2026-08-10",
+    "path": ".scratch/agent-coordination-framework/issues/47-reshape-task-details-around-agent-activity.md",
+    "identity": ".scratch/agent-coordination-framework/issues/47-reshape-task-details-around-agent-activity.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "bd59f90fd3ceae45d5c3a86afee57aed5599d83f",
+    "date": "2026-08-10",
+    "path": ".scratch/agent-coordination-framework/issues/37-structure-task-history-by-cause-and-attempt.md",
+    "identity": ".scratch/agent-coordination-framework/issues/37-structure-task-history-by-cause-and-attempt.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "5db7a9356592f4f41bbe354cf7ef9a476995c6f9",
+    "date": "2026-08-11",
+    "path": ".scratch/agent-coordination-framework/issues/48-make-task-relationships-discoverable-recoverable.md",
+    "identity": ".scratch/agent-coordination-framework/issues/48-make-task-relationships-discoverable-recoverable.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "375b4c37b5c411ac2ffe81c33919270262b1fa8e",
+    "date": "2026-08-11",
+    "path": ".scratch/agent-coordination-framework/issues/49-enable-agent-git-operations-in-task-workspaces.md",
+    "identity": ".scratch/agent-coordination-framework/issues/49-enable-agent-git-operations-in-task-workspaces.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "59b5d5e585b1a858c7f5c20f2478c31a3908e9f0",
+    "date": "2026-08-11",
+    "path": ".scratch/agent-coordination-framework/issues/38-separate-framework-process-role-instructions.md",
+    "identity": ".scratch/agent-coordination-framework/issues/38-separate-framework-process-role-instructions.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "ac78063bd6b376cdb5a6050e2e393a6d10b11e9a",
+    "date": "2026-08-11",
+    "path": ".scratch/agent-coordination-framework/issues/52-let-mentioned-agents-claim-primary-responsibility.md",
+    "identity": ".scratch/agent-coordination-framework/issues/52-let-mentioned-agents-claim-primary-responsibility.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "79b8f674a1d7324c1f9c9534274c0c178f0f354c",
+    "date": "2026-08-11",
+    "path": ".scratch/agent-coordination-framework/issues/28-prove-first-usable-workflow.md",
+    "identity": ".scratch/agent-coordination-framework/issues/28-prove-first-usable-workflow.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "51545bf4093b61c1ea160806cab0868f10175036",
+    "date": "2026-08-11",
+    "path": ".scratch/agent-coordination-framework/issues/51-investigate-sdk-capability-parity-and-automatic-approvals.md",
+    "identity": ".scratch/agent-coordination-framework/issues/51-investigate-sdk-capability-parity-and-automatic-approvals.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "51545bf4093b61c1ea160806cab0868f10175036",
+    "date": "2026-08-11",
+    "path": ".scratch/agent-coordination-framework/issues/54-enable-automatic-approval-review-for-agent-runs.md",
+    "identity": ".scratch/agent-coordination-framework/issues/54-enable-automatic-approval-review-for-agent-runs.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "88648ecebc4ffa2e481a011763a756753af7d0ab",
+    "date": "2026-08-12",
+    "path": ".scratch/agent-coordination-framework/issues/53-show-token-usage-in-attempt-transcripts.md",
+    "identity": ".scratch/agent-coordination-framework/issues/53-show-token-usage-in-attempt-transcripts.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "8ca28d96439ac80788377d19174b49c95b237bb4",
+    "date": "2026-08-13",
+    "path": ".scratch/agent-coordination-framework/issues/55-support-dark-mode.md",
+    "identity": ".scratch/agent-coordination-framework/issues/55-support-dark-mode.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "b361d5660a9e1fba04d6dc9ac2da82d685b3ed97",
+    "date": "2026-08-13",
+    "path": ".scratch/agent-coordination-framework/issues/56-reduce-agent-run-context-overhead.md",
+    "identity": ".scratch/agent-coordination-framework/issues/56-reduce-agent-run-context-overhead.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "a637f036db46a669fb3c9115d18a47b287cc5f59",
+    "date": "2026-08-13",
+    "path": ".scratch/agent-coordination-framework/issues/39-handle-same-column-moves-as-inert.md",
+    "identity": ".scratch/agent-coordination-framework/issues/39-handle-same-column-moves-as-inert.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "0e47e61e03141ac43aa8bf3b82c26eb35bdff5b9",
+    "date": "2026-08-13",
+    "path": ".scratch/agent-coordination-framework/issues/40-reuse-queued-column-entry-after-unblocking.md",
+    "identity": ".scratch/agent-coordination-framework/issues/40-reuse-queued-column-entry-after-unblocking.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "596fe40edaaa08976853c4e66b2ebdd79c9ee72f",
+    "date": "2026-08-13",
+    "path": ".scratch/agent-coordination-framework/issues/35-make-participant-mentions-discoverable.md",
+    "identity": ".scratch/agent-coordination-framework/issues/35-make-participant-mentions-discoverable.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "3f5b881883461f5d231b8c78d2ab8424d02aa2df",
+    "date": "2026-08-13",
+    "path": ".scratch/agent-coordination-framework/issues/34-relocate-project-state-root.md",
+    "identity": ".scratch/agent-coordination-framework/issues/34-relocate-project-state-root.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "fde8c56836048ebf90fef9d4e4eec04e1b390acc",
+    "date": "2026-08-13",
+    "path": ".scratch/agent-coordination-framework/issues/50-discard-interrupted-activation.md",
+    "identity": ".scratch/agent-coordination-framework/issues/50-discard-interrupted-activation.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "b4bf5bbf991d2240e591c55160da81a53e022ea9",
+    "date": "2026-08-14",
+    "path": ".scratch/agent-coordination-framework/issues/60-dismiss-startup-impact-after-acceptance.md",
+    "identity": ".scratch/agent-coordination-framework/issues/60-dismiss-startup-impact-after-acceptance.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "b4bf5bbf991d2240e591c55160da81a53e022ea9",
+    "date": "2026-08-14",
+    "path": ".scratch/agent-coordination-framework/issues/64-show-collapsed-line-counts.md",
+    "identity": ".scratch/agent-coordination-framework/issues/64-show-collapsed-line-counts.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "d133a6b79770eb3fa7f29a88d4d1cec3d741c6ed",
+    "date": "2026-08-14",
+    "path": ".scratch/agent-coordination-framework/issues/58-wrap-wide-transcript-content.md",
+    "identity": ".scratch/agent-coordination-framework/issues/58-wrap-wide-transcript-content.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "d133a6b79770eb3fa7f29a88d4d1cec3d741c6ed",
+    "date": "2026-08-14",
+    "path": ".scratch/agent-coordination-framework/issues/61-remove-mojibake-ui-characters.md",
+    "identity": ".scratch/agent-coordination-framework/issues/61-remove-mojibake-ui-characters.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "35412e673294bb31180f3aedcdb47762e3c29ee5",
+    "date": "2026-08-14",
+    "path": ".scratch/agent-coordination-framework/issues/59-notify-agent-handoffs-to-user.md",
+    "identity": ".scratch/agent-coordination-framework/issues/59-notify-agent-handoffs-to-user.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "f7f3231f055d7f868c6ff891ee7028cc81a8deaa",
+    "date": "2026-08-15",
+    "path": ".scratch/agent-conversations/issues/01-turn-attempt-transcripts-into-conversations.md",
+    "identity": ".scratch/agent-conversations/issues/01-turn-attempt-transcripts-into-conversations.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "577203627c8604e2c92123133e8e35619593c6c4",
+    "date": "2026-08-15",
+    "path": ".scratch/agent-conversations/issues/02-add-compact-task-conversation-index.md",
+    "identity": ".scratch/agent-conversations/issues/02-add-compact-task-conversation-index.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "12682b91ca3c5f834a94fd2873af26efd09d20c2",
+    "date": "2026-08-15",
+    "path": ".scratch/agent-conversations/issues/03-continue-conversation-through-agent-run.md",
+    "identity": ".scratch/agent-conversations/issues/03-continue-conversation-through-agent-run.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "d4d87121992f13fd1d9b6e6d9d68998aabc950ba",
+    "date": "2026-08-15",
+    "path": ".scratch/agent-conversations/issues/04-preserve-conversations-through-recovery-and-evolution.md",
+    "identity": ".scratch/agent-conversations/issues/04-preserve-conversations-through-recovery-and-evolution.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "f52882d694ab63c8cdc30b1be7f228e49bd12c28",
+    "date": "2026-08-15",
+    "path": ".scratch/agent-conversations/issues/05-complete-live-accessible-conversation-experience.md",
+    "identity": ".scratch/agent-conversations/issues/05-complete-live-accessible-conversation-experience.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "a85bb76950f63ed6ce8db33a1838e48bb34b1972",
+    "date": "2026-08-15",
+    "path": ".scratch/codebase-maintainability/issues/01-complete-user-board-projection.md",
+    "identity": ".scratch/codebase-maintainability/issues/01-complete-user-board-projection.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "a85bb76950f63ed6ce8db33a1838e48bb34b1972",
+    "date": "2026-08-15",
+    "path": ".scratch/codebase-maintainability/issues/02-complete-user-task-detail-projection.md",
+    "identity": ".scratch/codebase-maintainability/issues/02-complete-user-task-detail-projection.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "a85bb76950f63ed6ce8db33a1838e48bb34b1972",
+    "date": "2026-08-15",
+    "path": ".scratch/codebase-maintainability/issues/03-shared-accessible-modal-lifecycle.md",
+    "identity": ".scratch/codebase-maintainability/issues/03-shared-accessible-modal-lifecycle.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "bf4b74f9422895e7343ee0834f049e7f65d7b09a",
+    "date": "2026-08-15",
+    "path": ".scratch/codebase-maintainability/issues/04-shared-refresh-and-polling-lifecycle.md",
+    "identity": ".scratch/codebase-maintainability/issues/04-shared-refresh-and-polling-lifecycle.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "bf4b74f9422895e7343ee0834f049e7f65d7b09a",
+    "date": "2026-08-15",
+    "path": ".scratch/codebase-maintainability/issues/05-single-durable-activity-journal.md",
+    "identity": ".scratch/codebase-maintainability/issues/05-single-durable-activity-journal.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "c3dccb1700f062fbf6f15b63f1a6e5af962f1b85",
+    "date": "2026-08-15",
+    "path": ".scratch/codebase-maintainability/issues/06-atomic-attention-recording.md",
+    "identity": ".scratch/codebase-maintainability/issues/06-atomic-attention-recording.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "fc1fe110fbf7bc6b84df49093a1dd9042b18fe31",
+    "date": "2026-08-15",
+    "path": ".scratch/codebase-maintainability/issues/07-idempotent-command-execution-module.md",
+    "identity": ".scratch/codebase-maintainability/issues/07-idempotent-command-execution-module.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "c5da9648229e6029613a4887b723965fc1acb221",
+    "date": "2026-08-15",
+    "path": ".scratch/agent-conversations/issues/07-refresh-open-conversations-promptly.md",
+    "identity": ".scratch/agent-conversations/issues/07-refresh-open-conversations-promptly.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "f5567702a266254d0558e6ecbac3d60fd4182f7c",
+    "date": "2026-08-15",
+    "path": ".scratch/agent-coordination-framework/issues/67-archive-differently-owned-worktrees.md",
+    "identity": ".scratch/agent-coordination-framework/issues/67-archive-differently-owned-worktrees.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "bb79590a7ee0e1976e0d4bf9aec93e06e2cd4977",
+    "date": "2026-08-15",
+    "path": ".scratch/agent-coordination-framework/issues/66-render-task-markdown.md",
+    "identity": ".scratch/agent-coordination-framework/issues/66-render-task-markdown.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "037d0bf0df6aadf8abb7d41b3d521aad44a3110e",
+    "date": "2026-08-16",
+    "path": ".scratch/agent-coordination-framework/issues/57-make-task-attention-actionable.md",
+    "identity": ".scratch/agent-coordination-framework/issues/57-make-task-attention-actionable.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "a171ffb3756dfb0c2fb5e36abeb9c061d0fdf699",
+    "date": "2026-08-20",
+    "path": ".scratch/codebase-maintainability/issues/08-structured-idempotent-command-identity.md",
+    "identity": ".scratch/codebase-maintainability/issues/08-structured-idempotent-command-identity.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "a171ffb3756dfb0c2fb5e36abeb9c061d0fdf699",
+    "date": "2026-08-20",
+    "path": ".scratch/codebase-maintainability/issues/09-conversation-projection-module.md",
+    "identity": ".scratch/codebase-maintainability/issues/08-conversation-projection-module.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "a171ffb3756dfb0c2fb5e36abeb9c061d0fdf699",
+    "date": "2026-08-20",
+    "path": ".scratch/codebase-maintainability/issues/10-conversation-command-module.md",
+    "identity": ".scratch/codebase-maintainability/issues/09-conversation-command-module.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "a171ffb3756dfb0c2fb5e36abeb9c061d0fdf699",
+    "date": "2026-08-20",
+    "path": ".scratch/codebase-maintainability/issues/11-expand-capability-focused-contracts.md",
+    "identity": ".scratch/codebase-maintainability/issues/10-expand-capability-focused-contracts.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "a171ffb3756dfb0c2fb5e36abeb9c061d0fdf699",
+    "date": "2026-08-20",
+    "path": ".scratch/codebase-maintainability/issues/12-migrate-core-and-runtime-contracts.md",
+    "identity": ".scratch/codebase-maintainability/issues/11-migrate-core-and-runtime-contracts.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "4b73b5b219a26aaffdbafe20ea7867c389c3bc95",
+    "date": "2026-08-20",
+    "path": ".scratch/codebase-maintainability/issues/13-migrate-adapter-contracts.md",
+    "identity": ".scratch/codebase-maintainability/issues/12-migrate-adapter-contracts.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "4b73b5b219a26aaffdbafe20ea7867c389c3bc95",
+    "date": "2026-08-20",
+    "path": ".scratch/codebase-maintainability/issues/14-contract-compatibility-cleanup.md",
+    "identity": ".scratch/codebase-maintainability/issues/13-contract-compatibility-cleanup.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "4b73b5b219a26aaffdbafe20ea7867c389c3bc95",
+    "date": "2026-08-20",
+    "path": ".scratch/codebase-maintainability/issues/15-organize-browser-tests-by-capability.md",
+    "identity": ".scratch/codebase-maintainability/issues/14-organize-browser-tests-by-capability.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "80728a855ae240cf0a27b3bc4544aa361bb8b2c1",
+    "date": "2026-08-20",
+    "path": ".scratch/codebase-maintainability/issues/16-organize-application-and-runtime-tests.md",
+    "identity": ".scratch/codebase-maintainability/issues/15-organize-application-and-runtime-tests.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "80728a855ae240cf0a27b3bc4544aa361bb8b2c1",
+    "date": "2026-08-20",
+    "path": ".scratch/codebase-maintainability/issues/17-finalize-architecture-and-verification.md",
+    "identity": ".scratch/codebase-maintainability/issues/17-finalize-architecture-and-verification.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "0f0ee6920ebbee38562b5259381b7e015355609c",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-conversation-continuity/issues/01-continue-ordinary-activations-in-current-conversation.md",
+    "identity": ".scratch/agent-conversation-continuity/issues/01-continue-ordinary-activations-in-current-conversation.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "10a9423c197a601445b4c8b601fc9eb5bdf1339b",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-conversation-continuity/issues/02-retire-and-replace-agent-conversations.md",
+    "identity": ".scratch/agent-conversation-continuity/issues/02-retire-and-replace-agent-conversations.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "0bea7957df9b8bdf7032a5128573a266b2ed8bf6",
+    "date": "2026-08-22",
+    "path": ".scratch/codebase-maintainability/issues/18-localize-activation-creation.md",
+    "identity": ".scratch/codebase-maintainability/issues/18-localize-activation-creation.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "0c0bfc3a7ab67726b17deb35867f7b512a8705ba",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-conversation-display/issues/01-compact-markdown-messages-and-command-activity.md",
+    "identity": ".scratch/agent-conversation-display/issues/01-compact-markdown-messages-and-command-activity.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "0c0bfc3a7ab67726b17deb35867f7b512a8705ba",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-coordination-framework/issues/69-wrap-rendered-markdown-code-lines.md",
+    "identity": ".scratch/agent-coordination-framework/issues/69-wrap-rendered-markdown-code-lines.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "9597a02501e337bc6618fe2a8ce8b7f3543b0f84",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-conversation-display/issues/02-identify-generic-mcp-calls-and-disclose-evidence.md",
+    "identity": ".scratch/agent-conversation-display/issues/02-identify-generic-mcp-calls-and-disclose-evidence.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "81ec477ca9a90986c5417a7481f91c9c4d794cbc",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-conversation-display/issues/03-explain-framework-inspection-tools.md",
+    "identity": ".scratch/agent-conversation-display/issues/03-explain-framework-inspection-tools.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "66e083d65889032ecbe4dc803721ed5db1bc68e6",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-conversation-display/issues/04-explain-framework-action-tools-and-link-effects.md",
+    "identity": ".scratch/agent-conversation-display/issues/04-explain-framework-action-tools-and-link-effects.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "f597cf0369381f792bf40eabe7c522fc38d791d6",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-coordination-framework/issues/72-keep-comment-replies-in-context.md",
+    "identity": ".scratch/agent-coordination-framework/issues/72-keep-comment-replies-in-context.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "2fc20aed5e34c3e7dc52a343b39fc277f08b7137",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-coordination-framework/issues/65-link-relationship-events-to-tasks.md",
+    "identity": ".scratch/agent-coordination-framework/issues/65-link-relationship-events-to-tasks.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "b6f5ba7f7281c5fa7bde7ae435490e06f26e06b4",
+    "date": "2026-08-22",
+    "path": ".scratch/conversation-transcript-maintainability/issues/01-complete-coordination-transcript-projection.md",
+    "identity": ".scratch/conversation-transcript-maintainability/issues/01-complete-coordination-transcript-projection.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "b6f5ba7f7281c5fa7bde7ae435490e06f26e06b4",
+    "date": "2026-08-22",
+    "path": ".scratch/conversation-transcript-maintainability/issues/02-deepen-conversation-history-module.md",
+    "identity": ".scratch/conversation-transcript-maintainability/issues/02-deepen-conversation-history-module.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "b6f5ba7f7281c5fa7bde7ae435490e06f26e06b4",
+    "date": "2026-08-22",
+    "path": ".scratch/conversation-transcript-maintainability/issues/03-organize-transcript-tests-by-seam.md",
+    "identity": ".scratch/conversation-transcript-maintainability/issues/03-organize-transcript-tests-by-seam.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "b6f5ba7f7281c5fa7bde7ae435490e06f26e06b4",
+    "date": "2026-08-22",
+    "path": ".scratch/conversation-transcript-maintainability/issues/04-organize-task-browser-tests-by-sub-capability.md",
+    "identity": ".scratch/conversation-transcript-maintainability/issues/04-organize-task-browser-tests-by-sub-capability.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "b82b38a7bb3048c934e860858aa40f6ccf972cf1",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-coordination-framework/issues/63-evaluate-initial-prompt-token-breakdown.md",
+    "identity": ".scratch/agent-coordination-framework/issues/63-evaluate-initial-prompt-token-breakdown.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "1bb646634a177dff0dedbf2a61167323695d1f35",
+    "date": "2026-08-22",
+    "path": ".scratch/agent-coordination-framework/issues/70-define-process-owned-token-pricing.md",
+    "identity": ".scratch/agent-coordination-framework/issues/70-define-process-owned-token-pricing.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "9b4e6b2c1ad36ae2c528b558092c22b9abc55d73",
+    "date": "2026-08-23",
+    "path": ".scratch/agent-coordination-framework/issues/71-isolate-follow-up-token-usage.md",
+    "identity": ".scratch/agent-coordination-framework/issues/71-isolate-follow-up-token-usage.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "7f1b00cdfbdf197eb14155ceeae07878db1b13cc",
+    "date": "2026-08-23",
+    "path": ".scratch/agent-conversations/issues/08-simplify-agent-conversation-presentation.md",
+    "identity": ".scratch/agent-conversations/issues/08-simplify-agent-conversation-presentation.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "02b8519e63df814adeac529dd41d1d70a9bcce6f",
+    "date": "2026-08-24",
+    "path": ".scratch/agent-coordination-framework/issues/73-preserve-text-selection-during-live-refresh.md",
+    "identity": ".scratch/agent-coordination-framework/issues/73-preserve-text-selection-during-live-refresh.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "bf1768d80166fba180ce2e0f26a063462c3ae8aa",
+    "date": "2026-08-25",
+    "path": ".scratch/agent-coordination-framework/issues/62-review-agent-commits-with-open-worktrees.md",
+    "identity": ".scratch/agent-coordination-framework/issues/62-review-agent-commits-with-open-worktrees.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "bf1768d80166fba180ce2e0f26a063462c3ae8aa",
+    "date": "2026-08-25",
+    "path": ".scratch/agent-coordination-framework/issues/68-define-user-file-attachment-workflows.md",
+    "identity": ".scratch/agent-coordination-framework/issues/68-define-user-file-attachment-workflows.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "0ef478f0495b4dcd4d4b7bd283428e209c5c4a73",
+    "date": "2026-08-25",
+    "path": ".scratch/agent-coordination-framework/issues/74-explore-codex-compaction-threshold-parity.md",
+    "identity": ".scratch/agent-coordination-framework/issues/74-explore-codex-compaction-threshold-parity.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "0ef478f0495b4dcd4d4b7bd283428e209c5c4a73",
+    "date": "2026-08-25",
+    "path": ".scratch/agent-coordination-framework/issues/75-explain-token-cost-breakdown.md",
+    "identity": ".scratch/agent-coordination-framework/issues/75-explain-token-cost-breakdown.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "6d38e40bde8c4d8c44e48db6e6a0ee84fb364feb",
+    "date": "2026-08-26",
+    "path": ".scratch/post-feature-maintainability/issues/01-deepen-conversation-follow-up-composer.md",
+    "identity": ".scratch/post-feature-maintainability/issues/01-deepen-conversation-follow-up-composer.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "6d38e40bde8c4d8c44e48db6e6a0ee84fb364feb",
+    "date": "2026-08-26",
+    "path": ".scratch/post-feature-maintainability/issues/02-localize-token-cost-semantics.md",
+    "identity": ".scratch/post-feature-maintainability/issues/02-localize-token-cost-semantics.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "6d38e40bde8c4d8c44e48db6e6a0ee84fb364feb",
+    "date": "2026-08-26",
+    "path": ".scratch/post-feature-maintainability/issues/03-project-task-conversation-cost-summary.md",
+    "identity": ".scratch/post-feature-maintainability/issues/03-project-task-conversation-cost-summary.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "6d38e40bde8c4d8c44e48db6e6a0ee84fb364feb",
+    "date": "2026-08-26",
+    "path": ".scratch/post-feature-maintainability/issues/04-organize-attachment-and-cost-tests.md",
+    "identity": ".scratch/post-feature-maintainability/issues/04-organize-attachment-and-cost-tests.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "18a3a776df265dab81cae428d69a7c40bc46e646",
+    "date": "2026-08-26",
+    "path": ".scratch/agent-coordination-framework/issues/76-correct-conversation-cost-aggregation.md",
+    "identity": ".scratch/agent-coordination-framework/issues/76-correct-conversation-cost-aggregation.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "f421585cc87f02bc8b1a558f4e1477aac953eefd",
+    "date": "2026-08-26",
+    "path": ".scratch/agent-coordination-framework/issues/77-reconcile-conversation-usage-with-compaction.md",
+    "identity": ".scratch/agent-coordination-framework/issues/77-reconcile-conversation-usage-with-compaction.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "4b86ced795791f9d7974f73abd81fb71cb5cd86f",
+    "date": "2026-08-27",
+    "path": ".scratch/agent-coordination-framework/issues/80-keep-bottom-anchored-conversation-following.md",
+    "identity": ".scratch/agent-coordination-framework/issues/80-keep-bottom-anchored-conversation-following.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "65988e34c1d52ee2892274189b5fec385c1e4b03",
+    "date": "2026-08-29",
+    "path": ".scratch/agent-coordination-framework/issues/81-preselect-most-recent-task-agent-mention.md",
+    "identity": ".scratch/agent-coordination-framework/issues/81-preselect-most-recent-task-agent-mention.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "65988e34c1d52ee2892274189b5fec385c1e4b03",
+    "date": "2026-08-29",
+    "path": ".scratch/agent-coordination-framework/issues/82-omit-self-authored-comments-from-continuation-updates.md",
+    "identity": ".scratch/agent-coordination-framework/issues/82-omit-self-authored-comments-from-continuation-updates.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "65988e34c1d52ee2892274189b5fec385c1e4b03",
+    "date": "2026-08-29",
+    "path": ".scratch/agent-coordination-framework/issues/83-show-process-cost-statistics-in-settings.md",
+    "identity": ".scratch/agent-coordination-framework/issues/83-show-process-cost-statistics-in-settings.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "81488cc4844f1ca78dfc9d4b94e1e0aec529ae90",
+    "date": "2026-08-29",
+    "path": ".scratch/agent-coordination-framework/issues/78-disclose-agent-inspectable-task-content.md",
+    "identity": ".scratch/agent-coordination-framework/issues/78-disclose-agent-inspectable-task-content.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "b258c2de1bf35d4f107dadd211a42b372d66c5d9",
+    "date": "2026-08-29",
+    "path": ".scratch/agent-coordination-framework/issues/79-filter-timeline-to-agent-inspectable-events.md",
+    "identity": ".scratch/agent-coordination-framework/issues/79-filter-timeline-to-agent-inspectable-events.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "d9bcfdb46826dc6af323f3c8625694a5cc774081",
+    "date": "2026-08-29",
+    "path": ".scratch/agent-coordination-framework/issues/84-evaluate-web-api-routing-boundary.md",
+    "identity": ".scratch/agent-coordination-framework/issues/84-evaluate-web-api-routing-boundary.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "d9bcfdb46826dc6af323f3c8625694a5cc774081",
+    "date": "2026-08-29",
+    "path": ".scratch/agent-coordination-framework/issues/85-evaluate-typescript-persistence-tooling.md",
+    "identity": ".scratch/agent-coordination-framework/issues/85-evaluate-typescript-persistence-tooling.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "c32bb52862ccf14b410b81a4a3dfb02c1adc5c0f",
+    "date": "2026-08-29",
+    "path": ".scratch/agent-conversations/issues/06-evaluate-one-conversation-per-agent-and-task.md",
+    "identity": ".scratch/agent-conversations/issues/06-evaluate-one-conversation-per-agent-and-task.md",
+    "implementation": false,
+    "type": "decision-or-unspecified"
+  },
+  {
+    "commit": "c32bb52862ccf14b410b81a4a3dfb02c1adc5c0f",
+    "date": "2026-08-29",
+    "path": ".scratch/agent-coordination-framework/issues/86-isolate-web-api-routes-behind-typed-dispatcher.md",
+    "identity": ".scratch/agent-coordination-framework/issues/86-isolate-web-api-routes-behind-typed-dispatcher.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "c32bb52862ccf14b410b81a4a3dfb02c1adc5c0f",
+    "date": "2026-08-29",
+    "path": ".scratch/agent-coordination-framework/issues/87-prototype-drizzle-persistence-migrations.md",
+    "identity": ".scratch/agent-coordination-framework/issues/87-prototype-drizzle-persistence-migrations.md",
+    "implementation": false,
+    "type": "prototype"
+  },
+  {
+    "commit": "bb4502d4ed2ffc65db9d6aed9bc51a7b26b559f7",
+    "date": "2026-08-30",
+    "path": ".scratch/agent-coordination-framework/issues/88-localize-activation-resolution-commands.md",
+    "identity": ".scratch/agent-coordination-framework/issues/88-localize-activation-resolution-commands.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "f5199b0c8d4946773bfe88894f8c33654961334e",
+    "date": "2026-08-30",
+    "path": ".scratch/agent-coordination-framework/issues/89-reassess-automation-persistence-lifecycles.md",
+    "identity": ".scratch/agent-coordination-framework/issues/89-reassess-automation-persistence-lifecycles.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "f5199b0c8d4946773bfe88894f8c33654961334e",
+    "date": "2026-08-30",
+    "path": ".scratch/agent-coordination-framework/issues/90-evaluate-codex-runtime-event-seam.md",
+    "identity": ".scratch/agent-coordination-framework/issues/90-evaluate-codex-runtime-event-seam.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "9e106d1224bee5033a6ffe69a524689ca9899f14",
+    "date": "2026-08-30",
+    "path": ".scratch/agent-coordination-framework/issues/91-extract-retained-attempt-evidence.md",
+    "identity": ".scratch/agent-coordination-framework/issues/91-extract-retained-attempt-evidence.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "f2d9a89b0e1dd80d7b0edcdb94d0eb11495feee3",
+    "date": "2026-08-31",
+    "path": ".scratch/agent-coordination-framework/issues/92-localize-activation-dispatch-preparation.md",
+    "identity": ".scratch/agent-coordination-framework/issues/92-localize-activation-dispatch-preparation.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "de6d8a10ec3f5ddf847f5c210ef8752dc31ca222",
+    "date": "2026-08-31",
+    "path": ".scratch/agent-coordination-framework/issues/93-deepen-active-attempt-lifecycle.md",
+    "identity": ".scratch/agent-coordination-framework/issues/93-deepen-active-attempt-lifecycle.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "14aebe37e9aed041ccb40700bc4e8baa5eb5f0b0",
+    "date": "2026-08-31",
+    "path": ".scratch/agent-coordination-framework/issues/94-project-codex-events-into-attempt-evidence.md",
+    "identity": ".scratch/agent-coordination-framework/issues/94-project-codex-events-into-attempt-evidence.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "f6b1172971cb17f86932d41746e2d038659dbff8",
+    "date": "2026-08-31",
+    "path": ".scratch/agent-coordination-framework/issues/95-isolate-local-codex-session-evidence.md",
+    "identity": ".scratch/agent-coordination-framework/issues/95-isolate-local-codex-session-evidence.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "07ec5015459b70918b77ba287cffc912395d4a34",
+    "date": "2026-08-31",
+    "path": ".scratch/agent-coordination-framework/issues/96-recover-resumed-codex-threads-from-lazy-stream-failures.md",
+    "identity": ".scratch/agent-coordination-framework/issues/96-recover-resumed-codex-threads-from-lazy-stream-failures.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "366e4d240116c5b9799c143becef85c2fac87cee",
+    "date": "2026-08-31",
+    "path": ".scratch/released-schema-migrations/issues/01-establish-released-migration-baseline.md",
+    "identity": ".scratch/released-schema-migrations/issues/01-establish-released-migration-baseline.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "3a43c39bc488e2e0534fbdd3065103889c7561e4",
+    "date": "2026-08-31",
+    "path": ".scratch/agent-coordination-framework/issues/42-support-released-schema-upgrades.md",
+    "identity": ".scratch/agent-coordination-framework/issues/42-support-released-schema-upgrades.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "3a43c39bc488e2e0534fbdd3065103889c7561e4",
+    "date": "2026-08-31",
+    "path": ".scratch/released-schema-migrations/issues/02-upgrade-released-databases-safely.md",
+    "identity": ".scratch/released-schema-migrations/issues/02-upgrade-released-databases-safely.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "dfa79da0ddb3a8209d9965be4a0793a3a1e44a55",
+    "date": "2026-09-02",
+    "path": ".scratch/verification-maintainability/issues/01-reconcile-activation-prompt-contract.md",
+    "identity": ".scratch/verification-maintainability/issues/01-reconcile-activation-prompt-contract.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "dfa79da0ddb3a8209d9965be4a0793a3a1e44a55",
+    "date": "2026-09-02",
+    "path": ".scratch/verification-maintainability/issues/02-verify-complete-migration-schema.md",
+    "identity": ".scratch/verification-maintainability/issues/02-verify-complete-migration-schema.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "dfa79da0ddb3a8209d9965be4a0793a3a1e44a55",
+    "date": "2026-09-02",
+    "path": ".scratch/verification-maintainability/issues/03-stabilize-cli-host-test-lifecycle.md",
+    "identity": ".scratch/verification-maintainability/issues/03-stabilize-cli-host-test-lifecycle.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "d907c528a7b972c7baf3536e71a14c227e190578",
+    "date": "2026-09-02",
+    "path": ".scratch/maintainability-audit-2026-09/issues/01-type-conversation-browser-fixtures.md",
+    "identity": ".scratch/maintainability-audit-2026-09/issues/01-type-conversation-browser-fixtures.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "c2c4a9140bb3a88dcb8a8056cbf9d8f79ae41b19",
+    "date": "2026-09-02",
+    "path": ".scratch/maintainability-audit-2026-09/issues/02-localize-task-comment-composition.md",
+    "identity": ".scratch/maintainability-audit-2026-09/issues/02-localize-task-comment-composition.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "dfb8e3ff2bb1eb29af5ef5800d47820d31d17700",
+    "date": "2026-09-20",
+    "path": ".scratch/framework-improvements-2026-09/issues/03-preserve-board-navigation-state.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/03-preserve-board-navigation-state.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "1844d648d01a5ae99392708980a057224db1f815",
+    "date": "2026-09-22",
+    "path": ".scratch/framework-improvements-2026-09/issues/02-stop-conversation-scroll-snapback.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/02-stop-conversation-scroll-snapback.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "3ed62400d6eabd773dbf285c13121f053f100d09",
+    "date": "2026-09-22",
+    "path": ".scratch/framework-improvements-2026-09/issues/05-open-local-file-links-from-comments.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/05-open-local-file-links-from-comments.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "590178b7757a2bf1cb563f9c5facc1afa725aba0",
+    "date": "2026-09-23",
+    "path": ".scratch/framework-improvements-2026-09/issues/07-keep-task-movement-controls-accessible.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/07-keep-task-movement-controls-accessible.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "22d3decee92f08e9a34f3ce5ef73c3ed9d9f9f80",
+    "date": "2026-09-23",
+    "path": ".scratch/framework-improvements-2026-09/issues/08-use-full-height-conversation-dialog.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/08-use-full-height-conversation-dialog.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "1523bca1cebe1aac34bf333d3b1f008eeeb3a5e8",
+    "date": "2026-09-23",
+    "path": ".scratch/framework-improvements-2026-09/issues/11-collapse-long-task-descriptions.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/11-collapse-long-task-descriptions.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "dc2bad8b25c080828443ab6fe4c9a8ab0349cea5",
+    "date": "2026-09-24",
+    "path": ".scratch/framework-improvements-2026-09/issues/13-support-tables-in-markdown-content.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/13-support-tables-in-markdown-content.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "ccf2429d4778d4db3795495831044d8027aa2f55",
+    "date": "2026-09-24",
+    "path": ".scratch/framework-improvements-2026-09/issues/14-avoid-redundant-activation-after-follow-up-move.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/14-avoid-redundant-activation-after-follow-up-move.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "41a3aaf451215eb46516a64dd5e1bcd92450fe98",
+    "date": "2026-09-25",
+    "path": ".scratch/framework-improvements-2026-09/issues/16-navigate-timeline-with-column-movement-map.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/16-navigate-timeline-with-column-movement-map.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "ba71ca3f6cb8ab04a2e984609f8bc2a29fd98d12",
+    "date": "2026-09-26",
+    "path": ".scratch/framework-improvements-2026-09/issues/19-anchor-live-timeline-refresh-at-visible-top.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/19-anchor-live-timeline-refresh-at-visible-top.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "d5cfb15c8a4c4b3d9d57aecdc7babace9efe291f",
+    "date": "2026-09-27",
+    "path": ".scratch/framework-improvements-2026-09/issues/20-bound-task-detail-projection-cost.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/20-bound-task-detail-projection-cost.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b5c83d4bced7a8f3afb4e1c523f2131678cfab33",
+    "date": "2026-09-27",
+    "path": ".scratch/framework-improvements-2026-09/issues/18-widen-task-detail-content.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/18-widen-task-detail-content.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "664e460efc269e7dd3907c0598e492cefada2029",
+    "date": "2026-09-29",
+    "path": ".scratch/framework-improvements-2026-09/issues/15-redesign-blockers-around-explicit-resume-agents.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/15-redesign-blockers-around-explicit-resume-agents.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "8c4d0312722215abeeb6f575525e9d9e6b6e8510",
+    "date": "2026-09-30",
+    "path": ".scratch/framework-improvements-2026-09/issues/09-redesign-cross-task-mcp-capabilities.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/09-redesign-cross-task-mcp-capabilities.md",
+    "implementation": false,
+    "type": "grilling"
+  },
+  {
+    "commit": "8c4d0312722215abeeb6f575525e9d9e6b6e8510",
+    "date": "2026-09-30",
+    "path": ".scratch/framework-improvements-2026-09/issues/10-address-agents-on-other-tasks.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/10-address-agents-on-other-tasks.md",
+    "implementation": false,
+    "type": "grilling"
+  },
+  {
+    "commit": "dbeb48b8e0449a30b74cb169780d7a0f4de804da",
+    "date": "2026-09-30",
+    "path": ".scratch/cross-task-coordination/issues/01-cross-task-comments-and-participant-discovery.md",
+    "identity": ".scratch/cross-task-coordination/issues/01-cross-task-comments-and-participant-discovery.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "fd5b3dd81b0add488981fcf82cf99b739a0e33be",
+    "date": "2026-09-30",
+    "path": ".scratch/cross-task-coordination/issues/02-generalize-task-and-relationship-commands.md",
+    "identity": ".scratch/cross-task-coordination/issues/02-generalize-task-and-relationship-commands.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "6ee0b0b89d4d3d3caf140c7dfb68e504ab348b0c",
+    "date": "2026-10-02",
+    "path": ".scratch/cross-task-coordination/issues/03-curate-pinned-comments-in-tools-and-browser.md",
+    "identity": ".scratch/cross-task-coordination/issues/03-curate-pinned-comments-in-tools-and-browser.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "6ee0b0b89d4d3d3caf140c7dfb68e504ab348b0c",
+    "date": "2026-10-02",
+    "path": ".scratch/cross-task-coordination/issues/04-read-unified-history-with-stable-word-target-cursors.md",
+    "identity": ".scratch/cross-task-coordination/issues/04-read-unified-history-with-stable-word-target-cursors.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "6ee0b0b89d4d3d3caf140c7dfb68e504ab348b0c",
+    "date": "2026-10-02",
+    "path": ".scratch/cross-task-coordination/issues/05-compose-bounded-activation-updates-and-net-pin-changes.md",
+    "identity": ".scratch/cross-task-coordination/issues/05-compose-bounded-activation-updates-and-net-pin-changes.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "6ee0b0b89d4d3d3caf140c7dfb68e504ab348b0c",
+    "date": "2026-10-02",
+    "path": ".scratch/cross-task-coordination/issues/06-verify-complete-mcp-contract-and-publish-reference.md",
+    "identity": ".scratch/cross-task-coordination/issues/06-verify-complete-mcp-contract-and-publish-reference.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "c54f043c985c10b3a2307d6cc9a575b1fc92abee",
+    "date": "2026-10-02",
+    "path": ".scratch/cross-task-coordination/issues/07-refine-pinned-comment-controls-and-activity.md",
+    "identity": ".scratch/cross-task-coordination/issues/07-refine-pinned-comment-controls-and-activity.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "023c071621914eafdf16228e9dd2a9d6ca18d15e",
+    "date": "2026-10-02",
+    "path": ".scratch/framework-improvements-2026-09/issues/23-reflect-current-page-in-browser-tab-titles.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/23-reflect-current-page-in-browser-tab-titles.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "023c071621914eafdf16228e9dd2a9d6ca18d15e",
+    "date": "2026-10-02",
+    "path": ".scratch/framework-improvements-2026-09/issues/25-dock-add-comment-on-initial-load.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/25-dock-add-comment-on-initial-load.md",
+    "implementation": true,
+    "type": "task"
+  }
+]

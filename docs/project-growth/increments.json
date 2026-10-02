@@ -1,0 +1,922 @@
+[
+  {
+    "tickets": 1,
+    "delta": 1,
+    "production": 1259.0,
+    "test": 804.0,
+    "start_commit": "f5e1f3f163752a522f4a7b9d58f725d6081c251e",
+    "end_commit": "e5d98ff47dea304202693c0b9aed0e34f4138732"
+  },
+  {
+    "tickets": 2,
+    "delta": 1,
+    "production": 648.0,
+    "test": 580.0,
+    "start_commit": "e5d98ff47dea304202693c0b9aed0e34f4138732",
+    "end_commit": "2633fc6a2ff921e6de8e1b1ee95f1710a90890f5"
+  },
+  {
+    "tickets": 3,
+    "delta": 1,
+    "production": 748.0,
+    "test": 1024.0,
+    "start_commit": "2633fc6a2ff921e6de8e1b1ee95f1710a90890f5",
+    "end_commit": "ce3cb584947d91345247477c8627057c25126e41"
+  },
+  {
+    "tickets": 4,
+    "delta": 1,
+    "production": 759.0,
+    "test": 595.0,
+    "start_commit": "ce3cb584947d91345247477c8627057c25126e41",
+    "end_commit": "1af72dfbe6ffaff0999602dbc9fe8569cba8b8df"
+  },
+  {
+    "tickets": 5,
+    "delta": 1,
+    "production": 1548.0,
+    "test": 398.0,
+    "start_commit": "1af72dfbe6ffaff0999602dbc9fe8569cba8b8df",
+    "end_commit": "a61642a8a5d69f7eac98e0be35a9af21c76169fd"
+  },
+  {
+    "tickets": 6,
+    "delta": 1,
+    "production": 290.0,
+    "test": 580.0,
+    "start_commit": "a61642a8a5d69f7eac98e0be35a9af21c76169fd",
+    "end_commit": "427788efe5b0ffeeb81959d1dac5b6c26c78682f"
+  },
+  {
+    "tickets": 7,
+    "delta": 1,
+    "production": 700.0,
+    "test": 559.0,
+    "start_commit": "427788efe5b0ffeeb81959d1dac5b6c26c78682f",
+    "end_commit": "3b6c7b7993f67f178c9e4f9e8658ff1450de15e4"
+  },
+  {
+    "tickets": 8,
+    "delta": 1,
+    "production": -126.0,
+    "test": 25.0,
+    "start_commit": "3b6c7b7993f67f178c9e4f9e8658ff1450de15e4",
+    "end_commit": "e15f9fb50b2d743d96c3498263229c1a4d363b1a"
+  },
+  {
+    "tickets": 9,
+    "delta": 1,
+    "production": 131.0,
+    "test": 212.0,
+    "start_commit": "e15f9fb50b2d743d96c3498263229c1a4d363b1a",
+    "end_commit": "b45e4b8ff7ba94cf873c42ae50957c2c96b713a2"
+  },
+  {
+    "tickets": 10,
+    "delta": 1,
+    "production": 5.0,
+    "test": 29.0,
+    "start_commit": "b45e4b8ff7ba94cf873c42ae50957c2c96b713a2",
+    "end_commit": "7ad944e17623d3de928a018da0ad8551dc0a291a"
+  },
+  {
+    "tickets": 11,
+    "delta": 1,
+    "production": 477.0,
+    "test": 322.0,
+    "start_commit": "7ad944e17623d3de928a018da0ad8551dc0a291a",
+    "end_commit": "033a105eede751629e03686d385296d87558597e"
+  },
+  {
+    "tickets": 12,
+    "delta": 1,
+    "production": 105.0,
+    "test": 578.0,
+    "start_commit": "033a105eede751629e03686d385296d87558597e",
+    "end_commit": "c2b4b94bbbd3ac596bbafab4cccfc5e6175af716"
+  },
+  {
+    "tickets": 13,
+    "delta": 1,
+    "production": 22.0,
+    "test": 0.0,
+    "start_commit": "c2b4b94bbbd3ac596bbafab4cccfc5e6175af716",
+    "end_commit": "dbfd041eded83666fe222e798a6c7c1cb2fd459f"
+  },
+  {
+    "tickets": 14,
+    "delta": 1,
+    "production": 482.0,
+    "test": 638.0,
+    "start_commit": "dbfd041eded83666fe222e798a6c7c1cb2fd459f",
+    "end_commit": "20f575f5a46642dc06eaed0d1d7c896573f9c51b"
+  },
+  {
+    "tickets": 15,
+    "delta": 1,
+    "production": 569.0,
+    "test": 608.0,
+    "start_commit": "20f575f5a46642dc06eaed0d1d7c896573f9c51b",
+    "end_commit": "71fdff45efa7a5044821d6271b512f13b1d407a4"
+  },
+  {
+    "tickets": 16,
+    "delta": 1,
+    "production": 648.0,
+    "test": 465.0,
+    "start_commit": "71fdff45efa7a5044821d6271b512f13b1d407a4",
+    "end_commit": "fa1a640cfc42271c14466d7df5bbbded8440d97b"
+  },
+  {
+    "tickets": 17,
+    "delta": 1,
+    "production": 35.0,
+    "test": 109.0,
+    "start_commit": "fa1a640cfc42271c14466d7df5bbbded8440d97b",
+    "end_commit": "616d99dcfbd221bc881cbf806cb2b167ff52da1f"
+  },
+  {
+    "tickets": 18,
+    "delta": 1,
+    "production": 413.0,
+    "test": 676.0,
+    "start_commit": "616d99dcfbd221bc881cbf806cb2b167ff52da1f",
+    "end_commit": "beee068255ecb0dcf246ff3716207002fefcc9b3"
+  },
+  {
+    "tickets": 19,
+    "delta": 1,
+    "production": 366.0,
+    "test": 278.0,
+    "start_commit": "beee068255ecb0dcf246ff3716207002fefcc9b3",
+    "end_commit": "d38bb348af80b7db0b84d63831e0e19b1c599e23"
+  },
+  {
+    "tickets": 20,
+    "delta": 1,
+    "production": 4.0,
+    "test": 48.0,
+    "start_commit": "d38bb348af80b7db0b84d63831e0e19b1c599e23",
+    "end_commit": "f04816856e1040c1f560587c94d0a4a5ebd5d72d"
+  },
+  {
+    "tickets": 21,
+    "delta": 1,
+    "production": 180.0,
+    "test": 162.0,
+    "start_commit": "f04816856e1040c1f560587c94d0a4a5ebd5d72d",
+    "end_commit": "3d57c8782ba9840b23efe34c03d546e25e3e0a10"
+  },
+  {
+    "tickets": 22,
+    "delta": 1,
+    "production": 868.0,
+    "test": 1209.0,
+    "start_commit": "3d57c8782ba9840b23efe34c03d546e25e3e0a10",
+    "end_commit": "577d400b4f8fa721581ba9b58c4f0f3faaacd6e7"
+  },
+  {
+    "tickets": 23,
+    "delta": 1,
+    "production": 165.0,
+    "test": 137.0,
+    "start_commit": "577d400b4f8fa721581ba9b58c4f0f3faaacd6e7",
+    "end_commit": "fe6693e4871ded06c659da0a55a9e7b0f3d8b190"
+  },
+  {
+    "tickets": 24,
+    "delta": 1,
+    "production": 45.0,
+    "test": 125.0,
+    "start_commit": "fe6693e4871ded06c659da0a55a9e7b0f3d8b190",
+    "end_commit": "41447272c6974d63c0dbeb3664a0f89057e4cebb"
+  },
+  {
+    "tickets": 25,
+    "delta": 1,
+    "production": 282.0,
+    "test": 348.0,
+    "start_commit": "41447272c6974d63c0dbeb3664a0f89057e4cebb",
+    "end_commit": "07515c33a7fabf1154f37bb6784a6116227b9836"
+  },
+  {
+    "tickets": 26,
+    "delta": 1,
+    "production": 204.0,
+    "test": 271.0,
+    "start_commit": "07515c33a7fabf1154f37bb6784a6116227b9836",
+    "end_commit": "e547cd22d47cb1dd6ea485803e86bc97d00ffe6a"
+  },
+  {
+    "tickets": 27,
+    "delta": 1,
+    "production": 507.0,
+    "test": 302.0,
+    "start_commit": "e547cd22d47cb1dd6ea485803e86bc97d00ffe6a",
+    "end_commit": "13b20acca563f9e827da675f8966879dac458ef4"
+  },
+  {
+    "tickets": 28,
+    "delta": 1,
+    "production": 564.0,
+    "test": 390.0,
+    "start_commit": "13b20acca563f9e827da675f8966879dac458ef4",
+    "end_commit": "ad2ba76aae08f5d363b4a098d6621bbb8fb5b2eb"
+  },
+  {
+    "tickets": 29,
+    "delta": 1,
+    "production": 24.0,
+    "test": 74.0,
+    "start_commit": "ad2ba76aae08f5d363b4a098d6621bbb8fb5b2eb",
+    "end_commit": "3997dcaedfb6f6f12b53440008145794f56308b4"
+  },
+  {
+    "tickets": 30,
+    "delta": 1,
+    "production": 218.0,
+    "test": 356.0,
+    "start_commit": "3997dcaedfb6f6f12b53440008145794f56308b4",
+    "end_commit": "59b5d5e585b1a858c7f5c20f2478c31a3908e9f0"
+  },
+  {
+    "tickets": 31,
+    "delta": 1,
+    "production": 13.0,
+    "test": 425.0,
+    "start_commit": "59b5d5e585b1a858c7f5c20f2478c31a3908e9f0",
+    "end_commit": "ac78063bd6b376cdb5a6050e2e393a6d10b11e9a"
+  },
+  {
+    "tickets": 32,
+    "delta": 1,
+    "production": 0.0,
+    "test": 291.0,
+    "start_commit": "ac78063bd6b376cdb5a6050e2e393a6d10b11e9a",
+    "end_commit": "79b8f674a1d7324c1f9c9534274c0c178f0f354c"
+  },
+  {
+    "tickets": 33,
+    "delta": 1,
+    "production": 34.0,
+    "test": 217.0,
+    "start_commit": "79b8f674a1d7324c1f9c9534274c0c178f0f354c",
+    "end_commit": "51545bf4093b61c1ea160806cab0868f10175036"
+  },
+  {
+    "tickets": 34,
+    "delta": 1,
+    "production": 188.0,
+    "test": 226.0,
+    "start_commit": "51545bf4093b61c1ea160806cab0868f10175036",
+    "end_commit": "a152aeaf5b5dbd37905122f050ab413ad0197ed4"
+  },
+  {
+    "tickets": 35,
+    "delta": 1,
+    "production": 289.0,
+    "test": 175.0,
+    "start_commit": "a152aeaf5b5dbd37905122f050ab413ad0197ed4",
+    "end_commit": "8ca28d96439ac80788377d19174b49c95b237bb4"
+  },
+  {
+    "tickets": 36,
+    "delta": 1,
+    "production": 28.0,
+    "test": 57.0,
+    "start_commit": "8ca28d96439ac80788377d19174b49c95b237bb4",
+    "end_commit": "b361d5660a9e1fba04d6dc9ac2da82d685b3ed97"
+  },
+  {
+    "tickets": 37,
+    "delta": 1,
+    "production": 68.0,
+    "test": 94.0,
+    "start_commit": "b361d5660a9e1fba04d6dc9ac2da82d685b3ed97",
+    "end_commit": "a637f036db46a669fb3c9115d18a47b287cc5f59"
+  },
+  {
+    "tickets": 38,
+    "delta": 1,
+    "production": 17.0,
+    "test": 203.0,
+    "start_commit": "a637f036db46a669fb3c9115d18a47b287cc5f59",
+    "end_commit": "0e47e61e03141ac43aa8bf3b82c26eb35bdff5b9"
+  },
+  {
+    "tickets": 39,
+    "delta": 1,
+    "production": 227.0,
+    "test": 176.0,
+    "start_commit": "0e47e61e03141ac43aa8bf3b82c26eb35bdff5b9",
+    "end_commit": "d88b1c59d49bd70d8f2896a7b8dd207272551fcf"
+  },
+  {
+    "tickets": 40,
+    "delta": 1,
+    "production": 668.0,
+    "test": 814.0,
+    "start_commit": "d88b1c59d49bd70d8f2896a7b8dd207272551fcf",
+    "end_commit": "3f5b881883461f5d231b8c78d2ab8424d02aa2df"
+  },
+  {
+    "tickets": 41,
+    "delta": 1,
+    "production": 371.0,
+    "test": 433.0,
+    "start_commit": "3f5b881883461f5d231b8c78d2ab8424d02aa2df",
+    "end_commit": "3269fcd2b605f34bd1b8ce4475b516c179e3703f"
+  },
+  {
+    "tickets": 43,
+    "delta": 2,
+    "production": 30.5,
+    "test": 100.0,
+    "start_commit": "3269fcd2b605f34bd1b8ce4475b516c179e3703f",
+    "end_commit": "b4bf5bbf991d2240e591c55160da81a53e022ea9"
+  },
+  {
+    "tickets": 45,
+    "delta": 2,
+    "production": 1.5,
+    "test": 48.0,
+    "start_commit": "b4bf5bbf991d2240e591c55160da81a53e022ea9",
+    "end_commit": "094042a2c3d076d9d9819da1198973061d2a2fe7"
+  },
+  {
+    "tickets": 46,
+    "delta": 1,
+    "production": 644.0,
+    "test": 263.0,
+    "start_commit": "094042a2c3d076d9d9819da1198973061d2a2fe7",
+    "end_commit": "35412e673294bb31180f3aedcdb47762e3c29ee5"
+  },
+  {
+    "tickets": 47,
+    "delta": 1,
+    "production": 270.0,
+    "test": 128.0,
+    "start_commit": "35412e673294bb31180f3aedcdb47762e3c29ee5",
+    "end_commit": "f7f3231f055d7f868c6ff891ee7028cc81a8deaa"
+  },
+  {
+    "tickets": 48,
+    "delta": 1,
+    "production": 175.0,
+    "test": 245.0,
+    "start_commit": "f7f3231f055d7f868c6ff891ee7028cc81a8deaa",
+    "end_commit": "577203627c8604e2c92123133e8e35619593c6c4"
+  },
+  {
+    "tickets": 49,
+    "delta": 1,
+    "production": 449.0,
+    "test": 513.0,
+    "start_commit": "577203627c8604e2c92123133e8e35619593c6c4",
+    "end_commit": "ddf30743c50b23600b0c8ffe6feff2d1409f93b4"
+  },
+  {
+    "tickets": 50,
+    "delta": 1,
+    "production": 8.0,
+    "test": 175.0,
+    "start_commit": "ddf30743c50b23600b0c8ffe6feff2d1409f93b4",
+    "end_commit": "d4d87121992f13fd1d9b6e6d9d68998aabc950ba"
+  },
+  {
+    "tickets": 51,
+    "delta": 1,
+    "production": 146.0,
+    "test": 278.0,
+    "start_commit": "d4d87121992f13fd1d9b6e6d9d68998aabc950ba",
+    "end_commit": "dcb5d4714bd5cb31ba99aeff6804fe46e85eab37"
+  },
+  {
+    "tickets": 54,
+    "delta": 3,
+    "production": 21.666666666666668,
+    "test": 42.0,
+    "start_commit": "dcb5d4714bd5cb31ba99aeff6804fe46e85eab37",
+    "end_commit": "a85bb76950f63ed6ce8db33a1838e48bb34b1972"
+  },
+  {
+    "tickets": 56,
+    "delta": 2,
+    "production": 29.0,
+    "test": 62.5,
+    "start_commit": "a85bb76950f63ed6ce8db33a1838e48bb34b1972",
+    "end_commit": "bf4b74f9422895e7343ee0834f049e7f65d7b09a"
+  },
+  {
+    "tickets": 57,
+    "delta": 1,
+    "production": 12.0,
+    "test": 0.0,
+    "start_commit": "bf4b74f9422895e7343ee0834f049e7f65d7b09a",
+    "end_commit": "c3dccb1700f062fbf6f15b63f1a6e5af962f1b85"
+  },
+  {
+    "tickets": 58,
+    "delta": 1,
+    "production": 14.0,
+    "test": 30.0,
+    "start_commit": "c3dccb1700f062fbf6f15b63f1a6e5af962f1b85",
+    "end_commit": "588c05d1f3e8112efb67c0f4581c0299c1806d98"
+  },
+  {
+    "tickets": 59,
+    "delta": 1,
+    "production": 4.0,
+    "test": 41.0,
+    "start_commit": "588c05d1f3e8112efb67c0f4581c0299c1806d98",
+    "end_commit": "c5da9648229e6029613a4887b723965fc1acb221"
+  },
+  {
+    "tickets": 60,
+    "delta": 1,
+    "production": 122.0,
+    "test": 215.0,
+    "start_commit": "c5da9648229e6029613a4887b723965fc1acb221",
+    "end_commit": "f5567702a266254d0558e6ecbac3d60fd4182f7c"
+  },
+  {
+    "tickets": 61,
+    "delta": 1,
+    "production": 114.0,
+    "test": 94.0,
+    "start_commit": "f5567702a266254d0558e6ecbac3d60fd4182f7c",
+    "end_commit": "bb79590a7ee0e1976e0d4bf9aec93e06e2cd4977"
+  },
+  {
+    "tickets": 62,
+    "delta": 1,
+    "production": 228.0,
+    "test": 150.0,
+    "start_commit": "bb79590a7ee0e1976e0d4bf9aec93e06e2cd4977",
+    "end_commit": "037d0bf0df6aadf8abb7d41b3d521aad44a3110e"
+  },
+  {
+    "tickets": 67,
+    "delta": 5,
+    "production": 51.2,
+    "test": 0.0,
+    "start_commit": "037d0bf0df6aadf8abb7d41b3d521aad44a3110e",
+    "end_commit": "a171ffb3756dfb0c2fb5e36abeb9c061d0fdf699"
+  },
+  {
+    "tickets": 70,
+    "delta": 3,
+    "production": -9.666666666666666,
+    "test": 9.333333333333334,
+    "start_commit": "a171ffb3756dfb0c2fb5e36abeb9c061d0fdf699",
+    "end_commit": "4b73b5b219a26aaffdbafe20ea7867c389c3bc95"
+  },
+  {
+    "tickets": 72,
+    "delta": 2,
+    "production": 0.0,
+    "test": 91.0,
+    "start_commit": "4b73b5b219a26aaffdbafe20ea7867c389c3bc95",
+    "end_commit": "fc3504c9ddf50cad3894541e444631e14d5114ea"
+  },
+  {
+    "tickets": 73,
+    "delta": 1,
+    "production": 328.0,
+    "test": 481.0,
+    "start_commit": "fc3504c9ddf50cad3894541e444631e14d5114ea",
+    "end_commit": "0f0ee6920ebbee38562b5259381b7e015355609c"
+  },
+  {
+    "tickets": 74,
+    "delta": 1,
+    "production": 337.0,
+    "test": 303.0,
+    "start_commit": "0f0ee6920ebbee38562b5259381b7e015355609c",
+    "end_commit": "c12a13a8122cbf0e5df4059f3a246be240176a52"
+  },
+  {
+    "tickets": 75,
+    "delta": 1,
+    "production": 33.0,
+    "test": 0.0,
+    "start_commit": "c12a13a8122cbf0e5df4059f3a246be240176a52",
+    "end_commit": "0bea7957df9b8bdf7032a5128573a266b2ed8bf6"
+  },
+  {
+    "tickets": 77,
+    "delta": 2,
+    "production": 123.5,
+    "test": 127.5,
+    "start_commit": "0bea7957df9b8bdf7032a5128573a266b2ed8bf6",
+    "end_commit": "be466bb9c1beb7ca02a57b135f386582cca79bbe"
+  },
+  {
+    "tickets": 78,
+    "delta": 1,
+    "production": 353.0,
+    "test": 512.0,
+    "start_commit": "be466bb9c1beb7ca02a57b135f386582cca79bbe",
+    "end_commit": "9597a02501e337bc6618fe2a8ce8b7f3543b0f84"
+  },
+  {
+    "tickets": 79,
+    "delta": 1,
+    "production": 357.0,
+    "test": 459.0,
+    "start_commit": "9597a02501e337bc6618fe2a8ce8b7f3543b0f84",
+    "end_commit": "81ec477ca9a90986c5417a7481f91c9c4d794cbc"
+  },
+  {
+    "tickets": 80,
+    "delta": 1,
+    "production": 81.0,
+    "test": 284.0,
+    "start_commit": "81ec477ca9a90986c5417a7481f91c9c4d794cbc",
+    "end_commit": "74ba638cd0b27f5d8d4718d2aa6badfa609403d5"
+  },
+  {
+    "tickets": 81,
+    "delta": 1,
+    "production": 95.0,
+    "test": 349.0,
+    "start_commit": "74ba638cd0b27f5d8d4718d2aa6badfa609403d5",
+    "end_commit": "f597cf0369381f792bf40eabe7c522fc38d791d6"
+  },
+  {
+    "tickets": 82,
+    "delta": 1,
+    "production": 42.0,
+    "test": 166.0,
+    "start_commit": "f597cf0369381f792bf40eabe7c522fc38d791d6",
+    "end_commit": "2fc20aed5e34c3e7dc52a343b39fc277f08b7137"
+  },
+  {
+    "tickets": 86,
+    "delta": 4,
+    "production": 6.5,
+    "test": 86.5,
+    "start_commit": "2fc20aed5e34c3e7dc52a343b39fc277f08b7137",
+    "end_commit": "b6f5ba7f7281c5fa7bde7ae435490e06f26e06b4"
+  },
+  {
+    "tickets": 87,
+    "delta": 1,
+    "production": 21.0,
+    "test": 18.0,
+    "start_commit": "b6f5ba7f7281c5fa7bde7ae435490e06f26e06b4",
+    "end_commit": "b82b38a7bb3048c934e860858aa40f6ccf972cf1"
+  },
+  {
+    "tickets": 88,
+    "delta": 1,
+    "production": 312.0,
+    "test": 324.0,
+    "start_commit": "b82b38a7bb3048c934e860858aa40f6ccf972cf1",
+    "end_commit": "fbe902dcc5a5a7446beb771612040559b3df9db5"
+  },
+  {
+    "tickets": 89,
+    "delta": 1,
+    "production": 0.0,
+    "test": 0.0,
+    "start_commit": "fbe902dcc5a5a7446beb771612040559b3df9db5",
+    "end_commit": "9b4e6b2c1ad36ae2c528b558092c22b9abc55d73"
+  },
+  {
+    "tickets": 90,
+    "delta": 1,
+    "production": 916.0,
+    "test": 578.0,
+    "start_commit": "9b4e6b2c1ad36ae2c528b558092c22b9abc55d73",
+    "end_commit": "6af327d11fdfe3a85df338045fc305e4208fa25e"
+  },
+  {
+    "tickets": 91,
+    "delta": 1,
+    "production": 112.0,
+    "test": 49.0,
+    "start_commit": "6af327d11fdfe3a85df338045fc305e4208fa25e",
+    "end_commit": "fe6fe198f44c884f1d87b3aa9c2b9f3cb2d004d6"
+  },
+  {
+    "tickets": 93,
+    "delta": 2,
+    "production": 0.0,
+    "test": 0.0,
+    "start_commit": "fe6fe198f44c884f1d87b3aa9c2b9f3cb2d004d6",
+    "end_commit": "bf1768d80166fba180ce2e0f26a063462c3ae8aa"
+  },
+  {
+    "tickets": 94,
+    "delta": 1,
+    "production": 148.0,
+    "test": 56.0,
+    "start_commit": "bf1768d80166fba180ce2e0f26a063462c3ae8aa",
+    "end_commit": "0ef478f0495b4dcd4d4b7bd283428e209c5c4a73"
+  },
+  {
+    "tickets": 98,
+    "delta": 4,
+    "production": 28.75,
+    "test": 182.75,
+    "start_commit": "0ef478f0495b4dcd4d4b7bd283428e209c5c4a73",
+    "end_commit": "6d38e40bde8c4d8c44e48db6e6a0ee84fb364feb"
+  },
+  {
+    "tickets": 99,
+    "delta": 1,
+    "production": 70.0,
+    "test": 189.0,
+    "start_commit": "6d38e40bde8c4d8c44e48db6e6a0ee84fb364feb",
+    "end_commit": "d3931008ce11dbf225afcc3eac031f0d5e67deeb"
+  },
+  {
+    "tickets": 100,
+    "delta": 1,
+    "production": 248.0,
+    "test": 324.0,
+    "start_commit": "d3931008ce11dbf225afcc3eac031f0d5e67deeb",
+    "end_commit": "4197ccc2999f7b094c8ab49bf78268a17b561e96"
+  },
+  {
+    "tickets": 101,
+    "delta": 1,
+    "production": 461.0,
+    "test": 680.0,
+    "start_commit": "4197ccc2999f7b094c8ab49bf78268a17b561e96",
+    "end_commit": "64891a35a5e7ffe3c92d69ffc5535b211ff09e0a"
+  },
+  {
+    "tickets": 104,
+    "delta": 3,
+    "production": 0.0,
+    "test": 0.0,
+    "start_commit": "64891a35a5e7ffe3c92d69ffc5535b211ff09e0a",
+    "end_commit": "65988e34c1d52ee2892274189b5fec385c1e4b03"
+  },
+  {
+    "tickets": 105,
+    "delta": 1,
+    "production": 199.0,
+    "test": 106.0,
+    "start_commit": "65988e34c1d52ee2892274189b5fec385c1e4b03",
+    "end_commit": "81488cc4844f1ca78dfc9d4b94e1e0aec529ae90"
+  },
+  {
+    "tickets": 106,
+    "delta": 1,
+    "production": 70.0,
+    "test": 189.0,
+    "start_commit": "81488cc4844f1ca78dfc9d4b94e1e0aec529ae90",
+    "end_commit": "d9bcfdb46826dc6af323f3c8625694a5cc774081"
+  },
+  {
+    "tickets": 107,
+    "delta": 1,
+    "production": 254.0,
+    "test": 369.0,
+    "start_commit": "d9bcfdb46826dc6af323f3c8625694a5cc774081",
+    "end_commit": "ef7e86e1515f8fc5ec79330916bf742057e0702c"
+  },
+  {
+    "tickets": 108,
+    "delta": 1,
+    "production": 27.0,
+    "test": 0.0,
+    "start_commit": "ef7e86e1515f8fc5ec79330916bf742057e0702c",
+    "end_commit": "f5199b0c8d4946773bfe88894f8c33654961334e"
+  },
+  {
+    "tickets": 109,
+    "delta": 1,
+    "production": 20.0,
+    "test": 0.0,
+    "start_commit": "f5199b0c8d4946773bfe88894f8c33654961334e",
+    "end_commit": "9e106d1224bee5033a6ffe69a524689ca9899f14"
+  },
+  {
+    "tickets": 110,
+    "delta": 1,
+    "production": 24.0,
+    "test": 184.0,
+    "start_commit": "9e106d1224bee5033a6ffe69a524689ca9899f14",
+    "end_commit": "f2d9a89b0e1dd80d7b0edcdb94d0eb11495feee3"
+  },
+  {
+    "tickets": 111,
+    "delta": 1,
+    "production": -18.0,
+    "test": 0.0,
+    "start_commit": "f2d9a89b0e1dd80d7b0edcdb94d0eb11495feee3",
+    "end_commit": "e856974c21b1bb667d571837f53e11f38d4f32e1"
+  },
+  {
+    "tickets": 112,
+    "delta": 1,
+    "production": 79.0,
+    "test": 276.0,
+    "start_commit": "e856974c21b1bb667d571837f53e11f38d4f32e1",
+    "end_commit": "14aebe37e9aed041ccb40700bc4e8baa5eb5f0b0"
+  },
+  {
+    "tickets": 113,
+    "delta": 1,
+    "production": 44.0,
+    "test": 206.0,
+    "start_commit": "14aebe37e9aed041ccb40700bc4e8baa5eb5f0b0",
+    "end_commit": "f6b1172971cb17f86932d41746e2d038659dbff8"
+  },
+  {
+    "tickets": 114,
+    "delta": 1,
+    "production": 40.0,
+    "test": 401.0,
+    "start_commit": "f6b1172971cb17f86932d41746e2d038659dbff8",
+    "end_commit": "07ec5015459b70918b77ba287cffc912395d4a34"
+  },
+  {
+    "tickets": 115,
+    "delta": 1,
+    "production": 97.0,
+    "test": 159.0,
+    "start_commit": "07ec5015459b70918b77ba287cffc912395d4a34",
+    "end_commit": "366e4d240116c5b9799c143becef85c2fac87cee"
+  },
+  {
+    "tickets": 117,
+    "delta": 2,
+    "production": 114.0,
+    "test": 223.0,
+    "start_commit": "366e4d240116c5b9799c143becef85c2fac87cee",
+    "end_commit": "3a43c39bc488e2e0534fbdd3065103889c7561e4"
+  },
+  {
+    "tickets": 120,
+    "delta": 3,
+    "production": 10.333333333333334,
+    "test": 107.0,
+    "start_commit": "3a43c39bc488e2e0534fbdd3065103889c7561e4",
+    "end_commit": "dfa79da0ddb3a8209d9965be4a0793a3a1e44a55"
+  },
+  {
+    "tickets": 121,
+    "delta": 1,
+    "production": 0.0,
+    "test": 98.0,
+    "start_commit": "dfa79da0ddb3a8209d9965be4a0793a3a1e44a55",
+    "end_commit": "d907c528a7b972c7baf3536e71a14c227e190578"
+  },
+  {
+    "tickets": 122,
+    "delta": 1,
+    "production": 77.0,
+    "test": 0.0,
+    "start_commit": "d907c528a7b972c7baf3536e71a14c227e190578",
+    "end_commit": "4590b2efa6b63bf32eaaabc262572e69f36a305c"
+  },
+  {
+    "tickets": 123,
+    "delta": 1,
+    "production": 49.0,
+    "test": 183.0,
+    "start_commit": "4590b2efa6b63bf32eaaabc262572e69f36a305c",
+    "end_commit": "dfb8e3ff2bb1eb29af5ef5800d47820d31d17700"
+  },
+  {
+    "tickets": 124,
+    "delta": 1,
+    "production": 16.0,
+    "test": 88.0,
+    "start_commit": "dfb8e3ff2bb1eb29af5ef5800d47820d31d17700",
+    "end_commit": "1844d648d01a5ae99392708980a057224db1f815"
+  },
+  {
+    "tickets": 125,
+    "delta": 1,
+    "production": 258.0,
+    "test": 202.0,
+    "start_commit": "1844d648d01a5ae99392708980a057224db1f815",
+    "end_commit": "3ed62400d6eabd773dbf285c13121f053f100d09"
+  },
+  {
+    "tickets": 126,
+    "delta": 1,
+    "production": 39.0,
+    "test": 150.0,
+    "start_commit": "3ed62400d6eabd773dbf285c13121f053f100d09",
+    "end_commit": "d9e63fdb2b4bbe4dbe03d16d16dcc253e76350ba"
+  },
+  {
+    "tickets": 127,
+    "delta": 1,
+    "production": 1.0,
+    "test": 76.0,
+    "start_commit": "d9e63fdb2b4bbe4dbe03d16d16dcc253e76350ba",
+    "end_commit": "22d3decee92f08e9a34f3ce5ef73c3ed9d9f9f80"
+  },
+  {
+    "tickets": 128,
+    "delta": 1,
+    "production": 85.0,
+    "test": 106.0,
+    "start_commit": "22d3decee92f08e9a34f3ce5ef73c3ed9d9f9f80",
+    "end_commit": "1523bca1cebe1aac34bf333d3b1f008eeeb3a5e8"
+  },
+  {
+    "tickets": 129,
+    "delta": 1,
+    "production": 48.0,
+    "test": 265.0,
+    "start_commit": "1523bca1cebe1aac34bf333d3b1f008eeeb3a5e8",
+    "end_commit": "dc2bad8b25c080828443ab6fe4c9a8ab0349cea5"
+  },
+  {
+    "tickets": 130,
+    "delta": 1,
+    "production": 0.0,
+    "test": 222.0,
+    "start_commit": "dc2bad8b25c080828443ab6fe4c9a8ab0349cea5",
+    "end_commit": "ccf2429d4778d4db3795495831044d8027aa2f55"
+  },
+  {
+    "tickets": 131,
+    "delta": 1,
+    "production": 574.0,
+    "test": 477.0,
+    "start_commit": "ccf2429d4778d4db3795495831044d8027aa2f55",
+    "end_commit": "0f51156669f940f0d4985f84a7df8bbd73004175"
+  },
+  {
+    "tickets": 132,
+    "delta": 1,
+    "production": 85.0,
+    "test": 131.0,
+    "start_commit": "0f51156669f940f0d4985f84a7df8bbd73004175",
+    "end_commit": "ba71ca3f6cb8ab04a2e984609f8bc2a29fd98d12"
+  },
+  {
+    "tickets": 133,
+    "delta": 1,
+    "production": 152.0,
+    "test": 313.0,
+    "start_commit": "ba71ca3f6cb8ab04a2e984609f8bc2a29fd98d12",
+    "end_commit": "d5cfb15c8a4c4b3d9d57aecdc7babace9efe291f"
+  },
+  {
+    "tickets": 134,
+    "delta": 1,
+    "production": 19.0,
+    "test": 191.0,
+    "start_commit": "d5cfb15c8a4c4b3d9d57aecdc7babace9efe291f",
+    "end_commit": "8029e334d6d59e7444ab45c23935565eaaef6465"
+  },
+  {
+    "tickets": 135,
+    "delta": 1,
+    "production": 657.0,
+    "test": 870.0,
+    "start_commit": "8029e334d6d59e7444ab45c23935565eaaef6465",
+    "end_commit": "8c4d0312722215abeeb6f575525e9d9e6b6e8510"
+  },
+  {
+    "tickets": 136,
+    "delta": 1,
+    "production": 228.0,
+    "test": 346.0,
+    "start_commit": "8c4d0312722215abeeb6f575525e9d9e6b6e8510",
+    "end_commit": "dbeb48b8e0449a30b74cb169780d7a0f4de804da"
+  },
+  {
+    "tickets": 137,
+    "delta": 1,
+    "production": 180.0,
+    "test": 414.0,
+    "start_commit": "dbeb48b8e0449a30b74cb169780d7a0f4de804da",
+    "end_commit": "fd5b3dd81b0add488981fcf82cf99b739a0e33be"
+  },
+  {
+    "tickets": 141,
+    "delta": 4,
+    "production": 62.75,
+    "test": 64.75,
+    "start_commit": "fd5b3dd81b0add488981fcf82cf99b739a0e33be",
+    "end_commit": "6ee0b0b89d4d3d3caf140c7dfb68e504ab348b0c"
+  },
+  {
+    "tickets": 142,
+    "delta": 1,
+    "production": 56.0,
+    "test": 86.0,
+    "start_commit": "6ee0b0b89d4d3d3caf140c7dfb68e504ab348b0c",
+    "end_commit": "c54f043c985c10b3a2307d6cc9a575b1fc92abee"
+  },
+  {
+    "tickets": 144,
+    "delta": 2,
+    "production": 49.0,
+    "test": 152.0,
+    "start_commit": "c54f043c985c10b3a2307d6cc9a575b1fc92abee",
+    "end_commit": "023c071621914eafdf16228e9dd2a9d6ca18d15e"
+  }
+]
