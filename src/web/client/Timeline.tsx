@@ -18,6 +18,7 @@ import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { MarkUserMentionAddressed } from "./AttentionReasonAction.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { CommentPinButton } from "./CommentPinButton.tsx";
+import { CommentActionIcon } from "./CommentActionIcon.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 import { TextPreview } from "./TextPreview.tsx";
@@ -100,6 +101,7 @@ export function TaskTimeline({
     agentInspectableContent,
     onAttentionChanged,
     onAttentionError,
+    onSource: (sourceId) => followSource(sourceId),
     ...(onReplyToAgent === undefined ? {} : { onReplyToAgent }),
   };
 
@@ -198,6 +200,7 @@ export function TaskTimeline({
 }
 
 interface TimelineContext {
+  onSource(sourceId: string): void;
   readOnly: boolean;
   taskId: string;
   comments: TaskCommentView[];
@@ -530,6 +533,8 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
   onConversation?: (selection: ConversationSelection) => void;
 }): ReactNode {
   const relationship = relationshipActivityPresentation(activity, context.tasks);
+  const pinChange = activity.type === "comment.pinned" || activity.type === "comment.unpinned";
+  const pinnedComment = pinChange ? context.comments.find(({ id }) => id === activity.details.commentId) : undefined;
   const conversationId = activity.type === "conversation.continued" ? activity.details.conversationId : undefined;
   const activationId = activity.type === "conversation.continued" ? activity.details.activationId : undefined;
   const messageId = activity.type === "conversation.continued" ? activity.details.messageId : undefined;
@@ -548,7 +553,15 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
           {context.agentInspectableContent.activityIds.includes(activity.id) ? <AgentInspectableMarker /> : null}
         </span>
       </div>
-      {(activity.type === "conversation.continued" && activity.details.messageBody !== undefined) ||
+      {pinChange ? <div className="pin-activity-reference">
+        {pinnedComment === undefined ? <p>Comment {activity.details.commentId ?? "unavailable"}</p> : <>
+          <TextPreview id={`activity-${activity.id}`} text={pinnedComment.body}
+            expanded={expanded} onExpanded={onExpanded} renderedLineLimit={2}
+            participants={participantNamesById(context.agents)} />
+          <button className="comment-icon-button" aria-label="View in task history" title="View in task history"
+            onClick={() => context.onSource(pinnedComment.id)}><CommentActionIcon action="source" /></button>
+        </>}
+      </div> : (activity.type === "conversation.continued" && activity.details.messageBody !== undefined) ||
         (activity.type === "conversation.retired" && activity.details.reason !== undefined) ? (
         <TextPreview
           id={`activity-${activity.id}`}

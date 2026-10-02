@@ -21,6 +21,10 @@ test("shared pins curate immutable comments without replaying mentions and survi
   const comment = app.addTaskComment(command);
   assert.ok(comment.accepted);
   assert.deepEqual(app.addTaskComment(command), comment);
+  const initial = app.queryTask(taskId);
+  assert.ok(initial.available);
+  assert.equal(initial.task.comments.filter(({ id }) => id === comment.comment.id).length, 1);
+  assert.equal(initial.task.activity.filter(({ type }) => type === "comment.pinned").length, 0);
   assert.deepEqual(app.addTaskComment({ ...command, pinned: false }), { accepted: false, reason: "idempotency-conflict" });
   const pin = { taskId, commentId: comment.comment.id, actor: { kind: "user" as const, id: "paul" }, idempotencyKey: "unpin" };
   const unpinned = app.setTaskCommentPin({ ...pin, pinned: false });
@@ -33,7 +37,7 @@ test("shared pins curate immutable comments without replaying mentions and survi
   assert.ok(before.available);
   assert.equal(before.task.comments.find(({ id }) => id === comment.comment.id)?.body, command.body);
   assert.equal(before.task.activations.length, 2);
-  assert.equal(before.task.activity.filter((entry) => entry.type === "comment.pinned" || entry.type === "comment.unpinned").length, 3);
+  assert.equal(before.task.activity.filter((entry) => entry.type === "comment.pinned" || entry.type === "comment.unpinned").length, 2);
   await app.close();
   app = await CoordinationApplication.start(options);
   assert.deepEqual(app.addTaskComment({ ...plainCommand, pinned: false }), plain);

@@ -150,7 +150,8 @@ state rather than silently replacing or adopting inconsistent data.
 Shared pin membership is stored on immutable comments; pin changes append
 audit events in the task command transaction without executing mentions or creating
 activations. Initial pinned creation commits the comment, pin and its ordinary
-mention effects together. Inspection returns every current pin, and the browser's
+mention effects together without a separate pin-change event; subsequent pin/unpin
+commands append their own audit records. Inspection returns every current pin, and the browser's
 quiet pinned collection below the description links to original timeline positions.
 Migration 0005 adds membership and audit types without modifying released migrations.
 

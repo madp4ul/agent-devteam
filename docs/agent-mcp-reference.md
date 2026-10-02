@@ -121,6 +121,9 @@ or mutable reading receipt. The next activation advances through the entire
 previously composed interval whether or not omitted records were retrieved.
 
 Pin membership is shared current guidance, not another permanent history stream.
+Creating a comment with `pinned: true` commits its initial membership with the
+comment without a separate pin-change event. Later pin/unpin commands retain
+their own audit records and link to the original comment in the browser timeline.
 Fresh/replacement prompts receive all pins; returning prompts receive full newly
 pinned comments and ID-only unpin notices. Unchanged membership sends nothing,
 even after toggles. Audit pin events remain explicitly inspectable, but are not

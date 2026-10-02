@@ -292,7 +292,7 @@ export function TaskPage({
             </section>
 
             <div data-task-section="activity">
-              <PinnedComments taskId={task.id} comments={task.comments.filter((comment) => comment.pinned)} readOnly={!!task.archived}
+              <PinnedComments key={task.id} taskId={task.id} comments={task.comments} readOnly={!!task.archived}
                 onSource={(sourceId) => setTimelineSourceRequest((previous) => ({ sourceId, sequence: (previous?.sequence ?? 0) + 1 }))}
                 onChanged={refresh} onError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })} />
               <AgentActivityPanel

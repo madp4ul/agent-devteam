@@ -598,9 +598,6 @@ export class TaskCommandStore {
         );
       if (command.pinned === true) {
         this.#database.prepare("UPDATE task_comments SET pinned = 1 WHERE id = ?").run(comment.id);
-        this.#activityJournal.append(command.taskId, "comment.pinned", command.actor, {
-          commentId: comment.id, ...this.agentActivityProvenance(command, originTask),
-        });
       }
       const mentions = this.readMentionTargets(comment.body);
       this.createMentionActivations(command.taskId, comment.id, mentions.agentIds);

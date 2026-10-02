@@ -14,6 +14,8 @@ changing behavior. Do not infer task completion from this design handoff.
 | [04](issues/04-read-unified-history-with-stable-word-target-cursors.md) | Shared history JSON, whole-record pages, inspection, stable handles/counts | 01, 03 |
 | [05](issues/05-compose-bounded-activation-updates-and-net-pin-changes.md) | Durable activation checkpoints, boundary continuation, pin deltas, guidance | 02, 03, 04 |
 | [06](issues/06-verify-complete-mcp-contract-and-publish-reference.md) | Assembled regressions, complete reference/architecture reconciliation, review | 01–05 |
+| [07](issues/07-refine-pinned-comment-controls-and-activity.md) | User-reviewed compact pin/source controls, reversal window and identifying activity | Delivered pin capabilities |
+| [08](issues/08-expand-pin-activity-and-diagnose-source-scroll.md) | Preview delivered; remaining scroll glitch open, low-priority and explicitly deferred | 07 |
 
 Intake 12's interactive user instruction audit is now unblocked by delivery of 05
 and verification in 06. Intake 21 is separately open; this effort preserves comment IDs without
@@ -33,6 +35,18 @@ Issue 15's accepted relationship ownership/scheduling semantics remain the basel
   these delivery tickets.
 
 ## Decisions so far
+
+- 2026-10-02: [08](issues/08-expand-pin-activity-and-diagnose-source-scroll.md)
+  delivers expandable pin activity previews and separate source icons. The user
+  accepted these improvements and deferred the remaining scrolling glitch.
+  Claim released; retain evidence without automatically resuming diagnosis.
+
+- 2026-10-02: [07](issues/07-refine-pinned-comment-controls-and-activity.md) delivers
+  the user-reviewed UI refinement: compact SVG pin/source controls, side actions,
+  two-second keyboard-reversible unpin retention, identifying activity links and
+  single-entry atomic pinned creation. Full non-browser suite: 353 passed/4 skipped;
+  affected browser suites: 51 passed, plus focused checks after keyboard refinement.
+  Typecheck/build pass; Standards and Spec reviews are clear. Changes remain unstaged.
 
 - 2026-09-30: Product grilling synthesized into a concrete contract and six delivery
   slices. Implementation remains open. targetWords defaults to 2000 as an engineering

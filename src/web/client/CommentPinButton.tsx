@@ -1,13 +1,16 @@
 import { useState, type ReactNode } from "react";
 import { ApiError } from "./api.ts";
+import { CommentActionIcon } from "./CommentActionIcon.tsx";
 
 export function CommentPinButton({ taskId, commentId, pinned, onChanged, onError }: {
   taskId: string; commentId: string; pinned: boolean;
   onChanged(): Promise<void>; onError(error: unknown): void;
 }): ReactNode {
   const [pending, setPending] = useState(false);
-  return <button type="button" className="secondary quiet-action" disabled={pending}
-    aria-label={`${pinned ? "Unpin" : "Pin"} comment ${commentId}`} onClick={async () => {
+  const label = `${pinned ? "Unpin" : "Pin"} comment ${commentId}`;
+  return <button type="button" className="comment-icon-button" aria-disabled={pending}
+    aria-label={label} title={pinned ? "Unpin comment" : "Pin comment"} aria-pressed={pinned} onClick={async () => {
+      if (pending) return;
       setPending(true);
       try {
         const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/comments/${encodeURIComponent(commentId)}/${pinned ? "unpin" : "pin"}`, {
@@ -16,5 +19,5 @@ export function CommentPinButton({ taskId, commentId, pinned, onChanged, onError
         if (!response.ok) throw new ApiError(response.status, await response.json());
         await onChanged();
       } catch (error) { onError(error); } finally { setPending(false); }
-    }}>{pinned ? "Unpin" : "Pin"}</button>;
+    }}><CommentActionIcon action={pinned ? "unpin" : "pin"} /></button>;
 }

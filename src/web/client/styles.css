@@ -970,7 +970,15 @@ html[data-theme] .conversation-composer textarea:focus-visible { outline-offset:
 }
 
 .pinned-comments { margin-bottom: 1rem; }
+.pin-activity-reference { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: start; }
 .pinned-comments h2 { font-size: .95rem; }
 .pinned-comments article + article { margin-top: .75rem; border-top: 1px solid var(--border); padding-top: .75rem; }
-.pinned-comment-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
-.pinned-comments .text-preview { min-width: 0; }
+.pinned-comments article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: start; }
+.pinned-comment-content { min-width: 0; }
+.pinned-comment-actions { display: flex; gap: .2rem; }
+.comment-icon-button { display: grid; place-items: center; flex: none; width: 1.7rem; height: 1.7rem; padding: 0; border: 1px solid transparent; border-radius: .4rem; }
+html[data-theme] .comment-icon-button { color: var(--text-muted); background: transparent; }
+html[data-theme] .comment-icon-button:hover:not(:disabled), html[data-theme] .comment-icon-button:focus-visible { color: var(--text); background: var(--surface-hover); border-color: var(--border); }
+.comment-icon-button svg { display: block; width: 1rem; height: 1rem; fill: none; stroke: currentcolor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.comment-icon-button[aria-disabled="true"] { cursor: wait; opacity: .65; }
+.recently-unpinned .pinned-comment-content { color: var(--text-muted); }
