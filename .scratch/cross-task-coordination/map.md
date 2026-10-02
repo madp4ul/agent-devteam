@@ -15,8 +15,8 @@ changing behavior. Do not infer task completion from this design handoff.
 | [05](issues/05-compose-bounded-activation-updates-and-net-pin-changes.md) | Durable activation checkpoints, boundary continuation, pin deltas, guidance | 02, 03, 04 |
 | [06](issues/06-verify-complete-mcp-contract-and-publish-reference.md) | Assembled regressions, complete reference/architecture reconciliation, review | 01–05 |
 
-Intake 12's interactive user instruction audit waits for 05 and the final verification
-in 06. Intake 21 is separately open; this effort preserves comment IDs without
+Intake 12's interactive user instruction audit is now unblocked by delivery of 05
+and verification in 06. Intake 21 is separately open; this effort preserves comment IDs without
 designing arbitrary authored comment links. Attachment expansion remains intake 06.
 Issue 15's accepted relationship ownership/scheduling semantics remain the baseline.
 
@@ -51,3 +51,18 @@ Issue 15's accepted relationship ownership/scheduling semantics remain the basel
   4 skipped; affected browser coverage: 33 passed including the focused repaired
   delivery proof; typecheck/build passed. Standards and Spec reviews are clear.
   Changes await user review unstaged; no ticket 03+ work has been started.
+- 2026-10-01: 03 delivered shared pins and browser/MCP curation; 346 non-browser
+  tests passed/4 skipped, focused browser check passed, typecheck/build and review
+  complete. 04 is claimed next; remaining slices proceed in this implementation run.
+- 2026-10-01: 04 and 05 delivered whole-record history, stable project-signed
+  cursors, inspection interchange, bounded metadata, atomic conversation checkpoints,
+  net pins, JSON source boundaries and the twenty-tool names. Review findings were
+  repaired at public seams. Non-browser suite: 350 passed/4 skipped; typecheck/build
+  pass. 06 now verifies the assembly and reconciles the final public reference.
+- 2026-10-01: 06 delivered assembled verification and the final public reference;
+  all six delivery tickets are resolved. See [verification.md](verification.md).
+  Non-browser suite: 353 passed/4 skipped; typecheck/build pass. Full browser run:
+  169 passed and one layout-measurement timing failure, repaired with a settled-layout
+  assertion and then ten consecutive passes. All 170 browser cases have passing
+  evidence. Standards and Spec reviews have no outstanding findings. Intake 12 is
+  ready for user-led review; other intakes remain separate. Changes remain unstaged.

@@ -22,6 +22,9 @@ const productionMigrationIds = [
   boundTaskDetailLookupsMigrationId,
   relationshipResumeOwnersMigrationId,
   "0004_cross_task_comment_provenance",
+      "0005_shared_comment_pins",
+  "0006_history_cursor_signing",
+  "0007_conversation_pin_checkpoints",
 ];
 
 test("released comments recover only evidenced origin without inventing legacy provenance", async (t) => {
@@ -47,7 +50,7 @@ test("released comments recover only evidenced origin without inventing legacy p
   const application = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath });
   t.after(() => application.close());
   assert.equal(application.queryStartup().mode, "paused", JSON.stringify(application.queryStartup()));
-  const inspected = application.queryTaskInspection("released-task");
+  const inspected = application.queryTaskInspectionForUser("released-task");
   assert.ok(inspected.available);
   assert.deepEqual(inspected.task.comments[0]?.originTask, { id: "released-task", title: "Retained released task" });
   assert.equal(inspected.task.comments[0]?.id, "released-comment");

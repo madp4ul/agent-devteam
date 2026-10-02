@@ -2,7 +2,7 @@
 
 **Type:** grilling
 **Status:** open
-**Blocked by:** [05 — Delivered activation/guidance refinement](../../cross-task-coordination/issues/05-compose-bounded-activation-updates-and-net-pin-changes.md) and [06 — Assembled verification](../../cross-task-coordination/issues/06-verify-complete-mcp-contract-and-publish-reference.md), following issue 09's resolved design.
+**Blocked by:** None. Activation/guidance refinement (cross-task coordination 05) and assembled verification (06) are delivered.
 **Next step:** After issue 09's instruction refinement is delivered, inventory the effective instructions and review them interactively with the user.
 
 > **User involvement required:** This is not an autonomous implementation task.

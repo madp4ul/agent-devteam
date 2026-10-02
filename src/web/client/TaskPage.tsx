@@ -22,6 +22,7 @@ import { Modal } from "./Modal.tsx";
 import type { NavigationState, Navigate } from "./navigation.ts";
 import { useTaskMovement } from "./task-movement.ts";
 import { TaskTimeline } from "./Timeline.tsx";
+import { PinnedComments } from "./PinnedComments.tsx";
 import { TaskWorkspacePanel } from "./TaskWorkspacePanel.tsx";
 import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
 import { TaskRelationshipsPanel } from "./TaskRelationshipsPanel.tsx";
@@ -291,6 +292,9 @@ export function TaskPage({
             </section>
 
             <div data-task-section="activity">
+              <PinnedComments taskId={task.id} comments={task.comments.filter((comment) => comment.pinned)} readOnly={!!task.archived}
+                onSource={(sourceId) => setTimelineSourceRequest((previous) => ({ sourceId, sequence: (previous?.sequence ?? 0) + 1 }))}
+                onChanged={refresh} onError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })} />
               <AgentActivityPanel
                 state={{
                   taskId: task.id,
@@ -327,6 +331,7 @@ export function TaskPage({
                 tasks={detail.timelineRelationshipTasks}
                 unresolvedAttention={inspection.unresolvedAttention}
                 transcriptsAvailable={!task.archived}
+                readOnly={!!task.archived}
                 onAttentionChanged={refresh}
                 onAttentionError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })}
                 agentInspectableContent={detail.agentInspectableContent}

@@ -69,6 +69,11 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
   assert.equal(interrupted.task.activations[0]?.attempts[0]?.status, "interrupted");
   assert.equal(interrupted.task.activations[0]?.attempts[0]?.outcome?.status, "user-interrupted");
   assert.equal(interrupted.task.activations[0]?.attempts.length, 1);
+  const history = application.queryTaskHistory({ taskId: created.task.id });
+  assert.ok(history.available);
+  const compactOutcome = history.history.records.find(({ type }) => type === "attempt.completed");
+  assert.equal(compactOutcome?.details?.outcome, "interrupted");
+  assert.equal(compactOutcome?.details?.attemptId, first.attemptId);
   assert.deepEqual(await application.queryAttemptTranscript(first.attemptId), {
     available: true,
     threadId: "thread-1",

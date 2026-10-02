@@ -1,4 +1,5 @@
 import type { ModelReasoningEffort } from "@openai/codex-sdk";
+import type { HistoryCoverage, TaskHistoryPage } from "./history-contract.ts";
 
 import type { AutomationClock, ActivationReasonView } from "./automation-contract.ts";
 import type { AgentConversationMessageView } from "./conversation-contract.ts";
@@ -62,6 +63,14 @@ export interface CoordinationTaskIdentity {
 }
 
 export const coordinationToolNames = [
+  "board.list",
+  "task.list",
+  "task.archive.list",
+  "task.inspect",
+  "task.history.list",
+  "task.attachment.list",
+  "attempt.context.inspect",
+  "attempt.permission_block.report",
   "summarize_boards",
   "list_tasks",
   "list_archived_tasks",
@@ -75,6 +84,8 @@ export const coordinationToolNames = [
   // Historical names remain recognizable in retained transcripts, not MCP aliases.
   "task.comment.add",
   "task.participant.list",
+  "task.comment.pin",
+  "task.comment.unpin",
   "task.create",
   "task.edit",
   "task.move",
@@ -107,6 +118,7 @@ export interface CoordinationTranscriptEvidence {
 }
 
 export type CoordinationTranscriptPresentation =
+  | { kind: "coordination-comment-pin"; taskId: string; commentId?: string; pinned: boolean }
   | {
       kind: "coordination-task-move";
       taskId?: string;
@@ -308,6 +320,11 @@ export interface AgentRunAttachment {
 }
 
 export interface ActivationContextView {
+  history?: TaskHistoryPage;
+  fullHistory?: HistoryCoverage;
+  pinChanges?: { pinned: TaskCommentView[]; unpinned: string[] };
+  /** Internal recovery snapshot; not repeated in ordinary returning prompts. */
+  replacement?: { description: string; history: TaskHistoryPage; pinnedComments: TaskCommentView[] };
   kind: "initial" | "resumed";
   description?: string;
   comments: TaskCommentView[];

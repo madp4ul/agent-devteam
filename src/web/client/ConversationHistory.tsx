@@ -354,6 +354,11 @@ function coordinationActivityPresentation(item: CoordinationTranscriptItem): {
       ? []
       : [{ kind: "value", label: "Reason", value: permissionBlock.reason }];
   } else switch (item.presentation.kind) {
+    case "coordination-comment-pin": {
+      action = accessibleLabel = item.presentation.pinned ? "Pin comment" : "Unpin comment";
+      facts = [{ kind: "task", label: "Task", task: { id: item.presentation.taskId } }];
+      break;
+    }
     case "coordination-task-change": {
       action = accessibleLabel = item.presentation.action === "created" ? "Create task" : "Edit task";
       facts = [{ kind: "task", label: "Task", task: item.presentation.task }];

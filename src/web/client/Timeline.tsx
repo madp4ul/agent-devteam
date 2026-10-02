@@ -17,6 +17,7 @@ import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
 import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { MarkUserMentionAddressed } from "./AttentionReasonAction.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
+import { CommentPinButton } from "./CommentPinButton.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 import { TextPreview } from "./TextPreview.tsx";
@@ -55,6 +56,7 @@ export function TaskTimeline({
   tasks,
   unresolvedAttention,
   transcriptsAvailable = true,
+  readOnly = false,
   onReplyToAgent,
   onAttentionChanged,
   onAttentionError,
@@ -70,6 +72,7 @@ export function TaskTimeline({
   tasks: TimelineTask[];
   unresolvedAttention: TaskAttentionView[];
   transcriptsAvailable?: boolean;
+  readOnly?: boolean;
   onReplyToAgent?(agentId: string, attentionReasonId?: string): void | Promise<void>;
   onAttentionChanged(): Promise<void>;
   onAttentionError(error: unknown): void;
@@ -85,6 +88,7 @@ export function TaskTimeline({
     ? filterTimelineRecordsForAgents(records, agentInspectableContent)
     : records;
   const context: TimelineContext = {
+    readOnly,
     taskId,
     comments,
     activity,
@@ -108,6 +112,13 @@ export function TaskTimeline({
     });
   };
   const followSource = (sourceId: string): void => {
+    if (agentInspectableOnly && !visibleRecords.some((record) =>
+      record.kind === "comment" ? record.comment.id === sourceId
+        : record.kind === "activity" ? record.activity.id === sourceId
+          : record.kind === "attempt" && record.content.some((entry) =>
+            (entry.kind === "comment" ? entry.comment.id : entry.activity.id) === sourceId))) {
+      setAgentInspectableOnly(false);
+    }
     setTextExpanded(`comment-${sourceId}`, true);
     setTextExpanded(`activity-${sourceId}`, true);
     window.setTimeout(() => {
@@ -187,6 +198,7 @@ export function TaskTimeline({
 }
 
 interface TimelineContext {
+  readOnly: boolean;
   taskId: string;
   comments: TaskCommentView[];
   activity: TaskActivityView[];
@@ -440,6 +452,8 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
         <span className="entry-meta-actions">
           <RelativeTime value={comment.occurredAt} />
           <CopyMarkdownButton source={comment.body} label="Copy comment Markdown" />
+          {context.readOnly ? null : <CommentPinButton taskId={context.taskId} commentId={comment.id} pinned={!!comment.pinned}
+            onChanged={context.onAttentionChanged} onError={context.onAttentionError} />}
           {context.agentInspectableContent.commentIds.includes(comment.id) ? <AgentInspectableMarker /> : null}
         </span>
       </div>
@@ -664,6 +678,8 @@ function triggerDescription(activity: TaskActivityView, context: TimelineContext
 function activityLabel(type: TaskActivityView["type"]): string {
   return {
     "task.created": "Task created",
+    "comment.pinned": "Comment pinned",
+    "comment.unpinned": "Comment unpinned",
     "task.edited": "Task edited",
     "task.moved": "Task moved",
     "relationship.created": "Relationship created",

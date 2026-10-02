@@ -1,6 +1,7 @@
 import type { HttpDispatcher } from "../http/dispatcher.ts";
 import {
   childTaskCommand,
+  booleanField,
   numberField,
   readJsonBody,
   relationshipCommand,
@@ -16,6 +17,7 @@ type CurrentTaskCapabilities = Pick<AgentCoordinationCapabilities,
   | "queryTaskInspection"
   | "queryOperatingContext"
   | "addTaskComment"
+  | "setTaskCommentPin"
   | "createTask"
   | "editTask"
   | "resolveInertTaskMove"
@@ -46,6 +48,7 @@ export function registerCurrentTaskRoutes(
       taskId: params.taskId === "current" ? scope.taskId : params.taskId,
       callerTaskId: scope.taskId,
       body: stringField(body, "body"),
+      ...(body.pinned === undefined ? {} : { pinned: booleanField(body, "pinned") }),
       idempotencyKey: stringField(body, "idempotencyKey"),
       actor: { kind: "agent", id: scope.agentId },
       ...(scope.attemptId === undefined ? {} : { attemptId: scope.attemptId }),
@@ -58,6 +61,15 @@ export function registerCurrentTaskRoutes(
       commentId: result.comment.id,
     });
   });
+  for (const [action, pinned] of [["pin", true], ["unpin", false]] as const) {
+    dispatcher.register("POST", `/agent-api/tasks/:taskId/comments/:commentId/${action}`, "agent/current-task", async ({ request, response, scope, params }) => {
+      const body = await readJsonBody(request);
+      const result = application.setTaskCommentPin({ taskId: params.taskId === "current" ? scope.taskId : params.taskId,
+        commentId: params.commentId, pinned, callerTaskId: scope.taskId, actor: { kind: "agent", id: scope.agentId },
+        ...(scope.attemptId === undefined ? {} : { attemptId: scope.attemptId }), idempotencyKey: stringField(body, "idempotencyKey") });
+      sendJson(response, result.accepted ? 200 : 409, result);
+    });
+  }
   dispatcher.register("POST", "/agent-api/tasks", "agent/current-task", async ({ request, response, scope }) => {
     const body = await readJsonBody(request);
     const result = application.createTask({

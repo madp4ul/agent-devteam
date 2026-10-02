@@ -88,6 +88,7 @@ test("restart records an interrupted attempt and retries its activation at the h
   const retry = await recoveringRuntime.waitForRequest();
   assert.equal(retry.activationId, firstRequest.activationId);
   assert.equal(retry.workspace.path, firstRequest.workspace.path);
+  assert.deepEqual(retry.activationContext, firstRequest.activationContext);
   assert.deepEqual(retry.attempt, {
     number: 2,
     precedingOutcome: {

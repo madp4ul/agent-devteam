@@ -24,6 +24,7 @@ import type { ProcessBoardView } from "../process-contract.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
 import type { ActivationSchedulingModule } from "./activation-scheduling-module.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
+import type { TaskHistoryQuery, TaskHistoryQueryResult } from "../history-contract.ts";
 
 export class TaskDiscovery {
   readonly #processStore: ProcessStateStore;
@@ -122,15 +123,36 @@ export class TaskDiscovery {
     };
   }
 
-  queryArchivedTaskOverviews(): ArchivedTaskOverviewsQueryResult {
+  queryArchivedTaskOverviews(query?: { pageSize?: number; cursor?: string }): ArchivedTaskOverviewsQueryResult {
     if (this.#startup.mode === "configuration-error") {
       return { available: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
     }
-    return { available: true, tasks: this.#taskProjections.readArchivedTaskOverviewRecords().map(({ task }) => task) };
+    const tasks = this.#taskProjections.readArchivedTaskOverviewRecords().map(({ task }) => task);
+    if (query === undefined) return { available: true, tasks };
+    const page = metadataPage(tasks, query, "archive");
+    return page.available ? { available: true, tasks: page.items, nextCursor: page.nextCursor } : page;
   }
 
-  queryTaskInspection(taskId: string): TaskInspectionQueryResult {
-    return this.queryTaskInspectionView(taskId, { audience: "agent" });
+  queryTaskInspection(taskId: string, targetWords?: number): TaskInspectionQueryResult {
+    if (targetWords !== undefined && (!Number.isSafeInteger(targetWords) || targetWords < 1)) {
+      return { available: false, reason: "invalid-target-words" };
+    }
+    const result = this.queryTaskInspectionView(taskId, { audience: "agent" });
+    if (!result.available || targetWords === undefined) return result;
+    const history = this.#taskProjections.history.query({ taskId, targetWords });
+    if (!history.available) throw new Error("Validated inspection history could not be projected");
+    return { available: true, task: { ...result.task, history: history.history } };
+  }
+
+  queryTaskHistory(query: TaskHistoryQuery): TaskHistoryQueryResult {
+    if (this.#startup.mode === "configuration-error") {
+      return { available: false, reason: "configuration-error", diagnostics: this.#startup.diagnostics };
+    }
+    const task = this.#taskProjections.readTaskReferences([query.taskId])[0];
+    if (task === undefined || (!task.archived && !this.#taskProjections.isTaskInspectableByAgent(query.taskId))) {
+      return { available: false, reason: "not-found" };
+    }
+    return this.#taskProjections.history.query(query);
   }
 
   queryTaskParticipants(taskId: string): TaskParticipantsQueryResult {
@@ -190,7 +212,7 @@ export class TaskDiscovery {
     options: { audience: "agent" | "user" },
   ): TaskInspectionQueryResult | UserTaskInspectionQueryResult {
     const includeUnmapped = options.audience === "user";
-    const loaded = this.readTask(taskId, includeUnmapped, true);
+    const loaded = this.readTask(taskId, includeUnmapped, true, !includeUnmapped);
     if (!loaded.available) return loaded;
     const { task } = loaded;
     const board = includeUnmapped || task.archived || task.columnId === "completion"
@@ -243,7 +265,10 @@ export class TaskDiscovery {
         column: { id: column.id, name: column.name },
         revision: task.revision,
         ...(task.archived ? { archived: true as const } : {}),
-        comments: task.comments,
+        ...(includeWorkspace ? { comments: task.comments } : {
+          history: (this.#taskProjections.history.query({ taskId: task.id }) as Extract<TaskHistoryQueryResult, { available: true }>).history,
+        }),
+        pinnedComments: task.comments.filter((comment) => comment.pinned),
         relationships: task.relationships.map((relationship) => ({
           ...relationship,
           sourceTaskTitle: relatedTitles.get(relationship.sourceTaskId) ?? relationship.sourceTaskId,
@@ -270,7 +295,7 @@ export class TaskDiscovery {
           ? { workspace: this.#activationScheduling.readTaskWorkspace(task.id) ?? null }
           : {}),
         onDemand: { activity: true, attachments: true },
-    };
+    } as TaskInspectionView | UserTaskInspectionView;
   }
 
   queryTaskActivity(taskId: string): TaskActivityQueryResult {
@@ -280,10 +305,13 @@ export class TaskDiscovery {
       : loaded;
   }
 
-  queryTaskAttachments(taskId: string): TaskAttachmentsQueryResult {
-    const loaded = this.readTask(taskId, false, true);
+  queryTaskAttachments(taskId: string, query?: { pageSize?: number; cursor?: string }): TaskAttachmentsQueryResult {
+    const loaded = this.readTask(taskId, false, true, true);
     if (!loaded.available) return loaded;
-    return { available: true, attachments: this.#taskProjections.readTaskAttachments(taskId) };
+    const attachments = this.#taskProjections.readTaskAttachments(taskId);
+    if (query === undefined) return { available: true, attachments };
+    const page = metadataPage(attachments, query, `attachments:${taskId}`);
+    return page.available ? { available: true, attachments: page.items, nextCursor: page.nextCursor } : page;
   }
 
   queryCollaborators(): CollaboratorsQueryResult {
@@ -302,6 +330,7 @@ export class TaskDiscovery {
     taskId: string,
     includeUnmapped = false,
     includeArchived = false,
+    bounded = false,
   ):
     | { available: true; task: TaskView }
     | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
@@ -313,12 +342,30 @@ export class TaskDiscovery {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const task = this.#taskProjections.readTask(taskId);
+    const task = this.#taskProjections.readTask(taskId, bounded);
     if (task === undefined) return { available: false, reason: "not-found" };
     return !includeUnmapped && !(includeArchived && task.archived) && !this.#taskProjections.isTaskInspectableByAgent(taskId)
       ? { available: false, reason: "not-found" }
       : { available: true, task };
   }
+}
+
+function metadataPage<T>(items: T[], query: { pageSize?: number; cursor?: string }, scope: string):
+  | { available: true; items: T[]; nextCursor: string | null }
+  | { available: false; reason: "invalid-page-size" | "invalid-cursor" } {
+  const pageSize = query.pageSize ?? 20;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) return { available: false, reason: "invalid-page-size" };
+  let offset = 0;
+  if (query.cursor !== undefined) {
+    try {
+      const value = JSON.parse(Buffer.from(query.cursor, "base64url").toString()) as { scope: string; offset: number };
+      if (value.scope !== scope || !Number.isSafeInteger(value.offset) || value.offset < 0) throw new Error("Invalid cursor");
+      offset = value.offset;
+    } catch { return { available: false, reason: "invalid-cursor" }; }
+  }
+  return { available: true, items: items.slice(offset, offset + pageSize),
+    nextCursor: offset + pageSize < items.length
+      ? Buffer.from(JSON.stringify({ scope, offset: offset + pageSize })).toString("base64url") : null };
 }
 
 interface TaskOverviewCursor {

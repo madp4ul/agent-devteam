@@ -35,12 +35,21 @@ type TaskCapabilities = Pick<BrowserCoordinationCapabilities,
   | "removeTaskRelationship"
   | "editTaskRelationshipResumeAgent"
   | "addTaskComment"
+  | "setTaskCommentPin"
 >;
 
 export function registerTaskRoutes(
   dispatcher: HttpDispatcher<HttpRouteContext>,
   application: TaskCapabilities,
 ): void {
+  for (const [action, pinned] of [["pin", true], ["unpin", false]] as const) {
+    dispatcher.register("POST", `/api/tasks/:taskId/comments/:commentId/${action}`, "browser/tasks", async ({ request, response, params }) => {
+      const body = await readJsonBody(request);
+      const result = application.setTaskCommentPin({ taskId: params.taskId, commentId: params.commentId,
+        pinned, actor: localUserActor, idempotencyKey: stringField(body, "idempotencyKey") });
+      sendJson(response, result.accepted ? 200 : 409, result);
+    });
+  }
   dispatcher.register("POST", "/api/tasks", "browser/tasks", async ({ request, response }) => {
     const body = await readJsonBody<CreateTaskRequest>(request);
     const result = application.createTask({

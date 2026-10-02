@@ -48,19 +48,13 @@ CREATE TABLE "activity_ledger" (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT,
         id TEXT NOT NULL UNIQUE,
         task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-        type TEXT NOT NULL CHECK (
-          type IN (
-            'task.created', 'task.edited', 'task.moved',
-            'relationship.created', 'relationship.removed',
-            'relationship.satisfied', 'relationship.resume-agent-changed',
-            'attention.created', 'attention.resolved',
-            'activation.created', 'activation.dismissed',
-            'attempt.started', 'attempt.completed',
-            'automation.suspended', 'automation.resumed',
-            'conversation.continued', 'conversation.retired',
-            'task.archived', 'task.unarchived'
-          )
-        ),
+        type TEXT NOT NULL CHECK (type IN (
+          'task.created', 'task.edited', 'task.moved', 'comment.pinned', 'comment.unpinned',
+          'relationship.created', 'relationship.removed', 'relationship.satisfied', 'relationship.resume-agent-changed',
+          'attention.created', 'attention.resolved', 'activation.created', 'activation.dismissed',
+          'attempt.started', 'attempt.completed', 'automation.suspended', 'automation.resumed',
+          'conversation.continued', 'conversation.retired', 'task.archived', 'task.unarchived'
+        )),
         actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
         actor_id TEXT NOT NULL,
         occurred_at TEXT NOT NULL,
@@ -99,7 +93,7 @@ CREATE TABLE agent_conversations (
       ,replaces_conversation_id TEXT REFERENCES agent_conversations(id)
       ,replacement_reason TEXT
       ,archived_cost_json TEXT
-    );
+    , delivered_pin_ids_json TEXT NOT NULL DEFAULT '[]');
 
 -- table agents on agents
 CREATE TABLE agents (
@@ -200,6 +194,9 @@ CREATE TABLE coordination_migrations (
       migration_id TEXT NOT NULL UNIQUE
     );
 
+-- table history_cursor_identity on history_cursor_identity
+CREATE TABLE history_cursor_identity (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), secret TEXT NOT NULL);
+
 -- table model_pricing on model_pricing
 CREATE TABLE model_pricing (
       model TEXT PRIMARY KEY,
@@ -281,7 +278,7 @@ CREATE TABLE task_comments (
       actor_id TEXT NOT NULL,
       occurred_at TEXT NOT NULL,
       attempt_id TEXT REFERENCES attempts(id) ON DELETE SET NULL
-    , origin_task_id TEXT, origin_task_title TEXT);
+    , origin_task_id TEXT, origin_task_title TEXT, pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)));
 
 -- table task_numbers on task_numbers
 CREATE TABLE task_numbers (
@@ -333,8 +330,7 @@ CREATE TABLE tasks (
 CREATE INDEX activations_by_task_sequence ON activations(task_id, sequence);
 
 -- index activity_ledger_by_task_sequence on activity_ledger
-CREATE INDEX activity_ledger_by_task_sequence
-        ON activity_ledger(task_id, sequence);
+CREATE INDEX activity_ledger_by_task_sequence ON activity_ledger(task_id, sequence);
 
 -- index attempts_by_activation on attempts
 CREATE INDEX attempts_by_activation

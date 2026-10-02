@@ -15,12 +15,14 @@ test("task attention navigates to the exact mention and resolves beside its sour
     detail.task.description = `${"A long agent-authored description. ".repeat(120)}\n\nEnd of description.`;
     detail.task.comments.push({
       id: "source-local-comment",
+      originTask: { id: "T-0001", title: detail.task.title },
       body: "Please decide whether I should continue, @user.",
       actor: { kind: "agent", id: "implementer" },
       occurredAt: "2026-08-15T12:30:00.000Z",
     });
     detail.task.comments.push({
       id: "reply-local-comment",
+      originTask: { id: "T-0001", title: detail.task.title },
       body: "Please send the implementation decision, @user.",
       actor: { kind: "agent", id: "implementer" },
       occurredAt: "2026-08-15T12:31:00.000Z",

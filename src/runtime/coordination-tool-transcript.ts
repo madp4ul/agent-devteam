@@ -68,7 +68,7 @@ function coordinationProjection(
       ...optionalString("commentId", result?.commentId),
     }, withRejection(`${taskId}: comment`, rejection));
   }
-  if (tool === "inspect_operating_context") {
+  if (tool === "inspect_operating_context" || tool === "attempt.context.inspect") {
     const process = recordValue(result?.process);
     const board = recordValue(result?.board);
     const owningAgent = recordValue(result?.owningAgent);
@@ -83,14 +83,14 @@ function coordinationProjection(
       ...optionalString("owningAgentName", owningAgent?.name),
     });
   }
-  if (tool === "summarize_boards") {
+  if (tool === "summarize_boards" || tool === "board.list") {
     return projected({
       kind: "coordination-inspection",
       scope: "board-summaries",
       boards: namedEntities(result?.boards),
     }, "Board summaries");
   }
-  if (tool === "list_tasks") {
+  if (tool === "list_tasks" || tool === "task.list") {
     const requestedBoard = stringValue(arguments_?.boardId);
     const requestedColumns = stringValues(arguments_?.columnIds).map((id) => ({ id }));
     const boardId = requestedBoard ?? "requested board";
@@ -102,7 +102,7 @@ function coordinationProjection(
       columns: requestedColumns,
     }, `${boardId}: tasks in ${columns.length === 0 ? "requested columns" : columns}`);
   }
-  if (tool === "list_archived_tasks") {
+  if (tool === "list_archived_tasks" || tool === "task.archive.list") {
     const tasks = Array.isArray(result?.tasks) ? result.tasks : undefined;
     return projected({
       kind: "coordination-inspection",
@@ -110,15 +110,16 @@ function coordinationProjection(
       ...(tasks === undefined ? {} : { taskCount: tasks.length }),
     });
   }
-  if (tool === "inspect_task" || tool === "list_task_activity" || tool === "list_task_attachments") {
+  if (tool === "inspect_task" || tool === "list_task_activity" || tool === "list_task_attachments"
+    || tool === "task.inspect" || tool === "task.history.list" || tool === "task.attachment.list") {
     const task = recordValue(result?.task);
-    const scope = tool === "inspect_task"
+    const scope = tool === "inspect_task" || tool === "task.inspect"
       ? "task"
-      : tool === "list_task_activity" ? "task-activity" : "task-attachments";
+      : tool === "list_task_activity" || tool === "task.history.list" ? "task-activity" : "task-attachments";
     return projected({
       kind: "coordination-inspection",
       scope,
-      ...optionalString("taskId", task?.id ?? arguments_?.taskId),
+      ...optionalString("taskId", task?.id ?? taskId),
       ...optionalString("taskTitle", task?.title),
     }, `${stringValue(arguments_?.taskId) ?? taskId}: ${tool.replaceAll("_", " ")}`);
   }
@@ -148,6 +149,10 @@ function coordinationProjection(
       ...optionalString("columnId", column?.id),
       ...optionalString("columnName", column?.name),
     }, `${taskId}: current task inspection`);
+  }
+  if (tool === "task.comment.pin" || tool === "task.comment.unpin") {
+    return projected({ kind: "coordination-comment-pin", taskId,
+      ...optionalString("commentId", result?.commentId ?? arguments_?.commentId), pinned: tool === "task.comment.pin" }, `${taskId}: ${tool === "task.comment.pin" ? "pin" : "unpin"} comment`);
   }
   if (tool === "task.create" || tool === "task.edit") {
     const task = taskIdentity(result?.task);
@@ -207,7 +212,7 @@ function coordinationProjection(
       ...optionalString("relationshipId", arguments_?.relationshipId),
     }, withRejection(`${taskId}: relationship removed`, rejection));
   }
-  if (tool === "report_permission_block") {
+  if (tool === "report_permission_block" || tool === "attempt.permission_block.report") {
     const reason = stringValue(arguments_?.summary);
     return projected(
       { kind: "coordination-permission-block", ...optionalString("reason", reason) },
@@ -258,6 +263,8 @@ function requiresAuthoritativeAcceptance(tool: CoordinationToolName): boolean {
   switch (tool) {
     case "add_comment":
     case "task.comment.add":
+    case "task.comment.pin":
+    case "task.comment.unpin":
     case "task.create":
     case "task.edit":
     case "task.move":
@@ -272,8 +279,15 @@ function requiresAuthoritativeAcceptance(tool: CoordinationToolName): boolean {
     case "set_relationship_resume_agent":
     case "remove_relationship":
     case "report_permission_block":
+    case "attempt.permission_block.report":
       return true;
     case "summarize_boards":
+    case "board.list":
+    case "task.list":
+    case "task.archive.list":
+    case "task.inspect":
+    case "task.history.list":
+    case "task.attachment.list":
     case "list_tasks":
     case "list_archived_tasks":
     case "inspect_task":
@@ -283,6 +297,7 @@ function requiresAuthoritativeAcceptance(tool: CoordinationToolName): boolean {
     case "task.participant.list":
     case "inspect_current_task":
     case "inspect_operating_context":
+    case "attempt.context.inspect":
       return false;
     default:
       return assertNever(tool);

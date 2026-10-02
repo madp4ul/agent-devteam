@@ -21,6 +21,7 @@ import type {
   TaskView,
 } from "../task-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
+import { TaskHistoryStore } from "./task-history-store.ts";
 
 export interface StoredTaskOverview {
   sequence: number;
@@ -64,13 +65,15 @@ const taskOverviewRecordColumns = `
   MAX(CASE WHEN a.status = 'running' THEN a.target_agent_id END) AS active_agent_id`;
 
 export class TaskProjectionStore {
+  readonly history: TaskHistoryStore;
   readonly #database: DatabaseSync;
 
   constructor(database: CoordinationDatabase) {
     this.#database = database.connection;
+    this.history = new TaskHistoryStore(database);
   }
 
-  readTask(taskId: string): TaskView | undefined {
+  readTask(taskId: string, bounded = false): TaskView | undefined {
     const row = this.#database
       .prepare(
         "SELECT id, title, description, board_id, column_id, revision, archived_at FROM tasks WHERE id = ?",
@@ -100,7 +103,7 @@ export class TaskProjectionStore {
          WHERE task_id = ?
          ORDER BY sequence`,
       )
-      .all(taskId) as Array<{
+      .all(bounded ? "" : taskId) as Array<{
       id: string;
       type: TaskActivityView["type"];
       actor_kind: TaskActivityView["actor"]["kind"];
@@ -117,7 +120,7 @@ export class TaskProjectionStore {
       columnId: row.column_id,
       revision: row.revision,
       ...(row.archived_at === null ? {} : { archived: true as const }),
-      comments: this.readTaskComments(taskId),
+      comments: this.readTaskComments(taskId, bounded),
       relationships: this.readTaskRelationships(taskId),
       activity: activity.map((event) => ({
         id: event.id,
@@ -582,7 +585,7 @@ export class TaskProjectionStore {
     const comment = this.#database
       .prepare(
         `SELECT comment.id, comment.body, comment.actor_kind, comment.actor_id,
-                comment.occurred_at, comment.attempt_id, comment.origin_task_id,
+                comment.occurred_at, comment.attempt_id, comment.origin_task_id, comment.pinned,
                 COALESCE(origin.title, comment.origin_task_title) AS origin_task_title
          FROM task_comments comment
          LEFT JOIN tasks origin ON origin.id = comment.origin_task_id
@@ -856,18 +859,18 @@ export class TaskProjectionStore {
     }));
   }
 
-  private readTaskComments(taskId: string): TaskView["comments"] {
+  private readTaskComments(taskId: string, pinsOnly = false): TaskView["comments"] {
     const rows = this.#database
       .prepare(
         `SELECT comment.id, comment.body, comment.actor_kind, comment.actor_id,
-                comment.occurred_at, comment.attempt_id, comment.origin_task_id,
+                comment.occurred_at, comment.attempt_id, comment.origin_task_id, comment.pinned,
                 COALESCE(origin.title, comment.origin_task_title) AS origin_task_title
          FROM task_comments comment
          LEFT JOIN tasks origin ON origin.id = comment.origin_task_id
-         WHERE comment.task_id = ?
+         WHERE comment.task_id = ? AND (? = 0 OR comment.pinned = 1)
          ORDER BY comment.sequence`,
       )
-      .all(taskId) as Array<{
+      .all(taskId, pinsOnly ? 1 : 0) as Array<{
       id: string;
       body: string;
       actor_kind: Actor["kind"];
@@ -876,8 +879,10 @@ export class TaskProjectionStore {
       attempt_id: string | null;
       origin_task_id: string | null;
       origin_task_title: string | null;
+      pinned: number;
     }>;
     return rows.map((row) => ({
+      ...(row.pinned === 1 ? { pinned: true as const } : {}),
       id: row.id,
       body: row.body,
       actor: { kind: row.actor_kind, id: row.actor_id },

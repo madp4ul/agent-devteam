@@ -25,7 +25,7 @@ const server = new McpServer(
 );
 
 server.registerTool(
-  "summarize_boards",
+  "board.list",
   {
     description:
       "List boards with ordered columns, watching agents, and task counts without task payloads.",
@@ -35,7 +35,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "list_tasks",
+  "task.list",
   {
     description:
       "List a bounded page of compact task overviews from one or more explicit columns.",
@@ -50,44 +50,44 @@ server.registerTool(
 );
 
 server.registerTool(
-  "list_archived_tasks",
+  "task.archive.list",
   {
     description:
       "Deliberately list tasks retained in archive history. Archived tasks are excluded from ordinary column listings.",
-    inputSchema: {},
+    inputSchema: { pageSize: z.number().int().min(1).max(50).optional(), cursor: z.string().min(1).optional() },
   },
-  async () => callAgentApi("GET", "/agent-api/tasks/archive"),
+  async (arguments_) => callAgentApi("POST", "/agent-api/tasks/archive/query", arguments_),
 );
 
 server.registerTool(
-  "inspect_task",
+  "task.inspect",
   {
     description:
-      "Inspect a complete task description, comments, relationships, and current coordination state.",
-    inputSchema: { taskId: z.string().min(1) },
+      "Inspect current task state, participants, every pinned comment and a recent whole-record history page. taskId is current or a concrete ID. Continue history.nextCursor directly with task.history.list.",
+    inputSchema: { taskId: z.string().min(1), targetWords: z.number().int().positive().optional() },
   },
-  async ({ taskId }) =>
-    callAgentApi("GET", `/agent-api/tasks/${encodeURIComponent(taskId)}`),
+  async ({ taskId, ...body }) =>
+    callAgentApi("POST", `/agent-api/tasks/${encodeURIComponent(taskId)}/inspect`, body),
 );
 
 server.registerTool(
-  "list_task_activity",
+  "task.history.list",
   {
-    description: "Read a task's immutable framework activity on demand.",
-    inputSchema: { taskId: z.string().min(1) },
+    description: "Read immutable comments and substantive events as JSON. Select newest whole records toward targetWords (default 2000), then return oldest-first; the boundary record can exceed the target. Counts report returned, remaining and total words/records/comments. Use the returned cursor to continue backward. Cursors keep a fixed upper watermark, ignore later arrivals, and retry identically. An activation cursor stops once at its update boundary, then returns an older-history cursor; no scope argument is needed.",
+    inputSchema: { taskId: z.string().min(1), targetWords: z.number().int().positive().optional(), cursor: z.string().min(1).optional() },
   },
-  async ({ taskId }) =>
-    callAgentApi("GET", `/agent-api/tasks/${encodeURIComponent(taskId)}/activity`),
+  async ({ taskId, ...body }) =>
+    callAgentApi("POST", `/agent-api/tasks/${encodeURIComponent(taskId)}/history`, body),
 );
 
 server.registerTool(
-  "list_task_attachments",
+  "task.attachment.list",
   {
-    description: "Read a task's attachments on demand.",
-    inputSchema: { taskId: z.string().min(1) },
+    description: "List bounded attachment metadata on current or a concrete task ID; default 20, maximum 50 per page.",
+    inputSchema: { taskId: z.string().min(1), pageSize: z.number().int().min(1).max(50).optional(), cursor: z.string().min(1).optional() },
   },
-  async ({ taskId }) =>
-    callAgentApi("GET", `/agent-api/tasks/${encodeURIComponent(taskId)}/attachments`),
+  async ({ taskId, ...body }) =>
+    callAgentApi("POST", `/agent-api/tasks/${encodeURIComponent(taskId)}/attachments/query`, body),
 );
 
 server.registerTool(
@@ -100,17 +100,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "inspect_current_task",
-  {
-    description:
-      "Inspect the complete current task assigned to this activation, including comments and relationships.",
-    inputSchema: {},
-  },
-  async () => callAgentApi("GET", "/agent-api/current-task"),
-);
-
-server.registerTool(
-  "inspect_operating_context",
+  "attempt.context.inspect",
   {
     description:
       "Recover the complete current framework, process, board, owning-role, and participant instructions for this attempt.",
@@ -126,11 +116,19 @@ server.registerTool(
     inputSchema: {
       taskId: z.string().min(1),
       body: z.string().min(1),
+      pinned: z.boolean().optional(),
       idempotencyKey: z.string().min(1),
     },
   },
   async ({ taskId, ...arguments_ }) => callAgentApi("POST", `/agent-api/tasks/${encodeURIComponent(taskId)}/comments`, arguments_),
 );
+
+for (const action of ["pin", "unpin"] as const) {
+  server.registerTool(`task.comment.${action}`, {
+    description: `${action === "pin" ? "Mark" : "Remove"} shared current guidance on a mutable task. Text remains immutable; no mentions or activations execute. Matching state is inert.`,
+    inputSchema: { taskId: z.string().min(1), commentId: z.string().min(1), idempotencyKey: z.string().min(1) },
+  }, async ({ taskId, commentId, ...body }) => callAgentApi("POST", `/agent-api/tasks/${encodeURIComponent(taskId)}/comments/${encodeURIComponent(commentId)}/${action}`, body));
+}
 
 server.registerTool(
   "task.create",
@@ -247,7 +245,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "report_permission_block",
+  "attempt.permission_block.report",
   {
     description:
       "Report that the current activation cannot complete because the Codex permission policy blocked a required action. Use only after a required action was denied and user action or a policy change is necessary.",

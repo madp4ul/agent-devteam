@@ -122,7 +122,8 @@ content.
 Settled current conversations can be retired atomically with an attributable
 reason. Retired lineages remain durable and explicitly continuable, while the
 next ordinary activation creates the pair's replacement and receives that
-reason once with its complete initial task composition.
+reason once with initial operating guidance, current task state, all pins and a
+bounded recent history page rather than its entire accumulated discussion.
 
 Conversation attachment bytes live beside SQLite in a framework-owned content
 store under the same bound project state root. Pending uploads are temporary;
@@ -146,6 +147,13 @@ The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
 state rather than silently replacing or adopting inconsistent data.
 
+Shared pin membership is stored on immutable comments; pin changes append
+audit events in the task command transaction without executing mentions or creating
+activations. Initial pinned creation commits the comment, pin and its ordinary
+mention effects together. Inspection returns every current pin, and the browser's
+quiet pinned collection below the description links to original timeline positions.
+Migration 0005 adds membership and audit types without modifying released migrations.
+
 Comments retain their destination separately from the author's concrete origin
 task and originating attempt. Authenticated comment writes validate the running
 caller against its origin and the destination against mapping/archival invariants.
@@ -157,6 +165,15 @@ origin only through matching attempt/agent linkage; missing evidence stays unkno
 [ADR 0020](adr/0020-coordinate-across-tasks-with-task-local-participant-identity.md)
 records the authority and identity trade-off. External comments remain standalone
 in the destination browser timeline when their originating attempt is not local.
+
+Agent inspection uses a bounded state projection and the shared
+`TaskHistoryStore`, not the browser's complete timeline. The history store merges
+only the selected task's immutable comments/events, suppresses routine activation
+and start records, counts readable words once, and signs fixed-watermark backward
+cursors with the durable project identity added by migration 0006. Inspection
+cursors continue directly in the history tool. [ADR 0021](adr/0021-page-whole-history-records-at-conversation-checkpoints.md)
+records whole-record and checkpoint-boundary behavior. Browser inspection retains
+its complete user timeline; agent metadata listings have bounded pages.
 
 Persistence remains on the built-in synchronous `node:sqlite` driver with
 project-owned SQL. [ADR 0017](adr/0017-reconsider-drizzle-when-native-node-sqlite-and-strict-types-are-stable.md)
@@ -213,9 +230,14 @@ Retirement removes only automatic selection; the next ordinary activation
 creates the replacement current conversation. Activations and retries
 remain distinct inside that lineage, and each attempt's messages and tool
 activity remain separately attributable run evidence. A first activation gets
-the complete current task composition; each later distinct activation gets a
-fresh authoritative bootstrap plus task context not previously delivered to
-that conversation. Incremental delivery omits an owning agent's comment only
+current state, all shared pins and a bounded recent history page; each later
+distinct activation gets compact JSON state, description changes, net pin changes
+and a bounded newest slice of updates since its preceding composition checkpoint.
+Counts distinguish omitted updates from full retained history. Continuation stops
+once at that checkpoint before returning an older-history cursor. Composition,
+whole-interval advancement and pin membership capture commit atomically with the
+retained activation payload; omitted updates never form persistent unread gaps.
+Migration 0007 adds the pin checkpoint. Incremental delivery omits an owning agent's comment only
 when immutable attempt, conversation, and thread provenance proves the resumed
 Codex thread already retains it; missing provenance, another conversation, and
 thread replacement preserve or restore the comment. The attempt-scoped MCP
@@ -301,9 +323,9 @@ an agent's task workspace.
 3. When automation is running, it claims the next eligible activation for a
    task and prepares or verifies that task's Git workspace.
 4. Codex receives the activation reason plus current structural and workspace
-   context. A conversation's first activation receives the complete task and
-   operating composition; a later activation receives its authoritative
-   bootstrap and only newly delivered task text and activity. Retries retain
+   context. A conversation's first activation receives current state, all pins,
+   bounded recent history and operating instructions; a later activation receives
+   compact JSON updates and net pin changes with counts/continuation. Retries retain
    their activation's composed context and separate attempt facts. Surviving
    attachments from that conversation are projected into the run's scoped
    file directory, with current supported images also supplied as native image

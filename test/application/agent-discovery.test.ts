@@ -170,7 +170,7 @@ test("the user task-detail projection returns complete browser-ready task contex
     archived: false,
   }]);
   assert.equal(result.agentInspectableContent.taskFields.includes("description"), true);
-  assert.equal(result.agentInspectableContent.taskFields.includes("comments"), true);
+  assert.equal(result.agentInspectableContent.taskFields.includes("history"), true);
   assert.equal(result.agentInspectableContent.taskFields.includes("workspace" as never), false);
   assert.deepEqual(result.agentInspectableContent.commentIds, []);
   assert.deepEqual(result.agentInspectableContent.relationshipIds, [relationship.relationship.id]);
@@ -728,7 +728,8 @@ test("full task inspection keeps history and attachments behind on-demand querie
   const inspection = application.queryTaskInspection(created.task.id);
   assert.equal(inspection.available, true);
   if (!inspection.available) return;
-  const { participants, ...taskState } = inspection.task;
+  const { participants, pinnedComments, history, ...taskState } = inspection.task;
+  assert.deepEqual(pinnedComments, []);
   assert.equal(participants.length, 2);
   assert.deepEqual(taskState, {
     id: "T-0001",
@@ -737,14 +738,6 @@ test("full task inspection keeps history and attachments behind on-demand querie
     boardId: "delivery",
     column: { id: "implementation", name: "Implementation" },
     revision: 2,
-    comments: [
-      {
-        id: inspection.task.comments[0]?.id,
-        body: "Keep this authored comment distinct from framework activity.",
-        actor: { kind: "agent", id: "reviewer" },
-        occurredAt: inspection.task.comments[0]?.occurredAt,
-      },
-    ],
     relationships: [],
     waitingOn: { taskIds: [] },
     run: {

@@ -968,3 +968,9 @@ html[data-theme] .conversation-composer textarea:focus-visible { outline-offset:
   .transcript-content { padding-right: .65rem; }
   .conversation-message { width: 100%; }
 }
+
+.pinned-comments { margin-bottom: 1rem; }
+.pinned-comments h2 { font-size: .95rem; }
+.pinned-comments article + article { margin-top: .75rem; border-top: 1px solid var(--border); padding-top: .75rem; }
+.pinned-comment-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.pinned-comments .text-preview { min-width: 0; }

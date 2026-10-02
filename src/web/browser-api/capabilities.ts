@@ -35,6 +35,7 @@ export type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
   | "removeTaskRelationship"
   | "editTaskRelationshipResumeAgent"
   | "addTaskComment"
+  | "setTaskCommentPin"
   | "markUserMentionAddressed"
   | "continuePermissionBlockedActivation"
   | "retryFailedActivation"

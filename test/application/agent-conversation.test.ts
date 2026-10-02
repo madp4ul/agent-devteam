@@ -71,7 +71,7 @@ test("conversation lineage stays isolated by both task and stable agent identity
   assert.notEqual(firstImplementer, secondImplementer);
 });
 
-test("a source already delivered in initial history is not delivered again to its queued activation", async (t) => {
+test("a source delivered earlier remains exact outside its queued activation's bounded updates", async (t) => {
   const fixture = await createHandoffFixture();
   const runtime = new ControlledAgentRuntime();
   const application = await CoordinationApplication.start({
@@ -110,7 +110,7 @@ test("a source already delivered in initial history is not delivered again to it
   runtime.complete({ status: "completed", summary: "Initial activation complete.", threadId: "source-thread" });
   const resumed = await runtime.waitForRequest(2);
   assert.equal(resumed.resumeThreadId, "source-thread");
-  assert.equal(resumed.activationContext.sourceDelivery, "conversation-history");
+  assert.equal(resumed.activationContext.sourceDelivery, "activation-only");
   assert.deepEqual(resumed.activationContext.comments, []);
   runtime.complete({ status: "completed", summary: "Queued mention complete.", threadId: "source-thread" });
   await application.waitForAutomationIdle();
@@ -155,7 +155,7 @@ test("a self-authored activation source stays available through retained convers
 
   const resumed = await runtime.waitForRequest(2);
   assert.equal(resumed.resumeThreadId, "self-source-thread");
-  assert.equal(resumed.activationContext.sourceDelivery, "conversation-history");
+  assert.equal(resumed.activationContext.sourceDelivery, "activation-only");
   assert.deepEqual(resumed.activationContext.comments, []);
   assert.equal("body" in resumed.sourceEvent ? resumed.sourceEvent.body : undefined, source.comment.body);
   assert.ok(resumed.task.comments.some(({ id }) => id === source.comment.id));

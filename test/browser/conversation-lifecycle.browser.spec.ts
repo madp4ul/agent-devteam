@@ -125,6 +125,12 @@ test("compact conversation rows stay last in the supporting column and open by k
   await page.getByRole("button", { name: "Close conversation" }).click();
 
   await page.setViewportSize({ width: 600, height: 900 });
+  // Responsive docking clears on the next measured layout; do not sample its old fixed position.
+  await expect.poll(async () => {
+    const timeline = await page.locator('[data-task-section="timeline"]').boundingBox();
+    const conversations = await page.locator('[data-task-section="conversations"]').boundingBox();
+    return timeline === null || conversations === null ? -1 : conversations.y - (timeline.y + timeline.height);
+  }).toBeGreaterThan(0);
   const narrowOrder = await page.locator("[data-task-section]").evaluateAll((elements) =>
     elements.map((element) => element.getAttribute("data-task-section")),
   );

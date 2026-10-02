@@ -138,6 +138,10 @@ test("archive removes a clean durable workspace and retains task history without
   const archived = await archivePromise;
 
   assert.equal(archived.accepted, true);
+  const preservedHistory = application.queryTaskHistory({ taskId: created.task.id, targetWords: 1 });
+  assert.ok(preservedHistory.available);
+  assert.equal(preservedHistory.history.records.length, 1);
+  assert.ok(preservedHistory.history.nextCursor);
   assert.deepEqual(await application.archiveTask({
     taskId: created.task.id,
     actor: { kind: "user", id: "local-user" },

@@ -1,4 +1,5 @@
 import type { ActivationRecoveryAction, ActivationView } from "./automation-contract.ts";
+import type { TaskHistoryPage } from "./history-contract.ts";
 import type { ProcessBoardView, ProcessColumnView, ProcessDiagnostic } from "./process-contract.ts";
 import type { ActivationStartupFailureView, AgentExecutionProfile } from "./runtime-contract.ts";
 
@@ -13,6 +14,8 @@ export interface TaskActivityView {
   type:
     | "task.created"
     | "task.edited"
+    | "comment.pinned"
+    | "comment.unpinned"
     | "task.moved"
     | "relationship.created"
     | "relationship.removed"
@@ -36,6 +39,7 @@ export interface TaskActivityView {
 }
 
 export interface TaskCommentView {
+  pinned?: true;
   id: string;
   body: string;
   actor: Actor;
@@ -103,6 +107,8 @@ export interface TaskOverviewsQuery {
 }
 
 export interface TaskInspectionView {
+  history: TaskHistoryPage;
+  pinnedComments: TaskCommentView[];
   id: string;
   title: string;
   description: string;
@@ -110,7 +116,6 @@ export interface TaskInspectionView {
   column: { id: string; name: string };
   revision: number;
   archived?: true;
-  comments: TaskCommentView[];
   relationships: (TaskRelationshipView & { sourceTaskTitle: string; targetTaskTitle: string })[];
   participants: TaskParticipantView[];
   waitingOn: TaskOverviewView["waitingOn"];
@@ -145,7 +150,8 @@ export type TaskParticipantsQueryResult =
   | { available: false; reason: "not-found" }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
-export interface UserTaskInspectionView extends TaskInspectionView {
+export interface UserTaskInspectionView extends Omit<TaskInspectionView, "history"> {
+  comments: TaskCommentView[];
   workspace: TaskWorkspaceView | null;
 }
 
@@ -230,13 +236,14 @@ export type TaskOverviewsQueryResult =
   | { available: false; reason: "column-not-found"; columnId: string };
 
 export type ArchivedTaskOverviewsQueryResult =
-  | { available: true; tasks: TaskOverviewView[] }
+  | { available: true; tasks: TaskOverviewView[]; nextCursor?: string | null }
+  | { available: false; reason: "invalid-page-size" | "invalid-cursor" }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
 export type TaskInspectionQueryResult =
   | { available: true; task: TaskInspectionView }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { available: false; reason: "not-found" };
+  | { available: false; reason: "not-found" | "invalid-target-words" };
 
 export type UserTaskInspectionQueryResult =
   | { available: true; task: UserTaskInspectionView }
@@ -254,7 +261,8 @@ export type TaskActivityQueryResult =
   | { available: false; reason: "not-found" };
 
 export type TaskAttachmentsQueryResult =
-  | { available: true; attachments: TaskAttachmentView[] }
+  | { available: true; attachments: TaskAttachmentView[]; nextCursor?: string | null }
+  | { available: false; reason: "invalid-page-size" | "invalid-cursor" }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { available: false; reason: "not-found" };
 
@@ -329,6 +337,7 @@ export interface EditTaskCommand {
 }
 
 export interface AddTaskCommentCommand {
+  pinned?: boolean;
   taskId: string;
   body: string;
   actor: Actor;
@@ -343,6 +352,21 @@ export interface MarkUserMentionAddressedCommand {
   actor: Actor & { kind: "user" };
   idempotencyKey: string;
 }
+
+export interface SetTaskCommentPinCommand {
+  taskId: string;
+  commentId: string;
+  pinned: boolean;
+  actor: Actor;
+  attemptId?: string;
+  callerTaskId?: string;
+  idempotencyKey: string;
+}
+
+export type SetTaskCommentPinResult =
+  | { accepted: true; taskId: string; commentId: string; pinned: boolean; changed: boolean }
+  | { accepted: false; reason: "not-found" | "archived-task" | "comment-not-found" | "idempotency-conflict" }
+  | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
 export interface ArchiveTaskCommand {
   taskId: string;

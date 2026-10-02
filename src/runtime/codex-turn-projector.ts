@@ -94,7 +94,7 @@ export async function projectCodexTurn(
           }
           if (
             event.type === "item.completed" &&
-            coordinationCall?.name === "coordination.report_permission_block" &&
+            (coordinationCall?.name === "coordination.report_permission_block" || coordinationCall?.name === "coordination.attempt.permission_block.report") &&
             coordinationCall.status === "completed"
           ) {
             permissionBlockSummary = permissionBlockFrom(item);

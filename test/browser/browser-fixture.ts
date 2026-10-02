@@ -206,9 +206,14 @@ export async function contrastRatio(locator: Locator): Promise<number> {
       return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
     };
     const foreground = luminance(style.color);
-    const background = luminance(style.backgroundColor === "rgba(0, 0, 0, 0)"
-      ? getComputedStyle(element.parentElement ?? document.documentElement).backgroundColor
-      : style.backgroundColor);
+    let backgroundElement: Element | null = element;
+    let backgroundColor = style.backgroundColor;
+    while (backgroundColor === "rgba(0, 0, 0, 0)" && backgroundElement?.parentElement !== null) {
+      backgroundElement = backgroundElement?.parentElement ?? null;
+      if (backgroundElement === null) break;
+      backgroundColor = getComputedStyle(backgroundElement).backgroundColor;
+    }
+    const background = luminance(backgroundColor);
     const lighter = Math.max(foreground, background);
     const darker = Math.min(foreground, background);
     return (lighter + 0.05) / (darker + 0.05);

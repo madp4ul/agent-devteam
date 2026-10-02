@@ -258,6 +258,14 @@ test("a coordination move progresses from requested facts to authoritative facts
 
 test("every known coordination tool has a typed presentation even when evidence is partial or malformed", () => {
   const expectedPresentations = {
+    "board.list": { kind: "coordination-inspection", scope: "board-summaries" },
+    "task.list": { kind: "coordination-inspection", scope: "tasks" },
+    "task.archive.list": { kind: "coordination-inspection", scope: "archived-tasks" },
+    "task.inspect": { kind: "coordination-inspection", scope: "task" },
+    "task.history.list": { kind: "coordination-inspection", scope: "task-activity" },
+    "task.attachment.list": { kind: "coordination-inspection", scope: "task-attachments" },
+    "attempt.context.inspect": { kind: "coordination-inspection", scope: "operating-context" },
+    "attempt.permission_block.report": { kind: "coordination-permission-block" },
     summarize_boards: { kind: "coordination-inspection", scope: "board-summaries" },
     list_tasks: { kind: "coordination-inspection", scope: "tasks" },
     list_archived_tasks: { kind: "coordination-inspection", scope: "archived-tasks" },
@@ -270,6 +278,8 @@ test("every known coordination tool has a typed presentation even when evidence 
     add_comment: { kind: "coordination-comment" },
     "task.comment.add": { kind: "coordination-comment" },
     "task.participant.list": { kind: "coordination-inspection", scope: "participants" },
+    "task.comment.pin": { kind: "coordination-comment-pin" },
+    "task.comment.unpin": { kind: "coordination-comment-pin" },
     "task.create": { kind: "coordination-task-change" },
     "task.edit": { kind: "coordination-task-change" },
     "task.move": { kind: "coordination-task-move" },
@@ -286,6 +296,14 @@ test("every known coordination tool has a typed presentation even when evidence 
     report_permission_block: { kind: "coordination-permission-block" },
   } as const satisfies Record<CoordinationToolName, { kind: string; scope?: string }>;
   const expectedIncompleteStatuses = {
+    "board.list": "succeeded",
+    "task.list": "succeeded",
+    "task.archive.list": "succeeded",
+    "task.inspect": "succeeded",
+    "task.history.list": "succeeded",
+    "task.attachment.list": "succeeded",
+    "attempt.context.inspect": "succeeded",
+    "attempt.permission_block.report": "failed",
     summarize_boards: "succeeded",
     list_tasks: "succeeded",
     list_archived_tasks: "succeeded",
@@ -298,6 +316,8 @@ test("every known coordination tool has a typed presentation even when evidence 
     add_comment: "failed",
     "task.comment.add": "failed",
     "task.participant.list": "succeeded",
+    "task.comment.pin": "failed",
+    "task.comment.unpin": "failed",
     "task.create": "failed",
     "task.edit": "failed",
     "task.move": "failed",

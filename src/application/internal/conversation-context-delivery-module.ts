@@ -3,14 +3,18 @@ import type { DatabaseSync } from "node:sqlite";
 import type { ActivationContextView } from "../runtime-contract.ts";
 import type { TaskView } from "../task-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
+import { TaskHistoryStore } from "./task-history-store.ts";
+import { historyCoverage } from "../history-contract.ts";
 
 export class ConversationContextDeliveryModule {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
+  readonly #history: TaskHistoryStore;
 
   constructor(database: CoordinationDatabase) {
     this.#owner = database;
     this.#database = database.connection;
+    this.#history = new TaskHistoryStore(database);
   }
 
   composeAndRecordActivationContext(activationId: string, task: TaskView): ActivationContextView {
@@ -25,6 +29,7 @@ export class ConversationContextDeliveryModule {
                 conversation.delivered_description,
                 conversation.delivered_comment_sequence,
                 conversation.delivered_activity_sequence,
+                conversation.delivered_pin_ids_json,
                 conversation.replacement_reason,
                 conversation.owning_agent_id,
                 conversation.current_thread_id,
@@ -38,6 +43,7 @@ export class ConversationContextDeliveryModule {
         delivered_description: string | null;
         delivered_comment_sequence: number;
         delivered_activity_sequence: number;
+        delivered_pin_ids_json: string;
         replacement_reason: string | null;
         owning_agent_id: string;
         current_thread_id: string | null;
@@ -48,66 +54,31 @@ export class ConversationContextDeliveryModule {
       }
 
       const initial = conversation.originating_activation_id === activationId;
-      const commentRows = this.#database.prepare(
-        `SELECT comment.sequence, comment.id,
-                CASE WHEN comment.actor_kind = 'agent'
-                           AND comment.actor_id = ?
-                           AND ? IS NOT NULL
-                           AND EXISTS (
-                             SELECT 1
-                             FROM attempts authored_attempt
-                             JOIN activations authored_activation
-                               ON authored_activation.id = authored_attempt.activation_id
-                             WHERE authored_attempt.id = comment.attempt_id
-                               AND authored_activation.conversation_id = ?
-                               AND authored_attempt.thread_id = ?
-                           )
-                     THEN 1 ELSE 0 END AS retained_by_current_thread
-         FROM task_comments comment
-         WHERE comment.task_id = ? AND (? = 1 OR comment.sequence > ?)
-         ORDER BY comment.sequence`,
-      ).all(
-        conversation.owning_agent_id,
-        conversation.current_thread_id,
-        conversation.id,
-        conversation.current_thread_id,
-        task.id,
-        initial ? 1 : 0,
-        conversation.delivered_comment_sequence,
-      ) as Array<{
-        sequence: number;
-        id: string;
-        retained_by_current_thread: number;
-      }>;
-      const activityRows = this.#database.prepare(
-        `SELECT sequence, id FROM activity_ledger
-         WHERE task_id = ? AND (? = 1 OR sequence > ?)
-         ORDER BY sequence`,
-      ).all(task.id, initial ? 1 : 0, conversation.delivered_activity_sequence) as Array<{
-        sequence: number;
-        id: string;
-      }>;
-      const commentIds = new Set(commentRows
-        .filter(({ retained_by_current_thread }) => initial || retained_by_current_thread === 0)
-        .map(({ id }) => id));
-      const retainedCommentIds = new Set(commentRows
-        .filter(({ retained_by_current_thread }) => !initial && retained_by_current_thread === 1)
-        .map(({ id }) => id));
-      const activityIds = new Set(activityRows.map(({ id }) => id));
+      const upper = this.#history.watermark(task.id);
+      const page = this.#history.activationPage(task.id, initial ? { comments: 0, activity: 0 } : {
+        comments: conversation.delivered_comment_sequence, activity: conversation.delivered_activity_sequence,
+      }, !initial && conversation.current_thread_id !== null ? {
+        conversationId: conversation.id, threadId: conversation.current_thread_id, agentId: conversation.owning_agent_id,
+      } : undefined);
+      const fullPage = this.#history.query({ taskId: task.id });
+      const recovery = this.#history.activationPage(task.id, { comments: 0, activity: 0 });
+      if (!page.available || !fullPage.available || !recovery.available) throw new Error("Activation history could not be captured");
+      const priorPins = new Set(JSON.parse(conversation.delivered_pin_ids_json) as string[]);
+      const currentPins = task.comments.filter(({ pinned }) => pinned);
+      const pinChanges = {
+        pinned: initial ? currentPins : currentPins.filter(({ id }) => !priorPins.has(id)),
+        unpinned: initial ? [] : [...priorPins].filter((id) => !currentPins.some((comment) => comment.id === id)),
+      };
+      const commentIds = new Set(page.history.records.filter(({ type }) => type === "comment").map(({ id }) => id));
+      const activityIds = new Set(page.history.records.filter(({ type }) => type !== "comment").map(({ id }) => id));
       const sourceInCurrentContext =
-        commentIds.has(conversation.source_event_id) || activityIds.has(conversation.source_event_id);
-      const sourceDeliveredPreviously = !sourceInCurrentContext && (
-        retainedCommentIds.has(conversation.source_event_id) ||
-        this.#database.prepare(
-          `SELECT 1 FROM task_comments
-           WHERE task_id = ? AND id = ? AND sequence <= ?`,
-        ).get(task.id, conversation.source_event_id, conversation.delivered_comment_sequence) !== undefined ||
-        this.#database.prepare(
-          `SELECT 1 FROM activity_ledger
-           WHERE task_id = ? AND id = ? AND sequence <= ?`,
-        ).get(task.id, conversation.source_event_id, conversation.delivered_activity_sequence) !== undefined
-      );
+        commentIds.has(conversation.source_event_id) || activityIds.has(conversation.source_event_id)
+          || pinChanges.pinned.some(({ id }) => id === conversation.source_event_id);
       const context: ActivationContextView = {
+        history: page.history,
+        fullHistory: historyCoverage(fullPage.history.total, page.history.returned),
+        pinChanges,
+        replacement: { description: task.description, history: recovery.history, pinnedComments: currentPins },
         kind: initial ? "initial" : "resumed",
         ...(initial || conversation.delivered_description !== task.description
           ? { description: task.description }
@@ -116,9 +87,7 @@ export class ConversationContextDeliveryModule {
         activity: task.activity.filter(({ id }) => activityIds.has(id)),
         sourceDelivery: sourceInCurrentContext
           ? "current-context"
-          : sourceDeliveredPreviously
-            ? "conversation-history"
-            : "activation-only",
+          : "activation-only",
         ...(initial && conversation.replacement_reason !== null
           ? { replacementReason: conversation.replacement_reason }
           : {}),
@@ -130,12 +99,14 @@ export class ConversationContextDeliveryModule {
         `UPDATE agent_conversations
          SET delivered_description = ?,
              delivered_comment_sequence = ?,
-             delivered_activity_sequence = ?
+             delivered_activity_sequence = ?,
+             delivered_pin_ids_json = ?
          WHERE id = ?`,
       ).run(
         task.description,
-        commentRows.at(-1)?.sequence ?? conversation.delivered_comment_sequence,
-        activityRows.at(-1)?.sequence ?? conversation.delivered_activity_sequence,
+        upper.comments,
+        upper.activity,
+        JSON.stringify(currentPins.map(({ id }) => id)),
         conversation.id,
       );
       return context;

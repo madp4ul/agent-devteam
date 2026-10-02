@@ -12,6 +12,7 @@ import type {
   AttemptTokenUsage,
 } from "../application/runtime-contract.ts";
 import { composeActivationPrompt } from "../application/activation-prompt.ts";
+import { historyCoverage } from "../application/history-contract.ts";
 import {
   type CodexSessionEvidenceReader,
   LocalCodexSessionEvidenceReader,
@@ -273,8 +274,15 @@ function withThreadContinuity(outcome: AgentRunOutcome, replaced: boolean): Agen
 
 function replacementRequest(request: AgentRunRequest): AgentRunRequest {
   const { resumeThreadId: _resumeThreadId, ...withoutResumeThread } = request;
+  const recovery = request.activationContext.replacement;
   return {
     ...withoutResumeThread,
+    ...(recovery === undefined ? {} : { activationContext: {
+      ...request.activationContext, kind: "initial" as const, description: recovery.description,
+      history: recovery.history, pinChanges: { pinned: recovery.pinnedComments, unpinned: [] },
+      ...(request.activationContext.fullHistory === undefined ? {} : {
+        fullHistory: historyCoverage(request.activationContext.fullHistory.total, recovery.history.returned) }),
+    } }),
     attempt: { ...request.attempt, thread: "replaced" },
   };
 }

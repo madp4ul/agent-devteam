@@ -4,6 +4,8 @@ import type { DatabaseSync } from "node:sqlite";
 import type {
   AddTaskCommentCommand,
   AddTaskCommentResult,
+  SetTaskCommentPinCommand,
+  SetTaskCommentPinResult,
   Actor,
   BoardMutationResult,
   CreateTaskCommand,
@@ -569,6 +571,7 @@ export class TaskCommandStore {
       }
       const attemptId = command.actor.kind === "agent" ? command.attemptId : undefined;
       const comment = {
+        ...(command.pinned === true ? { pinned: true as const } : {}),
         id: randomUUID(),
         body: command.body,
         actor: command.actor,
@@ -593,6 +596,12 @@ export class TaskCommandStore {
           originTask?.id ?? null,
           originTask?.title ?? null,
         );
+      if (command.pinned === true) {
+        this.#database.prepare("UPDATE task_comments SET pinned = 1 WHERE id = ?").run(comment.id);
+        this.#activityJournal.append(command.taskId, "comment.pinned", command.actor, {
+          commentId: comment.id, ...this.agentActivityProvenance(command, originTask),
+        });
+      }
       const mentions = this.readMentionTargets(comment.body);
       this.createMentionActivations(command.taskId, comment.id, mentions.agentIds);
       this.createUserMentionAttention(
@@ -606,7 +615,37 @@ export class TaskCommandStore {
       if (updated === undefined) throw new Error("Commented task could not be read back");
       return { accepted: true, task: updated, comment };
     }, (result) => result.accepted, {
-      request: JSON.stringify({ taskId: command.taskId, body: command.body }),
+      request: JSON.stringify({ taskId: command.taskId, body: command.body, ...(command.pinned ? { pinned: true } : {}) }),
+      onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
+    });
+  }
+
+  setTaskCommentPin(command: SetTaskCommentPinCommand): SetTaskCommentPinResult {
+    const origin = this.agentCommandOrigin(command);
+    return this.#idempotentCommands.execute<SetTaskCommentPinResult>({
+      kind: command.pinned ? "pin-task-comment" : "unpin-task-comment",
+      scope: [origin?.id ?? command.taskId], caller: [command.actor.kind, command.actor.id],
+      idempotencyKey: command.idempotencyKey,
+    }, () => {
+      const task = this.#projections.readTask(command.taskId);
+      if (task === undefined) return { accepted: false, reason: "not-found" };
+      if (this.taskIsReadOnly(task)) return { accepted: false, reason: "archived-task" };
+      if (command.actor.kind === "agent" && !this.#projections.isTaskInspectableByAgent(task.id)) {
+        return { accepted: false, reason: "not-found" };
+      }
+      const comment = this.#database.prepare("SELECT pinned FROM task_comments WHERE task_id = ? AND id = ?")
+        .get(task.id, command.commentId) as { pinned: number } | undefined;
+      if (comment === undefined) return { accepted: false, reason: "comment-not-found" };
+      const changed = (comment.pinned === 1) !== command.pinned;
+      if (changed) {
+        this.#database.prepare("UPDATE task_comments SET pinned = ? WHERE id = ?").run(command.pinned ? 1 : 0, command.commentId);
+        this.#activityJournal.append(task.id, command.pinned ? "comment.pinned" : "comment.unpinned", command.actor, {
+          commentId: command.commentId, ...this.agentActivityProvenance(command, origin),
+        });
+      }
+      return { accepted: true, taskId: task.id, commentId: command.commentId, pinned: command.pinned, changed };
+    }, (result) => result.accepted, {
+      request: JSON.stringify({ taskId: command.taskId, commentId: command.commentId, pinned: command.pinned }),
       onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
     });
   }

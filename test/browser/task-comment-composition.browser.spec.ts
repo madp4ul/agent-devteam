@@ -339,6 +339,7 @@ test("comment composer stays beside a long timeline without covering its final e
     for (let index = 0; index < 18; index += 1) {
       detail.task.comments.push({
         id: `sticky-comment-${index}`,
+        originTask: { id: "T-0001", title: detail.task.title },
         body: index === 17
           ? "Final timeline reply source asks @user for a decision."
           : `Timeline reply source ${index + 1} remains readable while composing.`,

@@ -89,7 +89,10 @@ test("a participant consults the same agent on another task without duplicating 
   assert.equal(recipient.attempt.thread, "fresh");
   assert.ok("originTask" in recipient.sourceEvent);
   assert.deepEqual(recipient.sourceEvent.originTask, added.comment.originTask);
-  assert.match(composeActivationPrompt(recipient), /from task T-0001 \(Child implementation\)/);
+  const promptData = [...composeActivationPrompt(recipient).matchAll(/```json\n([\s\S]*?)\n```/gu)]
+    .map((match) => JSON.parse(match[1]!));
+  assert.deepEqual(promptData[0].history.records.find((entry: { id: string }) => entry.id === added.comment.id).author.originTask,
+    { id: origin.task.id, title: "Child implementation" });
   const reply = application.addTaskComment({
     taskId: origin.task.id, body: "@implementer Use the documented input format.",
     actor: { kind: "agent", id: "implementer" }, attemptId: recipient.attemptId,
@@ -106,7 +109,7 @@ test("a participant consults the same agent on another task without duplicating 
   await application.waitForAutomationIdle();
   await application.close();
   application = await CoordinationApplication.start(options);
-  const persisted = application.queryTaskInspection(destination.task.id);
+  const persisted = application.queryTaskInspectionForUser(destination.task.id);
   assert.ok(persisted.available);
   assert.deepEqual(persisted.task.comments[0]?.originTask, added.comment.originTask);
   assert.equal(persisted.task.comments[0]?.id, added.comment.id);

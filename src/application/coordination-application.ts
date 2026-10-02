@@ -66,6 +66,8 @@ import type {
 import type {
   AddTaskCommentCommand,
   AddTaskCommentResult,
+  SetTaskCommentPinCommand,
+  SetTaskCommentPinResult,
   ArchiveCompletedTasksCommand,
   ArchiveCompletedTasksResult,
   ArchivedTaskOverviewsQueryResult,
@@ -107,6 +109,7 @@ import type {
 } from "./task-contract.ts";
 import type { UserBoardProjection } from "./user-board-contract.ts";
 import type { ProcessCostStatisticsView } from "./process-cost-statistics-contract.ts";
+import type { UserTaskInspectionView } from "./task-contract.ts";
 import type {
   UserRelatedTaskView,
   UserTimelineRelatedTaskView,
@@ -116,12 +119,12 @@ import type {
 import { aggregateTokenCostSummaries } from "./token-cost.ts";
 
 function describeAgentInspectableTaskContent(
-  task: TaskInspectionView,
+  task: Omit<UserTaskInspectionView, "workspace">,
   activity: TaskActivityView[],
   attachments: TaskAttachmentView[],
 ): AgentInspectableTaskContentView {
   return {
-    taskFields: Object.keys(task) as Array<keyof TaskInspectionView>,
+    taskFields: [...Object.keys(task).filter((key) => key !== "comments"), "history"] as Array<keyof TaskInspectionView>,
     commentIds: task.comments.map(({ id }) => id),
     relationshipIds: task.relationships.map(({ id }) => id),
     activityIds: activity.map(({ id }) => id),
@@ -557,8 +560,8 @@ export class CoordinationApplication {
     return tasks;
   }
 
-  queryArchivedTaskOverviews(): ArchivedTaskOverviewsQueryResult {
-    return this.#discovery.queryArchivedTaskOverviews();
+  queryArchivedTaskOverviews(query?: { pageSize?: number; cursor?: string }): ArchivedTaskOverviewsQueryResult {
+    return this.#discovery.queryArchivedTaskOverviews(query);
   }
 
   queryProcessCostStatistics(): ProcessCostStatisticsView {
@@ -585,8 +588,12 @@ export class CoordinationApplication {
     };
   }
 
-  queryTaskInspection(taskId: string): TaskInspectionQueryResult {
-    return this.#discovery.queryTaskInspection(taskId);
+  queryTaskHistory(query: import("./history-contract.ts").TaskHistoryQuery): import("./history-contract.ts").TaskHistoryQueryResult {
+    return this.#discovery.queryTaskHistory(query);
+  }
+
+  queryTaskInspection(taskId: string, targetWords?: number): TaskInspectionQueryResult {
+    return this.#discovery.queryTaskInspection(taskId, targetWords);
   }
 
   queryTaskInspectionForUser(taskId: string): UserTaskInspectionQueryResult {
@@ -709,8 +716,8 @@ export class CoordinationApplication {
     return this.#discovery.queryTaskActivity(taskId);
   }
 
-  queryTaskAttachments(taskId: string): TaskAttachmentsQueryResult {
-    return this.#discovery.queryTaskAttachments(taskId);
+  queryTaskAttachments(taskId: string, query?: { pageSize?: number; cursor?: string }): TaskAttachmentsQueryResult {
+    return this.#discovery.queryTaskAttachments(taskId, query);
   }
 
   async queryAttemptTranscript(attemptId: string): Promise<AttemptTranscriptQueryResult> {
@@ -973,6 +980,10 @@ export class CoordinationApplication {
       this.#automation.kick();
     }
     return result;
+  }
+
+  setTaskCommentPin(command: SetTaskCommentPinCommand): SetTaskCommentPinResult {
+    return this.configurationErrorRejection() ?? this.#persistence.taskCommands.setTaskCommentPin(command);
   }
 
   markUserMentionAddressed(

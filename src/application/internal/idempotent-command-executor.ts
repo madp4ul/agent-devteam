@@ -23,6 +23,8 @@ type SingleScopeCommandKind =
   | "edit-task"
   | "move-task"
   | "add-task-comment"
+  | "pin-task-comment"
+  | "unpin-task-comment"
   | "archive-task"
   | "archive-completed-tasks"
   | "unarchive-task";

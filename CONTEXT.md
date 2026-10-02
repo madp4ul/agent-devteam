@@ -5,6 +5,11 @@ development work through configurable boards instead of direct conversation.
 
 ## Language
 
+**Activation composition checkpoint**:
+The boundary through which a participant's task context was captured for its
+preceding activation. It describes a coherent snapshot interval, not proof that
+the participant read every record within it.
+
 **Coordination framework**:
 The system that activates agents and lets them coordinate work through boards,
 tasks, comments, and task relationships.
@@ -146,6 +151,12 @@ with the same agent ID on different tasks have independent conversation memory.
 The participant's task from which an agent authored a comment, distinct from the
 destination task where the comment belongs. An unknown historical origin is not
 an assertion that the author belonged to the destination task.
+
+**Pinned comment**:
+An immutable task comment marked as shared guidance relevant to current work.
+Users and participants may curate this set on mutable tasks. Unpinning removes
+emphasis without retracting or deleting the comment. Pin changes are audited but
+do not activate agents or replay mentions.
 
 **Agent run**:
 One active execution of an agent for a task. Several runs of the same agent may

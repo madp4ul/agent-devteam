@@ -154,7 +154,7 @@ test("authenticated cross-task comments preserve caller scope and normalize curr
   const editActivity = application.queryTask(target.task.id);
   assert.ok(editActivity.available);
   assert.deepEqual(editActivity.task.activity.find((entry) => entry.type === "task.edited")?.actor, { kind: "agent", id: "implementer" });
-  const destination = application.queryTaskInspection(target.task.id);
+  const destination = application.queryTaskInspectionForUser(target.task.id);
   assert.ok(destination.available);
   assert.equal(destination.task.comments.length, 1);
   assert.deepEqual(destination.task.comments[0]?.actor, { kind: "agent", id: "implementer" });
@@ -289,16 +289,17 @@ boards:
   assert.deepEqual(
     listed.tools.map((tool) => tool.name),
     [
-      "summarize_boards",
-      "list_tasks",
-      "list_archived_tasks",
-      "inspect_task",
-      "list_task_activity",
-      "list_task_attachments",
+      "board.list",
+      "task.list",
+      "task.archive.list",
+      "task.inspect",
+      "task.history.list",
+      "task.attachment.list",
       "task.participant.list",
-      "inspect_current_task",
-      "inspect_operating_context",
+      "attempt.context.inspect",
       "task.comment.add",
+      "task.comment.pin",
+      "task.comment.unpin",
       "task.create",
       "task.edit",
       "task.move",
@@ -307,7 +308,7 @@ boards:
       "task.dependency.add",
       "task.relationship.resume_agent.update",
       "task.relationship.remove",
-      "report_permission_block",
+      "attempt.permission_block.report",
     ],
   );
   const reference = await readFile(
@@ -319,42 +320,49 @@ boards:
     listed.tools.map((tool) => tool.name),
   );
   const toolByName = new Map(listed.tools.map((tool) => [tool.name, tool]));
+  assert.equal(listed.tools.length, 20);
+  for (const tool of listed.tools) {
+    const properties = tool.inputSchema.properties ?? {};
+    assert.equal("actor" in properties || "attemptId" in properties || "conversationId" in properties || "callerTaskId" in properties, false);
+    if (tool.name.startsWith("task.") && "taskId" in properties) {
+      assert.ok(tool.inputSchema.required?.includes("taskId"), `${tool.name} requires an explicit selector`);
+    }
+  }
+  assert.ok(!listed.tools.some(({ name }) => /current|interrupt|retry|dismiss|unarchive|settings|search/u.test(name)));
   assert.deepEqual(
     Object.fromEntries(
       [
-        "summarize_boards",
-        "list_archived_tasks",
-        "inspect_task",
-        "list_task_activity",
-        "list_task_attachments",
+        "board.list",
+        "task.archive.list",
+        "task.inspect",
+        "task.history.list",
+        "task.attachment.list",
         "task.participant.list",
-        "inspect_current_task",
-        "inspect_operating_context",
+        "attempt.context.inspect",
       ].map((name) => [
         name,
         Object.keys(toolByName.get(name)?.inputSchema.properties ?? {}),
       ]),
     ),
     {
-      summarize_boards: [],
-      list_archived_tasks: [],
-      inspect_task: ["taskId"],
-      list_task_activity: ["taskId"],
-      list_task_attachments: ["taskId"],
+      "board.list": [],
+      "task.archive.list": ["pageSize", "cursor"],
+      "task.inspect": ["taskId", "targetWords"],
+      "task.history.list": ["taskId", "targetWords", "cursor"],
+      "task.attachment.list": ["taskId", "pageSize", "cursor"],
       "task.participant.list": ["taskId"],
-      inspect_current_task: [],
-      inspect_operating_context: [],
+      "attempt.context.inspect": [],
     },
   );
   assert.deepEqual(
-    Object.keys(toolByName.get("list_tasks")?.inputSchema.properties ?? {}),
+    Object.keys(toolByName.get("task.list")?.inputSchema.properties ?? {}),
     ["boardId", "columnIds", "pageSize", "cursor"],
   );
-  assert.deepEqual(toolByName.get("list_tasks")?.inputSchema.required, [
+  assert.deepEqual(toolByName.get("task.list")?.inputSchema.required, [
     "boardId",
     "columnIds",
   ]);
-  const listTaskProperties = toolByName.get("list_tasks")?.inputSchema.properties as
+  const listTaskProperties = toolByName.get("task.list")?.inputSchema.properties as
     | Record<string, { minItems?: number; maximum?: number }>
     | undefined;
   assert.equal(listTaskProperties?.columnIds?.minItems, 1);
@@ -362,6 +370,7 @@ boards:
   assert.deepEqual(Object.keys(toolByName.get("task.comment.add")?.inputSchema.properties ?? {}), [
     "taskId",
     "body",
+    "pinned",
     "idempotencyKey",
   ]);
   assert.deepEqual(Object.keys(toolByName.get("task.move")?.inputSchema.properties ?? {}), [
@@ -395,17 +404,17 @@ boards:
     ["taskId", "relationshipId", "idempotencyKey"],
   );
   assert.deepEqual(
-    Object.keys(toolByName.get("report_permission_block")?.inputSchema.properties ?? {}),
+    Object.keys(toolByName.get("attempt.permission_block.report")?.inputSchema.properties ?? {}),
     ["summary"],
   );
   assert.equal(
-    ["task.create", "report_permission_block"].some(
+    ["task.create", "attempt.permission_block.report"].some(
       (name) => "taskId" in (toolByName.get(name)?.inputSchema.properties ?? {}),
     ),
     false,
   );
   const unavailableOperatingContext = await client.callTool({
-    name: "inspect_operating_context",
+    name: "attempt.context.inspect",
     arguments: {},
   });
   assert.equal(unavailableOperatingContext.isError, true);
@@ -414,7 +423,7 @@ boards:
     reason: "invalid-attempt-scope",
   });
   const permissionReport = await client.callTool({
-    name: "report_permission_block",
+    name: "attempt.permission_block.report",
     arguments: { summary: "A required protected action needs user approval." },
   });
   assert.deepEqual(JSON.parse(textContent(permissionReport.content)), {
@@ -422,7 +431,7 @@ boards:
     taskId: created.task.id,
   });
 
-  const summary = await client.callTool({ name: "summarize_boards", arguments: {} });
+  const summary = await client.callTool({ name: "board.list", arguments: {} });
   const summaryValue = JSON.parse(textContent(summary.content)) as {
     boards: Array<{ columns: Array<{ id: string; taskCount: number }> }>;
   };
@@ -440,7 +449,7 @@ boards:
   assert.doesNotMatch(textContent(summary.content), /Complete context|current task identity/);
 
   const firstPage = await client.callTool({
-    name: "list_tasks",
+    name: "task.list",
     arguments: { boardId: "delivery", columnIds: ["implementation"], pageSize: 2 },
   });
   const firstPageValue = JSON.parse(textContent(firstPage.content)) as {
@@ -452,7 +461,7 @@ boards:
   assert.doesNotMatch(textContent(firstPage.content), /Complete context/);
 
   const secondPage = await client.callTool({
-    name: "list_tasks",
+    name: "task.list",
     arguments: {
       boardId: "delivery",
       columnIds: ["implementation"],
@@ -468,7 +477,7 @@ boards:
   assert.equal(secondPageValue.nextCursor, null);
 
   const invalidListing = await client.callTool({
-    name: "list_tasks",
+    name: "task.list",
     arguments: { boardId: "delivery", columnIds: ["missing"] },
   });
   assert.equal(invalidListing.isError, true);
@@ -478,7 +487,7 @@ boards:
     columnId: "missing",
   });
   const invalidCursor = await client.callTool({
-    name: "list_tasks",
+    name: "task.list",
     arguments: {
       boardId: "delivery",
       columnIds: ["implementation"],
@@ -492,7 +501,7 @@ boards:
   });
 
   const missingTask = await client.callTool({
-    name: "inspect_task",
+    name: "task.inspect",
     arguments: { taskId: "T-9999" },
   });
   assert.equal(missingTask.isError, true);
@@ -502,7 +511,7 @@ boards:
   });
 
   const inspectedOtherTask = await client.callTool({
-    name: "inspect_task",
+    name: "task.inspect",
     arguments: { taskId: "T-0002" },
   });
   const inspectedOtherTaskValue = JSON.parse(textContent(inspectedOtherTask.content)) as {
@@ -515,25 +524,26 @@ boards:
   assert.equal("activity" in inspectedOtherTaskValue.task, false);
 
   const activity = await client.callTool({
-    name: "list_task_activity",
+    name: "task.history.list",
     arguments: { taskId: "T-0002" },
   });
   const attachments = await client.callTool({
-    name: "list_task_attachments",
+    name: "task.attachment.list",
     arguments: { taskId: "T-0002" },
   });
   assert.match(textContent(activity.content), /task.created/);
   assert.deepEqual(JSON.parse(textContent(attachments.content)), {
     available: true,
     attachments: [],
+    nextCursor: null,
   });
 
   const collaborators = await client.callTool({ name: "task.participant.list", arguments: { taskId: "current" } });
   assert.match(textContent(collaborators.content), /Implementation Agent/);
   assert.doesNotMatch(textContent(collaborators.content), /Implement and hand off/);
 
-  const inspected = await client.callTool({ name: "inspect_current_task", arguments: {} });
-  const inspectedTask = JSON.parse(textContent(inspected.content)) as { id: string; revision: number };
+  const inspected = await client.callTool({ name: "task.inspect", arguments: { taskId: "current" } });
+  const inspectedTask = (JSON.parse(textContent(inspected.content)) as { task: { id: string; revision: number } }).task;
   assert.equal(inspectedTask.id, created.task.id);
 
   const dependencyArguments = {
@@ -709,6 +719,14 @@ boards:
     commentId: commentPayload.commentId,
   });
   assert.deepEqual(JSON.parse(textContent(repeatedCommentResult.content)), commentPayload);
+  for (const action of ["pin", "unpin"] as const) {
+    const arguments_ = { taskId: "current", commentId: commentPayload.commentId, idempotencyKey: `mcp-${action}` };
+    const result = await client.callTool({ name: `task.comment.${action}`, arguments: arguments_ });
+    assert.deepEqual(JSON.parse(textContent(result.content)), {
+      accepted: true, taskId: created.task.id, commentId: commentPayload.commentId, pinned: action === "pin", changed: true,
+    });
+    assert.deepEqual(await client.callTool({ name: `task.comment.${action}`, arguments: arguments_ }), result);
+  }
   const moveResult = await client.callTool({
     name: "task.move",
     arguments: {
@@ -948,7 +966,7 @@ boards:
   t.after(() => client.close());
 
   const operatingContext = await client.callTool({
-    name: "inspect_operating_context",
+    name: "attempt.context.inspect",
     arguments: {},
   });
   assert.notEqual(operatingContext.isError, true);
@@ -963,7 +981,7 @@ boards:
   };
   assert.equal(operatingPayload.attemptId, request.attemptId);
   assert.equal(operatingPayload.taskId, request.task.id);
-  assert.match(operatingPayload.frameworkInstructions, /durable record/);
+  assert.match(operatingPayload.frameworkInstructions, /shared coordination record/);
   assert.equal(
     operatingPayload.process.guidance,
     "Let mentioned specialists claim responsibility explicitly.",
@@ -1048,8 +1066,8 @@ function controlledMcpClient(options: CodexClientOptionsLike) {
         const client = new Client({ name: "controlled-codex-adapter", version: "1.0.0" });
         await client.connect(transport);
         try {
-          const inspected = await client.callTool({ name: "inspect_current_task", arguments: {} });
-          const current = JSON.parse(textContent(inspected.content)) as { revision: number };
+          const inspected = await client.callTool({ name: "task.inspect", arguments: { taskId: "current" } });
+          const current = (JSON.parse(textContent(inspected.content)) as { task: { revision: number } }).task;
           const commented = await client.callTool({
             name: "task.comment.add",
             arguments: {
@@ -1070,7 +1088,7 @@ function controlledMcpClient(options: CodexClientOptionsLike) {
           return {
             events: codexEvents(
               { type: "thread.started", thread_id: "controlled-assembled-thread" },
-              completedMcpItem("inspect_current_task", inspected.content),
+              completedMcpItem("task.inspect", inspected.content),
               completedMcpItem("task.comment.add", commented.content),
               completedMcpItem("task.move", moved.content),
               {

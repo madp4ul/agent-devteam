@@ -108,8 +108,8 @@ test("a later-satisfied mention can complete inertly without duplicate coordinat
   const outcome = await runtime.run(satisfied, { started() {} });
 
   assert.equal(outcome.status, "completed");
-  assert.match(prompt, /Later task activity after the activation source:[\s\S]*outcome: boundary verified/);
-  assert.match(prompt, /finish without manufacturing another comment, move, mention, or attention request merely to narrate status/);
+  assert.match(prompt, /"outcome": "boundary verified"/);
+  assert.match(prompt, /later changes can make the request obsolete/);
   assert.deepEqual(await runtime.read(satisfied.attemptId), [
     { kind: "message", role: "agent", text: "Later task activity already satisfied the request." },
   ]);
@@ -202,9 +202,9 @@ test("each activation receives automatic approval review and exact Git trust wit
   assert.match(prompt, /Earlier authored comment\./);
   assert.match(prompt, /dependency/);
   assert.doesNotMatch(prompt, /# Attempt continuation/);
-  assert.match(prompt, /`@user` requests explicit human attention/);
-  assert.doesNotMatch(prompt, /local-user/);
-  assert.match(prompt, /Author: @user/);
+  assert.match(prompt, /@user creates user attention/);
+  assert.match(prompt, /"id": "local-user"/);
+  assert.match(prompt, /"kind": "user"/);
 });
 
 test("an unusable interrupted thread falls back to a fresh thread with honest context", async () => {
@@ -246,6 +246,7 @@ test("an unusable interrupted thread falls back to a fresh thread with honest co
   };
   recovering.task.comments.push({
     id: "comment-known-before-replacement",
+    pinned: true,
     body: "Self-authored context must return after thread replacement.",
     actor: { kind: "agent", id: recovering.agent.id },
     occurredAt: "2026-08-12T09:10:00.000Z",
@@ -256,6 +257,12 @@ test("an unusable interrupted thread falls back to a fresh thread with honest co
     comments: [],
     activity: [],
     sourceDelivery: "conversation-history",
+    history: { records: [], returned: { words: 0, records: 0, comments: 0 },
+      remaining: { words: 0, records: 0, comments: 0 }, total: { words: 0, records: 0, comments: 0 }, nextCursor: null, projection: "activation-updates" },
+    pinChanges: { pinned: [], unpinned: [] },
+    replacement: { description: recovering.task.description, history: { records: [], returned: { words: 0, records: 0, comments: 0 },
+      remaining: { words: 0, records: 0, comments: 0 }, total: { words: 0, records: 0, comments: 0 }, nextCursor: null, projection: "history" },
+      pinnedComments: recovering.task.comments.filter(({ pinned }) => pinned) },
   };
 
   const outcome = await runtime.run(recovering, { started() {} });
@@ -263,7 +270,7 @@ test("an unusable interrupted thread falls back to a fresh thread with honest co
   assert.equal(freshStarts, 1);
   assert.equal(outcome.threadId, "thread-replacement");
   assert.equal(outcome.threadContinuity, "replaced");
-  assert.match(prompt, /Thread: replaced/);
+  assert.match(prompt, /"thread": "replaced"/);
   assert.match(prompt, /previous host stopped/i);
   assert.match(prompt, /Self-authored context must return after thread replacement\./);
 });
@@ -340,7 +347,7 @@ test("a resumed stream that fails before identity falls back to one fresh thread
   });
   assert.equal(freshStarts, 1);
   assert.equal(startedThreadId, "thread-lazy-replacement");
-  assert.match(prompt, /Thread: replaced/);
+  assert.match(prompt, /"thread": "replaced"/);
   assert.match(prompt, /FULL-DESCRIPTION-END/);
   assert.match(prompt, /Earlier authored comment\./);
   assert.match(prompt, /Restore this self-authored context after lazy replacement\./);
@@ -784,6 +791,7 @@ test("streamed Codex failures become failed attempt outcomes with retained threa
 });
 
 test("an explicit coordination permission report becomes a permission-blocked outcome", async () => {
+  for (const toolName of ["report_permission_block", "attempt.permission_block.report"]) {
   const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
@@ -796,7 +804,7 @@ test("an explicit coordination permission report becomes a permission-blocked ou
               item: {
                 type: "mcp_tool_call",
                 server: "coordination",
-                tool: "report_permission_block",
+                tool: toolName,
                 status: "completed",
                 arguments: {
                   summary: "Writing the protected file requires user approval.",
@@ -818,6 +826,7 @@ test("an explicit coordination permission report becomes a permission-blocked ou
       threadId: "thread-permission",
     },
   );
+  }
 });
 
 test("an exception after thread startup becomes an inspectable failed outcome", async () => {
