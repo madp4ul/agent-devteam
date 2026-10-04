@@ -20,11 +20,23 @@ modelPricing:
       cacheWriteInput: 6.25
       output: 30
 agents:
+  # Optional standing authorization for native Auto-review. Keep scopes specific;
+  # these entries do not expand sandbox access or replace explicit user approval.
+  # The routine entries below illustrate the field; many will not trigger review
+  # and have not been shown to prevent real permission interruptions. In a real
+  # process, focus allowances on recurring actions that need review, rather than
+  # copying every role duty. Name the action, target and purpose: for example,
+  # dependency downloads from a configured registry or writes to a specific
+  # build cache outside the task worktree. Review can also concern workspace
+  # actions; an external path alone does not determine whether review is needed.
   - id: architecture-designer
     name: Architecture Designer
     role: Designs implementation boundaries before coding begins
     summary: Produces an explicit architecture plan and answers design consultations.
     instructions: ./agents/architecture-designer.md
+    allowances:
+      - Inspect project files and local Git status, diffs, and history for the assigned design task.
+      - Write the assigned architecture plan and supporting documentation in the task workspace.
     model: gpt-5.6-luna
     reasoningEffort: medium
   - id: implementation-agent
@@ -32,6 +44,13 @@ agents:
     role: Implements approved plans and requested revisions
     summary: Builds scoped changes with tests and records the verified result.
     instructions: ./agents/implementation-agent.md
+    allowances:
+      - Edit project files in the task workspace to implement the approved plan or requested revisions.
+      - Run project-defined tests, type checks, and builds for the assigned work, including their local generated artifacts.
+      - Restore dependencies declared by the project using its package manager into local project dependency directories.
+      # Adapt these commented examples to actual approved targets before use:
+      # - Download only project-declared dependencies from <approved registry> for the assigned build.
+      # - Write generated build artifacts only to <specific external cache directory> for the assigned tests.
     model: gpt-5.6-luna
     reasoningEffort: medium
   - id: code-reviewer
@@ -39,6 +58,9 @@ agents:
     role: Reviews implementation correctness and repository standards
     summary: Independently reviews code and returns concrete findings or approval.
     instructions: ./agents/code-reviewer.md
+    allowances:
+      - Inspect project files and local Git status, diffs, and history for the assigned review.
+      - Run project-defined tests, type checks, and builds to verify the reviewed changes, including their local generated artifacts.
     model: gpt-5.6-luna
     reasoningEffort: medium
   - id: architecture-verifier
@@ -46,6 +68,9 @@ agents:
     role: Verifies the result against the intended architecture
     summary: Checks boundaries and future-change assumptions after code review.
     instructions: ./agents/architecture-verifier.md
+    allowances:
+      - Inspect project files and local Git diffs and history to verify the assigned architecture plan.
+      - Run project-defined checks relevant to the architecture verification, including their local generated artifacts.
     model: gpt-5.6-luna
     reasoningEffort: medium
   - id: merge-agent
@@ -53,6 +78,9 @@ agents:
     role: Integrates only user-approved work
     summary: Verifies approval and integration before completing the task.
     instructions: ./agents/merge-agent.md
+    allowances:
+      - Inspect local Git status, diffs, and history to verify the assigned work and its visible user approval.
+      - Run project-defined tests and builds to verify the approved integration, including their local generated artifacts.
     model: gpt-5.6-luna
     reasoningEffort: medium
 boards:

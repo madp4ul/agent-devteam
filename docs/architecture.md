@@ -240,6 +240,18 @@ deadline, reconciles on resume and settlement, and cancels outstanding timer
 waits when paused, kicked, or closed. [ADR 0023](adr/0023-recover-tasks-without-continuation-paths.md)
 records the continuation-based policy and its limits.
 
+Applied agent definitions may include optional user-authored reviewer allowances.
+Released migration 0009 retains that guidance with applied agents and snapshots
+its process version and exact entries at attempt claim. Runtime lifecycle reports
+persist whether native delivery was configured or unavailable, plus policy hashes
+or a compatibility reason. The Codex adapter owns read-only configuration/catalog
+inspection, inherited-policy composition, and narrowly verified template repair;
+it does not introduce another reviewer or widen agent capabilities. Unverified
+versions, changed templates or managed requirements keep baseline Auto-review.
+Only recognized optional-config rejection before any event permits baseline
+retry; denials and runs that may have started retain ordinary recovery rules.
+See [ADR 0024](adr/0024-treat-reviewer-allowances-as-an-optional-runtime-add-on.md).
+
 For each run, the Codex adapter starts or resumes a thread in the task's Git
 workspace. A per-attempt MCP adapter lets that agent inspect relevant project
 coordination state. Task content, movement, comments, and outgoing relationship

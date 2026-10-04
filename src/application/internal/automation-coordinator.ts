@@ -398,6 +398,9 @@ export class AutomationCoordinator {
           },
         },
         {
+          reviewerPolicyConfigured: (configuration) => {
+            this.#activeAttempts.recordReviewerPolicyConfigured(attempt.id, configuration);
+          },
           started: (threadId) => {
             if (threadId !== undefined) {
               this.#activeAttempts.recordThreadStarted(attempt.id, threadId);

@@ -1,10 +1,10 @@
 # 04 — Reduce routine command permission interruptions
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Blocked by:** None
-**Labels:** ready-for-agent
-**Next step:** Implement the agreed optional reviewer add-on with baseline fallback.
+**Labels:** user-review
+**Next step:** User review.
 **Specification:** [Optional per-agent reviewer allowances](../04-reviewer-allowances-spec.md).
 
 ## Accepted decision — 2026-10-04
@@ -22,15 +22,15 @@ Do not repeat the research or reopen a design interview as a prerequisite.
 
 ## Implementation acceptance criteria
 
-- [ ] Validate optional agent allowance guidance and include it in process versions.
-- [ ] Use the authoritative applied process; isolate selected-agent guidance and
+- [x] Validate optional agent allowance guidance and include it in process versions.
+- [x] Use the authoritative applied process; isolate selected-agent guidance and
       retain per-attempt provenance through fresh, resumed and recovered execution.
-- [ ] Upgrade to a verified compatible SDK and isolate native policy integration.
-- [ ] Preserve inherited/managed policy and complete current reviewer instructions;
+- [x] Upgrade to a verified compatible SDK and isolate native policy integration.
+- [x] Preserve inherited/managed policy and complete current reviewer instructions;
       detect missing delivery rather than treating config acceptance as proof.
-- [ ] Fall back to baseline on recognized add-on incompatibility, without replaying
+- [x] Fall back to baseline on recognized add-on incompatibility, without replaying
       work that may have started or retrying reviewer denials with weaker guidance.
-- [ ] Verify lifecycle, composition, delivery and fallback with meaningful coverage;
+- [x] Verify lifecycle, composition, delivery and fallback with meaningful coverage;
       document the implemented runtime/domain changes and remaining limitations.
 
 ## Problem and goal
@@ -136,3 +136,39 @@ superseded; delivery stays in this ticket and the current intake.
   but cannot establish the reported cause or a model regression. Findings will
   be retained in [research notes](../research/routine-permission-interruptions.md).
 - 2026-09-20: User-described GitHub issue. No runtime change or workaround applied.
+
+## Answer
+
+2026-10-04: Implemented the optional native reviewer add-on. Process agents accept
+`allowances` lists; the applied definition and semantic version own their source.
+Released migration 0009 retains applied guidance and per-attempt snapshots.
+Runtime lifecycle records configuration availability, compatibility reason and
+policy/template hashes without copying private reviewer policy into attempt history.
+
+Pinned SDK/CLI 0.160.0. The isolated runtime adapter reads effective native config
+and catalog metadata, preserves inherited local extra guidance, and repairs only
+the exact verified public template's missing extra-policy slot. Native templates
+with the correct slot need no override. Unknown versions/providers/templates,
+managed requirements or failed inspection use baseline approval behavior.
+A recognized optional-config rejection may retry baseline only before any event;
+reviewer denials and work that may have started are never downgraded or replayed.
+No new sandbox/network/Git capability or automatic user assent was introduced.
+
+Fresh, resumed and replacement turns use current selected-agent guidance. Tests
+verify that unapplied file edits cannot alter running-host authority, another
+agent receives no inherited role grants, and removing allowances makes queued
+work stale until user rebase. Historical attempt evidence survives that change.
+Architecture, process reference, glossary and ADR 0024 document ownership and
+compatibility limits. Earlier incident criteria remain historical: this does
+not establish the reported Astra regression or an approval-rate improvement.
+
+Validation: `pnpm typecheck` passed. Full `pnpm test`: 378 tests, 373 passed,
+zero failed, five opt-in native/platform probes skipped. The new native probe
+was separately enabled and passed: reviewer-only markers demonstrated an exact
+fresh-run denial and a different authorized write after resume with changed
+policy; disposable files were removed. Migration startup/upgrade/rollback tests
+pass with existing released fixtures unchanged and a new 0009 fixture.
+
+Standards review: no findings. Specification review: one missing lifecycle test
+was addressed and re-reviewed; no remaining findings. Changes are unstaged; no
+staging, commits or pushes were performed. Ready for user review.

@@ -28,6 +28,7 @@ export interface AgentExecutionProfile {
 }
 
 export interface AttemptView extends AgentExecutionProfile {
+  reviewerAllowances?: ReviewerAllowanceEvidence;
   id: string;
   status: "running" | "completed" | "failed" | "interrupted";
   workspacePath: string;
@@ -288,6 +289,7 @@ export interface AgentRunAgent {
   role: string;
   summary: string;
   instructions: string;
+  allowances?: string[];
   model?: string;
   reasoningEffort?: ModelReasoningEffort;
 }
@@ -366,6 +368,23 @@ export interface AttemptTranscriptAccess {
 
 export interface AgentRunLifecycle {
   started(threadId?: string): void;
+  reviewerPolicyConfigured?(configuration: ReviewerPolicyConfiguration): void;
+}
+
+export interface ReviewerPolicyConfiguration {
+  status: "active" | "unavailable";
+  reason?: string;
+  policyHash?: string;
+  templateHash?: string;
+}
+
+export interface ReviewerAllowanceEvidence {
+  definitionVersion: string;
+  allowances: string[];
+  status: "pending" | "active" | "unavailable";
+  reason?: string;
+  policyHash?: string;
+  templateHash?: string;
 }
 
 export interface OperatingContextView {

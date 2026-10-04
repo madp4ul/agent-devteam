@@ -814,7 +814,7 @@ export class TaskProjectionStore {
       .prepare(
         `SELECT id, status, workspace_path, started_at, completed_at,
                 outcome_status, outcome_summary, outcome_kind, thread_id, model, reasoning_effort,
-                thread_continuity
+                thread_continuity, reviewer_allowances_json
          FROM attempts
          WHERE activation_id = ?
            AND NOT EXISTS (
@@ -836,6 +836,7 @@ export class TaskProjectionStore {
         model: string | null;
         reasoning_effort: AttemptView["reasoningEffort"];
         thread_continuity: "replaced" | null;
+        reviewer_allowances_json: string | null;
       }>;
     return rows.map((row) => ({
       id: row.id,
@@ -858,6 +859,9 @@ export class TaskProjectionStore {
       ...(row.thread_continuity === null ? {} : { threadContinuity: row.thread_continuity }),
       model: row.model,
       reasoningEffort: row.reasoning_effort,
+      ...(row.reviewer_allowances_json === null ? {} : {
+        reviewerAllowances: JSON.parse(row.reviewer_allowances_json) as NonNullable<AttemptView["reviewerAllowances"]>,
+      }),
     }));
   }
 

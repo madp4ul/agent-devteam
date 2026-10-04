@@ -94,7 +94,7 @@ export class ActivationSchedulingModule {
       const task = this.#taskProjections.readTask(row.task_id);
       const activation = task?.activations.find((candidate) => candidate.id === row.id);
       const agentRow = this.#database.prepare(
-        `SELECT id, name, role, summary, instructions_content
+        `SELECT id, name, role, summary, instructions_content, allowances_json
          FROM agents
          WHERE id = ?`,
       ).get(row.target_agent_id) as AgentRow | undefined;
@@ -103,12 +103,14 @@ export class ActivationSchedulingModule {
       if (task === undefined || activation === undefined || agentRow === undefined || sourceEvent === undefined) {
         throw new Error(`Activation ${row.id} has incomplete durable provenance`);
       }
+      const allowances = JSON.parse(agentRow.allowances_json) as string[];
       const agent: AgentRunAgent = {
         id: agentRow.id,
         name: agentRow.name,
         role: agentRow.role,
         summary: agentRow.summary,
         instructions: agentRow.instructions_content,
+        ...(allowances.length === 0 ? {} : { allowances }),
         ...(row.model === null ? {} : { model: row.model }),
         ...(row.reasoning_effort === null ? {} : { reasoningEffort: row.reasoning_effort }),
       };
@@ -125,8 +127,8 @@ export class ActivationSchedulingModule {
       const attempt = { id: randomUUID(), number: priorAttempts.count + 1 };
       this.#database.prepare(
         `INSERT INTO attempts
-          (id, activation_id, status, workspace_path, started_at, model, reasoning_effort)
-         VALUES (?, ?, 'running', ?, ?, ?, ?)`,
+          (id, activation_id, status, workspace_path, started_at, model, reasoning_effort, reviewer_allowances_json)
+         VALUES (?, ?, 'running', ?, ?, ?, ?, ?)`,
       ).run(
         attempt.id,
         row.id,
@@ -134,6 +136,9 @@ export class ActivationSchedulingModule {
         occurredAt,
         agent.model ?? null,
         agent.reasoningEffort ?? null,
+        (agent.allowances?.length ?? 0) === 0 ? null : JSON.stringify({
+          definitionVersion: row.definition_version, allowances: agent.allowances, status: "pending",
+        }),
       );
       this.#database.prepare(
         `INSERT INTO activation_dispatch_claims (attempt_id, activation_id, claimed_at)
@@ -367,6 +372,7 @@ interface RunnableRow {
 }
 
 interface AgentRow {
+  allowances_json: string;
   id: string;
   name: string;
   role: string;

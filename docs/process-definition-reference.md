@@ -61,6 +61,63 @@ an invented default. Explicit values participate in the semantic fingerprint,
 are retained with activations and attempts, and do not change instructions,
 tools, sandboxing, approval policy, or any other permission boundary.
 
+### Optional reviewer allowances
+
+An agent may declare `allowances`, a list of nonblank strings describing work
+the user authorizes within a precise scope. Omission or an empty list keeps the
+ordinary approval behavior.
+
+```yaml
+    allowances:
+      - Run the project's test suite for the assigned implementation task.
+      - Install dependencies declared by the project into its local dependency directory.
+```
+
+These entries are extra guidance for native Auto-review. They do not guarantee
+approval or grant additional sandbox, network, Git or managed-policy capability.
+They are separate from role instructions and do not produce automatic user replies.
+
+Focus real-process allowances on recurring actions likely to need approval review,
+especially actions previously blocked despite intended authorization. Role duties
+belong in `instructions`; repeating all duties as allowances is usually unnecessary.
+Specify the action, target and purpose, such as downloading declared dependencies
+from an approved registry or writing generated artifacts to a named external cache.
+Review is not determined solely by workspace boundaries: network access and some
+actions inside the workspace may also require review. The software-delivery
+example demonstrates the field with routine entries whose benefit for reducing
+actual denials has not been established; tailor those entries to the real process.
+
+Allowance changes participate in the process fingerprint and existing stale-work
+review. Each attempt snapshots only its selected agent's applied allowances and
+process version. Attempt evidence reports `pending`, `active` or `unavailable`,
+with compatibility reasons and configured-policy hashes when available. `active`
+means verified configuration was selected; it does not promise a particular
+review decision. Historical attempts without evidence remain unknown.
+
+The runtime refreshes guidance for fresh, resumed and replacement attempts.
+Editing a task worktree does not change the authoritative applied definition.
+Running turns retain their submitted guidance; pause drains them, so use the
+existing interruption mechanism for immediate revocation before resuming.
+
+The optional integration is verified against SDK/CLI 0.160.0 and the known public
+reviewer template. Missing delivery slots receive a temporary repair only when
+the complete current template matches verified public policy. Changed templates,
+unverified versions/providers, unavailable configuration and managed requirements
+use baseline behavior and retain an inspectable reason. Inherited local extra
+guidance is preserved. A real denial still needs explicit user continuation.
+
+The check runs before allowance-bearing attempts against Codex's local model
+catalog cache. When the known template includes the extra-policy slot, the adapter
+automatically omits the temporary override. Any other template change disables
+the add-on and retains native baseline review pending compatibility verification.
+This is a local compatibility guard, not an upstream release monitor: a stale
+catalog or a refresh between inspection and execution can limit detection.
+
+Maintainers can run the controlled native fresh/resumed delivery check with
+`COORDINATION_RUN_REVIEWER_ALLOWANCE_PROBE=1` and
+`node --experimental-strip-types --test test/integration/real-codex-reviewer-allowances.test.ts`.
+It makes model calls and writes only its disposable probe files.
+
 ## Model token pricing
 
 `modelPricing` is an optional process-owned catalog. The framework never embeds

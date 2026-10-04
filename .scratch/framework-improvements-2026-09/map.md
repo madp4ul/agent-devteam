@@ -20,7 +20,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [01](issues/01-evaluate-mcp-usage-by-context-position.md) | MCP usage by context position, per tool and per conversation | Research call-time evidence, then grill the statistics design |
 | [02](issues/02-stop-conversation-scroll-snapback.md) | Stop conversation scrolling from snapping back to the bottom | Implemented; user review |
 | [03](issues/03-preserve-board-navigation-state.md) | Restore board state when returning from task details | Implemented; user review |
-| [04](issues/04-reduce-routine-permission-interruptions.md) | Reduce permission interruptions for routine authorized commands | Ready for implementation: optional per-agent reviewer guidance with baseline fallback; agreed specification retained in this intake |
+| [04](issues/04-reduce-routine-permission-interruptions.md) | Reduce permission interruptions for routine authorized commands | Implemented optional per-agent reviewer guidance with baseline fallback; user review |
 | [05](issues/05-open-local-file-links-from-comments.md) | Make task-comment local file links open the actual file | Implemented; user review |
 | [06](issues/06-attach-files-to-tasks-and-comments.md) | Attach files directly to tasks and comments | Grill ownership, lifetime, and agent file access |
 | [07](issues/07-keep-task-movement-controls-accessible.md) | Sticky Move Task controls and one-click next-column movement | Clarify next-column edge cases, then specify the UI change |
@@ -120,7 +120,7 @@ and browser coverage of icon/button geometric centering.
   template compatibility repair; acceptance alone is insufficient. The same ticket
   owns implementation; [agreed specification](04-reviewer-allowances-spec.md)
   preserves evidence, maturity risk and delivery constraints. No further design
-  interview or separate effort is required.
+  interview or separate effort is required. Implemented on 2026-10-04 with SDK 0.160.0, released migration 0009 and verified native fresh/resumed delivery; tests and both review axes pass. Ready for user review.
 
 - [27](issues/27-recover-stalled-work-without-user-attention.md): structural stalls
   activate the current watcher; every unresolved waiting relationship suppresses

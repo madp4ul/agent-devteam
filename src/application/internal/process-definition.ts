@@ -21,6 +21,7 @@ export interface ProcessAgentDefinition {
   role: string;
   summary: string;
   instructions: string;
+  allowances?: string[];
   model?: string;
   reasoningEffort?: ModelReasoningEffort;
 }
@@ -402,6 +403,7 @@ function schemaCorrection(keyword: string, params: Record<string, unknown>): str
     return `Remove the unsupported "${String(params.additionalProperty)}" property.`;
   }
   if (keyword === "pattern") {
+    if (params.pattern === "\\S") return "Provide allowance guidance containing non-whitespace text.";
     return "Use a lowercase stable ID beginning with a letter and containing only letters, digits, and single hyphens.";
   }
   if (keyword === "minLength") return "Provide a non-empty value.";

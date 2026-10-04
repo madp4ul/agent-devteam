@@ -26,6 +26,7 @@ const productionMigrationIds = [
   "0006_history_cursor_signing",
   "0007_conversation_pin_checkpoints",
   "0008_stall_recovery",
+  "0009_reviewer_allowances",
 ];
 
 test("released comments recover only evidenced origin without inventing legacy provenance", async (t) => {
@@ -361,7 +362,7 @@ test("a skipped-release upgrade preserves representative retained state and back
   const writer = new DatabaseSync(fixture.databasePath);
   writer.exec("PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0");
   writer.exec(await readFile(
-    join(import.meta.dirname, "../fixtures/released-schema/0001-initial-released-schema-data.sql"),
+    join(import.meta.dirname, "../fixtures/released-schema/0009-reviewer-allowances-data.sql"),
     "utf8",
   ));
   const attachmentPath = join(
@@ -442,7 +443,7 @@ test("a direct one-step upgrade preserves released identities and values through
   const fixture = await createReleasedDatabase("direct-release");
   const database = new DatabaseSync(fixture.databasePath);
   database.exec(await readFile(
-    join(import.meta.dirname, "../fixtures/released-schema/0002-bound-task-detail-lookups-data.sql"),
+    join(import.meta.dirname, "../fixtures/released-schema/0009-reviewer-allowances-data.sql"),
     "utf8",
   ));
   database.close();
@@ -505,7 +506,7 @@ test("a late migration failure rolls back the whole pending sequence, reports it
   const backupPath = join(fixture.directory, "late-failure-recovery.sqlite3");
   const retained = new DatabaseSync(fixture.databasePath);
   retained.exec(await readFile(
-    join(import.meta.dirname, "../fixtures/released-schema/0001-initial-released-schema-data.sql"),
+    join(import.meta.dirname, "../fixtures/released-schema/0009-reviewer-allowances-data.sql"),
     "utf8",
   ));
   retained.exec(`
@@ -607,7 +608,7 @@ test("an upgrade that omits coordination-enforcing indexes and triggers rolls ba
   const runtime = new CompletingAgentRuntime();
   const retained = new DatabaseSync(fixture.databasePath);
   retained.exec(await readFile(
-    join(import.meta.dirname, "../fixtures/released-schema/0001-initial-released-schema-data.sql"),
+    join(import.meta.dirname, "../fixtures/released-schema/0009-reviewer-allowances-data.sql"),
     "utf8",
   ));
   retained.exec(`

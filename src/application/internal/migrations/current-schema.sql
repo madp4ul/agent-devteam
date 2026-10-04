@@ -106,7 +106,7 @@ CREATE TABLE agents (
       model TEXT,
       reasoning_effort TEXT,
       applied INTEGER NOT NULL CHECK (applied IN (0, 1))
-    );
+    , allowances_json TEXT NOT NULL DEFAULT '[]');
 
 -- table attempt_transcripts on attempt_transcripts
 CREATE TABLE attempt_transcripts (
@@ -133,7 +133,7 @@ CREATE TABLE attempts (
       context_window_usage_json TEXT,
       outcome_kind TEXT
       ,thread_continuity TEXT CHECK (thread_continuity IS NULL OR thread_continuity = 'replaced')
-    );
+    , reviewer_allowances_json TEXT);
 
 -- table attention_reasons on attention_reasons
 CREATE TABLE "attention_reasons" (

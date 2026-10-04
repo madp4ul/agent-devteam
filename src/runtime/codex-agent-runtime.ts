@@ -18,6 +18,7 @@ import {
   LocalCodexSessionEvidenceReader,
 } from "./codex-session-evidence-reader.ts";
 import { projectCodexTurn } from "./codex-turn-projector.ts";
+import { CodexReviewerAllowances } from "./codex-reviewer-allowances.ts";
 
 export { composeActivationPrompt } from "../application/activation-prompt.ts";
 
@@ -59,6 +60,7 @@ export interface CodexAgentRuntimeOptions {
   };
   createClient?: (options: CodexClientOptionsLike) => CodexClientLike;
   sessionEvidenceReader?: CodexSessionEvidenceReader;
+  reviewerAllowances?: CodexReviewerAllowances;
 }
 
 export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess {
@@ -67,10 +69,12 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
   readonly #usage = new Map<string, AttemptTokenUsage>();
   readonly #contextWindowUsage = new Map<string, AttemptContextWindowUsage>();
   readonly #sessionEvidenceReader: CodexSessionEvidenceReader;
+  readonly #reviewerAllowances: CodexReviewerAllowances;
 
   constructor(options: CodexAgentRuntimeOptions) {
     this.#options = options;
     this.#sessionEvidenceReader = options.sessionEvidenceReader ?? new LocalCodexSessionEvidenceReader();
+    this.#reviewerAllowances = options.reviewerAllowances ?? new CodexReviewerAllowances();
   }
 
   async run(
@@ -109,118 +113,138 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
       },
     };
     let threadReplaced = false;
+    let observableEventReceived = false;
+    let addOnActive = false;
     try {
-      const client = (this.#options.createClient ?? createCodexClient)(clientOptions);
-      const threadOptions: CodexThreadOptionsLike = {
-        workingDirectory: request.workspace.path,
-        ...(request.agent.model === undefined ? {} : { model: request.agent.model }),
-        ...(request.agent.reasoningEffort === undefined
-          ? {}
-          : { modelReasoningEffort: request.agent.reasoningEffort }),
-      };
-      let effectiveRequest = request;
-      let thread: CodexThreadLike;
-      try {
-        if (request.resumeThreadId === undefined) {
-          thread = client.startThread(threadOptions);
-        } else if (client.resumeThread === undefined) {
+      if ((request.agent.allowances?.length ?? 0) > 0) {
+        const preparation = await this.#reviewerAllowances.prepare(request, signal);
+        if (preparation.config !== undefined) Object.assign(clientOptions.config!, preparation.config);
+        addOnActive = preparation.config !== undefined;
+        lifecycle.reviewerPolicyConfigured?.(preparation.configuration);
+      }
+      if (signal?.aborted) throw signal.reason ?? new Error("Agent run interrupted");
+      const execute = async (): Promise<AgentRunOutcome> => {
+        threadReplaced = false;
+        const client = (this.#options.createClient ?? createCodexClient)(clientOptions);
+        const threadOptions: CodexThreadOptionsLike = {
+          workingDirectory: request.workspace.path,
+          ...(request.agent.model === undefined ? {} : { model: request.agent.model }),
+          ...(request.agent.reasoningEffort === undefined
+            ? {}
+            : { modelReasoningEffort: request.agent.reasoningEffort }),
+        };
+        let effectiveRequest = request;
+        let thread: CodexThreadLike;
+        try {
+          if (request.resumeThreadId === undefined) {
+            thread = client.startThread(threadOptions);
+          } else if (client.resumeThread === undefined) {
+            effectiveRequest = replacementRequest(request);
+            threadReplaced = true;
+            thread = client.startThread(threadOptions);
+          } else {
+            thread = client.resumeThread(request.resumeThreadId, threadOptions);
+          }
+        } catch (error) {
+          if (request.resumeThreadId === undefined || signal?.aborted === true) throw error;
           effectiveRequest = replacementRequest(request);
           threadReplaced = true;
           thread = client.startThread(threadOptions);
-        } else {
-          thread = client.resumeThread(request.resumeThreadId, threadOptions);
         }
-      } catch (error) {
-        if (request.resumeThreadId === undefined || signal?.aborted === true) throw error;
-        effectiveRequest = replacementRequest(request);
-        threadReplaced = true;
-        thread = client.startThread(threadOptions);
-      }
-      let streamed;
-      try {
-        streamed = await thread.runStreamed(
-          codexInput(effectiveRequest),
-          signal === undefined ? {} : { signal },
-        );
-      } catch (error) {
-        if (
-          request.resumeThreadId === undefined ||
-          effectiveRequest.attempt.thread === "replaced" ||
-          signal?.aborted === true
-        ) {
-          throw error;
-        }
-        effectiveRequest = replacementRequest(request);
-        threadReplaced = true;
-        thread = client.startThread(threadOptions);
-        streamed = await thread.runStreamed(
-          codexInput(effectiveRequest),
-          signal === undefined ? {} : { signal },
-        );
-      }
-      let threadIdentityEstablished = false;
-      let observableEventReceived = false;
-      const project = (events: AsyncIterable<ThreadEvent>) => projectCodexTurn(observeEvents(events, () => {
-        observableEventReceived = true;
-      }), {
-        attemptId: request.attemptId,
-        taskId: request.task.id,
-      }, {
-        started: (threadId) => {
-          threadIdentityEstablished = true;
-          lifecycle.started(threadId);
-        },
-        publish: (transcript) => this.#remember(request.attemptId, transcript),
-      });
-      let projected;
-      try {
-        projected = await project(streamed.events);
-      } catch (error) {
-        if (
-          request.resumeThreadId === undefined ||
-          effectiveRequest.attempt.thread === "replaced" ||
-          threadIdentityEstablished ||
-          observableEventReceived ||
-          signal?.aborted === true
-        ) throw error;
-        effectiveRequest = replacementRequest(request);
-        threadReplaced = true;
-        thread = client.startThread(threadOptions);
-        streamed = await thread.runStreamed(
-          codexInput(effectiveRequest),
-          signal === undefined ? {} : { signal },
-        );
-        projected = await project(streamed.events);
-      }
-      this.#remember(request.attemptId, projected.transcript);
-      if (projected.usage !== undefined) this.#usage.set(request.attemptId, projected.usage);
-      if (
-        projected.threadId !== undefined &&
-        (projected.terminal.kind === "completed" || projected.terminal.kind === "permission-blocked")
-      ) {
-        const contextUsage = await this.#sessionEvidenceReader
-          .readLatestContextWindowUsage(projected.threadId)
-          .catch(() => null);
-        if (contextUsage !== null) this.#contextWindowUsage.set(request.attemptId, contextUsage);
-      }
-      const outcome = projected.terminal.kind === "completed"
-        ? {
-            status: "completed" as const,
-            summary: projected.terminal.summary,
-            ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
+        let streamed;
+        try {
+          streamed = await thread.runStreamed(
+            codexInput(effectiveRequest),
+            signal === undefined ? {} : { signal },
+          );
+        } catch (error) {
+          if (
+            request.resumeThreadId === undefined ||
+            effectiveRequest.attempt.thread === "replaced" ||
+            signal?.aborted === true
+          ) {
+            throw error;
           }
-        : projected.terminal.kind === "permission-blocked"
+          effectiveRequest = replacementRequest(request);
+          threadReplaced = true;
+          thread = client.startThread(threadOptions);
+          streamed = await thread.runStreamed(
+            codexInput(effectiveRequest),
+            signal === undefined ? {} : { signal },
+          );
+        }
+        let threadIdentityEstablished = false;
+        const project = (events: AsyncIterable<ThreadEvent>) => projectCodexTurn(observeEvents(events, () => {
+          observableEventReceived = true;
+        }), {
+          attemptId: request.attemptId,
+          taskId: request.task.id,
+        }, {
+          started: (threadId) => {
+            threadIdentityEstablished = true;
+            lifecycle.started(threadId);
+          },
+          publish: (transcript) => this.#remember(request.attemptId, transcript),
+        });
+        let projected;
+        try {
+          projected = await project(streamed.events);
+        } catch (error) {
+          if (
+            request.resumeThreadId === undefined ||
+            effectiveRequest.attempt.thread === "replaced" ||
+            threadIdentityEstablished ||
+            observableEventReceived ||
+            signal?.aborted === true
+          ) throw error;
+          effectiveRequest = replacementRequest(request);
+          threadReplaced = true;
+          thread = client.startThread(threadOptions);
+          streamed = await thread.runStreamed(
+            codexInput(effectiveRequest),
+            signal === undefined ? {} : { signal },
+          );
+          projected = await project(streamed.events);
+        }
+        this.#remember(request.attemptId, projected.transcript);
+        if (projected.usage !== undefined) this.#usage.set(request.attemptId, projected.usage);
+        if (
+          projected.threadId !== undefined &&
+          (projected.terminal.kind === "completed" || projected.terminal.kind === "permission-blocked")
+        ) {
+          const contextUsage = await this.#sessionEvidenceReader
+            .readLatestContextWindowUsage(projected.threadId)
+            .catch(() => null);
+          if (contextUsage !== null) this.#contextWindowUsage.set(request.attemptId, contextUsage);
+        }
+        const outcome = projected.terminal.kind === "completed"
           ? {
-              status: "permission-blocked" as const,
+              status: "completed" as const,
               summary: projected.terminal.summary,
               ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
             }
-          : {
-              status: "failed" as const,
-              summary: projected.terminal.summary,
-              ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
-            };
-      return withThreadContinuity(outcome, threadReplaced);
+          : projected.terminal.kind === "permission-blocked"
+            ? {
+                status: "permission-blocked" as const,
+                summary: projected.terminal.summary,
+                ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
+              }
+            : {
+                status: "failed" as const,
+                summary: projected.terminal.summary,
+                ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
+              };
+        return withThreadContinuity(outcome, threadReplaced);
+      };
+      try {
+        return await execute();
+      } catch (error) {
+        if (!addOnActive || observableEventReceived || signal?.aborted || !isOptionalPolicyConfigRejection(error)) throw error;
+        delete clientOptions.config!.auto_review;
+        lifecycle.reviewerPolicyConfigured?.({ status: "unavailable",
+          reason: "Native runtime rejected additional reviewer configuration before execution; using baseline approval behavior." });
+        return await execute();
+      }
     } finally {
       this.#options.mcpServer.release?.(request);
     }
@@ -242,6 +266,11 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
   #remember(attemptId: string, transcript: readonly AttemptTranscriptItem[]): void {
     this.#transcripts.set(attemptId, [...structuredClone(transcript)]);
   }
+}
+
+function isOptionalPolicyConfigRejection(error: unknown): boolean {
+  return error instanceof Error && /unknown field|unrecognized (?:field|configuration)/iu.test(error.message)
+    && /extra_policy|experimental_policy_template/iu.test(error.message);
 }
 
 function codexInput(request: AgentRunRequest): Input {

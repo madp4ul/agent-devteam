@@ -50,6 +50,10 @@
         "role": { "$ref": "#/$defs/nonEmptyText" },
         "summary": { "$ref": "#/$defs/nonEmptyText" },
         "instructions": { "$ref": "#/$defs/nonEmptyText" },
+        "allowances": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "\\S" }
+        },
         "model": { "$ref": "#/$defs/nonEmptyText" },
         "reasoningEffort": {
           "enum": ["minimal", "low", "medium", "high", "xhigh"]

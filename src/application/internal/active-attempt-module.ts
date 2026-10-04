@@ -6,6 +6,8 @@ import type {
 import type {
   AgentRunAgent,
   AgentRunOutcome,
+  ReviewerPolicyConfiguration,
+  ReviewerAllowanceEvidence,
   AttemptTranscriptItem,
   AttemptContextWindowUsage,
   AttemptTokenUsage,
@@ -298,6 +300,19 @@ export class ActiveAttemptModule {
         .prepare("UPDATE activity_ledger SET details_json = ? WHERE id = ?")
         .run(JSON.stringify({ ...details, threadId }), activity.id);
       this.updateConversationActivity(attemptId, new Date().toISOString(), threadId);
+    });
+  }
+
+  recordReviewerPolicyConfigured(attemptId: string, configuration: ReviewerPolicyConfiguration): void {
+    this.#owner.transaction(() => {
+      const row = this.#database.prepare(
+        "SELECT reviewer_allowances_json FROM attempts WHERE id = ? AND status = 'running'",
+      ).get(attemptId) as { reviewer_allowances_json: string | null } | undefined;
+      if (row?.reviewer_allowances_json == null) return;
+      const prior = JSON.parse(row.reviewer_allowances_json) as ReviewerAllowanceEvidence;
+      this.#database.prepare("UPDATE attempts SET reviewer_allowances_json = ? WHERE id = ?")
+        .run(JSON.stringify({ definitionVersion: prior.definitionVersion, allowances: prior.allowances,
+          ...configuration }), attemptId);
     });
   }
 

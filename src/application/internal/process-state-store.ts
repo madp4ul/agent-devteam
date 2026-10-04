@@ -59,8 +59,8 @@ export class ProcessStateStore {
       const insertAgent = connection.prepare(
         `INSERT INTO agents
           (id, name, role, summary, instructions_path, instructions_content,
-           model, reasoning_effort, applied)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+           model, reasoning_effort, allowances_json, applied)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            role = excluded.role,
@@ -69,6 +69,7 @@ export class ProcessStateStore {
            instructions_content = excluded.instructions_content,
            model = excluded.model,
            reasoning_effort = excluded.reasoning_effort,
+           allowances_json = excluded.allowances_json,
            applied = 1`,
       );
       for (const agent of definition.agents) {
@@ -81,6 +82,7 @@ export class ProcessStateStore {
           instructionByAgent.get(agent.id) ?? "",
           agent.model ?? null,
           agent.reasoningEffort ?? null,
+          JSON.stringify(agent.allowances ?? []),
         );
       }
 
