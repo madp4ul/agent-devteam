@@ -5,6 +5,9 @@ A process definition is a UTF-8 YAML file validated against
 It contains workflow configuration only; live tasks and coordination history
 remain in the application's relational store.
 
+For guidance on writing responsibilities, workflow expectations, and allowances,
+see [Writing process definitions](process-authoring.md).
+
 ## Editor setup
 
 Add this modeline as the first line of a definition whose location is two
