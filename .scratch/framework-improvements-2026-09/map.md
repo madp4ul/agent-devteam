@@ -28,7 +28,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [09](issues/09-redesign-cross-task-mcp-capabilities.md) | Inventory and redesign MCP tools for broad board collaboration | Design resolved; six cross-task coordination delivery slices published |
 | [10](issues/10-address-agents-on-other-tasks.md) | Address the correct task-scoped agent participant | Design resolved within issue 09; implementation/regression delivery open |
 | [11](issues/11-collapse-long-task-descriptions.md) | Collapse task descriptions longer than 15 lines behind Show more / Show less | Implemented; user review |
-| [12](issues/12-audit-agent-instructions-with-user.md) | Audit all agent instructions for unintended restrictions | After issue 09's instruction refinement is delivered, review the resulting inventory with the user |
+| [12](issues/12-audit-agent-instructions-with-user.md) | Audit all agent instructions for unintended restrictions | Resolved; user approved the coordination framework wording and concluded the ticket |
 | [13](issues/13-support-tables-in-markdown-content.md) | Render tables in every Markdown content surface without widening the UI | Implemented; user review |
 | [14](issues/14-avoid-redundant-activation-after-follow-up-move.md) | Do not reactivate a running follow-up agent when it moves into its watched column | Extend and verify the existing mention-activation exception semantics |
 | [15](issues/15-redesign-blockers-around-explicit-resume-agents.md) | Replace task-wide execution blocking with explicit per-relationship resume responsibility | Implemented; user review |
@@ -112,6 +112,12 @@ accessible controls. Any new icon-only button pattern uses shared decorative SVG
 and browser coverage of icon/button geometric centering.
 
 ## Decisions so far
+
+- [12](issues/12-audit-agent-instructions-with-user.md): rendered complete initial
+  prompts with source annotations, reviewed the coordination framework wording
+  interactively, and implemented the user's approved revisions. Six prompt tests
+  pass; runtime behavior is unchanged. User concluded the ticket after this review;
+  no further wording changes or delivery tickets are required.
 
 - [04](issues/04-reduce-routine-permission-interruptions.md): user approved optional
   per-agent allowance guidance supplied to native Auto-review, with today's

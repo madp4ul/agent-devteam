@@ -20,9 +20,9 @@ test("a fresh prompt separates framework hierarchy from bounded JSON task and so
     "# Current responsibility", "## Available participants", "# Current task background", "# Activation to handle"]);
   assert.match(prompt, /independent conversational memory/);
   assert.match(prompt, /tool descriptions explain operations/);
-  assert.match(prompt, /Finishing a response has no implicit board movement/);
+  assert.match(prompt, /Agents must move tasks between columns explicitly; ending a run does not move the task/);
   assert.match(prompt, /process and board guidance take precedence over conflicting role instructions/);
-  assert.match(prompt, /Execution controls, archive\/unarchive.*user-controlled/);
+  assert.match(prompt, /Only the user can archive or unarchive tasks/);
   assert.doesNotMatch(prompt, /Do not inspect the task merely|Choose the next coordination effect|authoritative and complete snapshot/);
   const [task, source] = data(prompt);
   assert.equal(task!.task.description, "Verify the prompt boundary.");

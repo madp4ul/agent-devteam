@@ -1,0 +1,140 @@
+{
+  "prepared": "2026-10-04",
+  "processPath": "examples/software-delivery/process.yaml",
+  "processVersion": "b53f56e93a69663ea4fafde1527e839fcb82151421874d4340b6abfb3d105b22",
+  "scenario": "synthetic initial column-entry, no attachments/pins/relationships",
+  "sources": [
+    {
+      "path": "examples/software-delivery/process.yaml",
+      "sha256": "093e9bcd0feb443f343dcab95ffa659a770eeb86477c0da5577891f911fc487b"
+    },
+    {
+      "path": "src/application/activation-prompt.ts",
+      "sha256": "89c1160e8c32955de05d30a616848e1bd3068ec129e8483e545cb17831126de1"
+    },
+    {
+      "path": "examples/software-delivery/agents/architecture-designer.md",
+      "sha256": "563d260ea545ff5ad0349b613d2b09561b86a03178ecb49ea8e4ee9397c3eab8"
+    },
+    {
+      "path": "examples/software-delivery/agents/implementation-agent.md",
+      "sha256": "ec710f51246aad6dcd3fe9aad554c6025f14c90023db8b69501c83dbd2ce0cf3"
+    },
+    {
+      "path": "examples/software-delivery/agents/code-reviewer.md",
+      "sha256": "ee509f492717c624bbf64d826cc3fc5e76a75ebec1e94df2a2a4563bdc4efa43"
+    },
+    {
+      "path": "examples/software-delivery/agents/architecture-verifier.md",
+      "sha256": "03bbd31cd0d12105e0f375cb31be36e98c90948fc8f820df01c30dc6d7d0873e"
+    },
+    {
+      "path": "examples/software-delivery/agents/merge-agent.md",
+      "sha256": "c974ba7f1b436c4e1b03585064761a40aa6f5feef3d1b643149b72ca97764c8a"
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "1e15cb92a23fd75d6c7f3ef94f3c32eef02a5b69ece97e397bb38cebf49a234c"
+    },
+    {
+      "path": "docs/agents/issue-tracker.md",
+      "sha256": "566be67fa0ae769fb6f3beb0ba65c2c1c41fecccd1d4230bfc3e36468ea1300d"
+    },
+    {
+      "path": "docs/agents/domain.md",
+      "sha256": "fdb450be3ea80ead1d9d88e50ac733f7327cb089f4b47d321609a289c7f38adf"
+    },
+    {
+      "path": "docs/agents/development-workflow.md",
+      "sha256": "5c8788d13cdf7f05549f926220f19a70d914d63b5dc6787a2a4b4b7ce9817455"
+    },
+    {
+      "path": "docs/architecture.md",
+      "sha256": "2c0015a02bf6f022305d030ec38aa29e06e20e82eebf74f9b4f680c6a0206551"
+    },
+    {
+      "path": "docs/process-definition-reference.md",
+      "sha256": "35cdbc06296a01662a94d319aa22bbb7996b3548e9f4b1c8f5aa753c7c75c6df"
+    },
+    {
+      "path": "docs/agent-mcp-reference.md",
+      "sha256": "16bd2ee56cd8982411298d5f9770217f9921244a0dc97b3e6ac5e6904cc354c4"
+    },
+    {
+      "path": "src/mcp/stdio-server.ts",
+      "sha256": "da32bb38479b2b9f3279905169e118ce655cde003caaaa97483b2d58252562c6"
+    },
+    {
+      "path": "src/runtime/codex-agent-runtime.ts",
+      "sha256": "9f4f95544f44cbda067f9f65b5a747e47d8314b0565b1d2c13d7bc1779473982"
+    },
+    {
+      "path": "src/runtime/codex-reviewer-allowances.ts",
+      "sha256": "eb5e6f9576f60f4ac5bd51f9c14a5e24c31d2a24a3f240feae99982c70452c4d"
+    },
+    {
+      "path": "src/runtime/reviewer-policy/codex-0.160.0.md",
+      "sha256": "37441097e4e825e0b195c32c985817ea07da15bb5c20fa753d87b22e2fe47e73"
+    },
+    {
+      "path": ".agents/skills/ask-matt/SKILL.md",
+      "sha256": "7a019ee4e38cccd6d991bdb0be33837e4d19f892a8cced6c62c674cc5c09b426"
+    },
+    {
+      "path": ".agents/skills/code-review/SKILL.md",
+      "sha256": "6a65cc61114f96db07ec41e3920e67c9c5bf70dd6e0901eb9460ebcb2bdc209f"
+    },
+    {
+      "path": ".agents/skills/codebase-design/SKILL.md",
+      "sha256": "a8d50abac5a4018f60e1d911d4b6f4e36454ca14d6c390c0695a578c7de65dad"
+    },
+    {
+      "path": ".agents/skills/diagnosing-bugs/SKILL.md",
+      "sha256": "7a0779480f323a66d109404646bcc1a14bf0232b45b3e3ea93b652a035718acb"
+    },
+    {
+      "path": ".agents/skills/domain-modeling/SKILL.md",
+      "sha256": "152e2c97239affb12a60c5f4a7e74ab546a49ae169688c81f4e2ccc42dafa579"
+    },
+    {
+      "path": ".agents/skills/grill-with-docs/SKILL.md",
+      "sha256": "610d091047bcfb9db0f75c057d15538481a721111579fc5ec7f83ad9131a2165"
+    },
+    {
+      "path": ".agents/skills/grilling/SKILL.md",
+      "sha256": "44331dda57f461db4fec3f2efb6ddabe7aaaa0a57ae0f88a883bc61aed8a0587"
+    },
+    {
+      "path": ".agents/skills/implement/SKILL.md",
+      "sha256": "45d8c86c50a993583b90db0f7c882afce889f1241c4f52753906b25ffaa086f9"
+    },
+    {
+      "path": ".agents/skills/prototype/SKILL.md",
+      "sha256": "03074862d4b6e4eaf472aa75146e1d193dd9e3bba0e4303a9b2425562d1d44cc"
+    },
+    {
+      "path": ".agents/skills/research/SKILL.md",
+      "sha256": "af378829f015775a3bcd65ff466826722e99359017ae6bae227ca4c9bd14049c"
+    },
+    {
+      "path": ".agents/skills/setup-matt-pocock-skills/SKILL.md",
+      "sha256": "def265a8b15ffb8afc3f335d69e175ba9a7fe3991218984b0e49e8345cde3b20"
+    },
+    {
+      "path": ".agents/skills/tdd/SKILL.md",
+      "sha256": "5363bb2775679fe9311fbb67947f95359169c6e7f1fac77c0f25e190bca6cf2f"
+    },
+    {
+      "path": ".agents/skills/to-spec/SKILL.md",
+      "sha256": "267638edd513b5918de626ad5605d261952abb7428cb308869c663ca924e93e7"
+    },
+    {
+      "path": ".agents/skills/to-tickets/SKILL.md",
+      "sha256": "5ecdf1d4df8a360ed39df21a2347f97ba177afd449a577da4f6b6ea8e1ebb808"
+    },
+    {
+      "path": ".agents/skills/wayfinder/SKILL.md",
+      "sha256": "257e40665b28ae959ffdcb97d7a72b074360f4a3d201bd84786505308546e434"
+    }
+  ]
+}
