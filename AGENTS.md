@@ -19,6 +19,12 @@ before changing module boundaries, state ownership, authoritative flows, runtime
 integration, or startup invariants. Update it in the same change whenever one of
 those architectural facts changes; record durable decision reasoning in an ADR.
 
+### Process authoring
+
+When creating or revising process definitions and agent role instructions, read
+`docs/process-authoring.md` for authoring principles and
+`docs/process-definition-reference.md` for configuration contracts.
+
 ### Browser UI controls
 
 Icon-only buttons must render a shared, geometrically centered SVG component;
