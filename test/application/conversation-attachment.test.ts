@@ -37,6 +37,7 @@ async function startSettledAttachmentConversation(t: TestContext, cleanup = true
   assert.ok(conversationId);
   await application.resumeAutomation();
   await runtime.waitForRequest(1);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Ready for evidence.", threadId: "attachment-thread" });
   await application.waitForAutomationIdle();
   return { application, conversationId, created, fixture, runtime };
@@ -92,6 +93,7 @@ test("an attachment-only follow-up binds a sanitized upload for runtime delivery
     assert.equal(detail.agentInspectableContent.conversationMessageIds.includes(continued.message.id), true);
     assert.deepEqual(detail.agentInspectableContent.attachmentIds, []);
   }
+  await application.resumeAutomation();
   const request = await runtime.waitForRequest(2);
   assert.deepEqual((request.attachments ?? []).map(({ id, fileName, currentMessage }) => ({
     id,
@@ -99,6 +101,7 @@ test("an attachment-only follow-up binds a sanitized upload for runtime delivery
     currentMessage,
   })), [{ id: upload.id, fileName: "evidence.xlsx", currentMessage: true }]);
   assert.match(request.attachments?.[0]?.path ?? "", /evidence\.xlsx$/);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Evidence inspected.", threadId: "attachment-thread" });
   await application.waitForAutomationIdle();
 });
@@ -129,7 +132,9 @@ test("replaying an attachment follow-up is idempotent and leaves unrelated pendi
     conversationId,
     uploadId: unrelated.id,
   }), true);
+  await application.resumeAutomation();
   await runtime.waitForRequest(2);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Evidence inspected.", threadId: "attachment-thread" });
   await application.waitForAutomationIdle();
 });
@@ -152,7 +157,9 @@ test("a bound attachment remains downloadable after restart", async (t) => {
     idempotencyKey: "persist-attachment",
   });
   assert.equal(continued.accepted, true);
+  await application.resumeAutomation();
   await runtime.waitForRequest(2);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Evidence persisted.", threadId: "attachment-thread" });
   await application.waitForAutomationIdle();
   await application.pauseAutomation();
@@ -277,6 +284,7 @@ test("archiving a task removes its immutable conversation attachments", async (t
 
   await application.resumeAutomation();
   await runtime.waitForRequest(1);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Ready for archival evidence.", threadId: "attachment-archive-thread" });
   await application.waitForAutomationIdle();
   const uploaded = await application.createConversationUpload({
@@ -297,7 +305,9 @@ test("archiving a task removes its immutable conversation attachments", async (t
     idempotencyKey: "bind-attachment-before-archive",
   });
   assert.equal(continued.accepted, true);
+  await application.resumeAutomation();
   await runtime.waitForRequest(2);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Evidence bound.", threadId: "attachment-archive-thread" });
   await application.waitForAutomationIdle();
 

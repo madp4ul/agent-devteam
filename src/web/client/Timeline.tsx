@@ -579,6 +579,12 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
       )}
       {nested ? null : (
         <footer className="activity-footer">
+          {activity.type !== "stall.recovery-exhausted" ? null :
+            activity.details.activationIds?.split(",").map((id, index) => {
+              const attempt = context.activations.find((activation) => activation.id === id)?.attempts.at(-1);
+              return attempt === undefined ? null : <button className="secondary" key={id}
+                onClick={() => context.onSource(attempt.id)}>View recovery {index + 1}</button>;
+            })}
           <small>{actorName(activity.actor, context.agents)}</small>
           {onConversation === undefined || conversationId === undefined || activationId === undefined || messageId === undefined ? null : (
             <button
@@ -680,6 +686,7 @@ function attemptStatus(attempt: AttemptView): { label: string; className: string
 }
 
 function triggerDescription(activity: TaskActivityView, context: TimelineContext): string {
+  if (activity.type === "stall.detected") return `stall recovery ${activity.details.recoveryNumber} of ${activity.details.recoveryLimit}`;
   const actor = actorName(activity.actor, context.agents);
   if (activity.type === "task.moved") {
     return `${actor} moving the task to ${columnName(activity.details.toColumnId, context.columns)}`;
@@ -714,10 +721,15 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "conversation.retired": "Conversation retired",
     "task.archived": "Task archived",
     "task.unarchived": "Task unarchived",
+    "stall.detected": "Stall detected",
+    "stall.recovery-skipped": "Stall recovery skipped",
+    "stall.recovery-exhausted": "Stall recovery needs attention",
   }[type];
 }
 
 function activityDescription(activity: TaskActivityView, columns: TimelineColumn[], agents: TimelineAgent[]): string {
+  if (activity.type === "stall.detected") return `No continuation path remained. Recovery ${activity.details.recoveryNumber} of ${activity.details.recoveryLimit} requested for ${nameForAgent(activity.details.targetAgentId ?? "the watcher", agents)}.`;
+  if (activity.type === "stall.recovery-skipped" || activity.type === "stall.recovery-exhausted") return activity.details.explanation ?? activityLabel(activity.type);
   if (activity.type === "task.moved") {
     return `${columnName(activity.details.fromColumnId, columns)} → ${columnName(activity.details.toColumnId, columns)}`;
   }
@@ -830,6 +842,7 @@ function reasonLabel(reason: ActivationView["reason"]["type"]): string {
     "relationship-satisfied": "a relationship being satisfied",
     "relationship-changed": "a relationship change",
     "user-follow-up": "a user follow-up",
+    "stall-recovery": "stall recovery",
   }[reason];
 }
 

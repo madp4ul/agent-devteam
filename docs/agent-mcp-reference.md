@@ -35,7 +35,7 @@ checking a now-advanced task revision. `self` resolves to the caller's stable ag
 | `task.move` | `taskId`, `destinationColumnId`, `expectedRevision`, `idempotencyKey` | Move current or a concrete task ID within its board with ordinary watcher effects. A same-column move is an inert success. Requires the task's revision. | `{ accepted: true, revision, transition: { taskId, fromColumnId, toColumnId } }`; an inert result also includes `outcome: "already-in-column"`. |
 | `task.child.create` | `taskId`, `boardId`, `columnId`, `title`, `description`, `resumeAgent`, optional `startingRef`, `idempotencyKey` | Atomically create new child work and an outgoing parent-child relationship from current or a concrete task ID. resumeAgent is self or an applied agent ID; completion later queues that owner. | `{ accepted: true, task: { id, title, boardId, columnId, revision } }` |
 | `task.child.add` | `taskId`, `childTaskId`, `resumeAgent`, `idempotencyKey` | Attach an existing child to current or a concrete parent task ID without creating a task. resumeAgent is self or an applied agent ID; removal wakes nobody. | `{ accepted: true, relationship }` |
-| `task.dependency.add` | `taskId`, `targetTaskId`, `resumeAgent`, `idempotencyKey` | Add an outgoing dependency from current or a concrete source task ID to existing project work. resumeAgent is self or an applied agent ID. Relating completed work does not synthesize a past completion activation. | `{ accepted: true, relationship }` |
+| `task.dependency.add` | `taskId`, `targetTaskId`, `resumeAgent`, `idempotencyKey` | Add an outgoing dependency from current or a concrete source task ID to existing project work. resumeAgent is self or an applied agent ID. Relating completed work does not synthesize a past completion activation. A link that closes a cycle across retained dependency/parent-child relationships rejects with `circular-relationship`, including paths through completed targets. | `{ accepted: true, relationship }` |
 | `task.relationship.resume_agent.update` | `taskId`, `relationshipId`, `resumeAgent`, `idempotencyKey` | Change who reassesses a waiting task when an unresolved relationship is satisfied. Use current or a concrete source task ID. | `{ accepted: true, relationship }` |
 | `task.relationship.remove` | `taskId`, `relationshipId`, `idempotencyKey` | Remove a mistaken relationship from current or a concrete task without waking its resume agent. | `{ accepted: true, relationship }` |
 | `attempt.permission_block.report` | `summary` | Report that the current activation cannot complete because the Codex permission policy blocked a required action. Use only after a required action was denied and user action or a policy change is necessary. | `{ accepted: true, taskId }` |
@@ -129,3 +129,11 @@ pinned comments and ID-only unpin notices. Unchanged membership sends nothing,
 even after toggles. Audit pin events remain explicitly inspectable, but are not
 automatic updates. Unpinning removes emphasis without retracting text. The full
 framework/process/board/role guide is not repeated on short returning activations.
+
+Stall recovery is a distinct activation reason supplied with its detection event
+and recovery number out of three. Before finishing, establish continuation through
+ordinary activation, an unresolved waiting relationship, explicit user attention,
+or movement to a user-owned/Completion column. A prose-only plan does not provide
+continuation. Every waiting relationship suppresses recovery without blocking
+ordinary work. The third normally finished recovery without continuation creates
+framework attention rather than another run; technical retries use existing policy.

@@ -1,5 +1,28 @@
 import { contrastRatio, expect, setAppearance, test } from "./browser-fixture.ts";
 
+test("circular waiting is rejected through the browser without changing relationships", async ({ page, request }) => {
+  const created = await request.post("/api/tasks", { data: { boardId: "delivery", columnId: "backlog",
+    title: "Cycle target", description: "Acyclic coordination", idempotencyKey: "cycle-browser-task" } });
+  expect(created.ok()).toBeTruthy();
+  const { task } = await created.json();
+  const linked = await request.post(`/api/tasks/${task.id}/relationships`, { data: {
+    type: "dependency", targetTaskId: "T-0001", resumeAgentId: "implementer", idempotencyKey: "cycle-browser-edge" } });
+  expect(linked.ok()).toBeTruthy();
+  await page.goto("/tasks/T-0001");
+  const relationships = page.getByRole("region", { name: "Relationships" });
+  await relationships.getByRole("button", { name: "More relationship types" }).click();
+  await relationships.getByRole("menuitem", { name: "Dependency" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create dependency" });
+  await dialog.getByRole("combobox", { name: "Task to wait on" }).fill("Cycle target");
+  await dialog.getByRole("option", { name: /Cycle target/ }).click();
+  await dialog.getByRole("combobox", { name: "Resume agent" }).selectOption("implementer");
+  await dialog.getByRole("button", { name: "Create dependency" }).click();
+  await expect(page.getByRole("alert")).toContainText("This relationship would create a circular wait.");
+  const detail = await (await request.get("/api/tasks/T-0001")).json();
+  expect(detail.task.relationships.filter((edge: { sourceTaskId: string; targetTaskId: string }) =>
+    edge.sourceTaskId === "T-0001" && edge.targetTaskId === task.id)).toHaveLength(0);
+});
+
 test("cross-task links in authored and framework history open a new tab", async ({ page }) => {
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();

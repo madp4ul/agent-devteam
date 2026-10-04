@@ -192,6 +192,7 @@ test("a running mentioned agent can claim its watched column without a second ac
   );
   assert.equal(moved.task.activity.at(-1)?.details.attemptId, request.attemptId);
 
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Claimed and completed the work." });
   await application.waitForAutomationIdle();
   assert.equal(runtime.requests.length, 1);
@@ -271,6 +272,7 @@ test("a running follow-up agent can claim its watched column without a second ac
   );
   assert.equal(moved.task.activity.at(-1)?.details.attemptId, followUpRequest.attemptId);
 
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Claimed and completed the follow-up." });
   await application.waitForAutomationIdle();
   assert.equal(runtime.requests.length, 2);
@@ -308,6 +310,7 @@ test("a running follow-up agent moving into another agent's watched column still
   const reviewerRequest = await runtime.waitForRequest(3);
   assert.equal(reviewerRequest.agent.id, "reviewer");
   assert.equal(reviewerRequest.reason.type, "column-entry");
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Reviewed the routed follow-up." });
   await application.waitForAutomationIdle();
 });
@@ -348,6 +351,7 @@ test("a failed follow-up claim retries the same activation and conversation", as
     sourceEventId: continued.message.id,
   });
   assert.equal(retryRequest.task.columnId, "verification");
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Completed the claimed follow-up responsibility." });
   await application.waitForAutomationIdle();
 
@@ -394,6 +398,7 @@ test("a failed mentioned-agent claim retries the same activation under the norma
   assert.equal(waitingTask.activations[0]?.id, firstRequest.activationId);
   assert.deepEqual(waitingTask.activations[0]?.reason, firstRequest.reason);
   assert.equal(retryRequest.task.columnId, "implementation");
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Completed the claimed responsibility." });
   await application.waitForAutomationIdle();
 
@@ -459,6 +464,7 @@ test("a same-agent column-entry run moving to another watched column still queue
   runtime.complete({ status: "completed", summary: "First responsibility complete." });
   const nextRequest = await runtime.waitForRequest(2);
   assert.equal(nextRequest.reason.type, "column-entry");
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Second responsibility complete." });
   await application.waitForAutomationIdle();
 });
@@ -493,6 +499,7 @@ test("a mentioned agent moving into another agent's watched column still hands o
   runtime.complete({ status: "completed", summary: "Routed to review." });
   const reviewerRequest = await runtime.waitForRequest(2);
   assert.equal(reviewerRequest.agent.id, "reviewer");
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Reviewed the routed work." });
   await application.waitForAutomationIdle();
 });

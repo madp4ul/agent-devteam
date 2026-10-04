@@ -433,6 +433,7 @@ function activationReasonLabel(reason: AgentConversationView["originatingActivat
     case "relationship-satisfied": return "Relationship satisfied";
     case "relationship-changed": return "Relationship changed";
     case "user-follow-up": return "User follow-up";
+    case "stall-recovery": return "Stall recovery";
   }
 }
 

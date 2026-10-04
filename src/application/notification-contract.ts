@@ -22,7 +22,7 @@ export type UpdateNotificationPolicyResult =
 
 export interface NotificationOccurrenceView {
   id: string;
-  type: "user-mention" | "failed-run" | "column-entry";
+  type: "user-mention" | "failed-run" | "column-entry" | "stall-recovery-exhausted";
   occurredAt: string;
   task: { id: string; title: string; boardId: string; boardName: string };
   destination?: { boardId: string; boardName: string; columnId: string; columnName: string };

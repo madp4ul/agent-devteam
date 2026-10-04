@@ -606,6 +606,7 @@ function structuredLiteral(value: unknown): string {
 function activationReasonLabel(reason: AgentConversationView["originatingActivation"]["reason"]["type"]): string {
   switch (reason) {
     case "column-entry": return "Entered a watched column";
+    case "stall-recovery": return "Stall recovery";
     case "agent-mention": return "Mentioned in a task comment";
     case "relationship-satisfied": return "Relationship satisfied";
     case "relationship-changed": return "Relationship changed";

@@ -111,6 +111,7 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
   assert.equal(workspaceCommit.trim(), startingCommit.trim());
   assert.equal(branch.trim(), "HEAD");
 
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Implemented and verified." });
   await application.waitForAutomationIdle();
   const completed = application.queryTask(created.task.id);
@@ -428,6 +429,7 @@ test("successive activations reuse one task workspace while another task is isol
   runtime.complete({ status: "completed", summary: "Repeated activation complete." });
   const otherTaskRequest = await runtime.waitForRequest(3);
   assert.notEqual(otherTaskRequest.workspace.path, firstRequest.workspace.path);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Other task complete." });
   await application.waitForAutomationIdle();
 });
@@ -445,6 +447,7 @@ test("a reused workspace must still be the task worktree registered by the proje
     },
   });
   t.after(() => application.close());
+  runtime.onCompletion = () => application.pauseAutomation();
   const created = application.createTask({
     boardId: "delivery",
     columnId: "implementation",
@@ -486,10 +489,13 @@ test("a reused workspace must still be the task worktree registered by the proje
   });
   assert.equal(reentry.accepted, true);
 
-  await assert.rejects(
-    application.waitForAutomationIdle(),
-    /registered task worktree/,
-  );
+  const resumed = await application.resumeAutomation();
+  assert.equal(resumed.accepted, false);
+  if (!resumed.accepted && resumed.reason === "runtime-start-failed") {
+    assert.match(resumed.diagnostic, /registered task worktree/);
+  } else {
+    assert.fail("Invalid workspace registration must reject dispatch");
+  }
   assert.equal(runtime.requests.length, 1);
   const failed = application.queryTask(created.task.id);
   assert.equal(failed.available, true);

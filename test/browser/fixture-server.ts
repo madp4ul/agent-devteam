@@ -139,7 +139,7 @@ application = await CoordinationApplication.start({
             idempotencyKey: "browser-comment",
           });
           if (!authored.accepted) throw new Error("Could not add the browser fixture agent comment");
-          automationClock.advanceBy(151_000);
+          automationClock.advanceBy(150_000);
         }
         return {
           status: "completed",
@@ -216,6 +216,16 @@ const draggable = application.createTask({
   idempotencyKey: "browser-draggable",
 });
 if (!draggable.accepted) throw new Error("Could not create draggable browser fixture");
+const relationship = application.createTaskRelationship({
+  type: "dependency",
+  sourceTaskId: inspected.task.id,
+  targetTaskId: draggable.task.id,
+  resumeAgentId: "implementer",
+  actor: { kind: "user", id: "local-user" },
+  idempotencyKey: "browser-relationship",
+});
+if (!relationship.accepted) throw new Error("Could not create the browser fixture relationship");
+
 const initialResume = await application.resumeAutomation();
 if (!initialResume.accepted) throw new Error("Could not run the inspected browser fixture task");
 await application.waitForAutomationIdle();
@@ -242,16 +252,6 @@ const permissionResume = await application.resumeAutomation();
 if (!permissionResume.accepted) throw new Error("Could not run the browser permission activation");
 await application.waitForAutomationIdle();
 application.pauseAutomation();
-
-const relationship = application.createTaskRelationship({
-  type: "dependency",
-  sourceTaskId: inspected.task.id,
-  targetTaskId: draggable.task.id,
-  resumeAgentId: "implementer",
-  actor: { kind: "user", id: "local-user" },
-  idempotencyKey: "browser-relationship",
-});
-if (!relationship.accepted) throw new Error("Could not create the browser fixture relationship");
 
 const startupFailed = application.createTask({
   boardId: "delivery",
@@ -293,7 +293,8 @@ class BrowserFixtureClock implements AutomationClock {
     return new Date(this.#now);
   }
 
-  waitUntil(): Promise<void> {
+  waitUntil(instant: string): Promise<void> {
+    this.#now = new Date(Math.max(this.#now.getTime(), Date.parse(instant)));
     return Promise.resolve();
   }
 

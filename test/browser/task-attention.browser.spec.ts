@@ -1,4 +1,35 @@
-import { expect, test } from "./browser-fixture.ts";
+import { contrastRatio, expect, setAppearance, test } from "./browser-fixture.ts";
+
+test("exhausted stall recovery exposes evidence and an addressable action in both themes", async ({ page, request }) => {
+  const created = await request.post("/api/tasks", { data: { boardId: "delivery", columnId: "implementation",
+    title: "Missing continuation", description: "Exercise automatic recovery", idempotencyKey: "browser-stall-task" } });
+  expect(created.ok()).toBeTruthy();
+  const { task } = await created.json();
+  const resumed = await request.post("/api/automation/resume");
+  expect(resumed.ok()).toBeTruthy();
+  await expect.poll(async () => {
+    const detail = await (await request.get(`/api/tasks/${task.id}`)).json();
+    return detail.inspection.unresolvedAttention.map((reason: { type: string }) => reason.type);
+  }).toContain("stall-recovery-exhausted");
+  await request.post("/api/automation/pause");
+  await page.goto(`/tasks/${task.id}`);
+  const attention = page.getByRole("region", { name: "Needs attention" });
+  for (const theme of ["dark", "light"] as const) {
+    await setAppearance(page, theme);
+    await expect(attention).toContainText("Three automatic recovery activations");
+    await expect(attention.getByRole("button", { name: "Mark addressed" })).toBeVisible();
+    expect(await contrastRatio(attention.locator(".recovery-explanation"))).toBeGreaterThanOrEqual(4.5);
+  }
+  await attention.getByRole("button", { name: "Review recovery" }).click();
+  const source = page.getByRole("region", { name: "Task timeline" }).locator("article")
+    .filter({ hasText: "Stall recovery needs attention" });
+  await expect(source).toBeFocused();
+  await expect(source.getByRole("button", { name: "View recovery 1" })).toBeVisible();
+  await source.getByRole("button", { name: "View recovery 3" }).click();
+  await expect(page.locator("article:focus")).toContainText("stall recovery");
+  await attention.getByRole("button", { name: "Mark addressed" }).click();
+  await expect(attention).toHaveCount(0);
+});
 
 test("task attention navigates to the exact mention and resolves beside its source", async ({ page }) => {
   const addressed = new Set<string>();

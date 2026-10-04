@@ -438,6 +438,104 @@
 <circle cx="1065.00" cy="114.25" r="2.5" fill="#fbbf24"><title>023c071 | 2026-10-02 | resolve 23 25 | 31,444 lines | 144 tickets</title></circle>
 <path stroke="#fbbf24" stroke-width="3" d="M360,78h25"/>
 <text x="393" y="83">Tests and test support</text>
+<g data-maintenance-id="M1">
+<path d="M126.81,395.17l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M1 | 8251169 | 2026-08-02 | split large code files | Early split of application, contracts, database, automation, and discovery modules; predates dedicated maintenance tickets | Production +135; tests +0</title></path>
+<path d="M126.81,399.37l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M1 | 8251169 | 2026-08-02 | split large code files | Early split of application, contracts, database, automation, and discovery modules; predates dedicated maintenance tickets | Production +135; tests +0</title></path>
+</g>
+<g data-maintenance-id="M2">
+<path d="M153.61,370.61l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M2 | 7de3845 | 2026-08-08 | resolve 29 | Decompose coordination persistence | Production -130; tests +2</title></path>
+<path d="M153.61,383.67l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M2 | 7de3845 | 2026-08-08 | resolve 29 | Decompose coordination persistence | Production -130; tests +2</title></path>
+</g>
+<g data-maintenance-id="M3">
+<path d="M187.12,363.02l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M3 | dbfd041 | 2026-08-08 | resolve 41 | Separate task projections from commands | Production +22; tests +0</title></path>
+<path d="M187.12,371.79l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M3 | dbfd041 | 2026-08-08 | resolve 41 | Separate task projections from commands | Production +22; tests +0</title></path>
+</g>
+<g data-maintenance-id="M4">
+<path d="M441.77,268.84l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M4 | dcb5d47 | 2026-08-15 | maintenance 2 | Initial user-board projection extraction and creation of the first maintainability effort, before its tickets were marked resolved | Production +14; tests +34</title></path>
+<path d="M441.77,257.49l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M4 | dcb5d47 | 2026-08-15 | maintenance 2 | Initial user-board projection extraction and creation of the first maintainability effort, before its tickets were marked resolved | Production +14; tests +34</title></path>
+</g>
+<g data-maintenance-id="M5">
+<path d="M461.88,268.17l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M5 | a85bb76 | 2026-08-15 | maintenance 3 | Codebase maintainability | Production +65; tests +126</title></path>
+<path d="M461.88,256.21l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M5 | a85bb76 | 2026-08-15 | maintenance 3 | Codebase maintainability | Production +65; tests +126</title></path>
+</g>
+<g data-maintenance-id="M6">
+<path d="M475.28,267.58l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M6 | bf4b74f | 2026-08-15 | resolve 5 | Codebase maintainability | Production +58; tests +125</title></path>
+<path d="M475.28,254.93l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M6 | bf4b74f | 2026-08-15 | resolve 5 | Codebase maintainability | Production +58; tests +125</title></path>
+</g>
+<g data-maintenance-id="M7">
+<path d="M481.98,267.46l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M7 | c3dccb1 | 2026-08-15 | resolve 6 | Codebase maintainability | Production +12; tests +0</title></path>
+<path d="M481.98,254.93l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M7 | c3dccb1 | 2026-08-15 | resolve 6 | Codebase maintainability | Production +12; tests +0</title></path>
+</g>
+<g data-maintenance-id="M8">
+<path d="M488.68,268.40l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M8 | fc1fe11 | 2026-08-15 | resolve 7 | Codebase maintainability | Production -92; tests +30</title></path>
+<path d="M488.68,254.63l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M8 | fc1fe11 | 2026-08-15 | resolve 7 | Codebase maintainability | Production -92; tests +30</title></path>
+</g>
+<g data-maintenance-id="M9">
+<path d="M548.99,259.93l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M9 | a171ffb | 2026-08-20 | resolve 8-12 maintainability | Codebase maintainability | Production +256; tests +0</title></path>
+<path d="M548.99,249.53l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M9 | a171ffb | 2026-08-20 | resolve 8-12 maintainability | Codebase maintainability | Production +256; tests +0</title></path>
+</g>
+<g data-maintenance-id="M10">
+<path d="M569.10,260.23l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M10 | 4b73b5b | 2026-08-20 | resolve maintenace 13-15 | Codebase maintainability | Production -29; tests +28</title></path>
+<path d="M569.10,249.24l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M10 | 4b73b5b | 2026-08-20 | resolve maintenace 13-15 | Codebase maintainability | Production -29; tests +28</title></path>
+</g>
+<g data-maintenance-id="M11">
+<path d="M582.50,260.23l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M11 | 80728a8 | 2026-08-20 | resolve maintenance 16-17 | Codebase maintainability | Production +0; tests +182</title></path>
+<path d="M582.50,247.38l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M11 | 80728a8 | 2026-08-20 | resolve maintenance 16-17 | Codebase maintainability | Production +0; tests +182</title></path>
+</g>
+<g data-maintenance-id="M12">
+<path d="M602.60,253.11l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M12 | 0bea795 | 2026-08-22 | resolve maintenance 18 | Codebase maintainability | Production +33; tests +0</title></path>
+<path d="M602.60,239.39l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M12 | 0bea795 | 2026-08-22 | resolve maintenance 18 | Codebase maintainability | Production +33; tests +0</title></path>
+</g>
+<g data-maintenance-id="M13">
+<path d="M676.32,240.86l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M13 | b6f5ba7 | 2026-08-22 | maintenance 1-4 | Conversation transcript maintainability | Production +26; tests +346</title></path>
+<path d="M676.32,215.20l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M13 | b6f5ba7 | 2026-08-22 | maintenance 1-4 | Conversation transcript maintainability | Production +26; tests +346</title></path>
+</g>
+<g data-maintenance-id="M14">
+<path d="M756.74,224.29l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M14 | 6d38e40 | 2026-08-26 | resolve maintenance round 3 | Post-feature maintainability | Production +115; tests +731</title></path>
+<path d="M756.74,197.29l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M14 | 6d38e40 | 2026-08-26 | resolve maintenance round 3 | Post-feature maintainability | Production +115; tests +731</title></path>
+</g>
+<g data-maintenance-id="M15">
+<path d="M817.05,211.01l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M15 | c32bb52 | 2026-08-29 | resolve 85 86 | Isolate typed HTTP route dispatch | Production +254; tests +369</title></path>
+<path d="M817.05,178.35l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M15 | c32bb52 | 2026-08-29 | resolve 85 86 | Isolate typed HTTP route dispatch | Production +254; tests +369</title></path>
+</g>
+<g data-maintenance-id="M16">
+<path d="M823.75,210.73l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M16 | bb4502d | 2026-08-30 | resolve 88 | Localize activation resolution | Production +27; tests +0</title></path>
+<path d="M823.75,178.35l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M16 | bb4502d | 2026-08-30 | resolve 88 | Localize activation resolution | Production +27; tests +0</title></path>
+</g>
+<g data-maintenance-id="M17">
+<path d="M830.45,210.53l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M17 | 9e106d1 | 2026-08-30 | resolve 91 | Extract retained attempt evidence | Production +20; tests +0</title></path>
+<path d="M830.45,178.35l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M17 | 9e106d1 | 2026-08-30 | resolve 91 | Extract retained attempt evidence | Production +20; tests +0</title></path>
+</g>
+<g data-maintenance-id="M18">
+<path d="M837.15,210.28l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M18 | f2d9a89 | 2026-08-31 | resolve 92 | Localize activation dispatch preparation | Production +24; tests +184</title></path>
+<path d="M837.15,176.47l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M18 | f2d9a89 | 2026-08-31 | resolve 92 | Localize activation dispatch preparation | Production +24; tests +184</title></path>
+</g>
+<g data-maintenance-id="M19">
+<path d="M843.85,210.47l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M19 | de6d8a1 | 2026-08-31 | resolve 93 | Deepen active attempt lifecycle | Production -18; tests +0</title></path>
+<path d="M843.85,176.47l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M19 | de6d8a1 | 2026-08-31 | resolve 93 | Deepen active attempt lifecycle | Production -18; tests +0</title></path>
+</g>
+<g data-maintenance-id="M20">
+<path d="M850.56,209.66l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M20 | 14aebe3 | 2026-08-31 | resolve 94 | Extract Codex event projection | Production +79; tests +276</title></path>
+<path d="M850.56,173.65l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M20 | 14aebe3 | 2026-08-31 | resolve 94 | Extract Codex event projection | Production +79; tests +276</title></path>
+</g>
+<g data-maintenance-id="M21">
+<path d="M857.26,209.21l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M21 | f6b1172 | 2026-08-31 | resolve 95 | Isolate local Codex session evidence | Production +44; tests +206</title></path>
+<path d="M857.26,171.55l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M21 | f6b1172 | 2026-08-31 | resolve 95 | Isolate local Codex session evidence | Production +44; tests +206</title></path>
+</g>
+<g data-maintenance-id="M22">
+<path d="M904.17,205.17l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M22 | dfa79da | 2026-09-02 | resolve verification 1-3 | Verification maintainability | Production +31; tests +321</title></path>
+<path d="M904.17,158.02l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M22 | dfa79da | 2026-09-02 | resolve verification 1-3 | Verification maintainability | Production +31; tests +321</title></path>
+</g>
+<g data-maintenance-id="M23">
+<path d="M910.87,205.17l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M23 | d907c52 | 2026-09-02 | resolve more maintenance | September maintainability audit | Production +0; tests +98</title></path>
+<path d="M910.87,157.02l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M23 | d907c52 | 2026-09-02 | resolve more maintenance | September maintainability audit | Production +0; tests +98</title></path>
+</g>
+<g data-maintenance-id="M24">
+<path d="M917.57,204.39l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M24 | c2c4a91 | 2026-09-02 | resolve maintenance more | September maintainability audit | Production +77; tests +0</title></path>
+<path d="M917.57,157.02l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>M24 | c2c4a91 | 2026-09-02 | resolve maintenance more | September maintainability audit | Production +77; tests +0</title></path>
+</g>
+<path d="M620,73l5,5 -5,5 -5,-5z" fill="#fb7185"/>
+<text x="636" y="83">Maintenance commit (both curves)</text>
 <text x="582.5" y="496" text-anchor="middle">Cumulative resolved implementation tickets</text>
 <text transform="translate(24,265.0) rotate(-90)" text-anchor="middle">Nonblank source lines</text>
 </svg>

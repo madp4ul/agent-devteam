@@ -136,7 +136,38 @@ def collect(ref):
     return endpoint, rows, resolutions, anomalies
 
 
-def svg_chart(filename, title, subtitle, series, ylabel):
+def maintenance_events(rows, resolutions):
+    rules = json.loads((HERE / 'maintenance-classification.json').read_text(encoding='utf-8'))
+    selected = {}
+    for ticket in resolutions:
+        if not ticket['implementation']:
+            continue
+        path = ticket['path']
+        label = rules['tickets'].get(path)
+        if not label:
+            label = next((label for prefix, label in rules['efforts'].items() if path.startswith(prefix)), None)
+        if label:
+            event = selected.setdefault(ticket['commit'], dict(tickets=[], labels=[]))
+            event['tickets'].append(path)
+            if label not in event['labels']:
+                event['labels'].append(label)
+    for commit, label in rules['additional_commits'].items():
+        selected.setdefault(commit, dict(tickets=[], labels=[]))['labels'].append(label)
+    events = []
+    previous = dict(production_lines=0, test_lines=0)
+    for row in rows:
+        if row['commit'] in selected:
+            events.append(dict(id=f'M{len(events)+1}', commit=row['commit'], date=row['date'],
+                               subject=row['subject'], chart_tickets=row['resolved_implementation'],
+                               production_lines=row['production_lines'], test_lines=row['test_lines'],
+                               production_delta=row['production_lines']-previous['production_lines'],
+                               test_delta=row['test_lines']-previous['test_lines'],
+                               **selected[row['commit']]))
+        previous = row
+    return events
+
+
+def svg_chart(filename, title, subtitle, series, ylabel, maintenance=None):
     """Dependency-free vector plot with explicit axes and inspectable tooltips."""
     width, height = 1100, 520
     left, right, top, bottom = 100, 35, 95, 85
@@ -177,12 +208,28 @@ def svg_chart(filename, title, subtitle, series, ylabel):
         legend_x = left + number * 260
         out += [f'<path stroke="{color}" stroke-width="3" d="M{legend_x},78h25"/>',
                 f'<text x="{legend_x+33}" y="83">{html.escape(label)}</text>']
+    if maintenance:
+        # Overlay after all series so both lines keep their identity and red
+        # diamonds remain distinct from ordinary circular commit points.
+        for event in maintenance:
+            x = px(event['chart_tickets'])
+            tooltip = (f"{event['id']} | {event['commit'][:7]} | {event['date']} | {event['subject']} | "
+                       f"{'; '.join(event['labels'])} | Production {event['production_delta']:+,}; tests {event['test_delta']:+,}")
+            out.append(f'<g data-maintenance-id="{event["id"]}">')
+            for key in ['production_lines', 'test_lines']:
+                y = py(event[key])
+                out.append(f'<path d="M{x:.2f},{y-5:.2f}l5,5 -5,5 -5,-5z" fill="#fb7185" stroke="#101827" stroke-width="1"><title>{html.escape(tooltip)}</title></path>')
+            out.append('</g>')
+        out += ['<path d="M620,73l5,5 -5,5 -5,-5z" fill="#fb7185"/>',
+                '<text x="636" y="83">Maintenance commit (both curves)</text>']
     out += [f'<text x="{left+plot_w/2}" y="{height-24}" text-anchor="middle">Cumulative resolved implementation tickets</text>',
             f'<text transform="translate(24,{top+plot_h/2}) rotate(-90)" text-anchor="middle">{html.escape(ylabel)}</text>', '</svg>']
     (HERE / filename).write_text('\n'.join(out) + '\n', encoding='utf-8')
 
 
 def write_report(endpoint, rows, resolutions, anomalies):
+    maintenance = maintenance_events(rows, resolutions)
+    (HERE / 'maintenance-events.json').write_text(json.dumps(maintenance, indent=2) + '\n', encoding='utf-8')
     with (HERE / 'history.csv').open('w', newline='', encoding='utf-8') as stream:
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
         writer.writeheader()
@@ -196,7 +243,7 @@ def write_report(endpoint, rows, resolutions, anomalies):
     svg_chart('size.svg', 'Code size across committed history',
               f"{len(rows)} first-parent commits through {endpoint[:7]}; every commit is a point", 
               [(label, color, points(key)) for label, color, key in
-               zip(['Production', 'Tests and test support'], colors, ['production_lines', 'test_lines'])], 'Nonblank source lines')
+               zip(['Production', 'Tests and test support'], colors, ['production_lines', 'test_lines'])], 'Nonblank source lines', maintenance)
     svg_chart('average.svg', 'Code retained per resolved ticket',
               'Total source lines / cumulative implementation tickets; this is a stock average, not marginal growth',
               [(label, color, points(key, True)) for label, color, key in
@@ -220,6 +267,11 @@ def write_report(endpoint, rows, resolutions, anomalies):
                   [(label, color, [(m['tickets'], m[key], f"{m['start_commit'][:7]} to {m['end_commit'][:7]} | {m['delta']} tickets | {m[key]:,.1f} lines / ticket") for m in marginal])
                    for label, color, key in zip(['Production growth / ticket', 'Test growth / ticket'], colors, ['production', 'test'])], 'Net nonblank lines / new ticket')
     end = rows[-1]
+    maintenance_table = []
+    for event in maintenance:
+        ticket_links = ', '.join(f'[{Path(path).stem}](../{path})' for path in event['tickets'])
+        evidence = ticket_links or html.escape('; '.join(event['labels']))
+        maintenance_table.append(f"| {event['id']} | `{event['commit'][:7]}` | {event['chart_tickets']} | {event['production_delta']:+,} | {event['test_delta']:+,} | {evidence} |")
     # Nonoverlapping windows of 20 resolutions make broad changes easier to read.
     windows, anchor = [], plateaus[0]
     for row in plateaus[1:]:
@@ -242,6 +294,12 @@ Each point represents one commit, in history order. X is the number of distinct
 implementation tickets observed resolved by that commit. Commits without a new
 resolution retain the same X coordinate, so vertical movement is meaningful.
 Hover a point when viewing the SVG directly to inspect its commit and totals.
+
+**Red diamonds mark {len(maintenance)} maintenance commits on both curves.** The
+blue and yellow lines still identify production and tests. Open
+[the SVG directly](project-growth/size.svg) and hover a red diamond for its commit,
+maintenance scope, and immediate net line changes. The evidence table below
+lists every marked commit.
 
 | Metric at endpoint | Count |
 | --- | ---: |
@@ -294,6 +352,37 @@ progressively increasing marginal growth over a substantial range. These are
 descriptive charts, not a fitted growth model; tickets vary in size and include
 maintenance, bugs, and implementation spikes as well as product features.
 
+## Maintenance commits highlighted in red
+
+The reviewed [classification](project-growth/maintenance-classification.json)
+includes the five dedicated maintainability/verification efforts, nine individual
+organizational refactoring tickets, and two early extraction commits identified
+from their diffs. For tickets, the marker is the commit where resolution was first
+recorded, consistent with the chart's ticket counting. Research-only decisions,
+ordinary bug fixes, and feature delivery are excluded from this classification.
+The dedicated efforts include verification work as well as structural refactoring.
+
+The two additional early commits cover maintenance before completion bookkeeping.
+Other preparatory or follow-up commits without a newly resolved classified ticket
+are not automatically marked. Thus the markers locate the reviewed maintenance
+deliveries, not every historical edit that could be called maintenance. Future
+efforts can be added to the classification when updating the report.
+
+The deltas below compare each marked commit with its immediate preceding
+first-parent commit, including any other work in that commit. They are not
+causal estimates or totals attributable exclusively to the listed tickets.
+The X values are cumulative implementation-ticket counts, not tracker ticket IDs.
+
+| Marker | Commit | Chart X | Net production lines | Net test lines | Maintenance evidence |
+| --- | --- | ---: | ---: | ---: | --- |
+{chr(10).join(maintenance_table)}
+
+A maintenance marker followed by slower production growth is an observation,
+not proof that maintenance caused the change. The goal of these efforts was to
+make behavior easier to locate, change, and verify; line count alone cannot
+establish success or no impact. Evaluating that needs evidence about subsequent
+change locality, reuse, regressions, and verification effort.
+
 ## Counting rules and limitations
 
 - **Lines:** nonblank physical lines, including comments, imports, and multiline
@@ -333,6 +422,8 @@ maintenance, bugs, and implementation spikes as well as product features.
 [Every commit and its measurements](project-growth/history.csv),
 [first resolution evidence](project-growth/resolutions.json), and
 [net-growth intervals](project-growth/increments.json) are retained locally.
+[Maintenance marker evidence](project-growth/maintenance-events.json) records the
+selected commits, linked tickets, and immediate production/test deltas.
 
 To extend the report manually from the repository root:
 

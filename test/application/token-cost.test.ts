@@ -215,6 +215,7 @@ test("a completed attempt retains its snapshotted price after process pricing ch
   const request = await runtime.waitForRequest(1);
   runtime.setTranscript(request.attemptId, []);
   runtime.setUsage(request.attemptId, attemptUsageFixture());
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Price snapshotted.", threadId: "price-snapshot-thread" });
   await application.waitForAutomationIdle();
   application.close();
@@ -253,6 +254,7 @@ test("a completed attempt retains its snapshotted price after process pricing ch
   const second = await restartedRuntime.waitForRequest(1);
   restartedRuntime.setTranscript(second.attemptId, []);
   restartedRuntime.setUsage(second.attemptId, attemptUsageFixture({ inputTokens: 3_000 }));
+  restarted.pauseAutomation();
   restartedRuntime.complete({ status: "completed", summary: "New price snapshotted.", threadId: "price-snapshot-thread" });
   await restarted.waitForAutomationIdle();
 
@@ -291,6 +293,7 @@ test("conversation cost totals preserve the known subtotal when a settled run ha
     outputTokens: 0,
     reasoningOutputTokens: 0,
   });
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "First priced run.", threadId: "cost-thread" });
   await application.waitForAutomationIdle();
 
@@ -302,6 +305,7 @@ test("conversation cost totals preserve the known subtotal when a settled run ha
     idempotencyKey: "second-cost-run",
   });
   assert.equal(secondMessage.accepted, true);
+  await application.resumeAutomation();
   const second = await runtime.waitForRequest(2);
   runtime.setTranscript(second.attemptId, []);
   runtime.setUsage(second.attemptId, {
@@ -311,6 +315,7 @@ test("conversation cost totals preserve the known subtotal when a settled run ha
     outputTokens: 0,
     reasoningOutputTokens: 0,
   });
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Second priced run.", threadId: "cost-thread" });
   await application.waitForAutomationIdle();
   const complete = await application.queryAgentConversation(created.task.id, conversationId);
@@ -327,7 +332,9 @@ test("conversation cost totals preserve the known subtotal when a settled run ha
     idempotencyKey: "unavailable-cost-run",
   });
   assert.equal(thirdMessage.accepted, true);
+  await application.resumeAutomation();
   await runtime.waitForRequest(3);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Usage unavailable.", threadId: "cost-thread" });
   await application.waitForAutomationIdle();
   const incomplete = await application.queryAgentConversation(created.task.id, conversationId);
@@ -351,6 +358,7 @@ test("conversation cost totals preserve the known subtotal when a settled run ha
     idempotencyKey: "recover-conversation-cost-from-checkpoint",
   });
   assert.equal(fourthMessage.accepted, true);
+  await application.resumeAutomation();
   const fourth = await runtime.waitForRequest(4);
   runtime.setTranscript(fourth.attemptId, []);
   runtime.setUsage(fourth.attemptId, {
@@ -360,6 +368,7 @@ test("conversation cost totals preserve the known subtotal when a settled run ha
     outputTokens: 0,
     reasoningOutputTokens: 0,
   });
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Later cumulative checkpoint.", threadId: "cost-thread" });
   await application.waitForAutomationIdle();
 
@@ -403,6 +412,7 @@ test("continued turns price cumulative Codex usage snapshots exactly once", asyn
     outputTokens: 0,
     reasoningOutputTokens: 0,
   });
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "First turn.", threadId: "turn-local-cost-thread" });
   await application.waitForAutomationIdle();
 
@@ -414,6 +424,7 @@ test("continued turns price cumulative Codex usage snapshots exactly once", asyn
     idempotencyKey: "continue-turn-local-cost-task",
   });
   assert.equal(continued.accepted, true);
+  await application.resumeAutomation();
   const second = await runtime.waitForRequest(2);
   runtime.setTranscript(second.attemptId, []);
   runtime.setUsage(second.attemptId, {
@@ -423,6 +434,7 @@ test("continued turns price cumulative Codex usage snapshots exactly once", asyn
     outputTokens: 0,
     reasoningOutputTokens: 0,
   });
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Continued turn.", threadId: "turn-local-cost-thread" });
   await application.waitForAutomationIdle();
 
@@ -471,6 +483,7 @@ test("continued turns price cumulative Codex usage snapshots exactly once", asyn
     idempotencyKey: "replace-turn-local-cost-thread",
   });
   assert.equal(replacement.accepted, true);
+  await application.resumeAutomation();
   const third = await runtime.waitForRequest(3);
   runtime.setTranscript(third.attemptId, []);
   runtime.setUsage(third.attemptId, {
@@ -480,6 +493,7 @@ test("continued turns price cumulative Codex usage snapshots exactly once", asyn
     outputTokens: 0,
     reasoningOutputTokens: 0,
   });
+  application.pauseAutomation();
   runtime.complete({
     status: "completed",
     summary: "Replacement thread turn.",
@@ -521,6 +535,7 @@ test("conversation context fill follows the latest Codex thread and survives res
     contextWindowTokens: 258_400,
     usedPercent: 49,
   });
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "First thread measured.", threadId: "first-context-thread" });
   await application.waitForAutomationIdle();
 
@@ -532,6 +547,7 @@ test("conversation context fill follows the latest Codex thread and survives res
     idempotencyKey: "replace-context-fill-thread",
   });
   assert.equal(continued.accepted, true);
+  await application.resumeAutomation();
   const second = await runtime.waitForRequest(2);
   runtime.setTranscript(second.attemptId, []);
   runtime.setContextWindowUsage(second.attemptId, {
@@ -539,6 +555,7 @@ test("conversation context fill follows the latest Codex thread and survives res
     contextWindowTokens: 258_400,
     usedPercent: 10,
   });
+  application.pauseAutomation();
   runtime.complete({
     status: "completed",
     summary: "Replacement thread measured.",
@@ -626,6 +643,7 @@ test("complete task detail owns the conversation cost summary", async (t) => {
     outputTokens: 0,
     reasoningOutputTokens: 20,
   });
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Review priced.", threadId: "task-cost-review" });
   await application.waitForAutomationIdle();
 
@@ -637,6 +655,7 @@ test("complete task detail owns the conversation cost summary", async (t) => {
     idempotencyKey: "second-priced-task-cost-run",
   });
   assert.equal(continued.accepted, true);
+  await application.resumeAutomation();
   const third = await runtime.waitForRequest(3);
   runtime.setTranscript(third.attemptId, []);
   runtime.setUsage(third.attemptId, {
@@ -646,6 +665,7 @@ test("complete task detail owns the conversation cost summary", async (t) => {
     outputTokens: 0,
     reasoningOutputTokens: 40,
   });
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Second implementation priced.", threadId: "task-cost-implementation" });
   await application.waitForAutomationIdle();
 
@@ -685,7 +705,9 @@ test("complete task detail owns the conversation cost summary", async (t) => {
     idempotencyKey: "unavailable-task-cost-run",
   });
   assert.equal(unavailable.accepted, true);
+  await application.resumeAutomation();
   await runtime.waitForRequest(4);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Usage unavailable.", threadId: "task-cost-implementation" });
   await application.waitForAutomationIdle();
 
@@ -732,6 +754,7 @@ test("process cost statistics aggregate retained tasks without repricing history
   const reviewRun = await runtime.waitForRequest(2);
   runtime.setTranscript(reviewRun.attemptId, []);
   runtime.setUsage(reviewRun.attemptId, attemptUsageFixture({ inputTokens: 2_000 }));
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Review priced.", threadId: "project-cost-review" });
   await application.waitForAutomationIdle();
 
@@ -775,10 +798,12 @@ test("process cost statistics aggregate retained tasks without repricing history
     idempotencyKey: "continue-retained-project-cost-thread",
   });
   assert.equal(resumedAfterArchive.accepted, true);
+  await application.resumeAutomation();
   const resumedRun = await runtime.waitForRequest(3);
   assert.equal(resumedRun.resumeThreadId, "project-cost-implementation");
   runtime.setTranscript(resumedRun.attemptId, []);
   runtime.setUsage(resumedRun.attemptId, attemptUsageFixture({ inputTokens: 1_500 }));
+  application.pauseAutomation();
   runtime.complete({
     status: "completed",
     summary: "Archived thread continued.",
@@ -812,10 +837,12 @@ test("process cost statistics aggregate retained tasks without repricing history
     idempotencyKey: "continue-retained-review-cost-thread",
   });
   assert.equal(resumedReview.accepted, true);
+  await application.resumeAutomation();
   const resumedReviewRun = await runtime.waitForRequest(4);
   assert.equal(resumedReviewRun.resumeThreadId, "project-cost-review");
   runtime.setTranscript(resumedReviewRun.attemptId, []);
   runtime.setUsage(resumedReviewRun.attemptId, attemptUsageFixture({ inputTokens: 2_500 }));
+  application.pauseAutomation();
   runtime.complete({
     status: "completed",
     summary: "Untouched archived review thread continued.",

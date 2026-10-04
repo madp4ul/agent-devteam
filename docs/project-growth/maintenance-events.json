@@ -1,0 +1,424 @@
+[
+  {
+    "id": "M1",
+    "commit": "82511691f23e9b98824d015fbe8fd963441d51e8",
+    "date": "2026-08-02",
+    "subject": "split large code files",
+    "chart_tickets": 4,
+    "production_lines": 3414,
+    "test_lines": 3003,
+    "production_delta": 135,
+    "test_delta": 0,
+    "tickets": [],
+    "labels": [
+      "Early split of application, contracts, database, automation, and discovery modules; predates dedicated maintenance tickets"
+    ]
+  },
+  {
+    "id": "M2",
+    "commit": "7de3845cfc9a5dc70fa60f971a82a81a97133ab9",
+    "date": "2026-08-08",
+    "subject": "resolve 29",
+    "chart_tickets": 8,
+    "production_lines": 5822,
+    "test_lines": 4542,
+    "production_delta": -130,
+    "test_delta": 2,
+    "tickets": [
+      ".scratch/agent-coordination-framework/issues/29-decompose-coordination-persistence.md"
+    ],
+    "labels": [
+      "Decompose coordination persistence"
+    ]
+  },
+  {
+    "id": "M3",
+    "commit": "dbfd041eded83666fe222e798a6c7c1cb2fd459f",
+    "date": "2026-08-08",
+    "subject": "resolve 41",
+    "chart_tickets": 13,
+    "production_lines": 6566,
+    "test_lines": 5706,
+    "production_delta": 22,
+    "test_delta": 0,
+    "tickets": [
+      ".scratch/agent-coordination-framework/issues/41-separate-task-projections-from-commands.md"
+    ],
+    "labels": [
+      "Separate task projections from commands"
+    ]
+  },
+  {
+    "id": "M4",
+    "commit": "dcb5d4714bd5cb31ba99aeff6804fe46e85eab37",
+    "date": "2026-08-15",
+    "subject": "maintenance 2",
+    "chart_tickets": 51,
+    "production_lines": 15799,
+    "test_lines": 16911,
+    "production_delta": 14,
+    "test_delta": 34,
+    "tickets": [],
+    "labels": [
+      "Initial user-board projection extraction and creation of the first maintainability effort, before its tickets were marked resolved"
+    ]
+  },
+  {
+    "id": "M5",
+    "commit": "a85bb76950f63ed6ce8db33a1838e48bb34b1972",
+    "date": "2026-08-15",
+    "subject": "maintenance 3",
+    "chart_tickets": 54,
+    "production_lines": 15864,
+    "test_lines": 17037,
+    "production_delta": 65,
+    "test_delta": 126,
+    "tickets": [
+      ".scratch/codebase-maintainability/issues/01-complete-user-board-projection.md",
+      ".scratch/codebase-maintainability/issues/02-complete-user-task-detail-projection.md",
+      ".scratch/codebase-maintainability/issues/03-shared-accessible-modal-lifecycle.md"
+    ],
+    "labels": [
+      "Codebase maintainability"
+    ]
+  },
+  {
+    "id": "M6",
+    "commit": "bf4b74f9422895e7343ee0834f049e7f65d7b09a",
+    "date": "2026-08-15",
+    "subject": "resolve 5",
+    "chart_tickets": 56,
+    "production_lines": 15922,
+    "test_lines": 17162,
+    "production_delta": 58,
+    "test_delta": 125,
+    "tickets": [
+      ".scratch/codebase-maintainability/issues/04-shared-refresh-and-polling-lifecycle.md",
+      ".scratch/codebase-maintainability/issues/05-single-durable-activity-journal.md"
+    ],
+    "labels": [
+      "Codebase maintainability"
+    ]
+  },
+  {
+    "id": "M7",
+    "commit": "c3dccb1700f062fbf6f15b63f1a6e5af962f1b85",
+    "date": "2026-08-15",
+    "subject": "resolve 6",
+    "chart_tickets": 57,
+    "production_lines": 15934,
+    "test_lines": 17162,
+    "production_delta": 12,
+    "test_delta": 0,
+    "tickets": [
+      ".scratch/codebase-maintainability/issues/06-atomic-attention-recording.md"
+    ],
+    "labels": [
+      "Codebase maintainability"
+    ]
+  },
+  {
+    "id": "M8",
+    "commit": "fc1fe110fbf7bc6b84df49093a1dd9042b18fe31",
+    "date": "2026-08-15",
+    "subject": "resolve 7",
+    "chart_tickets": 58,
+    "production_lines": 15842,
+    "test_lines": 17192,
+    "production_delta": -92,
+    "test_delta": 30,
+    "tickets": [
+      ".scratch/codebase-maintainability/issues/07-idempotent-command-execution-module.md"
+    ],
+    "labels": [
+      "Codebase maintainability"
+    ]
+  },
+  {
+    "id": "M9",
+    "commit": "a171ffb3756dfb0c2fb5e36abeb9c061d0fdf699",
+    "date": "2026-08-20",
+    "subject": "resolve 8-12 maintainability",
+    "chart_tickets": 67,
+    "production_lines": 16672,
+    "test_lines": 17692,
+    "production_delta": 256,
+    "test_delta": 0,
+    "tickets": [
+      ".scratch/codebase-maintainability/issues/08-structured-idempotent-command-identity.md",
+      ".scratch/codebase-maintainability/issues/09-conversation-projection-module.md",
+      ".scratch/codebase-maintainability/issues/10-conversation-command-module.md",
+      ".scratch/codebase-maintainability/issues/11-expand-capability-focused-contracts.md",
+      ".scratch/codebase-maintainability/issues/12-migrate-core-and-runtime-contracts.md"
+    ],
+    "labels": [
+      "Codebase maintainability"
+    ]
+  },
+  {
+    "id": "M10",
+    "commit": "4b73b5b219a26aaffdbafe20ea7867c389c3bc95",
+    "date": "2026-08-20",
+    "subject": "resolve maintenace 13-15",
+    "chart_tickets": 70,
+    "production_lines": 16643,
+    "test_lines": 17720,
+    "production_delta": -29,
+    "test_delta": 28,
+    "tickets": [
+      ".scratch/codebase-maintainability/issues/13-migrate-adapter-contracts.md",
+      ".scratch/codebase-maintainability/issues/14-contract-compatibility-cleanup.md",
+      ".scratch/codebase-maintainability/issues/15-organize-browser-tests-by-capability.md"
+    ],
+    "labels": [
+      "Codebase maintainability"
+    ]
+  },
+  {
+    "id": "M11",
+    "commit": "80728a855ae240cf0a27b3bc4544aa361bb8b2c1",
+    "date": "2026-08-20",
+    "subject": "resolve maintenance 16-17",
+    "chart_tickets": 72,
+    "production_lines": 16643,
+    "test_lines": 17902,
+    "production_delta": 0,
+    "test_delta": 182,
+    "tickets": [
+      ".scratch/codebase-maintainability/issues/16-organize-application-and-runtime-tests.md",
+      ".scratch/codebase-maintainability/issues/17-finalize-architecture-and-verification.md"
+    ],
+    "labels": [
+      "Codebase maintainability"
+    ]
+  },
+  {
+    "id": "M12",
+    "commit": "0bea7957df9b8bdf7032a5128573a266b2ed8bf6",
+    "date": "2026-08-22",
+    "subject": "resolve maintenance 18",
+    "chart_tickets": 75,
+    "production_lines": 17341,
+    "test_lines": 18686,
+    "production_delta": 33,
+    "test_delta": 0,
+    "tickets": [
+      ".scratch/codebase-maintainability/issues/18-localize-activation-creation.md"
+    ],
+    "labels": [
+      "Codebase maintainability"
+    ]
+  },
+  {
+    "id": "M13",
+    "commit": "b6f5ba7f7281c5fa7bde7ae435490e06f26e06b4",
+    "date": "2026-08-22",
+    "subject": "maintenance 1-4",
+    "chart_tickets": 86,
+    "production_lines": 18542,
+    "test_lines": 21057,
+    "production_delta": 26,
+    "test_delta": 346,
+    "tickets": [
+      ".scratch/conversation-transcript-maintainability/issues/01-complete-coordination-transcript-projection.md",
+      ".scratch/conversation-transcript-maintainability/issues/02-deepen-conversation-history-module.md",
+      ".scratch/conversation-transcript-maintainability/issues/03-organize-transcript-tests-by-seam.md",
+      ".scratch/conversation-transcript-maintainability/issues/04-organize-task-browser-tests-by-sub-capability.md"
+    ],
+    "labels": [
+      "Conversation transcript maintainability"
+    ]
+  },
+  {
+    "id": "M14",
+    "commit": "6d38e40bde8c4d8c44e48db6e6a0ee84fb364feb",
+    "date": "2026-08-26",
+    "subject": "resolve maintenance round 3",
+    "chart_tickets": 98,
+    "production_lines": 20166,
+    "test_lines": 22813,
+    "production_delta": 115,
+    "test_delta": 731,
+    "tickets": [
+      ".scratch/post-feature-maintainability/issues/01-deepen-conversation-follow-up-composer.md",
+      ".scratch/post-feature-maintainability/issues/02-localize-token-cost-semantics.md",
+      ".scratch/post-feature-maintainability/issues/03-project-task-conversation-cost-summary.md",
+      ".scratch/post-feature-maintainability/issues/04-organize-attachment-and-cost-tests.md"
+    ],
+    "labels": [
+      "Post-feature maintainability"
+    ]
+  },
+  {
+    "id": "M15",
+    "commit": "c32bb52862ccf14b410b81a4a3dfb02c1adc5c0f",
+    "date": "2026-08-29",
+    "subject": "resolve 85 86",
+    "chart_tickets": 107,
+    "production_lines": 21468,
+    "test_lines": 24670,
+    "production_delta": 254,
+    "test_delta": 369,
+    "tickets": [
+      ".scratch/agent-coordination-framework/issues/86-isolate-web-api-routes-behind-typed-dispatcher.md"
+    ],
+    "labels": [
+      "Isolate typed HTTP route dispatch"
+    ]
+  },
+  {
+    "id": "M16",
+    "commit": "bb4502d4ed2ffc65db9d6aed9bc51a7b26b559f7",
+    "date": "2026-08-30",
+    "subject": "resolve 88",
+    "chart_tickets": 108,
+    "production_lines": 21495,
+    "test_lines": 24670,
+    "production_delta": 27,
+    "test_delta": 0,
+    "tickets": [
+      ".scratch/agent-coordination-framework/issues/88-localize-activation-resolution-commands.md"
+    ],
+    "labels": [
+      "Localize activation resolution"
+    ]
+  },
+  {
+    "id": "M17",
+    "commit": "9e106d1224bee5033a6ffe69a524689ca9899f14",
+    "date": "2026-08-30",
+    "subject": "resolve 91",
+    "chart_tickets": 109,
+    "production_lines": 21515,
+    "test_lines": 24670,
+    "production_delta": 20,
+    "test_delta": 0,
+    "tickets": [
+      ".scratch/agent-coordination-framework/issues/91-extract-retained-attempt-evidence.md"
+    ],
+    "labels": [
+      "Extract retained attempt evidence"
+    ]
+  },
+  {
+    "id": "M18",
+    "commit": "f2d9a89b0e1dd80d7b0edcdb94d0eb11495feee3",
+    "date": "2026-08-31",
+    "subject": "resolve 92",
+    "chart_tickets": 110,
+    "production_lines": 21539,
+    "test_lines": 24854,
+    "production_delta": 24,
+    "test_delta": 184,
+    "tickets": [
+      ".scratch/agent-coordination-framework/issues/92-localize-activation-dispatch-preparation.md"
+    ],
+    "labels": [
+      "Localize activation dispatch preparation"
+    ]
+  },
+  {
+    "id": "M19",
+    "commit": "de6d8a10ec3f5ddf847f5c210ef8752dc31ca222",
+    "date": "2026-08-31",
+    "subject": "resolve 93",
+    "chart_tickets": 111,
+    "production_lines": 21521,
+    "test_lines": 24854,
+    "production_delta": -18,
+    "test_delta": 0,
+    "tickets": [
+      ".scratch/agent-coordination-framework/issues/93-deepen-active-attempt-lifecycle.md"
+    ],
+    "labels": [
+      "Deepen active attempt lifecycle"
+    ]
+  },
+  {
+    "id": "M20",
+    "commit": "14aebe37e9aed041ccb40700bc4e8baa5eb5f0b0",
+    "date": "2026-08-31",
+    "subject": "resolve 94",
+    "chart_tickets": 112,
+    "production_lines": 21600,
+    "test_lines": 25130,
+    "production_delta": 79,
+    "test_delta": 276,
+    "tickets": [
+      ".scratch/agent-coordination-framework/issues/94-project-codex-events-into-attempt-evidence.md"
+    ],
+    "labels": [
+      "Extract Codex event projection"
+    ]
+  },
+  {
+    "id": "M21",
+    "commit": "f6b1172971cb17f86932d41746e2d038659dbff8",
+    "date": "2026-08-31",
+    "subject": "resolve 95",
+    "chart_tickets": 113,
+    "production_lines": 21644,
+    "test_lines": 25336,
+    "production_delta": 44,
+    "test_delta": 206,
+    "tickets": [
+      ".scratch/agent-coordination-framework/issues/95-isolate-local-codex-session-evidence.md"
+    ],
+    "labels": [
+      "Isolate local Codex session evidence"
+    ]
+  },
+  {
+    "id": "M22",
+    "commit": "dfa79da0ddb3a8209d9965be4a0793a3a1e44a55",
+    "date": "2026-09-02",
+    "subject": "resolve verification 1-3",
+    "chart_tickets": 120,
+    "production_lines": 22040,
+    "test_lines": 26663,
+    "production_delta": 31,
+    "test_delta": 321,
+    "tickets": [
+      ".scratch/verification-maintainability/issues/01-reconcile-activation-prompt-contract.md",
+      ".scratch/verification-maintainability/issues/02-verify-complete-migration-schema.md",
+      ".scratch/verification-maintainability/issues/03-stabilize-cli-host-test-lifecycle.md"
+    ],
+    "labels": [
+      "Verification maintainability"
+    ]
+  },
+  {
+    "id": "M23",
+    "commit": "d907c528a7b972c7baf3536e71a14c227e190578",
+    "date": "2026-09-02",
+    "subject": "resolve more maintenance",
+    "chart_tickets": 121,
+    "production_lines": 22040,
+    "test_lines": 26761,
+    "production_delta": 0,
+    "test_delta": 98,
+    "tickets": [
+      ".scratch/maintainability-audit-2026-09/issues/01-type-conversation-browser-fixtures.md"
+    ],
+    "labels": [
+      "September maintainability audit"
+    ]
+  },
+  {
+    "id": "M24",
+    "commit": "c2c4a9140bb3a88dcb8a8056cbf9d8f79ae41b19",
+    "date": "2026-09-02",
+    "subject": "resolve maintenance more",
+    "chart_tickets": 122,
+    "production_lines": 22117,
+    "test_lines": 26761,
+    "production_delta": 77,
+    "test_delta": 0,
+    "tickets": [
+      ".scratch/maintainability-audit-2026-09/issues/02-localize-task-comment-composition.md"
+    ],
+    "labels": [
+      "September maintainability audit"
+    ]
+  }
+]

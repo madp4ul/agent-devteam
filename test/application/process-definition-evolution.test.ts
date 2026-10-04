@@ -517,6 +517,7 @@ test("Resume with current process rebases only compatible stale activations", as
     accepted: false,
     reason: "process-change-approval-required",
   });
+  runtime.onCompletion = () => changed.pauseAutomation();
   const approved = await changed.resumeWithCurrentProcess();
   assert.equal(approved.accepted, true);
   const startupAfterApproval = changed.queryStartup();
@@ -740,6 +741,7 @@ test("failed and user-interrupted activations become stale after a semantic chan
     },
   });
   t.after(() => changed.close());
+  rebasedRuntime.onCompletion = () => changed.pauseAutomation();
   const startup = changed.queryStartup();
   assert.equal(startup.mode, "paused");
   if (startup.mode === "paused") {
@@ -776,6 +778,7 @@ test("failed and user-interrupted activations become stale after a semantic chan
     idempotencyKey: "continue-rebased-interruption",
   });
   assert.equal(continued.accepted, true);
+  await changed.resumeAutomation();
   await changed.waitForAutomationIdle();
   const resumedRequest = rebasedRuntime.requests.find((request) => request.task.id === interrupted.task.id);
   assert.equal(resumedRequest?.resumeThreadId, "process-evolution-thread-2");
@@ -848,10 +851,12 @@ boards:
 
 class RecordingRuntime implements AgentRuntime {
   readonly requests: AgentRunRequest[] = [];
+  onCompletion?: () => void;
 
   run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
     this.requests.push(request);
     lifecycle.started("process-evolution-thread");
+    this.onCompletion?.();
     return Promise.resolve({
       status: "completed",
       summary: "Completed under the approved current process.",

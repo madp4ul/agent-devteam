@@ -88,6 +88,7 @@ export class AutomationCoordinator {
   #automationPumpRunning = false;
   #automationKickPending = false;
   #wakeAutomationPump: (() => void) | undefined;
+  #closed = false;
   readonly #activeRuns = new Map<string, ActiveRunControl>();
 
   constructor(options: AutomationCoordinatorOptions) {
@@ -204,6 +205,7 @@ export class AutomationCoordinator {
   }
 
   kick(): void {
+    if (this.#closed) return;
     if (this.#automation.state !== "running" || this.#runtimeDispatch === undefined) return;
     if (this.#automationPumpRunning) {
       this.#automationKickPending = true;
@@ -220,6 +222,14 @@ export class AutomationCoordinator {
       this.#processStore.pauseAutomation();
       this.#automation = { state: "paused", attemptsMayStart: false };
     });
+  }
+
+  close(): void {
+    this.#closed = true;
+    this.#automation = { state: "paused", attemptsMayStart: false };
+    this.#wakeAutomationPump?.();
+    this.#wakeAutomationPump = undefined;
+    for (const run of this.#activeRuns.values()) run.controller.abort();
   }
 
   private async runQueuedUntilSettled(onFirstDispatch: () => void): Promise<void> {
@@ -256,19 +266,11 @@ export class AutomationCoordinator {
         inFlightCompletions.add(tracked);
         continue;
       }
-      if (inFlightCompletions.size === 0) {
+      const dueAt = [this.#activationScheduling.readNextRetryDueAt(now),
+        this.#activationScheduling.readNextGraceDueAt(now)]
+        .filter((value): value is string => value !== undefined).sort()[0];
+      if (inFlightCompletions.size === 0 && dueAt === undefined) {
         if (firstError !== undefined) throw firstError;
-        const retryDueAt = this.#activationScheduling.readNextRetryDueAt(now);
-        if (retryDueAt !== undefined) {
-          let wake: (() => void) | undefined;
-          const nextKick = new Promise<void>((resolve) => {
-            wake = resolve;
-            this.#wakeAutomationPump = resolve;
-          });
-          await Promise.race([this.#clock.waitUntil(retryDueAt), nextKick]);
-          if (this.#wakeAutomationPump === wake) this.#wakeAutomationPump = undefined;
-          continue;
-        }
         return;
       }
       let wake: (() => void) | undefined;
@@ -276,7 +278,13 @@ export class AutomationCoordinator {
         wake = resolve;
         this.#wakeAutomationPump = resolve;
       });
-      await Promise.race([...inFlightCompletions, nextKick]);
+      const waiting = new AbortController();
+      try {
+        await Promise.race([...inFlightCompletions, nextKick,
+          ...(dueAt === undefined ? [] : [this.#clock.waitUntil(dueAt, waiting.signal)])]);
+      } finally {
+        waiting.abort();
+      }
       if (this.#wakeAutomationPump === wake) this.#wakeAutomationPump = undefined;
       if (firstError !== undefined) {
         await Promise.all(inFlightCompletions);
@@ -314,7 +322,8 @@ export class AutomationCoordinator {
       this.#activationScheduling.releaseUnstartedClaim(claim);
       return { completion: Promise.resolve() };
     }
-    const attempt = this.#activationScheduling.startPreparedAttempt(claim, workspace);
+    const attempt = this.#activationScheduling.startPreparedAttempt(claim, workspace, this.#clock.now());
+    if (attempt === undefined) return { completion: Promise.resolve() };
     const controller = new AbortController();
     let confirmInterruption = () => {};
     let failInterruption = (_error: unknown) => {};
@@ -411,6 +420,13 @@ export class AutomationCoordinator {
             summary: error instanceof Error ? error.message : "Agent runtime dispatch failed",
           };
         }
+        if (this.#closed) {
+          if (activeRun.state === "interrupting") {
+            throw new Error("Application closed before interruption could be durably confirmed");
+          }
+          activeRun.confirm();
+          return;
+        }
         const transcript = this.#transcriptAccess === undefined
           ? undefined
           : await this.#transcriptAccess.read(attempt.id) ?? undefined;
@@ -473,9 +489,18 @@ export class AutomationCoordinator {
 
 const systemAutomationClock: AutomationClock = {
   now: () => new Date(),
-  waitUntil: async (instant) => {
+  waitUntil: async (instant, signal) => {
     const delay = Math.max(0, Date.parse(instant) - Date.now());
-    await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    await new Promise<void>((resolve) => {
+      const finish = (): void => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, delay);
+      if (signal?.aborted) finish();
+      else signal?.addEventListener("abort", finish, { once: true });
+    });
   },
 };
 

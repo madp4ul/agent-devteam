@@ -48,7 +48,7 @@ test("waiting relationships do not suppress work and each completion queues its 
 
   await application.resumeAutomation();
   await application.waitForAutomationIdle();
-  assert.deepEqual(runtime.requests.map(({ reason }) => reason.type), ["column-entry"]);
+  assert.deepEqual(runtime.ordinaryRequests.map(({ reason }) => reason.type), ["column-entry"]);
 
   const completed = application.moveTask({
     taskId: first.id,
@@ -59,7 +59,7 @@ test("waiting relationships do not suppress work and each completion queues its 
   });
   assert.equal(completed.accepted, true);
   await application.waitForAutomationIdle();
-  assert.deepEqual(runtime.requests.map(({ reason }) => reason.type), [
+  assert.deepEqual(runtime.ordinaryRequests.map(({ reason }) => reason.type), [
     "column-entry",
     "relationship-satisfied",
   ]);
@@ -419,7 +419,7 @@ test("child completion adds resume work after existing responsibility runs", asy
 
   await application.resumeAutomation();
   await application.waitForAutomationIdle();
-  assert.deepEqual(runtime.requests.map(({ reason }) => reason.type), ["column-entry"]);
+  assert.deepEqual(runtime.ordinaryRequests.map(({ reason }) => reason.type), ["column-entry"]);
   const completedChild = application.moveTask({
     taskId: child.task.id,
     destinationColumnId: "completion",
@@ -430,13 +430,13 @@ test("child completion adds resume work after existing responsibility runs", asy
   assert.equal(completedChild.accepted, true);
   await application.waitForAutomationIdle();
 
-  assert.equal(runtime.requests.length, 2);
-  assert.equal(runtime.requests[0]?.task.id, parent.id);
-  assert.deepEqual(runtime.requests[0]?.reason, queuedResponsibility.reason);
+  assert.equal(runtime.ordinaryRequests.length, 2);
+  assert.equal(runtime.ordinaryRequests[0]?.task.id, parent.id);
+  assert.deepEqual(runtime.ordinaryRequests[0]?.reason, queuedResponsibility.reason);
   const completedParent = application.queryTask(parent.id);
   assert.equal(completedParent.available, true);
   if (!completedParent.available) return;
-  assert.equal(completedParent.task.activations.length, 2);
+  assert.equal(completedParent.task.activations.filter(({ reason }) => reason.type !== "stall-recovery").length, 2);
   assert.equal(completedParent.task.activations[1]?.reason.type, "relationship-satisfied");
   assert.equal(
     completedParent.task.activity.filter((event) => event.type === "relationship.satisfied").length,
@@ -489,7 +489,7 @@ test("a queued mention remains distinct from relationship satisfaction", async (
   assert.equal(unblocked.available, true);
   if (!unblocked.available) return;
   assert.deepEqual(
-    unblocked.task.activations.map((activation) => activation.reason.type),
+    unblocked.task.activations.filter(({ reason }) => reason.type !== "stall-recovery").map((activation) => activation.reason.type),
     ["column-entry", "agent-mention", "relationship-satisfied"],
   );
   assert.equal(new Set(unblocked.task.activations.map(({ conversationId }) => conversationId)).size, 1);
@@ -611,7 +611,7 @@ test("a child can start from committed Git state without sharing its parent's wo
   const parent = createTask(application, "implementation", "Parent work", "git-parent");
   await application.resumeAutomation();
   await application.waitForAutomationIdle();
-  const parentWorkspace = runtime.requests[0]?.workspace;
+  const parentWorkspace = runtime.ordinaryRequests[0]?.workspace;
   assert.ok(parentWorkspace);
   await writeFile(join(parentWorkspace.path, "DIRTY.txt"), "uncommitted parent state\n");
   const child = application.createChildTask({
@@ -630,10 +630,10 @@ test("a child can start from committed Git state without sharing its parent's wo
 
   await application.waitForAutomationIdle();
 
-  assert.equal(runtime.requests.length, 2);
-  assert.equal(runtime.requests[1]?.task.id, child.task.id);
-  assert.equal(runtime.requests[1]?.workspace.startingRef, "feature-base");
-  await assert.rejects(readFile(join(runtime.requests[1]!.workspace.path, "DIRTY.txt"), "utf8"));
+  assert.equal(runtime.ordinaryRequests.length, 2);
+  assert.equal(runtime.ordinaryRequests[1]?.task.id, child.task.id);
+  assert.equal(runtime.ordinaryRequests[1]?.workspace.startingRef, "feature-base");
+  await assert.rejects(readFile(join(runtime.ordinaryRequests[1]!.workspace.path, "DIRTY.txt"), "utf8"));
   assert.deepEqual(child.task.relationships, [
     {
       id: child.task.relationships[0]?.id,
@@ -644,7 +644,7 @@ test("a child can start from committed Git state without sharing its parent's wo
     },
   ]);
 
-  assert.notEqual(runtime.requests[0]?.workspace.path, runtime.requests[1]?.workspace.path);
+  assert.notEqual(runtime.ordinaryRequests[0]?.workspace.path, runtime.ordinaryRequests[1]?.workspace.path);
 
   const completedChild = application.moveTask({
     taskId: child.task.id,
@@ -655,8 +655,8 @@ test("a child can start from committed Git state without sharing its parent's wo
   });
   assert.equal(completedChild.accepted, true);
   await application.waitForAutomationIdle();
-  assert.equal(runtime.requests[2]?.task.id, parent.id);
-  assert.equal(runtime.requests[2]?.reason.type, "relationship-satisfied");
+  assert.equal(runtime.ordinaryRequests[2]?.task.id, parent.id);
+  assert.equal(runtime.ordinaryRequests[2]?.reason.type, "relationship-satisfied");
   const parentInspection = application.queryTaskInspection(parent.id);
   assert.equal(parentInspection.available, true);
   if (parentInspection.available) {
@@ -806,7 +806,7 @@ test("relationship satisfaction wakes idle automation after ordinary work comple
   });
   await application.resumeAutomation();
   await application.waitForAutomationIdle();
-  assert.deepEqual(runtime.requests.map(({ reason }) => reason.type), ["column-entry"]);
+  assert.deepEqual(runtime.ordinaryRequests.map(({ reason }) => reason.type), ["column-entry"]);
 
   application.moveTask({
     taskId: blocker.id,
@@ -816,7 +816,7 @@ test("relationship satisfaction wakes idle automation after ordinary work comple
     idempotencyKey: "wake-complete",
   });
   await application.waitForAutomationIdle();
-  assert.deepEqual(runtime.requests.map((request) => request.reason.type), [
+  assert.deepEqual(runtime.ordinaryRequests.map((request) => request.reason.type), [
     "column-entry",
     "relationship-satisfied",
   ]);
@@ -999,6 +999,36 @@ test("relationship removal never creates or cancels activation work", async (t) 
   }
 });
 
+test("retained mixed relationships reject circular waits even through completed targets", async (t) => {
+  const fixture = await createFixture();
+  await writeFile(fixture.processDefinitionPath, (await readFile(fixture.processDefinitionPath, "utf8")) +
+    "  - id: operations\n    name: Operations\n    guidance: Coordinate investigations.\n    columns:\n      - id: backlog\n        name: Backlog\n");
+  const application = await CoordinationApplication.start(fixture);
+  t.after(() => application.close());
+  const first = createTask(application, "backlog", "First", "cycle-first");
+  const second = createTask(application, "backlog", "Second", "cycle-second");
+  const thirdResult = application.createTask({ boardId: "operations", columnId: "backlog",
+    title: "Third", description: "Cross-board prerequisite", actor: { kind: "user", id: "paul" },
+    idempotencyKey: "cycle-third" });
+  assert.ok(thirdResult.accepted);
+  const third = thirdResult.task;
+  const actor = { kind: "user", id: "paul" } as const;
+  const link = (sourceTaskId: string, targetTaskId: string, type: "dependency" | "parent-child") =>
+    application.createTaskRelationship({ sourceTaskId, targetTaskId, type,
+      resumeAgentId: "implementer", actor, idempotencyKey: `${sourceTaskId}-${targetTaskId}` });
+  assert.equal(link(first.id, second.id, "parent-child").accepted, true);
+  assert.equal(link(second.id, third.id, "dependency").accepted, true);
+  assert.equal(application.moveTask({ taskId: second.id, destinationColumnId: "completion",
+    expectedRevision: second.revision, actor, idempotencyKey: "cycle-complete" }).accepted, true);
+  const before = [first, second, third].map(({ id }) => application.queryTask(id));
+  assert.deepEqual(link(third.id, first.id, "dependency"),
+    { accepted: false, reason: "circular-relationship" });
+  assert.deepEqual(link(second.id, first.id, "dependency"),
+    { accepted: false, reason: "circular-relationship" });
+  assert.deepEqual([first, second, third].map(({ id }) => application.queryTask(id)), before);
+  assert.equal(link(first.id, third.id, "dependency").accepted, true);
+});
+
 function createTask(
   application: CoordinationApplication,
   columnId: string,
@@ -1074,6 +1104,11 @@ async function createGitFixture(): Promise<{
 
 class RecordingRuntime implements AgentRuntime {
   readonly requests: AgentRunRequest[] = [];
+
+  // These scenarios assert ordinary relationship ordering independently of idle recovery.
+  get ordinaryRequests(): AgentRunRequest[] {
+    return this.requests.filter(({ reason }) => reason.type !== "stall-recovery");
+  }
 
   run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
     this.requests.push(request);

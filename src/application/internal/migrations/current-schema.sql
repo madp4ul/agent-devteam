@@ -26,7 +26,7 @@ CREATE TABLE "activations" (
         id TEXT NOT NULL UNIQUE,
         task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
         target_agent_id TEXT NOT NULL REFERENCES agents(id),
-        reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention', 'relationship-satisfied', 'relationship-changed', 'user-follow-up')),
+        reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention', 'relationship-satisfied', 'relationship-changed', 'user-follow-up', 'stall-recovery')),
         source_event_id TEXT NOT NULL,
         status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
         created_at TEXT NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE "activity_ledger" (
           'relationship.created', 'relationship.removed', 'relationship.satisfied', 'relationship.resume-agent-changed',
           'attention.created', 'attention.resolved', 'activation.created', 'activation.dismissed',
           'attempt.started', 'attempt.completed', 'automation.suspended', 'automation.resumed',
-          'conversation.continued', 'conversation.retired', 'task.archived', 'task.unarchived'
+          'conversation.continued', 'conversation.retired', 'task.archived', 'task.unarchived', 'stall.detected', 'stall.recovery-skipped', 'stall.recovery-exhausted'
         )),
         actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
         actor_id TEXT NOT NULL,
@@ -136,10 +136,10 @@ CREATE TABLE attempts (
     );
 
 -- table attention_reasons on attention_reasons
-CREATE TABLE attention_reasons (
+CREATE TABLE "attention_reasons" (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK (type IN ('user-mention', 'failed-run')),
+      type TEXT NOT NULL CHECK (type IN ('user-mention', 'failed-run', 'stall-recovery-exhausted')),
       source_event_id TEXT,
       created_at TEXT NOT NULL,
       resolved_at TEXT
@@ -216,10 +216,10 @@ CREATE TABLE notification_column_subscriptions (
     );
 
 -- table notification_occurrences on notification_occurrences
-CREATE TABLE notification_occurrences (
+CREATE TABLE "notification_occurrences" (
       sequence INTEGER PRIMARY KEY AUTOINCREMENT,
       id TEXT NOT NULL UNIQUE,
-      type TEXT NOT NULL CHECK (type IN ('user-mention', 'failed-run', 'column-entry')),
+      type TEXT NOT NULL CHECK (type IN ('user-mention', 'failed-run', 'column-entry', 'stall-recovery-exhausted')),
       task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       task_title TEXT NOT NULL,
       board_id TEXT NOT NULL,
@@ -259,6 +259,13 @@ CREATE TABLE runtime (
       impact_previous_version TEXT
     );
 
+-- table stall_recovery_activations on stall_recovery_activations
+CREATE TABLE stall_recovery_activations (
+        activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
+        recovery_number INTEGER NOT NULL CHECK (recovery_number BETWEEN 1 AND 3),
+        dispatched INTEGER NOT NULL DEFAULT 0 CHECK (dispatched IN (0, 1))
+      );
+
 -- table task_attachments on task_attachments
 CREATE TABLE task_attachments (
       id TEXT PRIMARY KEY,
@@ -293,6 +300,13 @@ CREATE TABLE task_relationships (
       target_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, resume_agent_id TEXT REFERENCES agents(id),
       CHECK (source_task_id <> target_task_id)
     );
+
+-- table task_stall_recovery on task_stall_recovery
+CREATE TABLE task_stall_recovery (
+        task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+        recovery_count INTEGER NOT NULL DEFAULT 0 CHECK (recovery_count BETWEEN 0 AND 3),
+        grace_until TEXT
+      );
 
 -- table task_starting_refs on task_starting_refs
 CREATE TABLE task_starting_refs (
@@ -381,6 +395,80 @@ CREATE TRIGGER activations_start_in_task_order
          )
         BEGIN
           SELECT RAISE(ABORT, 'activation-order-conflict');
+        END;
+
+-- trigger addressed_attention_grants_stall_grace on attention_reasons
+CREATE TRIGGER addressed_attention_grants_stall_grace
+        AFTER UPDATE OF resolved_at ON attention_reasons
+        WHEN OLD.resolved_at IS NULL AND NEW.resolved_at IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM attention_reasons
+            WHERE task_id = NEW.task_id AND resolved_at IS NULL)
+        BEGIN
+          INSERT INTO task_stall_recovery (task_id, grace_until)
+          VALUES (NEW.task_id, strftime('%Y-%m-%dT%H:%M:%fZ', NEW.resolved_at, '+60 seconds'))
+          ON CONFLICT(task_id) DO UPDATE SET grace_until = excluded.grace_until;
+        END;
+
+-- trigger attention_resets_stall on attention_reasons
+CREATE TRIGGER attention_resets_stall
+        AFTER INSERT ON attention_reasons
+        BEGIN
+          UPDATE task_stall_recovery SET recovery_count = 0 WHERE task_id = NEW.task_id;
+        END;
+
+-- trigger dismissed_activation_grants_stall_grace on activity_ledger
+CREATE TRIGGER dismissed_activation_grants_stall_grace
+        AFTER INSERT ON activity_ledger WHEN NEW.type = 'activation.dismissed'
+        BEGIN
+          INSERT INTO task_stall_recovery (task_id, grace_until)
+          VALUES (NEW.task_id, strftime('%Y-%m-%dT%H:%M:%fZ', NEW.occurred_at, '+60 seconds'))
+          ON CONFLICT(task_id) DO UPDATE SET grace_until = excluded.grace_until;
+        END;
+
+-- trigger regular_activation_resets_stall on activations
+CREATE TRIGGER regular_activation_resets_stall
+        AFTER INSERT ON activations WHEN NEW.reason_type <> 'stall-recovery'
+        BEGIN
+          UPDATE task_stall_recovery SET recovery_count = 0 WHERE task_id = NEW.task_id;
+        END;
+
+-- trigger reopened_target_resets_stall on tasks
+CREATE TRIGGER reopened_target_resets_stall
+        AFTER UPDATE OF column_id ON tasks
+        WHEN OLD.column_id = 'completion' AND NEW.column_id <> 'completion'
+        BEGIN
+          UPDATE task_stall_recovery SET recovery_count = 0 WHERE task_id IN (
+            SELECT source_task_id FROM task_relationships WHERE target_task_id = NEW.id
+          );
+        END;
+
+-- trigger unwatched_column_resets_stall on columns
+CREATE TRIGGER unwatched_column_resets_stall
+        AFTER UPDATE OF watching_agent_id ON columns
+        WHEN OLD.watching_agent_id IS NOT NULL AND NEW.watching_agent_id IS NULL
+        BEGIN
+          UPDATE task_stall_recovery SET recovery_count = 0 WHERE task_id IN (
+            SELECT id FROM tasks WHERE board_id = NEW.board_id AND column_id = NEW.id
+          );
+        END;
+
+-- trigger user_owned_move_resets_stall on tasks
+CREATE TRIGGER user_owned_move_resets_stall
+        AFTER UPDATE OF column_id ON tasks
+        WHEN NEW.column_id = 'completion' OR EXISTS (
+          SELECT 1 FROM columns WHERE board_id = NEW.board_id AND id = NEW.column_id
+            AND watching_agent_id IS NULL
+        )
+        BEGIN
+          UPDATE task_stall_recovery SET recovery_count = 0 WHERE task_id = NEW.id;
+        END;
+
+-- trigger waiting_relationship_resets_stall on task_relationships
+CREATE TRIGGER waiting_relationship_resets_stall
+        AFTER INSERT ON task_relationships
+        WHEN (SELECT column_id FROM tasks WHERE id = NEW.target_task_id) <> 'completion'
+        BEGIN
+          UPDATE task_stall_recovery SET recovery_count = 0 WHERE task_id = NEW.source_task_id;
         END;
 
 -- view agent_inspectable_tasks on agent_inspectable_tasks

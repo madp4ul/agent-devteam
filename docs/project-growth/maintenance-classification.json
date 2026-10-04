@@ -1,0 +1,25 @@
+{
+  "description": "Reviewed organizational/verification maintenance. Match dedicated effort prefixes and specific refactoring tickets; exclude ordinary features, bug fixes, and research-only decisions.",
+  "efforts": {
+    ".scratch/codebase-maintainability/issues/": "Codebase maintainability",
+    ".scratch/conversation-transcript-maintainability/issues/": "Conversation transcript maintainability",
+    ".scratch/post-feature-maintainability/issues/": "Post-feature maintainability",
+    ".scratch/verification-maintainability/issues/": "Verification maintainability",
+    ".scratch/maintainability-audit-2026-09/issues/": "September maintainability audit"
+  },
+  "tickets": {
+    ".scratch/agent-coordination-framework/issues/29-decompose-coordination-persistence.md": "Decompose coordination persistence",
+    ".scratch/agent-coordination-framework/issues/41-separate-task-projections-from-commands.md": "Separate task projections from commands",
+    ".scratch/agent-coordination-framework/issues/86-isolate-web-api-routes-behind-typed-dispatcher.md": "Isolate typed HTTP route dispatch",
+    ".scratch/agent-coordination-framework/issues/88-localize-activation-resolution-commands.md": "Localize activation resolution",
+    ".scratch/agent-coordination-framework/issues/91-extract-retained-attempt-evidence.md": "Extract retained attempt evidence",
+    ".scratch/agent-coordination-framework/issues/92-localize-activation-dispatch-preparation.md": "Localize activation dispatch preparation",
+    ".scratch/agent-coordination-framework/issues/93-deepen-active-attempt-lifecycle.md": "Deepen active attempt lifecycle",
+    ".scratch/agent-coordination-framework/issues/94-project-codex-events-into-attempt-evidence.md": "Extract Codex event projection",
+    ".scratch/agent-coordination-framework/issues/95-isolate-local-codex-session-evidence.md": "Isolate local Codex session evidence"
+  },
+  "additional_commits": {
+    "82511691f23e9b98824d015fbe8fd963441d51e8": "Early split of application, contracts, database, automation, and discovery modules; predates dedicated maintenance tickets",
+    "dcb5d4714bd5cb31ba99aeff6804fe46e85eab37": "Initial user-board projection extraction and creation of the first maintainability effort, before its tickets were marked resolved"
+  }
+}

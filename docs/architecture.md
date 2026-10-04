@@ -142,6 +142,10 @@ retirement, while task archival removes both authored messages and their
 content. Startup clears abandoned uploads and disposable runtime projections.
 
 Every dependency and parent-child relationship stores one resume-agent ID.
+Creation rejects a directed cycle across the combined retained relationship
+graph, including satisfied relationships whose targets may later reopen. The
+authoritative command transaction checks before inserting an edge; a newly
+created child has no outgoing relationships and cannot close a cycle.
 Unresolved relationships contribute a `waitingOn` projection but do not enter
 activation eligibility. When a target enters Completion, the task command
 transaction records relationship-satisfaction activity on both tasks and
@@ -219,6 +223,22 @@ Automation turns committed activation records into agent runs. It preserves the
 order of activations for each task, prevents overlapping runs on one task, and
 allows independent tasks to run concurrently. Automation always starts paused
 and proceeds only after the user resumes it.
+
+Stall recovery is an authoritative scheduler workflow in the coordination core.
+When watched, mapped work has no unfinished activation, waiting relationship,
+user attention, or suspension, reconciliation queues its current watcher with a
+distinct recovery reason and immutable detection event. First dispatch rechecks after
+workspace preparation and records obsolete recovery as skipped. Three recovery
+activations without continuation create independently addressable framework
+attention with links to the retained attempts. Ordinary continuation promises
+reset the budget in their owning SQLite transaction through released migration
+0008's triggers; pause and interruption preserve it. The same migration retains
+per-task budget, grace deadline, and per-activation dispatch accounting across
+restart. Addressing the last attention reason or dismissing an activation gives
+the user 60 seconds to arrange continuation. The automation pump wakes at the
+deadline, reconciles on resume and settlement, and cancels outstanding timer
+waits when paused, kicked, or closed. [ADR 0023](adr/0023-recover-tasks-without-continuation-paths.md)
+records the continuation-based policy and its limits.
 
 For each run, the Codex adapter starts or resumes a thread in the task's Git
 workspace. A per-attempt MCP adapter lets that agent inspect relevant project

@@ -55,6 +55,9 @@ test("a participant consults the same agent on another task without duplicating 
     idempotencyKey: "consult-destination",
   });
   assert.ok(origin.accepted && destination.accepted);
+  assert.ok(application.createTaskRelationship({ type: "dependency", sourceTaskId: origin.task.id,
+    targetTaskId: destination.task.id, resumeAgentId: "implementer", actor: { kind: "user", id: "paul" },
+    idempotencyKey: "await-consultation" }).accepted);
   await application.resumeAutomation();
   const caller = await runtime.waitForRequest(1);
   const sourceParticipants = application.queryTaskParticipants(origin.task.id);
@@ -227,6 +230,7 @@ test("an agent comment and move hand work to the next watched-column agent", asy
     );
   }
 
+  application.pauseAutomation();
   runtime.complete({
     status: "completed",
     summary: "Review complete.",

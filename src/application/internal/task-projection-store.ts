@@ -344,6 +344,8 @@ export class TaskProjectionStore {
           type: typed.type,
           sourceEventId: typed.source_event_id,
           createdAt: typed.created_at,
+          ...(typed.type === "stall-recovery-exhausted" ? { explanation:
+            "Three automatic recovery activations finished without establishing a continuation path. Review the recovery history and arrange how work should continue. Marking this addressed gives you 60 seconds before recovery is checked again." } : {}),
           ...(typed.type !== "failed-run" || typed.failure_summary === null
             ? {}
             : { recovery: typed.failure_kind === "permission"

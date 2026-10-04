@@ -44,6 +44,7 @@ export class TaskCommandStore {
   readonly #activityJournal: ActivityJournal;
   readonly #attentionRecorder: AttentionRecorder;
   readonly #activationCreation: ActivationCreationModule;
+  readonly #now: () => Date;
 
   constructor(
     database: CoordinationDatabase,
@@ -53,6 +54,7 @@ export class TaskCommandStore {
     activityJournal: ActivityJournal,
     attentionRecorder: AttentionRecorder,
     activationCreation: ActivationCreationModule,
+    now: () => Date = () => new Date(),
   ) {
     this.#database = database.connection;
     this.#projections = projections;
@@ -61,6 +63,7 @@ export class TaskCommandStore {
     this.#activityJournal = activityJournal;
     this.#attentionRecorder = attentionRecorder;
     this.#activationCreation = activationCreation;
+    this.#now = now;
   }
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
@@ -362,6 +365,8 @@ export class TaskCommandStore {
           .get(command.type, command.sourceTaskId, command.targetTaskId);
         if (duplicate !== undefined) {
           result = { accepted: false, reason: "duplicate-relationship" };
+        } else if (this.relationshipWouldCreateCycle(command.sourceTaskId, command.targetTaskId)) {
+          result = { accepted: false, reason: "circular-relationship" };
         } else {
           const relationship = this.insertRelationship(
             command.type,
@@ -436,7 +441,7 @@ export class TaskCommandStore {
             resumeAgentId: row.resume_agent_id,
           };
           this.#database.prepare("DELETE FROM task_relationships WHERE id = ?").run(row.id);
-          const occurredAt = new Date().toISOString();
+          const occurredAt = this.#now().toISOString();
           this.#activityJournal.append(
             row.source_task_id,
             "relationship.removed",
@@ -518,7 +523,7 @@ export class TaskCommandStore {
         targetTaskId: row.target_task_id,
         resumeAgentId: command.resumeAgentId,
       };
-      const occurredAt = new Date().toISOString();
+      const occurredAt = this.#now().toISOString();
       const change = {
         ...this.agentActivityProvenance(command, origin),
         previousResumeAgentId: row.resume_agent_id ?? "",
@@ -575,7 +580,7 @@ export class TaskCommandStore {
         id: randomUUID(),
         body: command.body,
         actor: command.actor,
-        occurredAt: new Date().toISOString(),
+        occurredAt: this.#now().toISOString(),
         ...(attemptId === undefined ? {} : { attemptId }),
         ...(originTask === undefined ? {} : { originTask }),
       };
@@ -702,12 +707,12 @@ export class TaskCommandStore {
         | undefined;
       let result: MarkUserMentionAddressedResult;
       if (reason === undefined) result = { accepted: false, reason: "not-found" };
-      else if (reason.type !== "user-mention") {
+      else if (reason.type !== "user-mention" && reason.type !== "stall-recovery-exhausted") {
         result = { accepted: false, reason: "wrong-reason-type" };
       } else if (reason.resolved_at !== null) {
         result = { accepted: false, reason: "already-resolved" };
       } else {
-        const resolvedAt = new Date().toISOString();
+        const resolvedAt = this.#now().toISOString();
         this.#database
           .prepare("UPDATE attention_reasons SET resolved_at = ? WHERE id = ?")
           .run(resolvedAt, command.attentionReasonId);
@@ -715,7 +720,7 @@ export class TaskCommandStore {
           reason.task_id,
           "attention.resolved",
           command.actor,
-          { attentionReasonId: command.attentionReasonId, reasonType: "user-mention" },
+          { attentionReasonId: command.attentionReasonId, reasonType: reason.type },
           resolvedAt,
         );
         result = { accepted: true, attentionReasonId: command.attentionReasonId, resolvedAt };
@@ -782,6 +787,17 @@ export class TaskCommandStore {
     return destination === undefined
       ? { accepted: false, reason: "invalid-destination" }
       : undefined;
+  }
+
+  private relationshipWouldCreateCycle(sourceTaskId: string, targetTaskId: string): boolean {
+    return this.#database.prepare(
+      `WITH RECURSIVE reachable(id) AS (
+         SELECT ?
+         UNION
+         SELECT relationship.target_task_id
+         FROM task_relationships relationship JOIN reachable ON relationship.source_task_id = reachable.id
+       ) SELECT 1 FROM reachable WHERE id = ? LIMIT 1`,
+    ).get(targetTaskId, sourceTaskId) !== undefined;
   }
 
   private insertRelationship(
@@ -867,7 +883,7 @@ export class TaskCommandStore {
       )
       .get(currentAttemptId, taskId, destination.watching_agent_id) !== undefined;
     if (runningAgentIsClaimingResponsibility) return;
-    const occurredAt = new Date().toISOString();
+    const occurredAt = this.#now().toISOString();
     this.#activationCreation.createOrdinary({
       taskId,
       targetAgentId: destination.watching_agent_id,
@@ -882,7 +898,7 @@ export class TaskCommandStore {
     resumeAgentId: string,
     sourceEventId: string,
   ): void {
-    const occurredAt = new Date().toISOString();
+    const occurredAt = this.#now().toISOString();
     this.#activationCreation.createOrdinary({
       taskId,
       targetAgentId: resumeAgentId,
@@ -935,7 +951,7 @@ export class TaskCommandStore {
       )
       .get(taskId);
     if (mapped === undefined) return;
-    const occurredAt = new Date().toISOString();
+    const occurredAt = this.#now().toISOString();
     for (const targetAgentId of mentionedAgents) {
       this.#activationCreation.createOrdinary({
         taskId,

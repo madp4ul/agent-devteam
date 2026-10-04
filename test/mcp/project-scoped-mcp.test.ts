@@ -554,6 +554,12 @@ boards:
   };
   const dependencyResult = await client.callTool({ name: "task.dependency.add", arguments: dependencyArguments });
   const repeatedDependencyResult = await client.callTool({ name: "task.dependency.add", arguments: dependencyArguments });
+  const circularDependency = await client.callTool({ name: "task.dependency.add", arguments: {
+    taskId: "T-0002", targetTaskId: created.task.id, resumeAgent: "self", idempotencyKey: "reject-mcp-cycle",
+  } });
+  assert.equal(circularDependency.isError, true);
+  assert.deepEqual(JSON.parse(textContent(circularDependency.content)),
+    { accepted: false, reason: "circular-relationship" });
   const dependencyPayload = JSON.parse(textContent(dependencyResult.content)) as {
     accepted: true;
     relationship: {
@@ -1031,6 +1037,7 @@ boards:
     reasonType: activation.reason.type,
   })), [{ id: request.activationId, status: "running", reasonType: "agent-mention" }]);
 
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Claimed responsibility through MCP." });
   await application.waitForAutomationIdle();
 });

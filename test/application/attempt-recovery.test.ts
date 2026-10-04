@@ -67,6 +67,7 @@ test("user dismisses one untouched queued activation without creating an attempt
   const first = await runtime.waitForRequest(1);
   assert.equal(first.activationId, firstActivationId);
   assert.equal(runtime.requests.some(({ activationId }) => activationId === laterActivationId), false);
+  application.pauseAutomation();
   await runtime.finish({ status: "completed", summary: "Remaining work completed after resume." });
   await application.waitForAutomationIdle();
 });
@@ -139,6 +140,7 @@ test("technical failure schedules the same head activation with capped exponenti
 
   const later = await runtime.waitForRequest(3);
   assert.equal(later.activationId, laterActivationId);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Later work preserved." });
   await application.waitForAutomationIdle();
   const conversation = await application.queryAgentConversation(created.task.id, conversationId);
@@ -211,6 +213,7 @@ test("exhaustion offers retry and dismiss only on the current attention reason",
   await runtime.finish({ status: "completed", summary: "Recovered after user retry." });
   const later = await runtime.waitForRequest(5);
   assert.equal(later.activationId, laterActivationId);
+  application.pauseAutomation();
   await runtime.finish({ status: "completed", summary: "Queue advanced." });
   await application.waitForAutomationIdle();
   const recovered = application.queryTask(taskId);
@@ -259,6 +262,7 @@ test("dismiss records abandonment and permits the preserved queue to advance", a
   assert.equal(dismissed.accepted, true);
   const later = await runtime.waitForRequest(4);
   assert.equal(later.activationId, laterActivationId);
+  application.pauseAutomation();
   await runtime.finish({ status: "completed", summary: "Later activation completed." });
   await application.waitForAutomationIdle();
   const inspected = application.queryTask(taskId);
@@ -419,6 +423,7 @@ test("permission block requires explicit continuation and never retries automati
   });
   const later = await runtime.waitForRequest(5);
   assert.equal(later.activationId, laterActivationId);
+  restarted.pauseAutomation();
   await runtime.finish({ status: "completed", summary: "Later work completed." });
   await restarted.waitForAutomationIdle();
   const inspected = restarted.queryTask(taskId);

@@ -70,7 +70,7 @@ export function useDesktopNotifications(navigate: Navigate): DesktopNotification
           ? `entered ${occurrence.destination?.columnName ?? "a workflow column"}`
           : occurrence.type === "user-mention"
             ? "mentioned you"
-            : "agent run failed";
+            : occurrence.type === "stall-recovery-exhausted" ? "automatic stall recovery needs attention" : "agent run failed";
         const notification = new Notification(
           `${occurrence.task.boardName} · ${occurrence.task.id}`,
           { body: `${occurrence.task.title} · ${reason}`, tag: occurrence.id },

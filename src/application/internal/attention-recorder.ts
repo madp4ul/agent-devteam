@@ -4,7 +4,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type { ActivityJournal } from "./activity-journal.ts";
 import type { NotificationStore } from "./notification-store.ts";
 
-type AttentionCause = "user-mention" | "failed-run";
+type AttentionCause = "user-mention" | "failed-run" | "stall-recovery-exhausted";
 
 export class AttentionRecorder {
   readonly #database: DatabaseSync;

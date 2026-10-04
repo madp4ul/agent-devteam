@@ -162,7 +162,7 @@ test("archive removes a clean durable workspace and retains task history without
   await assert.rejects(stat(before.task.workspace.path));
   const queried = application.queryTask(created.task.id);
   const attemptId = queried.available ? queried.task.activations[0]?.attempts[0]?.id : undefined;
-  if (queried.available) assert.equal(queried.task.activations.length, 2);
+  if (queried.available) assert.equal(queried.task.activations.length, 5);
   assert.notEqual(attemptId, undefined);
   if (attemptId !== undefined) {
     assert.deepEqual(await application.queryAttemptTranscript(attemptId), {
@@ -276,6 +276,7 @@ test("archive rejects busy tasks and requires explicit permission to discard a d
     idempotencyKey: "archive-running",
   }), { accepted: false, reason: "activation-work-pending" });
 
+  application.pauseAutomation();
   finishRun();
   await application.waitForAutomationIdle();
   const detail = application.queryTaskInspectionForUser(created.task.id);
@@ -533,7 +534,7 @@ test("an activation after unarchive provisions from the current process default 
   });
   assert.equal(comment.accepted, true);
   await application.waitForAutomationIdle();
-  assert.equal(requests[1]?.workspace.startingRef, "main");
+  assert.equal(requests.find(({ reason }) => reason.type === "agent-mention")?.workspace.startingRef, "main");
 });
 
 test("bulk archive revalidates Completion after each awaited workspace cleanup", async (t) => {

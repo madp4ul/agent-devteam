@@ -172,6 +172,7 @@ export function AttentionReasonResolution({
       {reason.recovery?.explanation === undefined ? null : (
         <small className="recovery-explanation">{reason.recovery.explanation}</small>
       )}
+      {reason.explanation === undefined ? null : <small className="recovery-explanation">{reason.explanation}</small>}
       {reason.type === "user-mention" ? (
         onOpenMention === undefined ? null : (
           <button
@@ -182,6 +183,12 @@ export function AttentionReasonResolution({
             View request
           </button>
         )
+      ) : reason.type === "stall-recovery-exhausted" ? (
+        <span className="inline-actions">
+          {onOpenMention === undefined ? null : <button className="secondary" autoFocus={highlighted}
+            onClick={() => onOpenMention(reason.sourceEventId)}>Review recovery</button>}
+          <MarkUserMentionAddressed attentionReasonId={reason.id} onResolved={onResolved} onError={onError} />
+        </span>
       ) : reason.type === "automation-suspended" && interruption !== undefined ? (
         <InterruptionResolution
           taskId={interruption.taskId}

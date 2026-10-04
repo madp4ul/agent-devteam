@@ -94,6 +94,7 @@ test("retry attempts retain the activation's snapshotted execution profile", asy
     { model: retry.agent.model, reasoningEffort: retry.agent.reasoningEffort },
     { model: "gpt-5.6-sol", reasoningEffort: "medium" },
   );
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Retry completed." });
   await application.waitForAutomationIdle();
 
@@ -139,7 +140,8 @@ test("entering a watched column wakes automation that is already running", async
   assert.equal(created.accepted, true);
   await application.waitForAutomationIdle();
 
-  assert.equal(runtime.requests.length, 1);
+  assert.deepEqual(runtime.requests.map(({ reason }) => reason.type),
+    ["column-entry", "stall-recovery", "stall-recovery", "stall-recovery"]);
 });
 
 test("different tasks run concurrently while each task preserves activation order", async (t) => {
@@ -214,6 +216,7 @@ test("different tasks run concurrently while each task preserves activation orde
   assert.equal(firstThreeRequests[2]?.task.id, first.task.id);
   assert.notEqual(firstThreeRequests[2]?.activationId, firstTwoRequests[0]?.activationId);
 
+  application.pauseAutomation();
   runtime.complete(firstTwoRequests[1]!.activationId, {
     status: "completed",
     summary: "Independent task completed.",
@@ -268,6 +271,7 @@ test("a newly queued independent task starts while another task is still running
   assert.ok(firstTwoRequests, "the automation pump did not wake for the independent task");
   assert.equal(firstTwoRequests[1]?.task.id, second.task.id);
 
+  application.pauseAutomation();
   runtime.complete(firstRequest.activationId, {
     status: "completed",
     summary: "Original task completed.",
@@ -319,6 +323,8 @@ test("competing coordinators claim one activation before workspace provisioning"
   await delay(250);
   assert.equal(runtime.requests.length, 1);
 
+  firstApplication.pauseAutomation();
+  secondApplication.pauseAutomation();
   runtime.complete(request.activationId, {
     status: "completed",
     summary: "Claimed activation completed once.",

@@ -270,6 +270,7 @@ test("a queued activation survives application restart and remains paused", asyn
   if (!queued.available) return;
   assert.equal(queued.task.activations[0]?.status, "queued");
 
+  runtime.onCompletion = () => restarted.pauseAutomation();
   await restarted.resumeAutomation();
   await restarted.waitForAutomationIdle();
   assert.equal(runtime.requests.length, 1);

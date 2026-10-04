@@ -25,6 +25,7 @@ const productionMigrationIds = [
       "0005_shared_comment_pins",
   "0006_history_cursor_signing",
   "0007_conversation_pin_checkpoints",
+  "0008_stall_recovery",
 ];
 
 test("released comments recover only evidenced origin without inventing legacy provenance", async (t) => {

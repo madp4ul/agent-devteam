@@ -206,6 +206,7 @@ test("interrupt confirms runtime termination, preserves the queue head, and cont
     : entry.kind === "item" ? `item:${entry.attemptId}` : entry.kind);
   assert.deepEqual(historyOrder, ["activation", `item:${first.attemptId}`, `resume:${first.attemptId}`,
     `item:${second.attemptId}`, `resume:${second.attemptId}`, `item:${third.attemptId}`]);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Continued safely.", threadId: "thread-1" });
   await application.waitForAutomationIdle();
   application.close();
@@ -343,6 +344,7 @@ test("user dismisses an interrupted head and releases later work in Completion",
   const inspection = application.queryTaskInspection(created.task.id);
   assert.equal(inspection.available, true);
   if (inspection.available) assert.equal(inspection.task.automationSuspended, false);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Later consultation completed." });
   await application.waitForAutomationIdle();
 });
@@ -446,6 +448,7 @@ test("pause drains active attempts and preserves queued work until resume", asyn
   assert.equal(runtime.requests.length, 2);
   await application.resumeAutomation();
   await runtime.waitForRequest(3);
+  application.pauseAutomation();
   runtime.completeAll({ status: "completed", summary: "Resumed in order." });
   await application.waitForAutomationIdle();
 });
@@ -534,6 +537,7 @@ test("pause after workspace preparation releases the unstarted claim with contin
   assert.equal(resumed.attempt.number, 2);
   assert.equal(resumed.attempt.continuationMessage, "Reassess the prepared workspace before continuing.");
   assert.equal(resumed.resumeThreadId, "thread-1");
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Continued after the pause.", threadId: "thread-1" });
   await application.waitForAutomationIdle();
 });

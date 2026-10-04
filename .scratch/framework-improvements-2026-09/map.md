@@ -43,7 +43,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [24](issues/24-investigate-task-position-spacing-and-initial-reveal.md) | Investigate retained Task position gaps and description-dependent initial reveal | Check recent fixes and reproduce before proposing changes |
 | [25](issues/25-dock-add-comment-on-initial-load.md) | Position Add Comment correctly before the first scroll | Implemented; user review |
 | [26](issues/26-display-interruption-resume-instructions.md) | Show resume events and supplied instructions in timeline and conversations | Implemented; user review |
-| [27](issues/27-recover-stalled-work-without-user-attention.md) | Wake an agent when watched work stalls without required user attention | Define eligibility, recovery ownership, and loop prevention |
+| [27](issues/27-recover-stalled-work-without-user-attention.md) | Wake an agent when watched work stalls without required user attention | Design resolved; three stall recovery delivery tickets published |
 | [28](issues/28-redesign-coordination-across-task-worktrees.md) | Reliably share and integrate parent/child work across task worktrees | Discuss source selection, task branches, synchronization, and integration |
 
 ## Workflow and relationships
@@ -99,9 +99,11 @@ Task position spacing may already be fixed, while Add Comment should dock before
 any scroll event. Compare description lengths and expansion state in both.
 Issue 26 covers retained resume evidence in both timeline and conversation views.
 
-Issues 27 and 28 are open design work rather than ready implementation slices.
-Issue 27 must align with authoritative activation/attention lifecycle and issue
-12's instruction audit. Issue 28 revisits the original Git workspace lifecycle
+Issue 27's design is resolved in the [stall recovery specification](../stall-recovery/spec.md)
+and [three delivery tickets](../stall-recovery/map.md). Its implementation must
+preserve the authoritative activation/attention lifecycle; targeted recovery
+wording is user-reviewed, while issue 12's wider instruction audit stays separate.
+Issue 28 remains open design work and revisits the original Git workspace lifecycle
 and should align with issue 09's cross-task tools; one branch per task and a
 symbolic parent-commit selector remain proposals until the design is agreed.
 
@@ -110,6 +112,16 @@ accessible controls. Any new icon-only button pattern uses shared decorative SVG
 and browser coverage of icon/button geometric centering.
 
 ## Decisions so far
+
+- [27](issues/27-recover-stalled-work-without-user-attention.md): structural stalls
+  activate the current watcher; every unresolved waiting relationship suppresses
+  recovery. Three recovery activations per episode, continuation-based resets,
+  dispatch recheck, and 60-second grace after attention acknowledgment/dismissal
+  bound waste while preserving user intervention. Reject cycles across all
+  retained relationship types, including satisfied edges. [Specification](../stall-recovery/spec.md),
+  [delivery tickets](../stall-recovery/map.md), and
+  [ADR 0023](../../docs/adr/0023-recover-tasks-without-continuation-paths.md)
+  record agreed design; implementation remains open.
 
 - [26](issues/26-display-interruption-resume-instructions.md): interruption resumes
   retain exact runtime instructions and user provenance in immutable activity.

@@ -558,6 +558,7 @@ function EditDialog({
 }
 
 function interruptionReasonDescription(reason: string | undefined): string {
+  if (reason === "stall-recovery") return "stall recovery";
   if (reason === "column-entry") return "column entry";
   if (reason === "relationship-satisfied") return "a relationship being satisfied";
   if (reason === "relationship-changed") return "a relationship change";

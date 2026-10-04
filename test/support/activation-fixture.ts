@@ -58,10 +58,12 @@ export class ControlledRetryClock implements AutomationClock {
 
 export class CompletingAgentRuntime implements AgentRuntime {
   readonly requests: AgentRunRequest[] = [];
+  onCompletion?: () => void;
 
   run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
     this.requests.push(request);
     lifecycle.started();
+    this.onCompletion?.();
     return Promise.resolve({ status: "completed", summary: "Completed under control." });
   }
 }
@@ -259,6 +261,7 @@ export async function startFollowUpAgentMoveScenario(
   if (!created.accepted) throw new Error("Expected follow-up scenario task creation");
   await application.resumeAutomation();
   const initialRequest = await runtime.waitForRequest(1);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Ready for the follow-up.", threadId: "claim-thread" });
   await application.waitForAutomationIdle();
   const conversationId = created.task.activations[0]?.conversationId;
@@ -272,6 +275,7 @@ export async function startFollowUpAgentMoveScenario(
   });
   assert.equal(continued.accepted, true);
   if (!continued.accepted) throw new Error("Expected follow-up scenario continuation");
+  await application.resumeAutomation();
   const request = await runtime.waitForRequest(2);
   assert.equal(request.reason.type, "user-follow-up");
   return { application, runtime, created, initialRequest, conversationId, continued, request };

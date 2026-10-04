@@ -52,7 +52,7 @@ test("relocate-state moves the bound project state to one requested destination"
 test("relocate-state preserves and repairs a provisioned task workspace", async () => {
   const fixture = await createInitializedOfflineFixture();
 
-  const runtime = new WorkspaceWritingRuntime();
+  const runtime = new WorkspaceWritingRuntime(false, () => application.pauseAutomation());
   const application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: join(fixture.originalStateRoot, "coordination.sqlite3"),
@@ -99,7 +99,7 @@ test("relocate-state preserves and repairs a provisioned task workspace", async 
     runtimeDispatch: {
       projectRepositoryPath: fixture.repositoryPath,
       taskWorkspaceRoot: join(destination, "task-worktrees"),
-      agentRuntime: new WorkspaceWritingRuntime(),
+      agentRuntime: new WorkspaceWritingRuntime(false, () => restarted.pauseAutomation()),
     },
   });
   try {
@@ -357,7 +357,7 @@ test("an incomplete operation guard fails closed instead of weakening exclusivit
 
 test("a stale application guard with a durable running attempt blocks relocation until startup recovery", async () => {
   const fixture = await createInitializedOfflineFixture();
-  const runtime = new WorkspaceWritingRuntime();
+  const runtime = new WorkspaceWritingRuntime(false, () => application.pauseAutomation());
   const application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: join(fixture.originalStateRoot, "coordination.sqlite3"),
@@ -418,7 +418,7 @@ test("relocate-state rewrites historical attempt paths after workspace archival"
     runtimeDispatch: {
       projectRepositoryPath: fixture.repositoryPath,
       taskWorkspaceRoot: join(fixture.originalStateRoot, "task-worktrees"),
-      agentRuntime: new WorkspaceWritingRuntime(),
+      agentRuntime: new WorkspaceWritingRuntime(false, () => application.pauseAutomation()),
     },
   });
   const created = application.createTask({
@@ -470,7 +470,7 @@ test("relocate-state preserves a detached task workspace and uncommitted state",
     runtimeDispatch: {
       projectRepositoryPath: fixture.repositoryPath,
       taskWorkspaceRoot: join(fixture.originalStateRoot, "task-worktrees"),
-      agentRuntime: new WorkspaceWritingRuntime(true),
+      agentRuntime: new WorkspaceWritingRuntime(true, () => application.pauseAutomation()),
     },
   });
   const created = application.createTask({
@@ -587,7 +587,7 @@ test("relocate-state rejects an escaped persisted attempt path before copying", 
     runtimeDispatch: {
       projectRepositoryPath: fixture.repositoryPath,
       taskWorkspaceRoot: join(fixture.originalStateRoot, "task-worktrees"),
-      agentRuntime: new WorkspaceWritingRuntime(),
+      agentRuntime: new WorkspaceWritingRuntime(false, () => application.pauseAutomation()),
     },
   });
   const created = application.createTask({
@@ -657,7 +657,7 @@ test("a Git-repair failure restores the source registration and keeps its recove
     runtimeDispatch: {
       projectRepositoryPath: fixture.repositoryPath,
       taskWorkspaceRoot: join(fixture.originalStateRoot, "task-worktrees"),
-      agentRuntime: new WorkspaceWritingRuntime(),
+      agentRuntime: new WorkspaceWritingRuntime(false, () => application.pauseAutomation()),
     },
   });
   const created = application.createTask({
@@ -803,8 +803,10 @@ async function createInitializedOfflineFixture(): ReturnType<typeof createFixtur
 
 class WorkspaceWritingRuntime implements AgentRuntime {
   readonly #detachAfterCommit: boolean;
+  readonly #onCompletion: () => void;
 
-  constructor(detachAfterCommit = false) {
+  constructor(detachAfterCommit = false, onCompletion: () => void = () => {}) {
+    this.#onCompletion = onCompletion;
     this.#detachAfterCommit = detachAfterCommit;
   }
 
@@ -821,6 +823,7 @@ class WorkspaceWritingRuntime implements AgentRuntime {
     ]);
     if (this.#detachAfterCommit) await git(request.workspace.path, "switch", "--detach");
     await writeFile(join(request.workspace.path, "dirty.txt"), "uncommitted relocation state\n");
+    this.#onCompletion();
     return { status: "completed", summary: "Prepared Git state for relocation." };
   }
 }

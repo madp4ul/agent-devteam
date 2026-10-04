@@ -240,6 +240,16 @@ state and decides whether the original request still requires action. An
 activation's target agent is fixed when the activation is created and is not
 re-resolved when the run begins.
 
+**Stall recovery**:
+A bounded framework activation of a task's current column watcher when no
+unfinished activation, unresolved outgoing waiting relationship, user attention,
+or task suspension provides a continuation path. Recovery is immediate except
+for 60 seconds after the last attention reason is addressed or an activation
+is dismissed. Three recovery activations without continuation create explicit
+framework attention. Regular activation, waiting, user attention, or entering
+an unwatched/Completion column resets the episode; pause and interruption
+preserve its count. Obsolete recovery is skipped before first dispatch without another run.
+
 **Stale activation**:
 An activation created under a different process-definition version from the
 one currently applied. It does not start or retry automatically. The user may
@@ -314,7 +324,8 @@ clarification, a decision, or help.
 **Needs attention**:
 A task condition requiring explicit user action because the user was mentioned
 or an agent run failed and awaits recovery, or because user-interrupted task
-automation awaits Continue. Being in an unwatched column alone does not create
+automation awaits Continue, or because three stall recoveries established no
+continuation. Being in an unwatched column alone does not create
 this condition.
 
 **Role**:
@@ -397,7 +408,8 @@ coordination requests.
 
 **Attention reason**:
 A typed cause of a task needing user attention: a user mention, a failed agent
-run, or user-interrupted task automation awaiting Continue. Each occurrence is
+run, user-interrupted task automation awaiting Continue, or exhausted stall
+recovery. Each occurrence is
 resolved independently through an explicit action appropriate to its cause.
 
 **Notification policy**:
@@ -408,7 +420,9 @@ process definition and operating-system delivery state. The policy is enabled
 by default; its global switch can silence all configured causes without changing
 their individual settings. Agent-authored user mentions and actionable
 agent-run failures default on, while a user-initiated interruption is not a
-notification cause. Policy changes apply only to future occurrences and never
+notification cause. Exhausted stall recovery uses the agent-run failure setting;
+it reports recovery exhaustion rather than falsely claiming a technical failure.
+Policy changes apply only to future occurrences and never
 replay delivery for work that happened while silenced.
 
 **Notification occurrence**:
@@ -469,6 +483,8 @@ the target next enters Completion, not a subscription list. Every such entry
 records satisfaction activity on both tasks and appends one independent
 activation for that resume agent, even while other relationships remain
 unresolved. Reopening the target makes the relationship unresolved again.
+New dependency and parent-child links cannot close a directed cycle across the
+combined retained graph, including currently satisfied relationships.
 
 **Relationship removal**:
 An idempotent user or agent recovery command that removes one current dependency

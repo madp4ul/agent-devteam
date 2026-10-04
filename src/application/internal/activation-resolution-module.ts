@@ -22,15 +22,18 @@ export class ActivationResolutionModule {
   readonly #database: DatabaseSync;
   readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
+  readonly #now: () => Date;
 
   constructor(
     database: CoordinationDatabase,
     idempotentCommands: IdempotentCommandExecutor,
     activityJournal: ActivityJournal,
+    now: () => Date = () => new Date(),
   ) {
     this.#database = database.connection;
     this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
+    this.#now = now;
   }
 
   dismissActivation(command: DismissActivationCommand): DismissActivationResult {
@@ -76,7 +79,7 @@ export class ActivationResolutionModule {
         if (!dismissible) {
           result = { accepted: false, reason: "not-dismissible" };
         } else {
-          const occurredAt = new Date().toISOString();
+          const occurredAt = this.#now().toISOString();
           this.#database.prepare(
             `UPDATE activations
              SET status = 'completed', resolution = 'dismissed',
@@ -131,7 +134,7 @@ export class ActivationResolutionModule {
       else if (activation.stale !== 1 || activation.resolution !== null) {
         result = { accepted: false, reason: "not-stale" };
       } else {
-        const resolvedAt = new Date().toISOString();
+        const resolvedAt = this.#now().toISOString();
         this.#database.prepare(
           `UPDATE activations
            SET status = 'completed', resolution = 'dismissed', stale = 0,
@@ -235,7 +238,7 @@ export class ActivationResolutionModule {
            WHERE id = ?`,
         )
         .run(command.taskId);
-      const occurredAt = new Date().toISOString();
+      const occurredAt = this.#now().toISOString();
       this.#activityJournal.append(
         command.taskId,
         "automation.resumed",
@@ -291,7 +294,7 @@ export class ActivationResolutionModule {
       } else if (reason.status !== "failed" || reason.failure_kind !== expectedFailureKind) {
         result = { accepted: false, reason: "wrong-recovery-type" };
       } else {
-        const resolvedAt = new Date().toISOString();
+        const resolvedAt = this.#now().toISOString();
         this.#database
           .prepare("UPDATE attention_reasons SET resolved_at = ? WHERE id = ?")
           .run(resolvedAt, command.attentionReasonId);

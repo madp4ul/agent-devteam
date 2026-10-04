@@ -14,6 +14,7 @@ import type { AttentionRecorder } from "./attention-recorder.ts";
 import type { ConversationProjectionModule } from "./conversation-projection-module.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { TaskProjectionStore } from "./task-projection-store.ts";
+import type { StallRecoveryModule } from "./stall-recovery-module.ts";
 
 export interface ClaimedActivation {
   activation: ActivationView;
@@ -39,6 +40,7 @@ export class ActivationSchedulingModule {
   readonly #conversationProjections: ConversationProjectionModule;
   readonly #activityJournal: ActivityJournal;
   readonly #attentionRecorder: AttentionRecorder;
+  readonly #stallRecovery: StallRecoveryModule;
 
   constructor(
     database: CoordinationDatabase,
@@ -46,6 +48,7 @@ export class ActivationSchedulingModule {
     conversationProjections: ConversationProjectionModule,
     activityJournal: ActivityJournal,
     attentionRecorder: AttentionRecorder,
+    stallRecovery: StallRecoveryModule,
   ) {
     this.#owner = database;
     this.#database = database.connection;
@@ -53,6 +56,7 @@ export class ActivationSchedulingModule {
     this.#conversationProjections = conversationProjections;
     this.#activityJournal = activityJournal;
     this.#attentionRecorder = attentionRecorder;
+    this.#stallRecovery = stallRecovery;
   }
 
   claimNextRunnable(
@@ -61,6 +65,7 @@ export class ActivationSchedulingModule {
   ): ClaimedActivation | undefined {
     return this.#owner.transaction(() => {
       const occurredAt = now.toISOString();
+      this.#stallRecovery.reconcileWithinTransaction(now);
       const row = this.#database.prepare(
         `SELECT a.id, a.task_id, a.target_agent_id, a.source_event_id,
                 a.model, a.reasoning_effort, a.continuation_message, a.definition_version,
@@ -166,8 +171,18 @@ export class ActivationSchedulingModule {
     return row.retry_due_at ?? undefined;
   }
 
-  startPreparedAttempt(claim: ClaimedActivation, workspace: TaskWorkspaceView): StartedAttempt {
+  readNextGraceDueAt(now: Date): string | undefined {
+    return this.#stallRecovery.readNextGraceDueAt(now);
+  }
+
+  startPreparedAttempt(claim: ClaimedActivation, workspace: TaskWorkspaceView, now = new Date()): StartedAttempt | undefined {
     return this.#owner.transaction(() => {
+      if (claim.activation.reason.type === "stall-recovery" &&
+          !this.#stallRecovery.dispatchIsNeeded(claim.activation.id, claim.task.id, claim.agent.id, now)) {
+        this.#deleteClaimedProvisionalAttempt(claim);
+        this.#stallRecovery.skipWithinTransaction(claim.activation.id, claim.task.id, now);
+        return undefined;
+      }
       const prepared = this.#database.prepare(
         `SELECT activation.task_id, activation.target_agent_id, activation.definition_version,
                 attempt.workspace_path
@@ -195,7 +210,10 @@ export class ActivationSchedulingModule {
       } else if (!sameWorkspace(registered, workspace)) {
         throw new Error(`Task ${prepared.task_id} has an inconsistent workspace registration`);
       }
-      const occurredAt = new Date().toISOString();
+      const occurredAt = now.toISOString();
+      if (claim.activation.reason.type === "stall-recovery") {
+        this.#stallRecovery.recordDispatchWithinTransaction(claim.activation.id, claim.task.id);
+      }
       this.#database.prepare("UPDATE attempts SET started_at = ? WHERE id = ?")
         .run(occurredAt, claim.attempt.id);
       this.#activityJournal.append(

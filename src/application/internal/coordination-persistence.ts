@@ -20,6 +20,7 @@ import { ActivationResolutionModule } from "./activation-resolution-module.ts";
 import type { AttemptTranscriptAccess } from "../runtime-contract.ts";
 import { AttemptEvidenceModule } from "./attempt-evidence-module.ts";
 import { ActivationSchedulingModule } from "./activation-scheduling-module.ts";
+import { StallRecoveryModule } from "./stall-recovery-module.ts";
 
 export interface CoordinationPersistence {
   process: ProcessStateStore;
@@ -40,9 +41,10 @@ export interface CoordinationPersistence {
 export async function openCoordinationPersistence(
   path: string,
   transcriptAccess?: AttemptTranscriptAccess,
+  now: () => Date = () => new Date(),
 ): Promise<CoordinationPersistence> {
   const database = await CoordinationDatabase.open(path);
-  return composeCoordinationPersistence(database, path, transcriptAccess);
+  return composeCoordinationPersistence(database, path, transcriptAccess, now);
 }
 
 /** @internal Test harness for migration startup scenarios not yet in the production registry. */
@@ -50,9 +52,10 @@ export async function openCoordinationPersistenceForMigrationTest(
   path: string,
   databaseOptions: CoordinationDatabaseOpenOptions,
   transcriptAccess?: AttemptTranscriptAccess,
+  now: () => Date = () => new Date(),
 ): Promise<CoordinationPersistence> {
   const database = await CoordinationDatabase.openForMigrationTest(path, databaseOptions);
-  return composeCoordinationPersistence(database, path, transcriptAccess);
+  return composeCoordinationPersistence(database, path, transcriptAccess, now);
 }
 
 export function openEphemeralCoordinationPersistence(
@@ -69,6 +72,7 @@ function composeCoordinationPersistence(
   database: CoordinationDatabase,
   path: string,
   transcriptAccess?: AttemptTranscriptAccess,
+  now: () => Date = () => new Date(),
 ): CoordinationPersistence {
   const conversationAttachments = new ConversationAttachmentStore(database, path);
   const taskProjections = new TaskProjectionStore(database);
@@ -86,6 +90,7 @@ function composeCoordinationPersistence(
     database,
     idempotentCommands,
     activityJournal,
+    now,
   );
   const conversationProjections = new ConversationProjectionModule(
     database,
@@ -106,6 +111,7 @@ function composeCoordinationPersistence(
     conversationProjections,
     activityJournal,
     attentionRecorder,
+    new StallRecoveryModule(database, activationCreation, activityJournal, attentionRecorder),
   );
   return {
     process: new ProcessStateStore(database),
@@ -119,6 +125,7 @@ function composeCoordinationPersistence(
       activityJournal,
       attentionRecorder,
       activationCreation,
+      now,
     ),
     taskProjections,
     conversationProjections,

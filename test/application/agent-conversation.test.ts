@@ -112,6 +112,7 @@ test("a source delivered earlier remains exact outside its queued activation's b
   assert.equal(resumed.resumeThreadId, "source-thread");
   assert.equal(resumed.activationContext.sourceDelivery, "activation-only");
   assert.deepEqual(resumed.activationContext.comments, []);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Queued mention complete.", threadId: "source-thread" });
   await application.waitForAutomationIdle();
 });
@@ -159,6 +160,7 @@ test("a self-authored activation source stays available through retained convers
   assert.deepEqual(resumed.activationContext.comments, []);
   assert.equal("body" in resumed.sourceEvent ? resumed.sourceEvent.body : undefined, source.comment.body);
   assert.ok(resumed.task.comments.some(({ id }) => id === source.comment.id));
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Self-authored source handled.", threadId: "self-source-thread" });
   await application.waitForAutomationIdle();
 });
@@ -223,9 +225,10 @@ test("ordinary activations reuse the task-and-agent conversation and deliver onl
     idempotencyKey: "collaborator-continuity-comment",
   });
   assert.equal(collaboratorComment.accepted, true);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Initial work complete.", threadId: "continuity-thread" });
   await application.waitForAutomationIdle();
-  application.pauseAutomation();
+
 
   const current = application.queryTask(created.task.id);
   assert.equal(current.available, true);
@@ -275,6 +278,7 @@ test("ordinary activations reuse the task-and-agent conversation and deliver onl
     "@implementer handle this exact resumed request in full.",
   ]);
   assert.equal(resumed.activationContext.sourceDelivery, "current-context");
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Resumed work complete.", threadId: "continuity-thread" });
   await application.waitForAutomationIdle();
 });
@@ -304,6 +308,7 @@ test("continuing a conversation persists one authored message and activation ide
   if (!created.accepted) return;
   await application.resumeAutomation();
   await runtime.waitForRequest(1);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Initial answer.", threadId: "thread-initial" });
   await application.waitForAutomationIdle();
   const completed = application.queryTask(created.task.id);
@@ -418,9 +423,10 @@ test("retiring a settled conversation preserves it and the next ordinary activat
 
   await application.resumeAutomation();
   await runtime.waitForRequest(1);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Initial work settled.", threadId: "retired-thread" });
   await application.waitForAutomationIdle();
-  application.pauseAutomation();
+
 
   const command = {
     taskId: created.task.id,
@@ -466,9 +472,10 @@ test("retiring a settled conversation preserves it and the next ordinary activat
   assert.equal(replacementRequest.activationContext.description, created.task.description);
   assert.equal(replacementRequest.activationContext.replacementReason, command.reason);
   assert.equal(replacementRequest.resumeThreadId, undefined);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Replacement approach complete.", threadId: "replacement-thread" });
   await application.waitForAutomationIdle();
-  application.pauseAutomation();
+
 
   const index = application.queryTaskConversationIndex(created.task.id);
   assert.equal(index.available, true);
@@ -525,6 +532,7 @@ test("retiring a settled conversation preserves it and the next ordinary activat
     "@implementer keep this ordinary work in the replacement lineage.",
     "A same-agent comment authored in the retired conversation.",
   ]);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Replacement lineage stayed current.", threadId: "replacement-thread" });
   await application.waitForAutomationIdle();
 
@@ -566,9 +574,10 @@ test("a follow-up resumes the owning agent's thread and existing task workspace 
   if (!created.accepted) return;
   await application.resumeAutomation();
   const initialRequest = await runtime.waitForRequest(1);
+  application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Initial implementation answer.", threadId: "thread-owner" });
   await application.waitForAutomationIdle();
-  application.pauseAutomation();
+
   const current = application.queryTask(created.task.id);
   assert.equal(current.available, true);
   if (!current.available) return;
@@ -624,6 +633,7 @@ test("a follow-up resumes the owning agent's thread and existing task workspace 
   assert.equal(followUpRequest.attempt.thread, "resumed");
   assert.equal(followUpRequest.attempt.continuationMessage, "Re-check the implementation detail.");
   assert.equal(followUpRequest.agent.instructions, "Use the current follow-up instructions.\n");
+  application.pauseAutomation();
   runtime.complete({
     status: "completed",
     summary: "Follow-up continued after replacing an unusable thread.",
@@ -648,9 +658,11 @@ test("a follow-up resumes the owning agent's thread and existing task workspace 
     idempotencyKey: "follow-up-after-thread-replacement",
   });
   assert.equal(afterReplacement.accepted, true);
+  await application.resumeAutomation();
   const replacementFollowUp = await runtime.waitForRequest(4);
   assert.equal(replacementFollowUp.agent.id, "implementer");
   assert.equal(replacementFollowUp.resumeThreadId, "thread-replacement");
+  application.pauseAutomation();
   runtime.complete({
     status: "completed",
     summary: "Replacement lineage continued.",
@@ -910,6 +922,7 @@ agents:
   };
   runtime.setTranscript(request.attemptId, expectedTranscript);
   runtime.setUsage(request.attemptId, expectedUsage);
+  application.pauseAutomation();
   runtime.complete({
     status: "completed",
     summary: "Implementation complete.",

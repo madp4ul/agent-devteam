@@ -181,8 +181,8 @@ export class CoordinationApplication {
   ): Promise<CoordinationApplication> {
     return CoordinationApplication.startWithPersistence(
       options,
-      (path, transcriptAccess) =>
-        openCoordinationPersistenceForMigrationTest(path, databaseOptions, transcriptAccess),
+      (path, transcriptAccess, now) =>
+        openCoordinationPersistenceForMigrationTest(path, databaseOptions, transcriptAccess, now),
     );
   }
 
@@ -191,12 +191,14 @@ export class CoordinationApplication {
     openPersistence: (
       path: string,
       transcriptAccess?: AttemptTranscriptAccess,
+      now?: () => Date,
     ) => Promise<CoordinationPersistence>,
   ): Promise<CoordinationApplication> {
     const validation = await loadProcessDefinition(options.processDefinitionPath);
     let persistence: CoordinationPersistence;
     try {
-      persistence = await openPersistence(options.databasePath, options.transcriptAccess);
+      persistence = await openPersistence(options.databasePath, options.transcriptAccess,
+        options.automationClock === undefined ? undefined : () => options.automationClock!.now());
     } catch (error) {
       return CoordinationApplication.configurationError([
         databaseStartupDiagnostic(options.databasePath, error),
@@ -433,7 +435,9 @@ export class CoordinationApplication {
   dismissStaleActivation(
     command: DismissStaleActivationCommand,
   ): DismissStaleActivationResult {
-    return this.#persistence.activationResolutions.dismissStaleActivation(command);
+    const result = this.#persistence.activationResolutions.dismissStaleActivation(command);
+    if (result.accepted) this.#automation.kick();
+    return result;
   }
 
   dismissActivation(command: DismissActivationCommand): DismissActivationResult {
@@ -948,12 +952,7 @@ export class CoordinationApplication {
   removeTaskRelationship(command: RemoveTaskRelationshipCommand): RemoveTaskRelationshipResult {
     const gated = this.configurationErrorRejection();
     const result = gated ?? this.#persistence.taskCommands.removeTaskRelationship(command);
-    if (
-      result.accepted &&
-      result.sourceTask.activations.some((activation) => activation.status === "queued")
-    ) {
-      this.#automation.kick();
-    }
+    if (result.accepted) this.#automation.kick();
     return result;
   }
 
@@ -996,7 +995,9 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    return this.#persistence.taskCommands.markUserMentionAddressed(command);
+    const result = this.#persistence.taskCommands.markUserMentionAddressed(command);
+    if (result.accepted) this.#automation.kick();
+    return result;
   }
 
   retryFailedActivation(command: ActivationRecoveryCommand): ActivationRecoveryResult {
@@ -1092,6 +1093,7 @@ export class CoordinationApplication {
   }
 
   close(): void {
+    this.#automation.close();
     this.#persistence.close();
   }
 

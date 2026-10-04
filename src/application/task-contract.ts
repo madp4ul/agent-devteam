@@ -32,7 +32,10 @@ export interface TaskActivityView {
     | "conversation.continued"
     | "conversation.retired"
     | "task.archived"
-    | "task.unarchived";
+    | "task.unarchived"
+    | "stall.detected"
+    | "stall.recovery-skipped"
+    | "stall.recovery-exhausted";
   actor: Actor | { kind: "framework"; id: "coordination" };
   occurredAt: string;
   details: Record<string, string>;
@@ -157,7 +160,8 @@ export interface UserTaskInspectionView extends Omit<TaskInspectionView, "histor
 
 export interface TaskAttentionView {
   id: string;
-  type: "user-mention" | "failed-run" | "automation-suspended";
+  type: "user-mention" | "failed-run" | "automation-suspended" | "stall-recovery-exhausted";
+  explanation?: string;
   sourceEventId: string | null;
   createdAt: string;
   recovery?: {
@@ -421,7 +425,7 @@ export type InertMoveTaskResult = {
 export type TaskRelationshipMutationResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { accepted: false; reason: "not-found" | "archived-task" | "self-relationship" | "duplicate-relationship" | "resume-agent-not-found" | "idempotency-conflict" };
+  | { accepted: false; reason: "not-found" | "archived-task" | "self-relationship" | "duplicate-relationship" | "circular-relationship" | "resume-agent-not-found" | "idempotency-conflict" };
 
 export type EditTaskRelationshipResumeAgentResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }

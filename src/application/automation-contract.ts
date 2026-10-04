@@ -5,11 +5,11 @@ import type { Actor } from "./task-contract.ts";
 /** Automation lifecycle, activation, interruption, and recovery facts. */
 export interface AutomationClock {
   now(): Date;
-  waitUntil(instant: string): Promise<void>;
+  waitUntil(instant: string, signal?: AbortSignal): Promise<void>;
 }
 
 export interface ActivationReasonView {
-  type: "column-entry" | "agent-mention" | "relationship-satisfied" | "relationship-changed" | "user-follow-up";
+  type: "column-entry" | "agent-mention" | "relationship-satisfied" | "relationship-changed" | "user-follow-up" | "stall-recovery";
   sourceEventId: string;
 }
 

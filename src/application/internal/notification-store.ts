@@ -81,7 +81,7 @@ export class NotificationStore {
               column_id, column_name, attention_reason_id, occurred_at
        FROM notification_occurrences WHERE sequence > ? ORDER BY sequence`,
     ).all(afterSequence) as Array<{
-      sequence: number; id: string; type: "user-mention" | "failed-run" | "column-entry";
+      sequence: number; id: string; type: "user-mention" | "failed-run" | "column-entry" | "stall-recovery-exhausted";
       task_id: string; task_title: string; board_id: string; board_name: string;
       column_id: string | null; column_name: string | null;
       attention_reason_id: string | null; occurred_at: string;
@@ -127,7 +127,7 @@ export class NotificationStore {
   }
 
   recordAttention(
-    type: "user-mention" | "failed-run",
+    type: "user-mention" | "failed-run" | "stall-recovery-exhausted",
     taskId: string,
     attentionReasonId: string,
     sourceEventId: string,
@@ -143,7 +143,7 @@ export class NotificationStore {
   }
 
   private insertOccurrence(
-    type: "user-mention" | "failed-run" | "column-entry",
+    type: "user-mention" | "failed-run" | "column-entry" | "stall-recovery-exhausted",
     taskId: string,
     sourceEventId: string,
     occurredAt: string,

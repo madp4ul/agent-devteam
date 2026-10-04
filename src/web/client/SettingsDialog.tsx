@@ -63,6 +63,7 @@ export function SettingsDialog({ notifications, onClose }: {
                         onChange={(enabled) => change({ type: "cause", cause: "user-mention", enabled })} />
                       <SettingToggle label="Agent run failures" checked={policy.causes.failedRun}
                         onChange={(enabled) => change({ type: "cause", cause: "failed-run", enabled })} />
+                      <small>Includes automatic stall recovery that needs your attention.</small>
                     </fieldset>
                     <div>
                       <h4>Column entry</h4>
