@@ -48,6 +48,14 @@ async function run(arguments_: string[]): Promise<void> {
   }
 
   if (command === "start") {
+    let additionalAllowances: string | undefined;
+    try {
+      additionalAllowances = readAdditionalAllowances(arguments_);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 2;
+      return;
+    }
     const definitionPath = resolve(
       readOption(arguments_, "--process") ?? "examples/software-delivery/process.yaml",
     );
@@ -136,6 +144,7 @@ async function run(arguments_: string[]): Promise<void> {
             projectRepositoryPath,
             taskWorkspaceRoot: projectState.taskWorkspaceRoot,
             agentRuntime,
+            ...(additionalAllowances === undefined ? {} : { additionalAllowances }),
           },
           runtimeDiagnostic: (diagnostic) => {
             console.error(
@@ -170,6 +179,7 @@ async function run(arguments_: string[]): Promise<void> {
     console.log(`Coordination application listening at ${server.baseUrl}`);
     console.log(`Startup mode: ${application.queryStartup().mode}`);
     console.log(`Project repository: ${projectRepositoryPath}`);
+    console.log(`Project reviewer allowances: ${additionalAllowances === undefined ? "none" : "configured for this launch"}`);
     if (projectState === undefined) {
       console.log("Project state root: unavailable");
     } else {
@@ -221,7 +231,7 @@ async function run(arguments_: string[]): Promise<void> {
   }
 
   console.error(
-    "Usage:\n  coordination validate <process-definition.yaml>\n  coordination start [--process path] [--project repository] [--state-root path] [--host address] [--port number]\n  coordination relocate-state <destination> [--project repository]",
+    "Usage:\n  coordination validate <process-definition.yaml>\n  coordination start [--process path] [--project repository] [--state-root path] [--host address] [--port number] [--additional-allowances text]\n  coordination relocate-state <destination> [--project repository]",
   );
   process.exitCode = 2;
 }
@@ -229,6 +239,27 @@ async function run(arguments_: string[]): Promise<void> {
 function readOption(arguments_: string[], name: string): string | undefined {
   const index = arguments_.indexOf(name);
   return index === -1 ? undefined : arguments_[index + 1];
+}
+
+function readAdditionalAllowances(arguments_: string[]): string | undefined {
+  const name = "--additional-allowances";
+  let value: string | undefined;
+  let found = false;
+  for (let index = 1; index < arguments_.length; index++) {
+    const argument = arguments_[index]!;
+    if (argument !== name && !argument.startsWith(`${name}=`)) continue;
+    if (found) throw new Error(`${name} may only be specified once`);
+    found = true;
+    if (argument === name) {
+      value = arguments_[++index];
+      if (value === undefined || value.startsWith("--")) {
+        throw new Error(`${name} requires a text argument; use ${name}=<text> for text beginning with --`);
+      }
+    } else {
+      value = argument.slice(name.length + 1);
+    }
+  }
+  return value?.trim() ? value : undefined;
 }
 
 function createVerifiedWorkspaceOpener(

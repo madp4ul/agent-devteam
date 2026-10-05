@@ -31,12 +31,16 @@ the sandbox identity can run Git inspection without changing global or
 repository configuration.
 
 **Agent allowance guidance**:
-User-authored standing authorization alongside a process agent definition,
+User-authored standing authorization alongside a process agent definition or
+supplied project-wide through the host's launch argument,
 optionally supplied to the runtime's automatic approval reviewer. It guides
 review within existing capability and managed-policy boundaries, does not
 guarantee approval, and falls back to ordinary review when unsupported.
-The applied process owns its source; each attempt retains its selected guidance
-and compatibility evidence separately from task or agent-authored content.
+The applied process owns role allowances; the launching user owns project
+allowances for that host lifetime. Each attempt retains its selected sources
+and native composition/compatibility evidence separately from task or
+agent-authored content. Restart without project allowances removes that source
+for future attempts; retained history is never loaded as active authorization.
 
 **Board**:
 A configurable workflow containing columns and tasks. Different parts of the

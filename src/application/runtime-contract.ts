@@ -20,6 +20,15 @@ export interface RuntimeDispatchOptions {
   projectRepositoryPath: string;
   taskWorkspaceRoot: string;
   agentRuntime: AgentRuntime;
+  additionalAllowances?: string;
+}
+
+/** Launch-only guidance: durable copies are evidence, never configuration to reload. */
+export interface ProjectAllowanceSource {
+  source: "launch-argument";
+  launchId: string;
+  projectRepositoryPath: string;
+  text: string;
 }
 
 export interface AgentExecutionProfile {
@@ -298,6 +307,7 @@ export interface AgentRunRequest {
   activationId: string;
   attemptId: string;
   agent: AgentRunAgent;
+  projectAllowances?: ProjectAllowanceSource;
   process: { name: string; guidance: string; definitionVersion: string };
   board: ProcessBoardView;
   collaborators: Array<Pick<AgentRunAgent, "id" | "name" | "role" | "summary">>;
@@ -376,15 +386,25 @@ export interface ReviewerPolicyConfiguration {
   reason?: string;
   policyHash?: string;
   templateHash?: string;
+  /** Exact optional policy selected for submission; does not prove reviewer consumption. */
+  preparedPolicy?: {
+    nativeVersion: string;
+    workspacePath: string;
+    inheritedExtraPolicy: string;
+    extraPolicy: string;
+  };
 }
 
 export interface ReviewerAllowanceEvidence {
   definitionVersion: string;
   allowances: string[];
+  agentId?: string;
+  projectAllowances?: ProjectAllowanceSource;
   status: "pending" | "active" | "unavailable";
   reason?: string;
   policyHash?: string;
   templateHash?: string;
+  configurations?: ReviewerPolicyConfiguration[];
 }
 
 export interface OperatingContextView {

@@ -116,7 +116,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     let observableEventReceived = false;
     let addOnActive = false;
     try {
-      if ((request.agent.allowances?.length ?? 0) > 0) {
+      if ((request.agent.allowances?.length ?? 0) > 0 || request.projectAllowances?.text.trim()) {
         const preparation = await this.#reviewerAllowances.prepare(request, signal);
         if (preparation.config !== undefined) Object.assign(clientOptions.config!, preparation.config);
         addOnActive = preparation.config !== undefined;

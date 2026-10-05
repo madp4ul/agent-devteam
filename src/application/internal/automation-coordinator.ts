@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import type {
   ActiveRunView,
   AutomationClock,
@@ -14,6 +16,7 @@ import type {
   AttemptTranscriptAccess,
   RuntimeStartupDiagnostic,
   RuntimeDispatchOptions,
+  ProjectAllowanceSource,
 } from "../runtime-contract.ts";
 import type { Actor } from "../task-contract.ts";
 import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-workspace.ts";
@@ -76,6 +79,7 @@ export class AutomationCoordinator {
     | {
         agentRuntime: RuntimeDispatchOptions["agentRuntime"];
         workspaceManager: GitTaskWorkspaceManager;
+        projectAllowances?: ProjectAllowanceSource;
       }
     | undefined;
   readonly #startingRef: string | undefined;
@@ -105,6 +109,14 @@ export class AutomationCoordinator {
         ? undefined
         : {
             agentRuntime: options.runtimeDispatch.agentRuntime,
+            ...(options.runtimeDispatch.additionalAllowances?.trim()
+              ? { projectAllowances: {
+                  source: "launch-argument" as const,
+                  launchId: randomUUID(),
+                  projectRepositoryPath: resolve(options.runtimeDispatch.projectRepositoryPath),
+                  text: options.runtimeDispatch.additionalAllowances,
+                } }
+              : {}),
             workspaceManager: new GitTaskWorkspaceManager(
               options.runtimeDispatch.projectRepositoryPath,
               options.runtimeDispatch.taskWorkspaceRoot,
@@ -251,6 +263,7 @@ export class AutomationCoordinator {
       const claim = this.#activationScheduling.claimNextRunnable(
         now,
         (taskId) => this.#runtimeDispatch!.workspaceManager.pathFor(taskId),
+        this.#runtimeDispatch.projectAllowances,
       );
       if (claim !== undefined) {
         const { completion } = await this.dispatch(claim, () => {
@@ -373,6 +386,7 @@ export class AutomationCoordinator {
           activationId: claim.activation.id,
           attemptId: attempt.id,
           agent: claim.agent,
+          ...(claim.projectAllowances === undefined ? {} : { projectAllowances: claim.projectAllowances }),
           process: {
             name: process.name,
             guidance: process.guidance,

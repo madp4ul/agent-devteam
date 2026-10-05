@@ -95,6 +95,48 @@ The direct cross-platform command remains:
 pnpm start -- --process examples/software-delivery/process.yaml --project . --host 127.0.0.1 --port 3100
 ```
 
+### Project reviewer allowances
+
+Supply project-specific reviewer guidance without changing the reusable process:
+
+```powershell
+.\examples\software-delivery\start.cmd --additional-allowances "Run project validation in the approved browser."
+```
+
+The argument reaches every process agent, including roles with no allowances.
+It supplements inherited native and process guidance within existing policy;
+it does not grant Computer Use app access or change sandbox/managed permissions.
+Startup prints whether project guidance is configured without printing its text.
+
+For direct Node invocation in PowerShell, single quotes keep `$` and other
+PowerShell expressions literal; double an embedded single quote:
+
+```powershell
+node --experimental-strip-types src/cli.ts start --project . --additional-allowances 'Run the project''s browser validation.'
+```
+
+In `cmd.exe`, use double quotes around simple text containing spaces. The
+`start.cmd` launcher forwards arguments through cmd/pnpm; complex quoting or
+shell metacharacters must be escaped for every shell they pass through. For
+complex multiline text or embedded quotes, a user-controlled JavaScript launcher
+can supply an argument array directly to Node without a shell:
+
+```javascript
+import { spawn } from "node:child_process";
+spawn(process.execPath, ["--experimental-strip-types", "src/cli.ts", "start",
+  "--project", ".", "--additional-allowances", `Run browser validation.
+Keep "private" project data local.`], { stdio: "inherit" });
+```
+
+Nonblank text is retained exactly. Empty/whitespace text is equivalent to omission;
+a missing value or duplicate flag is an error. Use the equals form for text
+beginning with `--`: `--additional-allowances="--literal guidance"`.
+Restart without the option removes project guidance for future attempts. Queued
+work and retries use the current launch text at claim; existing history keeps its
+exact sources. Process fingerprints and stale-work rules are unaffected.
+Every restart is paused. To revoke guidance immediately, interrupt running
+attempts before stopping and relaunching without it.
+
 ### Reset the Windows example state
 
 During pre-release testing, the example database and Git worktree registrations
@@ -147,6 +189,11 @@ sets `approval_policy = "on-request"` and
 `approvals_reviewer = "auto_review"`. Auto-review evaluates one scoped
 boundary crossing at a time; it does not widen writable roots, bypass managed
 policy, or guarantee approval.
+
+For desktop validation, first save native approval for the required apps through
+the desktop host's **Always allow** prompt. See
+[Computer Use setup](../computer-use-setup.md) for the verified SDK recovery path
+and version limits. Continue and reviewer guidance do not create app grants.
 
 Every dispatched run also supplies the exact current task-workspace path as
 process-local Git trust. It never sets `safe.directory=*` or edits Git

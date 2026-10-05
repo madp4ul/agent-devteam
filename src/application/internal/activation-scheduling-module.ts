@@ -7,6 +7,7 @@ import type {
   AttemptContextView,
   RuntimeStartupBoundary,
   RuntimeStartupDiagnostic,
+  ProjectAllowanceSource,
 } from "../runtime-contract.ts";
 import type { TaskActivityView, TaskView, TaskWorkspaceView } from "../task-contract.ts";
 import type { ActivityJournal } from "./activity-journal.ts";
@@ -20,6 +21,7 @@ export interface ClaimedActivation {
   activation: ActivationView;
   task: TaskView;
   agent: AgentRunAgent;
+  projectAllowances?: ProjectAllowanceSource;
   sourceEvent: TaskActivityView | TaskView["comments"][number];
   continuationMessage: string | null;
   resumeThreadId?: string;
@@ -62,6 +64,7 @@ export class ActivationSchedulingModule {
   claimNextRunnable(
     now: Date,
     pathForUnprovisionedTask: (taskId: string) => string,
+    projectAllowances?: ProjectAllowanceSource,
   ): ClaimedActivation | undefined {
     return this.#owner.transaction(() => {
       const occurredAt = now.toISOString();
@@ -104,6 +107,7 @@ export class ActivationSchedulingModule {
         throw new Error(`Activation ${row.id} has incomplete durable provenance`);
       }
       const allowances = JSON.parse(agentRow.allowances_json) as string[];
+      const selectedProjectAllowances = projectAllowances === undefined ? undefined : { ...projectAllowances };
       const agent: AgentRunAgent = {
         id: agentRow.id,
         name: agentRow.name,
@@ -136,8 +140,9 @@ export class ActivationSchedulingModule {
         occurredAt,
         agent.model ?? null,
         agent.reasoningEffort ?? null,
-        (agent.allowances?.length ?? 0) === 0 ? null : JSON.stringify({
-          definitionVersion: row.definition_version, allowances: agent.allowances, status: "pending",
+        allowances.length === 0 && selectedProjectAllowances === undefined ? null : JSON.stringify({
+          definitionVersion: row.definition_version, agentId: agent.id, allowances, status: "pending",
+          ...(selectedProjectAllowances === undefined ? {} : { projectAllowances: selectedProjectAllowances }),
         }),
       );
       this.#database.prepare(
@@ -149,6 +154,7 @@ export class ActivationSchedulingModule {
         activation,
         task,
         agent,
+        ...(selectedProjectAllowances === undefined ? {} : { projectAllowances: selectedProjectAllowances }),
         sourceEvent,
         continuationMessage: row.continuation_message,
         workspace,

@@ -67,8 +67,9 @@ tools, sandboxing, approval policy, or any other permission boundary.
 ### Optional reviewer allowances
 
 An agent may declare `allowances`, a list of nonblank strings describing work
-the user authorizes within a precise scope. Omission or an empty list keeps the
-ordinary approval behavior.
+the user authorizes within a precise scope. Omission or an empty list contributes
+no process guidance. If launch guidance is also absent, ordinary approval
+behavior is unchanged.
 
 ```yaml
     allowances:
@@ -91,8 +92,9 @@ example demonstrates the field with routine entries whose benefit for reducing
 actual denials has not been established; tailor those entries to the real process.
 
 Allowance changes participate in the process fingerprint and existing stale-work
-review. Each attempt snapshots only its selected agent's applied allowances and
-process version. Attempt evidence reports `pending`, `active` or `unavailable`,
+review. Each attempt snapshots its selected agent's applied allowances and
+process version separately from any project launch source. Attempt evidence
+reports `pending`, `active` or `unavailable`,
 with compatibility reasons and configured-policy hashes when available. `active`
 means verified configuration was selected; it does not promise a particular
 review decision. Historical attempts without evidence remain unknown.
@@ -120,6 +122,43 @@ Maintainers can run the controlled native fresh/resumed delivery check with
 `COORDINATION_RUN_REVIEWER_ALLOWANCE_PROBE=1` and
 `node --experimental-strip-types --test test/integration/real-codex-reviewer-allowances.test.ts`.
 It makes model calls and writes only its disposable probe files.
+
+### Project reviewer allowances at launch
+
+`start --additional-allowances "<text>"` appends project-specific standing
+authorization for every agent, including roles with no process allowances.
+This is launch configuration, not a process YAML field. Inherited native
+`extra_policy` stays first, followed by labeled process guidance and labeled
+project guidance. Text is serialized as data within its source section; native
+policy and independent restrictions still apply. No Computer Use app access,
+sandbox/network capability or managed permission is granted.
+
+Omitted, empty or whitespace-only text contributes nothing. Nonblank text is
+retained exactly. Missing arguments and duplicate flags fail before project
+state is accessed; use `--additional-allowances=<text>` when text begins with
+`--`. See [Windows launch examples](tutorials/start-a-process.md#project-reviewer-allowances).
+
+The current host owns the launch text in memory. Every new attempt, including
+technical retries and user continuations, selects it at claim. Restarting with
+changed text updates future attempts, including previously queued activations;
+restarting without the flag removes it. History never restores an active grant.
+Launch changes leave the process fingerprint and stale-work rules unchanged.
+Startup remains paused; running attempts retain their selected sources. Use
+interruption before restarting when revocation must take effect immediately.
+
+Attempt evidence retains exact launch text with launch and project identity,
+selected process entries/version/agent, and ordered native configuration
+selections. An active selection contains exact composed additional policy and
+inherited guidance, native version, workspace identity and policy/template hashes.
+`active` describes verified configuration selection, not guaranteed reviewer
+consumption or approval. If optional config is rejected before execution, history
+retains it followed by an unavailable baseline selection. When inspection cannot
+verify composition, only selected framework sources and the reason are retained.
+`pending` means delivery is unverified. Older attempts without these fields
+have unrecorded evidence; current settings never fill those historical gaps.
+These additive facts use the existing JSON evidence column; released migrations
+are unchanged. [ADR 0025](adr/0025-scope-project-reviewer-guidance-to-host-launch.md)
+records the ownership and recovery decision.
 
 ## Model token pricing
 

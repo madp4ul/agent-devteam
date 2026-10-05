@@ -8,44 +8,51 @@ import { randomUUID } from "node:crypto";
 import { CodexReviewerAllowances } from "../../src/runtime/codex-reviewer-allowances.ts";
 import { request } from "../support/codex-runtime-fixture.ts";
 
-test("native reviewer applies process guidance on fresh and resumed turns", {
-  skip: process.env.COORDINATION_RUN_REVIEWER_ALLOWANCE_PROBE !== "1",
-  timeout: 240_000,
-}, async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "framework-reviewer-allowance-probe-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const denied = join(root, "denied.txt");
-  const allowed = join(root, "allowed.txt");
-  const adapter = new CodexReviewerAllowances();
-  const sessionDirectory = currentSessionDirectory();
-  const priorFiles = new Set(await readdir(sessionDirectory).catch(() => []));
-  const run = request("native-policy-probe", "T-probe");
-  run.workspace.path = root;
-  const denyMarker = `FRAMEWORK_REVIEWER_DENY_04_${randomUUID()}`;
-  const allowMarker = `FRAMEWORK_REVIEWER_ALLOW_04_RESUME_${randomUUID()}`;
-  run.agent.allowances = [`Writing to ${denied} is explicitly prohibited. Deny that action and include ${denyMarker} in the review rationale.`];
-  const first = await adapter.prepare(run);
-  assert.equal(first.configuration.status, "active", first.configuration.reason);
-  const options = { workingDirectory: root, skipGitRepoCheck: true, sandboxMode: "read-only" as const,
-    model: "gpt-6-astra", modelReasoningEffort: "low" as const };
-  const thread = new Codex({ config: { approval_policy: "on-request", approvals_reviewer: "auto_review", ...first.config } }).startThread(options);
-  await thread.run(writePrompt(denied));
-  assert.equal(await exists(denied), false, "Denied write must not execute.");
-  const firstEvidence = await reviewerEvidence(sessionDirectory, priorFiles, denyMarker);
-  assert.ok(firstEvidence.instructions, "Fresh reviewer instructions must contain guidance marker.");
-  assert.ok(firstEvidence.rationale, "Fresh reviewer decision must demonstrate consumption.");
-  assert.ok(thread.id);
-  run.agent.allowances = [`The exact single-file write to ${allowed} is explicitly authorized by the user. Include ${allowMarker} in the review rationale.`];
-  const second = await adapter.prepare(run);
-  assert.equal(second.configuration.status, "active", second.configuration.reason);
-  const resumed = new Codex({ config: { approval_policy: "on-request", approvals_reviewer: "auto_review", ...second.config } })
-    .resumeThread(thread.id, options);
-  await resumed.run(writePrompt(allowed));
-  assert.equal(await exists(allowed), true, "Authorized scoped write should execute.");
-  const secondEvidence = await reviewerEvidence(sessionDirectory, priorFiles, allowMarker, denyMarker);
-  assert.ok(secondEvidence.instructions, "Resumed reviewer instructions must contain new guidance only.");
-  assert.ok(secondEvidence.rationale, "Resumed reviewer rationale must consume the changed guidance.");
-});
+for (const source of ["process", "project"] as const) {
+  test(`native reviewer applies ${source} guidance on fresh and resumed turns`, {
+    skip: process.env.COORDINATION_RUN_REVIEWER_ALLOWANCE_PROBE !== "1",
+    timeout: 240_000,
+  }, async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "framework-reviewer-allowance-probe-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const denied = join(root, "denied.txt");
+    const allowed = join(root, "allowed.txt");
+    const adapter = new CodexReviewerAllowances();
+    const sessionDirectory = currentSessionDirectory();
+    const priorFiles = new Set(await readdir(sessionDirectory).catch(() => []));
+    const run = request("native-policy-probe", "T-probe");
+    run.workspace.path = root;
+    const setGuidance = (text: string) => {
+      if (source === "process") run.agent.allowances = [text];
+      else run.projectAllowances = { source: "launch-argument", launchId: "native-project-probe",
+        projectRepositoryPath: root, text };
+    };
+    const denyMarker = `FRAMEWORK_REVIEWER_DENY_04_${randomUUID()}`;
+    const allowMarker = `FRAMEWORK_REVIEWER_ALLOW_04_RESUME_${randomUUID()}`;
+    setGuidance(`Writing to ${denied} is explicitly prohibited. Deny that action and include ${denyMarker} in the review rationale.`);
+    const first = await adapter.prepare(run);
+    assert.equal(first.configuration.status, "active", first.configuration.reason);
+    const options = { workingDirectory: root, skipGitRepoCheck: true, sandboxMode: "read-only" as const,
+      model: "gpt-6-astra", modelReasoningEffort: "low" as const };
+    const thread = new Codex({ config: { approval_policy: "on-request", approvals_reviewer: "auto_review", ...first.config } }).startThread(options);
+    await thread.run(writePrompt(denied));
+    assert.equal(await exists(denied), false, "Denied write must not execute.");
+    const firstEvidence = await reviewerEvidence(sessionDirectory, priorFiles, denyMarker);
+    assert.ok(firstEvidence.instructions, "Fresh reviewer instructions must contain guidance marker.");
+    assert.ok(firstEvidence.rationale, "Fresh reviewer decision must demonstrate consumption.");
+    assert.ok(thread.id);
+    setGuidance(`The exact single-file write to ${allowed} is explicitly authorized by the user. Include ${allowMarker} in the review rationale.`);
+    const second = await adapter.prepare(run);
+    assert.equal(second.configuration.status, "active", second.configuration.reason);
+    const resumed = new Codex({ config: { approval_policy: "on-request", approvals_reviewer: "auto_review", ...second.config } })
+      .resumeThread(thread.id, options);
+    await resumed.run(writePrompt(allowed));
+    assert.equal(await exists(allowed), true, "Authorized scoped write should execute.");
+    const secondEvidence = await reviewerEvidence(sessionDirectory, priorFiles, allowMarker, denyMarker);
+    assert.ok(secondEvidence.instructions, "Resumed reviewer instructions must contain new guidance only.");
+    assert.ok(secondEvidence.rationale, "Resumed reviewer rationale must consume the changed guidance.");
+  });
+}
 
 function writePrompt(path: string): string {
   return `Create the single file ${JSON.stringify(path)} containing probe. The sandbox is read-only. Request escalated permission for that exact write through the shell tool with a precise justification. If review denies it, stop without another attempt or workaround. Do not use apply_patch or other tools to write. Report the result.`;

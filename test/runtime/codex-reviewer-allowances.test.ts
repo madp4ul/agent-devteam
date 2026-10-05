@@ -12,6 +12,47 @@ const state: NativeReviewerPolicyState = { version: "0.160.0", config: { model_p
   auto_review: { extra_policy: "Keep the user's existing restriction." } }, requirements: null,
   templates: [template.replace("\n{{ extra_policy }}\n", "")] };
 
+test("project guidance is appended for fresh, resumed and replacement threads with exact source evidence", async () => {
+  const supplied: CodexClientOptionsLike[] = [];
+  const configured: ReviewerPolicyConfiguration[] = [];
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => [] },
+    reviewerAllowances: new CodexReviewerAllowances(async () => structuredClone(state)),
+    createClient(options) {
+      supplied.push(options);
+      const thread = { async runStreamed() { return { events: events(
+        { type: "thread.started", thread_id: "project-thread" }, { type: "turn.completed" }) }; } };
+      return { startThread: () => thread, resumeThread(id) {
+        if (id === "missing") throw new Error("Missing thread");
+        return thread;
+      } };
+    },
+  });
+  for (const [index, resumeThreadId] of [undefined, "project-thread", "missing"].entries()) {
+    const run = request(`project-${index}`, "T-0010");
+    if (resumeThreadId !== undefined) run.resumeThreadId = resumeThreadId;
+    run.projectAllowances = { source: "launch-argument", launchId: `launch-${index}`,
+      projectRepositoryPath: "D:/project", text: `Browser validation ${index}.\nKeep data local.` };
+    // Include both sources only on the fresh attempt; others have project-only text.
+    if (index === 0) run.agent.allowances = ["Inspect the diff."];
+    const outcome = await runtime.run(run, { started() {}, reviewerPolicyConfigured: (value) => configured.push(value) });
+    assert.equal(outcome.status, "completed");
+    if (index === 2) assert.equal(outcome.threadContinuity, "replaced");
+    const policy = (supplied[index]?.config?.auto_review as { extra_policy: string }).extra_policy;
+    assert.match(policy, /^Keep the user's existing restriction\./);
+    assert.match(policy, /User-authorized project launch allowances/);
+    assert.match(policy, new RegExp(`Browser validation ${index}`));
+    if (index === 0) assert.ok(policy.indexOf("Inspect the diff.") < policy.indexOf("Browser validation"));
+    else assert.doesNotMatch(policy, /Inspect the diff|Browser validation 0/);
+    assert.equal(configured[index]?.preparedPolicy?.extraPolicy, policy);
+    assert.equal(configured[index]?.preparedPolicy?.inheritedExtraPolicy, "Keep the user's existing restriction.");
+    assert.equal(configured[index]?.preparedPolicy?.workspacePath, run.workspace.path);
+    assert.equal(configured[index]?.preparedPolicy?.nativeVersion, "0.160.0");
+    assert.equal(supplied[index]?.config?.approval_policy, "on-request");
+    assert.equal(supplied[index]?.config?.approvals_reviewer, "auto_review");
+  }
+});
+
 test("runtime supplies scoped guidance and preserves inherited policy on fresh and resumed attempts", async () => {
   const supplied: CodexClientOptionsLike[] = [];
   const configured: ReviewerPolicyConfiguration[] = [];
@@ -67,7 +108,8 @@ test("unsupported or changed policy falls back without changing baseline approva
       },
     });
     const run = request("fallback", "T-0010");
-    run.agent.allowances = ["Inspect the diff."];
+    run.projectAllowances = { source: "launch-argument", launchId: "fallback-launch",
+      projectRepositoryPath: "D:/project", text: "Inspect the diff." };
     assert.equal((await runtime.run(run, { started() {}, reviewerPolicyConfigured: (value) => configuration = value })).status, "completed");
     assert.equal(configuration?.status, "unavailable");
     assert.equal(received?.config?.auto_review, undefined);
@@ -90,6 +132,8 @@ test("corrected native templates do not need an override and inspection failures
 test("a rejected optional config retries baseline only before any event; other errors do not replay", async () => {
   for (const scenario of ["config-before-events", "config-after-events", "command-error"]) {
     let calls = 0;
+    const configurations: ReviewerPolicyConfiguration[] = [];
+    const lifecycle = { started() {}, reviewerPolicyConfigured: (value: ReviewerPolicyConfiguration) => configurations.push(value) };
     const runtime = createRuntime({
       mcpServer: { command: "node", args: () => [] },
       reviewerAllowances: new CodexReviewerAllowances(async () => state),
@@ -109,15 +153,19 @@ test("a rejected optional config retries baseline only before any event; other e
       },
     });
     const run = request(scenario, "T-0010");
-    run.agent.allowances = ["Inspect the diff."];
+    run.projectAllowances = { source: "launch-argument", launchId: "rejection-launch",
+      projectRepositoryPath: "D:/project", text: "Inspect the diff." };
     if (scenario === "config-before-events") {
-      assert.equal((await runtime.run(run, { started() {} })).status, "completed");
+      assert.equal((await runtime.run(run, lifecycle)).status, "completed");
       assert.equal(calls, 2);
+      assert.deepEqual(configurations.map(({ status }) => status), ["active", "unavailable"]);
+      assert.match(configurations[0]?.preparedPolicy?.extraPolicy ?? "", /Inspect the diff/);
+      assert.equal(configurations[1]?.preparedPolicy, undefined);
     } else if (scenario === "config-after-events") {
-      assert.equal((await runtime.run(run, { started() {} })).status, "failed");
+      assert.equal((await runtime.run(run, lifecycle)).status, "failed");
       assert.equal(calls, 1);
     } else {
-      await assert.rejects(runtime.run(run, { started() {} }));
+      await assert.rejects(runtime.run(run, lifecycle));
       assert.equal(calls, 1);
     }
   }

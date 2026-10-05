@@ -58,17 +58,28 @@ export class CodexReviewerAllowances {
       if (normalized.some((value) => value !== template && value !== withoutSlot)) {
         return unavailable("Reviewer template changed; additional-policy delivery needs verification.");
       }
-      const guidance = [
+      const guidance = (request.agent.allowances?.length ?? 0) === 0 ? undefined : [
         "## User-authorized process agent allowances",
         `Applied process version: ${request.process.definitionVersion}`,
         `Agent: ${request.agent.id}`,
         "The user authorizes the following work within its stated scope. Apply the existing reviewer policy and independent restrictions.",
         JSON.stringify(request.agent.allowances ?? []),
       ].join("\n");
-      const extraPolicy = [inherited.extra_policy, guidance].filter((value) => value !== undefined && value !== "").join("\n\n");
+      const project = request.projectAllowances;
+      const projectGuidance = !project?.text.trim() ? undefined : [
+        "## User-authorized project launch allowances",
+        `Source: --additional-allowances; launch ${project.launchId}`,
+        `Project repository: ${JSON.stringify(project.projectRepositoryPath)}`,
+        "The user authorizes the following work within its stated scope. Apply the existing reviewer policy and independent restrictions.",
+        JSON.stringify(project.text),
+      ].join("\n");
+      const extraPolicy = [inherited.extra_policy, guidance, projectGuidance]
+        .filter((value) => value !== undefined && value !== "").join("\n\n");
       const repair = normalized.some((value) => value === withoutSlot);
       return {
-        configuration: { status: "active", policyHash: hash(extraPolicy), templateHash: hash(template) },
+        configuration: { status: "active", policyHash: hash(extraPolicy), templateHash: hash(template),
+          preparedPolicy: { nativeVersion: state.version, workspacePath: request.workspace.path,
+            inheritedExtraPolicy: (inherited.extra_policy as string | undefined) ?? "", extraPolicy } },
         config: { auto_review: { extra_policy: extraPolicy,
           ...(repair ? { experimental_policy_template: template } : {}) } },
       };

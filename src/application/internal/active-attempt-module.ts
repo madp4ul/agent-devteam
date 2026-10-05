@@ -311,8 +311,14 @@ export class ActiveAttemptModule {
       if (row?.reviewer_allowances_json == null) return;
       const prior = JSON.parse(row.reviewer_allowances_json) as ReviewerAllowanceEvidence;
       this.#database.prepare("UPDATE attempts SET reviewer_allowances_json = ? WHERE id = ?")
-        .run(JSON.stringify({ definitionVersion: prior.definitionVersion, allowances: prior.allowances,
-          ...configuration }), attemptId);
+        .run(JSON.stringify({
+          ...prior,
+          status: configuration.status,
+          reason: configuration.reason,
+          ...(configuration.policyHash === undefined ? {} : { policyHash: configuration.policyHash }),
+          ...(configuration.templateHash === undefined ? {} : { templateHash: configuration.templateHash }),
+          configurations: [...(prior.configurations ?? []), configuration],
+        }), attemptId);
     });
   }
 

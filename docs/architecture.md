@@ -241,16 +241,28 @@ waits when paused, kicked, or closed. [ADR 0023](adr/0023-recover-tasks-without-
 records the continuation-based policy and its limits.
 
 Applied agent definitions may include optional user-authored reviewer allowances.
-Released migration 0009 retains that guidance with applied agents and snapshots
-its process version and exact entries at attempt claim. Runtime lifecycle reports
-persist whether native delivery was configured or unavailable, plus policy hashes
-or a compatibility reason. The Codex adapter owns read-only configuration/catalog
+Released migration 0009 retains that guidance with applied agents. The host may
+also receive project-wide allowance text through `--additional-allowances`.
+Each automation instance owns an immutable launch source; attempt claim snapshots
+its exact text, launch/project identity and the selected process version/agent
+entries in the existing attempt evidence. It never reloads launch authorization
+from durable history. Queued work and retries select the current host's source
+at claim, while running attempts retain their submitted guidance. Launch changes
+do not change process fingerprints or stale-work rules; every restart remains
+paused. The runtime composes inherited native guidance, process entries and
+project text additively, including roles without process entries. Runtime lifecycle
+reports persist configuration selections with exact prepared additional policy,
+inherited guidance, policy/template hashes and compatibility reasons. A rejected
+optional configuration followed by baseline retains both selections without
+claiming the rejected guidance was delivered. The Codex adapter owns read-only
+configuration/catalog
 inspection, inherited-policy composition, and narrowly verified template repair;
 it does not introduce another reviewer or widen agent capabilities. Unverified
 versions, changed templates or managed requirements keep baseline Auto-review.
 Only recognized optional-config rejection before any event permits baseline
 retry; denials and runs that may have started retain ordinary recovery rules.
 See [ADR 0024](adr/0024-treat-reviewer-allowances-as-an-optional-runtime-add-on.md).
+See [ADR 0025](adr/0025-scope-project-reviewer-guidance-to-host-launch.md) for launch ownership and evidence.
 
 For each run, the Codex adapter starts or resumes a thread in the task's Git
 workspace. A per-attempt MCP adapter lets that agent inspect relevant project
@@ -342,6 +354,7 @@ marked archived only after Git reports successful worktree removal.
 | State | Owner | Location |
 | --- | --- | --- |
 | Workflow structure and agent instructions | User and project | Version-controlled process files in the project repository |
+| Active project reviewer allowance guidance | Launching user and host instance | In-memory launch configuration; historical copies only in attempt evidence |
 | Boards, tasks, activity, activations, run history, notification policy, and eligible notification occurrences | Coordination framework | SQLite in the bound project state root |
 | Conversation attachment originals | Coordination framework | Framework-owned content store in the bound project state root |
 | Task implementation work | Process and agents | One Git worktree per task in the same state root |
