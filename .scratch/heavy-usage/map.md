@@ -8,8 +8,17 @@ Specification: [Heavy usage](spec.md)
 - [02 — Page task timelines and preserve the full map](issues/02-page-task-timelines-and-lazy-map.md): resolved.
 - [03 — Recover transient runtime failures](issues/03-recover-transient-runtime-failures.md): resolved.
 - [04 — Retain loaded timeline content and fix scroll navigation](issues/04-retain-loaded-timeline-and-fix-scroll-navigation.md): resolved.
+- [05 — Inspect hot rollback journals before migration](issues/05-inspect-hot-rollback-journals-before-migration.md): resolved.
 
 ## Decisions so far
+
+- [Ticket 05](issues/05-inspect-hot-rollback-journals-before-migration.md) fixes
+  compatibility inspection of interrupted transactions: copy the rollback
+  journal and permit SQLite recovery only on disposable inspection storage.
+  A copy of the affected board upgrades and restarts with retained evidence
+  preserved. Original database/journal hashes are unchanged. Verification:
+  31 migration tests, 407 full Node passes (six skips), typechecks and whitespace
+  checks passed.
 
 - Ticket 01 pages indexed conversation evidence before hydration; its accepted
   work was preserved while tickets 02 and 03 were implemented.

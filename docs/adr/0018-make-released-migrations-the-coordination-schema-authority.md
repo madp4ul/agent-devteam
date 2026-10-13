@@ -20,7 +20,13 @@ prefix proceeds through the pending migrations. A database without the ledger
 is an unsupported pre-release store. Startup reports a blocking configuration
 error and does not delete, adopt, or rewrite its database, WAL, or shared-memory
 files. Compatibility inspection uses a temporary copy because opening SQLite
-read-only can still change a shared-memory file.
+read-only can still change a shared-memory file. Inspection copies the database
+and any WAL, shared-memory and rollback-journal sidecars. SQLite may recover a
+hot rollback journal on that disposable copy before querying the ledger; the
+copy is therefore opened writable, then application queries are restricted with
+`query_only`. The retained files are never opened by SQLite during this gate.
+Omitting the rollback journal can make a valid recoverable database appear to
+have malformed schema roots after an interrupted transaction.
 
 Before changing an older compatible database, startup creates one uniquely
 named database-only recovery file beside it through SQLite's online backup

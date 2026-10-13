@@ -281,10 +281,12 @@ function inspectExistingMigrationHistory(
   let inspection: DatabaseSync | undefined;
   try {
     copyFileSync(path, inspectionPath);
-    for (const suffix of ["-wal", "-shm"]) {
+    for (const suffix of ["-wal", "-shm", "-journal"]) {
       if (existsSync(`${path}${suffix}`)) copyFileSync(`${path}${suffix}`, `${inspectionPath}${suffix}`);
     }
-    inspection = new DatabaseSync(inspectionPath, { readOnly: true });
+    // A hot rollback journal must be recovered before SQLite can read the
+    // schema. Recovery writes only this disposable copy, never retained state.
+    inspection = new DatabaseSync(inspectionPath);
     inspection.exec("PRAGMA busy_timeout = 5000; PRAGMA query_only = ON");
     const ledger = inspection.prepare(
       "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'coordination_migrations'",

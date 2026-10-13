@@ -8,6 +8,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import { CoordinationDatabase } from "../../src/application/internal/coordination-database.ts";
 import { describeCoordinationSchema } from "../../src/application/internal/coordination-schema-snapshot.ts";
 import { coordinationMigrations } from "../../src/application/internal/migrations/registry.ts";
 import { initialReleasedMigration } from "../../src/application/internal/migrations/0001-initial-released-schema.ts";
@@ -15,6 +16,66 @@ import { createCommittedTestRepository } from "../support/agent-runtime-fixture.
 import { CompletingAgentRuntime } from "../support/activation-fixture.ts";
 
 const initialReleasedMigrationId = "0001_initial_released_schema";
+
+test("compatibility inspection recovers a hot rollback journal on its copy without changing retained files", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "coordination-hot-journal-test-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "coordination.sqlite3");
+  const migration = {
+    id: "test_initial",
+    apply(db: DatabaseSync) {
+      db.exec("CREATE TABLE coordination_migrations(position INTEGER PRIMARY KEY, migration_id TEXT); CREATE TABLE retained(value TEXT); INSERT INTO retained VALUES ('valuable')");
+    },
+  };
+  const old = await CoordinationDatabase.openForMigrationTest(path, { migrations: [migration], expectedSchemaIsComplete: () => true });
+  old.close();
+  const original = await readFile(path);
+  const templatePath = join(directory, "committed-template.sqlite3");
+  await copyFile(path, templatePath);
+  const template = new DatabaseSync(templatePath);
+  template.exec("CREATE TABLE conversation_history_items(id INTEGER PRIMARY KEY, body TEXT)");
+  template.close();
+  // SQLite produces the recovery journal; abrupt process exit leaves it hot.
+  await promisify(execFile)(process.execPath, ["--input-type=module", "-e", `
+    import { DatabaseSync } from 'node:sqlite';
+    const db = new DatabaseSync(process.argv[1]);
+    db.exec('PRAGMA cache_size=5; BEGIN IMMEDIATE; CREATE TABLE conversation_history_items(id INTEGER PRIMARY KEY, body TEXT)');
+    const insert = db.prepare('INSERT INTO conversation_history_items(body) VALUES (?)');
+    for (let index=0; index<1000; index++) insert.run('x'.repeat(4000));
+    process.exit(0);
+  `, path]);
+  // Model interruption between writing the new schema page and the final size
+  // header. The journal contains the original page and repairs this exact state.
+  const interrupted = await readFile(path);
+  const committed = await readFile(templatePath);
+  const encodedPageSize = original.readUInt16BE(16);
+  const pageSize = encodedPageSize === 1 ? 65536 : encodedPageSize;
+  committed.copy(interrupted, 0, 0, pageSize);
+  original.copy(interrupted, 28, 28, 32);
+  await writeFile(path, interrupted);
+  const retainedJournal = await readFile(`${path}-journal`);
+  const withoutJournal = join(directory, "incomplete-inspection.sqlite3");
+  await copyFile(path, withoutJournal);
+  const broken = new DatabaseSync(withoutJournal, { readOnly: true });
+  assert.throws(() => broken.prepare("SELECT * FROM sqlite_schema").all(), /conversation_history_items.*invalid rootpage/);
+  broken.close();
+  let inspected = false;
+  await assert.rejects(CoordinationDatabase.openForMigrationTest(path, {
+    migrations: [migration, { id: "test_next", apply() { throw new Error("not reached"); } }],
+    createBackup: async () => { inspected = true; throw new Error("stop before upgrade"); },
+    expectedSchemaIsComplete: () => true,
+  }), /pre-upgrade recovery backup/);
+  assert.equal(inspected, true, "inspection accepted the recovered ledger");
+  // The subsequent normal open may recover the original, so use an unsupported
+  // registry to assert preflight itself leaves every retained byte untouched.
+  await writeFile(path, interrupted);
+  await writeFile(`${path}-journal`, retainedJournal);
+  await assert.rejects(CoordinationDatabase.openForMigrationTest(path, {
+    migrations: [{ ...migration, id: "unsupported" }],
+  }), /Unsupported or malformed coordination migration history/);
+  assert.deepEqual(await readFile(path), interrupted);
+  assert.deepEqual(await readFile(`${path}-journal`), retainedJournal);
+});
 const boundTaskDetailLookupsMigrationId = "0002_bound_task_detail_lookups";
 const relationshipResumeOwnersMigrationId = "0003_relationship_resume_owners";
 const productionMigrationIds = [

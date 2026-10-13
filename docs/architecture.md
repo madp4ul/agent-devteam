@@ -235,7 +235,11 @@ online backup facility, the database-only recovery copy is independently
 verified, and the complete pending sequence plus its ledger entries run in one
 immediate transaction whose schema, integrity, and foreign keys verify before
 commit. Divergent, malformed, newer, or ledger-less histories block startup
-without migration. Process
+without migration.
+Compatibility inspection first copies the database and all SQLite sidecars,
+including the rollback journal, into disposable storage. SQLite recovery may
+write that copy before its query-only ledger check; it never opens retained
+files during compatibility inspection. Process
 application, restart recovery, workspace recovery, board mutation, and agent
 dispatch begin only after the database has opened at the current released
 history. Startup compares every application table, index, trigger, and view
