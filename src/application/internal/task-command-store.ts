@@ -241,6 +241,9 @@ export class TaskCommandStore {
         {
           fromColumnId: currentTask.columnId,
           toColumnId: command.destinationColumnId,
+          fromColumnName: (this.#database.prepare("SELECT name FROM columns WHERE board_id = ? AND id = ?").get(currentTask.boardId, currentTask.columnId) as { name: string } | undefined)?.name ?? currentTask.columnId,
+          toColumnName: (this.#database.prepare("SELECT name FROM columns WHERE board_id = ? AND id = ?").get(currentTask.boardId, command.destinationColumnId) as { name: string } | undefined)?.name ?? command.destinationColumnId,
+          actorName: command.actor.kind === "agent" ? (this.#database.prepare("SELECT name FROM agents WHERE id = ?").get(command.actor.id) as { name: string } | undefined)?.name ?? command.actor.id : command.actor.id,
           ...this.agentActivityProvenance(command, origin),
         },
       );
@@ -584,6 +587,7 @@ export class TaskCommandStore {
         ...(attemptId === undefined ? {} : { attemptId }),
         ...(originTask === undefined ? {} : { originTask }),
       };
+      if (command.attemptId) this.#activityJournal.promoteProbe(command.attemptId, comment.occurredAt);
       this.#database
         .prepare(
           `INSERT INTO task_comments

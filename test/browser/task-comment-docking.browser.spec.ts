@@ -1,3 +1,4 @@
+import { fulfillTaskScenario } from "./browser-fixture.ts";
 import { expect, test } from "./browser-fixture.ts";
 import type { Locator } from "@playwright/test";
 
@@ -24,7 +25,7 @@ for (const theme of ["dark", "light"] as const) {
           detail.task.description = longDescription
             ? Array.from({ length: 40 }, (_, index) => `Description line ${index + 1}.`).join("  \n")
             : "A short description.";
-          await route.fulfill({ response, json: detail });
+          await fulfillTaskScenario(route, response, detail);
         });
         await page.goto("/tasks/T-0001");
         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -61,7 +62,7 @@ for (const theme of ["dark", "light"] as const) {
         id: `live-attention-${index}`, type: "user-mention", sourceEventId: detail.task.comments[0].id,
         createdAt: "2026-08-15T12:30:00.000Z",
       })) : [];
-      await route.fulfill({ response, json: detail });
+      await fulfillTaskScenario(route, response, detail);
     });
     await page.goto("/tasks/T-0001");
     const composer = page.getByRole("region", { name: "Add comment" });

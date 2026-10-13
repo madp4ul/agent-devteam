@@ -89,11 +89,31 @@ both relationship endpoints through bounded task-reference queries.
 Complete user-facing board and task-detail read projections are assembled
 inside this boundary before the web adapter serializes them. The adapter does
 not reconstruct those authoritative views by coordinating lower-level queries.
-Task-detail projection reads the inspected task's history once, carries only
-board and column metadata rather than other tasks' histories, and resolves
-current and historical relationship labels through deduplicated task-ID
-lookups. Supporting task-scoped indexes keep those reads independent of
-unrelated accumulated history for active and archived tasks.
+Browser task detail selects its newest 50 top-level timeline groups from
+migration 0011's task-scoped index before hydrating authored sources. Each
+attempt discloses at most 50 nested records with its own paging cursor. Current
+pins, unfinished activation controls, attention, participants, relationships,
+and conversation cost totals are independent of that history window. Selected
+pages resolve only their historical relationship references. Agent history and
+context-delivery queries retain their separate contracts.
+
+The movement map has its own compact durable projection, retaining containing
+record identity, source identity, movement order and labels. Its query reads no
+comment bodies, transcripts or unrelated activity. The browser loads it when
+its desktop layout reveals it, then requests sequence deltas while visible.
+Source links and coalesced map scrubbing resolve bounded windows directly;
+stale responses cannot replace the latest destination. The initial timeline
+query remains bounded, while the browser retains every page and nested activity
+already requested for this task. It preserves measured reading/selection anchors
+and represents skipped ranges with explicit load controls rather than empty
+height estimates. Polling refreshes the newest page and the directly inspected
+historical page through bounded queries, independently of retained DOM size.
+Map geometry uses available source anchors and logical history position when
+records are absent; after hydration navigation aligns to the actual source.
+[ADR 0029](adr/0029-retain-requested-task-timeline-content.md) records the user's
+revised retention policy and the scrollbar/map-navigation correction.
+[ADR 0027](adr/0027-page-task-timelines-and-load-the-movement-map-independently.md)
+records grouping, cursor, hydration and map contracts.
 
 Each command workflow owns its SQLite transaction and records the state change,
 activity provenance, projection updates, notifications, and idempotent response
@@ -119,6 +139,17 @@ authoritative command, and archival preserves the lineage, its final aggregated
 cost snapshot, and the cumulative thread checkpoints needed for later cost
 continuation while removing detailed transcript, authored-message, and replay
 content.
+Browser conversation history uses migration 0010's indexed item projection.
+Application queries select a bounded window before hydrating sources, including
+within one large attempt, and source links resolve windows directly. Codex live
+item updates enter that projection through the existing application lifecycle
+transaction; browser polling never reads complete runtime transcripts. Signed
+conversation cursors retain a backward watermark, while refresh renews the
+window's live evidence. The browser retains at most 150 history elements with
+eviction spacers and durable reading/selection anchors. Conversation cost totals
+still aggregate compact pricing/usage evidence across all retained attempts,
+independently of the visible history. [ADR 0026](adr/0026-page-browser-conversations-before-hydration.md)
+records storage, ordering, cursor and window contracts.
 Settled current conversations can be retired atomically with an attributable
 reason. Retired lineages remain durable and explicitly continuable, while the
 next ordinary activation creates the pair's replacement and receives that
@@ -223,6 +254,27 @@ Automation turns committed activation records into agent runs. It preserves the
 order of activations for each task, prevents overlapping runs on one task, and
 allows independent tasks to run concurrently. Automation always starts paused
 and proceeds only after the user resumes it.
+
+Transient runtime recovery is owned by settlement and scheduling in the core.
+Released migration 0012 stores mutable outage episodes and marks provisional
+probes. Deterministic classification prefers explicit runtime codes/deadlines;
+unknown, authentication, billing and permission failures keep ordinary recovery.
+Recognized failures bypass the three-attempt budget, wait for a usable provider
+deadline or at least 60 seconds, and retry the same activation through normal
+eligibility and thread continuity. Waiting frees other tasks to dispatch.
+The first failure is retained; subsequent empty probes retain their dispatch
+claim until output, accepted coordination writes, thread changes, usage evidence
+or a non-transient outcome publishes the attempt. Rejected provisional probes
+are discarded before immutable attempt history is published, updating only
+bounded episode samples and counters. Published work is never compacted away.
+Usage comparisons reuse cumulative checkpoint isolation; uncertain deltas are
+retained conservatively. Native runtime caches are released after durable
+settlement. Restart remains paused, retains waiting deadlines/counts, and
+requeues an abandoned provisional probe without host-stop attempt noise.
+Task and conversation HTTP views expose current waiting independently of paged
+history, and browser stop controls use interruption/dismissal commands.
+[ADR 0028](adr/0028-retry-transient-runtime-failures-with-provisional-probes.md)
+records this exception to the ordinary finite retry policy.
 
 Stall recovery is an authoritative scheduler workflow in the coordination core.
 When watched, mapped work has no unfinished activation, waiting relationship,

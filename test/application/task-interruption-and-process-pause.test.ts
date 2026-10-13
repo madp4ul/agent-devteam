@@ -657,6 +657,7 @@ class InterruptibleRuntime implements AgentRuntime, AttemptTranscriptAccess {
       role: "agent",
       text: `Attempt ${request.attempt.number} interruptible evidence.`,
     }]);
+    this.#transcripts.get(request.attemptId)!.forEach((item, ordinal) => lifecycle.transcriptItemUpdated?.(ordinal, item));
     lifecycle.started(`thread-${this.requests.length}`);
     for (const waiter of this.#waiters.splice(0)) {
       const found = this.requests[waiter.count - 1];

@@ -449,7 +449,7 @@ test("task command and archival activity remains identical after restart", async
       {
         type: "task.moved",
         actor: { kind: "user", id: "local-user" },
-        details: { fromColumnId: "backlog", toColumnId: "completion" },
+        details: { fromColumnId: "backlog", toColumnId: "completion", fromColumnName: "Backlog", toColumnName: "Completion", actorName: "local-user" },
       },
       {
         type: "task.archived",

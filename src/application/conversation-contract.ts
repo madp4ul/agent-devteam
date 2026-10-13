@@ -1,7 +1,24 @@
-import type { ActivationView } from "./automation-contract.ts";
+import type { RuntimeWaitingView, ActivationView } from "./automation-contract.ts";
 import type { ProcessDiagnostic } from "./process-contract.ts";
 import type { AttemptContextWindowUsage, EstimatedTokenCost, AttemptTokenUsage, AttemptTranscriptItem, TokenCostBreakdown } from "./runtime-contract.ts";
 import type { Actor, TaskActivityView, TaskCommentView } from "./task-contract.ts";
+
+export interface ConversationHistoryQuery {
+  pageSize?: number;
+  cursor?: string;
+  attemptId?: string;
+  messageId?: string;
+  activationId?: string;
+}
+
+export interface ConversationHistoryPage {
+  recordIds: string[];
+  olderCursor: string | null;
+  newerCursor: string | null;
+  refreshCursor: string;
+  endingCursor: string;
+  atLatest: boolean;
+}
 
 /** Conversation index, detail, message, transcript, and continuation facts. */
 export type AgentConversationTranscriptView =
@@ -9,6 +26,10 @@ export type AgentConversationTranscriptView =
   | { available: false };
 
 export interface AgentConversationView {
+  /** Present on bounded browser queries. Legacy browser fixtures may omit it. */
+  page?: ConversationHistoryPage;
+  runtimeRecovery?: RuntimeWaitingView;
+  liveStatus?: "running" | "queued" | null;
   id: string;
   taskId: string;
   originatingActivationId: string;
@@ -58,7 +79,7 @@ export type AgentConversationHistoryEntry =
 export type AgentConversationQueryResult =
   | { available: true; conversation: AgentConversationView }
   | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { available: false; reason: "not-found" };
+  | { available: false; reason: "not-found" | "invalid-page" };
 
 export interface AgentConversationIndexEntry {
   id: string;

@@ -183,6 +183,10 @@ export class TaskArchiveStore {
       result = this.#owner.transaction(() => {
         const occurredAt = new Date().toISOString();
         this.snapshotConversationCosts(taskId);
+        // A stopped stream can have durable items without a final JSON snapshot.
+        this.#database.prepare(`DELETE FROM conversation_history_items WHERE kind = 'item'
+          AND conversation_id IN (SELECT id FROM agent_conversations WHERE task_id = ?)`)
+          .run(taskId);
         this.#database.prepare(
           "DELETE FROM attempt_transcripts WHERE attempt_id IN (SELECT attempt.id FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id WHERE activation.task_id = ?)",
         ).run(taskId);

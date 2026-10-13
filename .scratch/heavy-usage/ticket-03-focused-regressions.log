@@ -1,0 +1,20 @@
+✔ conversation lineage stays isolated by both task and stable agent identity (278.3229ms)
+✔ a source delivered earlier remains exact outside its queued activation's bounded updates (564.0606ms)
+✔ a self-authored activation source stays available through retained conversation history (524.5903ms)
+✔ ordinary activations reuse the task-and-agent conversation and deliver only new task context (602.5284ms)
+✔ continuing a conversation persists one authored message and activation idempotently (480.463ms)
+✔ retiring a settled conversation preserves it and the next ordinary activation creates its replacement (829.8888ms)
+✔ a follow-up resumes the owning agent's thread and existing task workspace in activation order (761.8481ms)
+✔ task conversation index stays compact, recent, distinguishable, and historically navigable (485.9305ms)
+✔ a finished attempt transcript remains inspectable after application restart (475.9156ms)
+✔ a streamed Codex failure remains inspectable while its retry waits at the queue head (437.285ms)
+✔ conversation index status follows running work and unresolved attention (417.7416ms)
+✔ start binds one state root and presents binding failures in configuration-error mode (2239.1635ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6109.746

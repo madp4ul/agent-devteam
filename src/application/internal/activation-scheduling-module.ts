@@ -1,3 +1,4 @@
+import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
@@ -129,6 +130,7 @@ export class ActivationSchedulingModule {
         "SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?",
       ).get(row.id) as { count: number };
       const attempt = { id: randomUUID(), number: priorAttempts.count + 1 };
+      const waiting = new RuntimeRecoveryStore(this.#database, this.#activityJournal).readWaiting(row.id);
       this.#database.prepare(
         `INSERT INTO attempts
           (id, activation_id, status, workspace_path, started_at, model, reasoning_effort, reviewer_allowances_json)
@@ -145,6 +147,9 @@ export class ActivationSchedulingModule {
           ...(selectedProjectAllowances === undefined ? {} : { projectAllowances: selectedProjectAllowances }),
         }),
       );
+      if (waiting) {
+        this.#database.prepare("UPDATE attempts SET provisional_probe = 1, recovery_episode_id = ? WHERE id = ?").run(waiting.episodeId, attempt.id);
+      }
       this.#database.prepare(
         `INSERT INTO activation_dispatch_claims (attempt_id, activation_id, claimed_at)
          VALUES (?, ?, ?)`,
@@ -170,8 +175,9 @@ export class ActivationSchedulingModule {
   readNextRetryDueAt(now: Date): string | undefined {
     const row = this.#database.prepare(
       `SELECT MIN(a.retry_due_at) AS retry_due_at
-       FROM activations a
-       WHERE a.status = 'queued' AND a.retry_due_at > ?
+       FROM activations a JOIN tasks task ON task.id = a.task_id JOIN mapped_tasks mapped ON mapped.id = task.id
+       JOIN agents agent ON agent.id = a.target_agent_id AND agent.applied = 1
+       WHERE a.stale = 0 AND task.automation_suspended = 0 AND a.status = 'queued' AND a.retry_due_at > ?
          AND NOT EXISTS (
            SELECT 1 FROM activations earlier
            WHERE earlier.task_id = a.task_id
@@ -196,7 +202,7 @@ export class ActivationSchedulingModule {
       }
       const prepared = this.#database.prepare(
         `SELECT activation.task_id, activation.target_agent_id, activation.definition_version,
-                attempt.workspace_path
+                attempt.workspace_path, attempt.provisional_probe
          FROM attempts attempt
          JOIN activations activation ON activation.id = attempt.activation_id
          JOIN activation_dispatch_claims dispatch_claim ON dispatch_claim.attempt_id = attempt.id
@@ -207,11 +213,16 @@ export class ActivationSchedulingModule {
         target_agent_id: string;
         definition_version: string;
         workspace_path: string;
+        provisional_probe: number;
       } | undefined;
       if (prepared === undefined) throw new Error(`Attempt ${claim.attempt.id} is not prepared`);
       if (prepared.workspace_path !== workspace.path) {
         throw new Error(`Attempt ${claim.attempt.id} was prepared for a different workspace`);
       }
+      const eligible = this.#database.prepare(`SELECT 1 FROM activations a JOIN tasks task ON task.id = a.task_id
+        JOIN mapped_tasks mapped ON mapped.id = task.id JOIN agents agent ON agent.id = a.target_agent_id AND agent.applied = 1
+        WHERE a.id = ? AND a.stale = 0 AND task.automation_suspended = 0 AND a.status = 'running'`).get(claim.activation.id);
+      if (!eligible) { this.releaseUnstartedClaim(claim); return undefined; }
       const registered = this.readTaskWorkspace(prepared.task_id);
       if (registered === undefined) {
         this.#database.prepare(
@@ -227,6 +238,10 @@ export class ActivationSchedulingModule {
       }
       this.#database.prepare("UPDATE attempts SET started_at = ? WHERE id = ?")
         .run(occurredAt, claim.attempt.id);
+      if (prepared.provisional_probe === 1) {
+        this.#database.prepare("UPDATE runtime_recovery_episodes SET retry_count = retry_count + 1 WHERE id = (SELECT recovery_episode_id FROM attempts WHERE id = ?)").run(claim.attempt.id);
+        return claim.attempt;
+      }
       this.#activityJournal.append(
         prepared.task_id,
         "attempt.started",
@@ -252,7 +267,7 @@ export class ActivationSchedulingModule {
       this.#deleteClaimedProvisionalAttempt(claim);
       const released = this.#database.prepare(
         `UPDATE activations
-         SET status = 'queued', continuation_message = ?
+         SET status = 'queued', continuation_message = ?, retry_due_at = (SELECT next_eligible_at FROM runtime_recovery_episodes WHERE activation_id = activations.id AND state = 'waiting')
          WHERE id = ? AND status = 'running'`,
       ).run(claim.continuationMessage, claim.activation.id);
       if (released.changes !== 1) throw new Error(`Activation ${claim.activation.id} is not starting`);
@@ -266,6 +281,7 @@ export class ActivationSchedulingModule {
   ): RuntimeStartupDiagnostic {
     return this.#owner.transaction(() => {
       const occurredAt = new Date().toISOString();
+      new RuntimeRecoveryStore(this.#database, this.#activityJournal).finishWithinTransaction(claim.activation.id, "ordinary", new Date(occurredAt));
       const failed = this.#database.prepare(
         `UPDATE activations
          SET status = 'failed', failure_kind = 'technical', failure_summary = ?

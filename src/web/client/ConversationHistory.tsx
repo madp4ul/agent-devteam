@@ -50,16 +50,20 @@ export function ConversationHistory({
   const selectedActivationId = selectedCause?.kind === "activation" || selectedCause?.kind === "message"
     ? selectedCause.activationId
     : undefined;
+  const selectedItemIndex = selectedCause === undefined && selectedAttemptId !== undefined
+    ? conversation.history.findIndex((entry) => entry.kind === "item" && entry.attemptId === selectedAttemptId)
+    : -1;
   const causes = conversation.history.filter((entry) => entry.kind === "activation" || entry.kind === "message");
-  const active = causes.some(({ status }) => status === "running");
-  const queued = causes.some(({ status }) => status === "queued");
+  const active = conversation.liveStatus === "running" || causes.some(({ status }) => status === "running");
+  const queued = conversation.liveStatus === "queued" || causes.some(({ status }) => status === "queued");
   if (conversation.history.length === 0) {
     return <p className="unavailable">This conversation has not started a run yet.</p>;
   }
 
   return (
     <div className="conversation-stream">
-      {conversation.history.map((entry, index) => entry.kind === "continuity-loss" ? (
+      {conversation.history.map((entry, index) => <div key={conversation.page?.recordIds[index] ?? historyEntryId(entry, index)} data-history-record={conversation.page?.recordIds[index] ?? historyEntryId(entry, index)} tabIndex={index === selectedItemIndex ? -1 : undefined} ref={index === selectedItemIndex ? (element) => { selectedContextRef.current = element; } : undefined}>
+      {entry.kind === "continuity-loss" ? (
         <section key={`continuity-${entry.occurredAt}`} className="conversation-system-note warning" role="note">
           <p className="eyebrow">Replacement context</p>
           <p>{entry.reason}</p>
@@ -206,7 +210,8 @@ export function ConversationHistory({
             </article>
           );
         })()
-      ))}
+      )}
+      </div>)}
       {active || queued ? (
         <p className="conversation-live-state" role="status" aria-label={queued ? "Follow-up queued" : "Agent working"}>
           {queued
@@ -612,4 +617,11 @@ function activationReasonLabel(reason: AgentConversationView["originatingActivat
     case "relationship-changed": return "Relationship changed";
     case "user-follow-up": return "User follow-up";
   }
+}
+
+function historyEntryId(entry: AgentConversationView["history"][number], index: number): string {
+  if (entry.kind === "item") return `item:${entry.attemptId}:${entry.item.id ?? index}`;
+  if (entry.kind === "activation" || entry.kind === "message") return `cause:${entry.activationId}`;
+  if (entry.kind === "resume") return `resume:${entry.activity.id}`;
+  return `${entry.kind}:${entry.kind === "retirement" ? entry.retirement.occurredAt : entry.occurredAt}`;
 }

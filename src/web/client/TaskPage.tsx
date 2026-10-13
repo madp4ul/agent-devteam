@@ -151,7 +151,7 @@ export function TaskPage({
   const interruptedAgentId = inspection.currentActivation?.state === "interrupted"
     ? inspection.currentActivation.targetAgentId
     : interruptedActivation?.targetAgentId;
-  const mostRecentTaskAgentId = findMostRecentlyRunAgentId(task.activations);
+  const mostRecentTaskAgentId = detail.mostRecentAgentId ?? findMostRecentlyRunAgentId(task.activations);
   const interruption = interruptedActivationId === undefined || interruptedAgentId === undefined
     ? undefined
     : {
@@ -245,6 +245,7 @@ export function TaskPage({
                   reasons={inspection.unresolvedAttention}
                   highlightedReasonId={highlightedReasonId}
                   interruption={interruption}
+                  onSource={(sourceId) => setTimelineSourceRequest((previous) => ({ sourceId, sequence: (previous?.sequence ?? 0) + 1 }))}
                   onChanged={refresh}
                   onFeedback={setFeedback}
                 />
@@ -308,7 +309,7 @@ export function TaskPage({
             </section>
 
             <div data-task-section="activity">
-              <PinnedComments key={task.id} taskId={task.id} comments={task.comments} readOnly={!!task.archived}
+              <PinnedComments key={task.id} taskId={task.id} comments={inspection.pinnedComments} readOnly={!!task.archived}
                 onSource={(sourceId) => setTimelineSourceRequest((previous) => ({ sourceId, sequence: (previous?.sequence ?? 0) + 1 }))}
                 onChanged={refresh} onError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })} />
               <AgentActivityPanel
@@ -339,6 +340,8 @@ export function TaskPage({
             >
               <TaskTimeline
                 taskId={task.id}
+                page={detail.timeline}
+                pins={inspection.pinnedComments}
                 comments={task.comments}
                 activity={task.activity}
                 activations={task.activations}
@@ -378,12 +381,13 @@ export function TaskPage({
                   {task.archived ? null : (
                     <div data-task-section="move">
                       <MoveTaskPanel
+                        taskId={task.id}
+                        onSource={(sourceId) => setTimelineSourceRequest((previous) => ({ sourceId, sequence: (previous?.sequence ?? 0) + 1 }))}
                         columns={board.columns}
                         currentColumnId={task.columnId}
                         currentColumnName={board.columns.find((column) => column.id === task.columnId)?.name ?? task.columnId}
-                        {...(currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id })}
-                        movementCount={task.activity.filter((entry) => entry.type === "task.moved").length}
-                        movements={task.activity.filter((entry): entry is typeof entry & { type: "task.moved" } => entry.type === "task.moved")}
+                        {...(detail.movementSummary?.latestSourceId === undefined ? currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id } : { currentColumnSourceId: detail.movementSummary.latestSourceId })}
+                        movementCount={detail.movementSummary?.total ?? task.activity.filter((entry) => entry.type === "task.moved").length}
                         agents={detail.collaborators}
                         pending={pendingTaskId !== undefined}
                         onMove={async (column) => move({ id: task.id, revision: task.revision }, column)}

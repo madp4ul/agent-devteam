@@ -7,6 +7,7 @@ import type {
   EditTaskRequest,
   EditTaskRelationshipResumeAgentRequest,
   IdempotentBrowserRequest,
+  InterruptTaskRequest,
   MoveTaskRequest,
   UserTaskDetailQueryResult,
 } from "../../application/browser-transport-contract.ts";
@@ -26,6 +27,8 @@ import type { BrowserCoordinationCapabilities } from "./capabilities.ts";
 type TaskCapabilities = Pick<BrowserCoordinationCapabilities,
   | "createTask"
   | "queryUserTaskDetail"
+  | "queryTaskTimeline"
+  | "queryTaskMovementMap"
   | "interruptTask"
   | "continueInterruptedTask"
   | "editTask"
@@ -42,6 +45,19 @@ export function registerTaskRoutes(
   dispatcher: HttpDispatcher<HttpRouteContext>,
   application: TaskCapabilities,
 ): void {
+  dispatcher.register("GET", "/api/tasks/:taskId/timeline", "browser/tasks", ({ response, params, url }) => {
+    const result = application.queryTaskTimeline(params.taskId, {
+      ...(url.searchParams.has("pageSize") ? { pageSize: Number(url.searchParams.get("pageSize")) } : {}),
+      ...(url.searchParams.has("cursor") ? { cursor: url.searchParams.get("cursor")! } : {}),
+      ...(url.searchParams.has("sourceId") ? { sourceId: url.searchParams.get("sourceId")! } : {}),
+      ...(url.searchParams.get("refresh") === "true" ? { refresh: true } : {}),
+    });
+    sendJson(response, result.available ? 200 : result.reason === "not-found" ? 404 : 400, result);
+  });
+  dispatcher.register("GET", "/api/tasks/:taskId/movement-map", "browser/tasks", ({ response, params, url }) => {
+    const result = application.queryTaskMovementMap(params.taskId, Number(url.searchParams.get("after") ?? 0));
+    sendJson(response, result.available ? 200 : result.reason === "not-found" ? 404 : 400, result);
+  });
   for (const [action, pinned] of [["pin", true], ["unpin", false]] as const) {
     dispatcher.register("POST", `/api/tasks/:taskId/comments/:commentId/${action}`, "browser/tasks", async ({ request, response, params }) => {
       const body = await readJsonBody(request);
@@ -67,9 +83,10 @@ export function registerTaskRoutes(
     sendJson(response, result.available ? 200 : result.reason === "not-found" ? 404 : 409, result);
   });
   dispatcher.register("POST", "/api/tasks/:taskId/interrupt", "browser/tasks", async ({ request, response, params }) => {
-    const body = await readJsonBody<IdempotentBrowserRequest>(request);
+    const body = await readJsonBody<InterruptTaskRequest>(request);
     const result = application.interruptTask({
       taskId: params.taskId,
+      ...(body.activationId === undefined ? {} : { activationId: stringField(body, "activationId") }),
       actor: localUserActor,
       idempotencyKey: stringField(body, "idempotencyKey"),
     });

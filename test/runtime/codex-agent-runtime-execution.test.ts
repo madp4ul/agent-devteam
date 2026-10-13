@@ -927,6 +927,10 @@ test("a completed turn retains its reported token usage for the current attempt"
     reasoningOutputTokens: 180,
   });
   assert.equal(await usageAccess.readUsage("attempt-without-reported-usage"), null);
+  runtime.release("attempt-activation-with-usage");
+  assert.equal(await runtime.read("attempt-activation-with-usage"), null);
+  assert.equal(await runtime.readUsage("attempt-activation-with-usage"), null);
+  assert.equal(await runtime.readContextWindowUsage("attempt-activation-with-usage"), null);
 });
 
 test("runtime preserves cumulative usage snapshots when attempts reuse one Codex thread", async () => {

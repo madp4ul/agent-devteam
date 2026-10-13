@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import type {
   ActivationView,
@@ -12,6 +12,8 @@ import type {
   TaskRelationshipView,
   UserTimelineRelatedTaskView,
 } from "../../application/browser-transport-contract.ts";
+import { useTimelineWindow } from "./timeline-window.ts";
+import type { TimelinePage } from "../../application/timeline-contract.ts";
 import { findParticipantMentions } from "../../application/participant-mentions.ts";
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
 import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
@@ -50,6 +52,8 @@ type ConversationSelection = {
 
 export function TaskTimeline({
   taskId,
+  page,
+  pins,
   comments,
   activity,
   activations,
@@ -66,6 +70,8 @@ export function TaskTimeline({
   agentInspectableContent,
 }: {
   taskId: string;
+  page?: TimelinePage;
+  pins?: TaskCommentView[];
   comments: TaskCommentView[];
   activity: TaskActivityView[];
   activations: ActivationView[];
@@ -85,21 +91,46 @@ export function TaskTimeline({
   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
   const [agentInspectableOnly, setAgentInspectableOnly] = useState(false);
   const pendingFilterAnchor = useRef<TimelineViewportAnchor | null>(null);
-  const records = buildTimelineRecords(comments, activity, activations);
+  const history = useTimelineWindow(taskId, page);
+  const records = history.page?.records ?? buildTimelineRecords(comments, activity, activations);
+  useEffect(() => {
+    const keys = new Set(records.flatMap((record) => record.kind === "comment" ? [`comment-${record.comment.id}`] : record.kind === "activity" ? [`activity-${record.activity.id}`] : record.kind === "startup-failure" ? [`startup-${record.activation.id}`] : [`outcome-${record.attempt.id}`, ...record.content.map((entry) => entry.kind === "comment" ? `comment-${entry.comment.id}` : `activity-${entry.activity.id}`)]));
+    setExpandedText((current) => {
+      const next = new Set([...current].filter((key) => keys.has(key)));
+      return next.size === current.size ? current : next;
+    });
+  }, [history.page]);
+  const sourceSequence = useRef(0);
+  const pendingSourceFocus = useRef<{ id: string; sequence: number } | undefined>(undefined);
+  const olderRef = useRef<HTMLDivElement>(null);
+  const newerRef = useRef<HTMLDivElement>(null);
+  const loadRef = useRef(history.load); loadRef.current = history.load;
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) if (entry.isIntersecting) void loadRef.current(entry.target === olderRef.current ? "older" : "newer");
+    }, { rootMargin: "120px" });
+    if (olderRef.current) observer.observe(olderRef.current);
+    if (newerRef.current) observer.observe(newerRef.current);
+    return () => observer.disconnect();
+  }, [history.page?.olderCursor, history.page?.newerCursor]);
+  const windowInspectable = history.page?.inspectableSources === undefined ? agentInspectableContent : { ...agentInspectableContent, ...history.page.inspectableSources };
+  const windowComments = history.page === undefined ? comments : records.flatMap((record) => record.kind === "comment" ? [record.comment] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "comment" ? [entry.comment] : []) : []);
+  const windowActivity = history.page === undefined ? activity : records.flatMap((record) => record.kind === "activity" ? [record.activity] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "activity" ? [entry.activity] : []) : []);
   const visibleRecords = agentInspectableOnly
-    ? filterTimelineRecordsForAgents(records, agentInspectableContent)
+    ? filterTimelineRecordsForAgents(records, windowInspectable)
     : records;
   const context: TimelineContext = {
     readOnly,
+    pinnedCommentIds: pins === undefined ? undefined : new Set(pins.map(({ id }) => id)),
     taskId,
-    comments,
-    activity,
-    activations,
+    comments: windowComments,
+    activity: windowActivity,
+    activations: [...new Map([...activations, ...records.flatMap((record) => record.kind === "attempt" ? [{ ...record.activation, attempts: records.flatMap((candidate) => candidate.kind === "attempt" && candidate.activation.id === record.activation.id ? [candidate.attempt] : []) }] : [])].map((activation) => [activation.id, activation])).values()],
     agents,
     columns,
-    tasks,
+    tasks: history.page?.relatedTasks ?? tasks,
     unresolvedAttention,
-    agentInspectableContent,
+    agentInspectableContent: windowInspectable,
     onAttentionChanged,
     onAttentionError,
     onSource: (sourceId) => followSource(sourceId),
@@ -114,22 +145,25 @@ export function TaskTimeline({
       return next;
     });
   };
-  const followSource = (sourceId: string): void => {
-    if (agentInspectableOnly && !visibleRecords.some((record) =>
-      record.kind === "comment" ? record.comment.id === sourceId
-        : record.kind === "activity" ? record.activity.id === sourceId
-          : record.kind === "attempt" && record.content.some((entry) =>
-            (entry.kind === "comment" ? entry.comment.id : entry.activity.id) === sourceId))) {
-      setAgentInspectableOnly(false);
-    }
+  const focusPendingSource = (): void => {
+    const pending = pendingSourceFocus.current;
+    if (!pending || pending.sequence !== sourceSequence.current || !document.getElementById(timelineSourceElementId(pending.id))) return;
+    pendingSourceFocus.current = undefined;
+    focusTimelineSource(pending.id);
+  };
+  const followSource = async (sourceId: string): Promise<void> => {
+    const sequence = ++sourceSequence.current;
+    history.cancelSource();
+    pendingSourceFocus.current = { id: sourceId, sequence };
+    setAgentInspectableOnly(false);
     setTextExpanded(`comment-${sourceId}`, true);
     setTextExpanded(`activity-${sourceId}`, true);
-    window.setTimeout(() => {
-      focusTimelineSource(sourceId);
-    });
+    if (!document.getElementById(timelineSourceElementId(sourceId)) && page !== undefined) await history.source(sourceId);
+    if (sequence === sourceSequence.current) window.requestAnimationFrame(focusPendingSource);
   };
+  useLayoutEffect(focusPendingSource, [history.page, expandedText, agentInspectableOnly]);
   useEffect(() => {
-    if (sourceRequest !== undefined) followSource(sourceRequest.sourceId);
+    if (sourceRequest !== undefined) void followSource(sourceRequest.sourceId);
   }, [sourceRequest?.sequence]);
   useLayoutEffect(() => {
     restoreTimelineViewportAnchor(pendingFilterAnchor.current);
@@ -143,7 +177,9 @@ export function TaskTimeline({
 
   return (
     <>
-      <section className="timeline-section" aria-labelledby="timeline-heading">
+      <section className="timeline-section" aria-labelledby="timeline-heading"
+        data-history-start={history.page?.start ?? 0} data-history-total={history.page?.total ?? records.length}>
+
         <div className="timeline-heading-row">
           <h2 id="timeline-heading" tabIndex={-1}>Task timeline</h2>
           <fieldset className="timeline-filters" aria-label="Filter task timeline">
@@ -158,11 +194,20 @@ export function TaskTimeline({
             </label>
           </fieldset>
         </div>
+        {history.error === undefined ? null : <p role="alert">{history.error} <button className="secondary" onClick={history.retry}>Retry timeline</button></p>}
+        {history.loading ? <p role="status">Loading timeline…</p> : null}
+        {history.page?.newerCursor ? <div ref={newerRef}><button className="secondary" disabled={history.loading} onClick={() => void history.load("newer")}>Load newer timeline</button></div> : null}
         {records.length === 0 ? <p className="quiet">No task history yet.</p> : visibleRecords.length === 0 ? (
           <p className="quiet timeline-empty">No timeline content matches this filter.</p>
         ) : (
           <ol className="timeline">
             {visibleRecords.map((record) => (
+              <Fragment key={record.key}>
+              {history.gapBefore(record.key) ? <li className="timeline-history-gap">
+                <button type="button" className="secondary" disabled={history.loading} onClick={() => void history.fillGap(history.gapBefore(record.key)!.sourceId)}>
+                  Load history between these entries
+                </button>
+              </li> : null}
               <TimelineRecordView
                 key={record.key}
                 record={record}
@@ -171,11 +216,14 @@ export function TaskTimeline({
                 onTextExpanded={setTextExpanded}
                 onSource={followSource}
                 agentInspectableOnly={agentInspectableOnly}
+                onOlderContent={history.content}
                 {...(transcriptsAvailable ? { onConversation: setConversationSelection } : {})}
               />
+              </Fragment>
             ))}
           </ol>
         )}
+        {history.page?.olderCursor ? <div ref={olderRef}><button className="secondary" disabled={history.loading} onClick={() => void history.load("older")}>Load older timeline</button></div> : null}
       </section>
       {conversationSelection === undefined ? null : (
         <AgentConversationDialog
@@ -203,6 +251,7 @@ export function TaskTimeline({
 interface TimelineContext {
   onSource(sourceId: string): void;
   readOnly: boolean;
+  pinnedCommentIds: Set<string> | undefined;
   taskId: string;
   comments: TaskCommentView[];
   activity: TaskActivityView[];
@@ -225,6 +274,7 @@ function TimelineRecordView({
   onSource,
   onConversation,
   agentInspectableOnly,
+  onOlderContent,
 }: {
   record: TimelineRecord;
   context: TimelineContext;
@@ -233,10 +283,11 @@ function TimelineRecordView({
   onSource(sourceId: string): void;
   onConversation?: (selection: ConversationSelection) => void;
   agentInspectableOnly: boolean;
+  onOlderContent(record: Extract<TimelineRecord, { kind: "attempt" }>): Promise<void>;
 }): ReactNode {
   if (record.kind === "comment") {
     return (
-      <li className="timeline-entry comment-entry" data-timeline-record={record.comment.id}>
+      <li className="timeline-entry comment-entry" data-history-record={record.key} data-timeline-record={record.comment.id}>
         <div className="timeline-marker" aria-hidden="true">✎</div>
         <CommentCard
           comment={record.comment}
@@ -251,7 +302,7 @@ function TimelineRecordView({
     return (
       <li
         className={`timeline-entry event-entry${record.activity.type === "task.moved" ? " movement-entry" : ""}`}
-        data-timeline-record={record.activity.id}
+        data-history-record={record.key} data-timeline-record={record.activity.id}
       >
         <div className="timeline-marker" aria-hidden="true">{record.activity.type === "task.moved" ? "→" : "◆"}</div>
         <ActivityCard
@@ -267,7 +318,7 @@ function TimelineRecordView({
   if (record.kind === "startup-failure") {
     const agentName = nameForAgent(record.activation.targetAgentId, context.agents);
     return (
-      <li className="timeline-entry attempt-entry failed-attempt" data-timeline-record={record.activation.id}>
+      <li className="timeline-entry attempt-entry failed-attempt" data-history-record={record.key} data-timeline-record={record.activation.id}>
         <div className="timeline-marker" aria-hidden="true">!</div>
         <article id={timelineSourceElementId(record.activation.id)} tabIndex={-1}>
           <div className="entry-meta">
@@ -297,6 +348,7 @@ function TimelineRecordView({
       onTextExpanded={onTextExpanded}
       onSource={onSource}
       agentInspectableOnly={agentInspectableOnly}
+      onOlderContent={onOlderContent}
       {...(onConversation === undefined ? {} : { onConversation })}
     />
   );
@@ -310,6 +362,7 @@ function AttemptCard({
   onSource,
   onConversation,
   agentInspectableOnly,
+  onOlderContent,
 }: {
   record: Extract<TimelineRecord, { kind: "attempt" }>;
   context: TimelineContext;
@@ -318,13 +371,14 @@ function AttemptCard({
   onSource(sourceId: string): void;
   onConversation?: (selection: ConversationSelection) => void;
   agentInspectableOnly: boolean;
+  onOlderContent(record: Extract<TimelineRecord, { kind: "attempt" }>): Promise<void>;
 }): ReactNode {
   const { attempt, activation } = record;
   const agentName = nameForAgent(activation.targetAgentId, context.agents);
   const status = attemptStatus(attempt);
   const outcomeTextId = `outcome-${attempt.id}`;
   return (
-    <li className={`timeline-entry attempt-entry ${status.className}`} data-timeline-record={attempt.id}>
+    <li className={`timeline-entry attempt-entry ${status.className}`} data-history-record={record.key} data-timeline-record={attempt.id}>
       <div className="timeline-marker" aria-hidden="true">▶</div>
       <article id={timelineSourceElementId(attempt.id)} tabIndex={-1}>
         <div className="entry-meta attempt-heading">
@@ -366,6 +420,7 @@ function AttemptCard({
             ))}
           </ol>
         )}
+        {record.contentPage?.olderCursor ? <button className="secondary" onClick={() => void onOlderContent(record)}>Load older attempt activity</button> : null}
         <footer className="attempt-footer">
           <div className="attempt-metadata">
             <TriggerLink record={record} context={context} onSource={onSource} />
@@ -456,7 +511,7 @@ function CommentCard({ comment, context, nested = false, expanded, onExpanded }:
         <span className="entry-meta-actions">
           <RelativeTime value={comment.occurredAt} />
           <CopyMarkdownButton source={comment.body} label="Copy comment Markdown" />
-          {context.readOnly ? null : <CommentPinButton taskId={context.taskId} commentId={comment.id} pinned={!!comment.pinned}
+          {context.readOnly ? null : <CommentPinButton taskId={context.taskId} commentId={comment.id} pinned={context.pinnedCommentIds?.has(comment.id) ?? !!comment.pinned}
             onChanged={context.onAttentionChanged} onError={context.onAttentionError} />}
           {context.agentInspectableContent.commentIds.includes(comment.id) ? <AgentInspectableMarker /> : null}
         </span>
@@ -557,13 +612,13 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
       {activity.type === "automation.resumed" && activity.details.resolution !== "dismissed" ? (
         <ResumeInstructions activity={activity} />
       ) : pinChange ? <div className="pin-activity-reference">
-        {pinnedComment === undefined ? <p>Comment {activity.details.commentId ?? "unavailable"}</p> : <>
+        {pinnedComment === undefined ? <p>Comment {activity.details.commentId ?? "unavailable"}</p> : (
           <TextPreview id={`activity-${activity.id}`} text={pinnedComment.body}
             expanded={expanded} onExpanded={onExpanded} renderedLineLimit={2}
             participants={participantNamesById(context.agents)} />
-          <button className="comment-icon-button" aria-label="View in task history" title="View in task history"
-            onClick={() => context.onSource(pinnedComment.id)}><CommentActionIcon action="source" /></button>
-        </>}
+        )}
+        {activity.details.commentId === undefined ? null : <button className="comment-icon-button" aria-label="View in task history" title="View in task history"
+          onClick={() => context.onSource(activity.details.commentId!)}><CommentActionIcon action="source" /></button>}
       </div> : (activity.type === "conversation.continued" && activity.details.messageBody !== undefined) ||
         (activity.type === "conversation.retired" && activity.details.reason !== undefined) ? (
         <TextPreview
@@ -582,8 +637,9 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
           {activity.type !== "stall.recovery-exhausted" ? null :
             activity.details.activationIds?.split(",").map((id, index) => {
               const attempt = context.activations.find((activation) => activation.id === id)?.attempts.at(-1);
-              return attempt === undefined ? null : <button className="secondary" key={id}
-                onClick={() => context.onSource(attempt.id)}>View recovery {index + 1}</button>;
+              const attemptId = attempt?.id ?? activity.details.recoveryAttemptIds?.split(",")[index];
+              return attemptId === undefined ? null : <button className="secondary" key={id}
+                onClick={() => context.onSource(attemptId)}>View recovery {index + 1}</button>;
             })}
           <small>{actorName(activity.actor, context.agents)}</small>
           {onConversation === undefined || conversationId === undefined || activationId === undefined || messageId === undefined ? null : (
@@ -724,6 +780,10 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "stall.detected": "Stall detected",
     "stall.recovery-skipped": "Stall recovery skipped",
     "stall.recovery-exhausted": "Stall recovery needs attention",
+    "runtime.waiting": "Runtime recovery waiting",
+    "runtime.recovered": "Runtime recovered",
+    "runtime.waiting-stopped": "Runtime retries stopped",
+    "runtime.waiting-ended": "Runtime recovery ended",
   }[type];
 }
 

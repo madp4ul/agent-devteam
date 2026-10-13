@@ -1,0 +1,2985 @@
+--- baseline/src/application/browser-transport-contract.ts
++++ src/application/browser-transport-contract.ts
+@@ -132,3 +132,5 @@
+   ConfiguredModelPriceView,
+   ProcessCostStatisticsView,
+ } from "./process-cost-statistics-contract.ts";
++
++export type { TimelineRecord, TimelinePage, TimelineQuery, TimelineQueryResult, TaskMovementMetadata, MovementMapPage, MovementMapQueryResult } from "./timeline-contract.ts";
+--- baseline/src/application/coordination-application.ts
++++ src/application/coordination-application.ts
+@@ -125,7 +125,7 @@
+ ): AgentInspectableTaskContentView {
+   return {
+     taskFields: [...Object.keys(task).filter((key) => key !== "comments"), "history"] as Array<keyof TaskInspectionView>,
+-    commentIds: task.comments.map(({ id }) => id),
++    commentIds: [...new Set([...task.comments, ...task.pinnedComments].map(({ id }) => id))],
+     relationshipIds: task.relationships.map(({ id }) => id),
+     activityIds: activity.map(({ id }) => id),
+     conversationMessageIds: activity.flatMap(({ details }) =>
+@@ -607,6 +607,14 @@
+   queryUserTaskDetail(taskId: string): UserTaskDetailQueryResult {
+     const context = this.#discovery.queryUserTaskDetailContext(taskId);
+     if (!context.available) return context;
++    const timeline = this.#persistence.taskProjections.timeline.query(taskId);
++    if (!timeline.available) return { available: false, reason: "not-found" };
++    const pins = context.inspection.pinnedComments;
++    context.task.comments = timeline.page.records.flatMap((record) => record.kind === "comment" ? [record.comment] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "comment" ? [entry.comment] : []) : []);
++    context.task.activity = timeline.page.records.flatMap((record) => record.kind === "activity" ? [record.activity] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "activity" ? [entry.activity] : []) : []);
++    context.task.activity.reverse();
++    context.inspection.comments = context.task.comments;
++    context.inspection.pinnedComments = pins;
+     let agentInspectableContent: AgentInspectableTaskContentView = {
+       taskFields: [],
+       commentIds: [],
+@@ -632,6 +640,9 @@
+     return {
+       available: true,
+       task: context.task,
++      timeline: timeline.page,
++      movementSummary: this.#persistence.taskProjections.timeline.movementSummary(taskId),
++      mostRecentAgentId: this.#persistence.taskProjections.readMostRecentAgentId(taskId),
+       board: context.board,
+       inspection: context.inspection,
+       relationshipTasks: relatedTasks.relationshipTasks,
+@@ -647,6 +658,14 @@
+         ? {}
+         : { conversationCost }),
+     };
++  }
++
++  queryTaskTimeline(taskId: string, query: import("./timeline-contract.ts").TimelineQuery = {}): import("./timeline-contract.ts").TimelineQueryResult {
++    return this.#persistence.taskProjections.timeline.query(taskId, query);
++  }
++
++  queryTaskMovementMap(taskId: string, after = 0): import("./timeline-contract.ts").MovementMapQueryResult {
++    return this.#persistence.taskProjections.timeline.movementMap(taskId, after);
+   }
+ 
+   private readUserRelatedTaskReferences(task: TaskView): {
+--- baseline/src/application/timeline-contract.ts
++++ src/application/timeline-contract.ts
+@@ -0,0 +1,49 @@
++import type { ActivationView } from "./automation-contract.ts";
++import type { ActivationStartupFailureView, AttemptView } from "./runtime-contract.ts";
++import type { TaskActivityView, TaskCommentView } from "./task-contract.ts";
++
++export type AttemptTimelineContent =
++  | { kind: "comment"; occurredAt: string; comment: TaskCommentView }
++  | { kind: "activity"; occurredAt: string; activity: TaskActivityView };
++
++export type TimelineRecord =
++  | { key: string; kind: "comment"; occurredAt: string; comment: TaskCommentView }
++  | { key: string; kind: "activity"; occurredAt: string; activity: TaskActivityView }
++  | {
++      key: string;
++      kind: "attempt";
++      occurredAt: string;
++      activation: ActivationView;
++      attempt: AttemptView;
++      number: number;
++      previousAttempt: AttemptView | null;
++      content: AttemptTimelineContent[];
++      contentPage?: { olderCursor: string | null; total: number; sourceId?: string };
++    }
++  | {
++      key: string;
++      kind: "startup-failure";
++      occurredAt: string;
++      failure: ActivationStartupFailureView;
++      activation: ActivationView;
++    };
++
++export interface TimelineQuery { pageSize?: number; cursor?: string; sourceId?: string; refresh?: boolean }
++export interface TimelinePage {
++  records: TimelineRecord[];
++  olderCursor: string | null;
++  newerCursor: string | null;
++  refreshCursor: string;
++  total: number;
++  start: number;
++  relatedTasks?: import("./user-task-detail-contract.ts").UserTimelineRelatedTaskView[];
++  inspectableSources?: { commentIds: string[]; activityIds: string[] };
++}
++export interface TaskMovementMetadata extends TaskActivityView {
++  type: "task.moved";
++  recordId: string;
++  sequence: number;
++}
++export interface MovementMapPage { movements: TaskMovementMetadata[]; cursor: number; total: number }
++export type TimelineQueryResult = { available: true; page: TimelinePage } | { available: false; reason: "not-found" | "invalid-page" };
++export type MovementMapQueryResult = { available: true; map: MovementMapPage } | { available: false; reason: "not-found" | "invalid-page" };
+--- baseline/src/application/user-task-detail-contract.ts
++++ src/application/user-task-detail-contract.ts
+@@ -56,6 +56,9 @@
+ 
+ export interface UserTaskDetailView {
+   task: TaskView;
++  timeline: import("./timeline-contract.ts").TimelinePage;
++  movementSummary: { total: number; latestSourceId?: string };
++  mostRecentAgentId?: string | undefined;
+   board: ProcessBoardView;
+   inspection: UserTaskInspectionView;
+   activeRun: ActiveRunView | null;
+--- baseline/src/web/browser-api/capabilities.ts
++++ src/web/browser-api/capabilities.ts
+@@ -26,6 +26,8 @@
+   | "queryTaskInspectionForUser"
+   | "queryTaskWorkspaceGitState"
+   | "queryUserTaskDetail"
++  | "queryTaskTimeline"
++  | "queryTaskMovementMap"
+   | "interruptTask"
+   | "continueInterruptedTask"
+   | "editTask"
+--- baseline/src/web/browser-api/task-routes.ts
++++ src/web/browser-api/task-routes.ts
+@@ -26,6 +26,8 @@
+ type TaskCapabilities = Pick<BrowserCoordinationCapabilities,
+   | "createTask"
+   | "queryUserTaskDetail"
++  | "queryTaskTimeline"
++  | "queryTaskMovementMap"
+   | "interruptTask"
+   | "continueInterruptedTask"
+   | "editTask"
+@@ -42,6 +44,19 @@
+   dispatcher: HttpDispatcher<HttpRouteContext>,
+   application: TaskCapabilities,
+ ): void {
++  dispatcher.register("GET", "/api/tasks/:taskId/timeline", "browser/tasks", ({ response, params, url }) => {
++    const result = application.queryTaskTimeline(params.taskId, {
++      ...(url.searchParams.has("pageSize") ? { pageSize: Number(url.searchParams.get("pageSize")) } : {}),
++      ...(url.searchParams.has("cursor") ? { cursor: url.searchParams.get("cursor")! } : {}),
++      ...(url.searchParams.has("sourceId") ? { sourceId: url.searchParams.get("sourceId")! } : {}),
++      ...(url.searchParams.get("refresh") === "true" ? { refresh: true } : {}),
++    });
++    sendJson(response, result.available ? 200 : result.reason === "not-found" ? 404 : 400, result);
++  });
++  dispatcher.register("GET", "/api/tasks/:taskId/movement-map", "browser/tasks", ({ response, params, url }) => {
++    const result = application.queryTaskMovementMap(params.taskId, Number(url.searchParams.get("after") ?? 0));
++    sendJson(response, result.available ? 200 : result.reason === "not-found" ? 404 : 400, result);
++  });
+   for (const [action, pinned] of [["pin", true], ["unpin", false]] as const) {
+     dispatcher.register("POST", `/api/tasks/:taskId/comments/:commentId/${action}`, "browser/tasks", async ({ request, response, params }) => {
+       const body = await readJsonBody(request);
+--- baseline/src/web/client/api.ts
++++ src/web/client/api.ts
+@@ -94,6 +94,18 @@
+   return detail;
+ }
+ 
++export async function readTaskTimeline(taskId: string, query: import("../../application/timeline-contract.ts").TimelineQuery = {}): Promise<import("../../application/timeline-contract.ts").TimelinePage> {
++  const params = new URLSearchParams();
++  for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));
++  const result = await request<Extract<import("../../application/timeline-contract.ts").TimelineQueryResult, { available: true }>>(`/api/tasks/${encodeURIComponent(taskId)}/timeline?${params}`);
++  return result.page;
++}
++
++export async function readTaskMovementMap(taskId: string, after = 0): Promise<import("../../application/timeline-contract.ts").MovementMapPage> {
++  const result = await request<Extract<import("../../application/timeline-contract.ts").MovementMapQueryResult, { available: true }>>(`/api/tasks/${encodeURIComponent(taskId)}/movement-map?after=${after}`);
++  return result.map;
++}
++
+ export async function readArchivedTasks(): Promise<TaskOverviewView[]> {
+   const result = await request<{ available: true; tasks: TaskOverviewView[] }>("/api/archive");
+   return result.tasks;
+--- baseline/src/web/client/MarkdownContent.tsx
++++ src/web/client/MarkdownContent.tsx
+@@ -1,4 +1,4 @@
+-import { createContext, Fragment, useContext, useState, type MouseEvent, type ReactNode, type WheelEvent } from "react";
++import { createContext, Fragment, useContext, useMemo, useState, type MouseEvent, type ReactNode, type WheelEvent } from "react";
+ import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
+ import { gfmTable } from "micromark-extension-gfm-table";
+ import ReactMarkdown, { defaultUrlTransform, type Components, type UrlTransform } from "react-markdown";
+@@ -21,7 +21,7 @@
+   className?: string;
+ }): ReactNode {
+   const taskId = useContext(TaskMarkdownContext);
+-  const components = markdownComponents(participants, taskId);
++  const components = useMemo(() => markdownComponents(participants, taskId), [participants, taskId]);
+   return (
+     <div className={`markdown-content${className === undefined ? "" : ` ${className}`}`}>
+       <ReactMarkdown
+--- baseline/src/web/client/MoveTaskPanel.tsx
++++ src/web/client/MoveTaskPanel.tsx
+@@ -1,28 +1,30 @@
+ import type { ReactNode } from "react";
+ 
+-import type { CollaboratorView, ProcessColumnView, TaskActivityView } from "../../application/browser-transport-contract.ts";
++import type { CollaboratorView, ProcessColumnView } from "../../application/browser-transport-contract.ts";
+ import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
+ import { TaskMovementMap } from "./TaskMovementMap.tsx";
+-import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
++import { timelineSourceElementId } from "./timeline-scroll-anchor.ts";
+ 
+ export function MoveTaskPanel({
++  taskId,
++  onSource,
+   columns,
+   currentColumnId,
+   currentColumnName,
+   currentColumnSourceId,
+   movementCount,
+-  movements,
+   agents,
+   pending,
+   onMove,
+   inspectable,
+ }: {
++  taskId: string;
++  onSource(sourceId: string): void;
+   columns: ProcessColumnView[];
+   currentColumnId: string;
+   currentColumnName: string;
+   currentColumnSourceId?: string;
+   movementCount: number;
+-  movements: Array<TaskActivityView & { type: "task.moved" }>;
+   agents: Pick<CollaboratorView, "id" | "name">[];
+   pending: boolean;
+   onMove(column: ProcessColumnView): Promise<void>;
+@@ -79,11 +81,11 @@
+           href={`#${timelineSourceElementId(currentColumnSourceId)}`}
+           onClick={(event) => {
+             event.preventDefault();
+-            focusTimelineSource(currentColumnSourceId);
++            onSource(currentColumnSourceId);
+           }}
+         >View move to {currentColumnName} in timeline</a>
+       )}
+-      <TaskMovementMap movements={movements} columns={columns} agents={agents} />
++      <TaskMovementMap taskId={taskId} onSource={onSource} columns={columns} agents={agents} />
+     </section>
+   );
+ }
+--- baseline/src/web/client/PinnedComments.tsx
++++ src/web/client/PinnedComments.tsx
+@@ -9,16 +9,16 @@
+   onSource(sourceId: string): void; onChanged(): Promise<void>; onError(error: unknown): void;
+ }): ReactNode {
+   const [expanded, setExpanded] = useState(new Set<string>());
+-  const previousPins = useRef(comments.filter((comment) => comment.pinned).map(({ id }) => id));
+-  const [retained, setRetained] = useState<Array<{ id: string; expiresAt: number }>>([]);
++  const previousPins = useRef(comments.filter((comment) => comment.pinned));
++  const [retained, setRetained] = useState<Array<{ comment: TaskCommentView; expiresAt: number }>>([]);
+   useEffect(() => {
+     const pinned = comments.filter((comment) => comment.pinned);
+     const currentIds = new Set(pinned.map(({ id }) => id));
+-    const removed = previousPins.current.filter((id) => !currentIds.has(id));
+-    previousPins.current = [...currentIds];
++    const removed = previousPins.current.filter((comment) => !currentIds.has(comment.id));
++    previousPins.current = pinned;
+     setRetained((current) => [
+-      ...current.filter(({ id }) => !currentIds.has(id)),
+-      ...removed.map((id) => ({ id, expiresAt: Date.now() + 2000 })),
++      ...current.filter(({ comment }) => !currentIds.has(comment.id)),
++      ...removed.map((comment) => ({ comment, expiresAt: Date.now() + 2000 })),
+     ]);
+   }, [comments]);
+   useEffect(() => {
+@@ -28,8 +28,12 @@
+     return () => window.clearTimeout(timer);
+   }, [retained]);
+   // Bridge the incoming snapshot until the effect captures removals, preserving the row and focus.
+-  const retainedIds = new Set([...previousPins.current, ...retained.map(({ id }) => id)]);
+-  const visible = comments.filter((comment) => comment.pinned || retainedIds.has(comment.id));
++  const currentIds = new Set(comments.filter((comment) => comment.pinned).map(({ id }) => id));
++  const previous = new Map([...previousPins.current, ...retained.map(({ comment }) => comment)].map((comment) => [comment.id, comment]));
++  const visible: TaskCommentView[] = [...comments.filter((comment) => comment.pinned), ...[...previous.values()].filter((comment) => !currentIds.has(comment.id)).map((comment) => {
++    const { pinned: _pinned, ...unpinned } = comment;
++    return unpinned;
++  })];
+   if (visible.length === 0) return null;
+   return <section className="detail-panel pinned-comments" aria-label="Pinned comments">
+     <h2>Pinned comments</h2>
+--- baseline/src/web/client/styles.css
++++ src/web/client/styles.css
+@@ -1009,3 +1009,6 @@
+ .comment-icon-button svg { display: block; width: 1rem; height: 1rem; fill: none; stroke: currentcolor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+ .comment-icon-button[aria-disabled="true"] { cursor: wait; opacity: .65; }
+ .recently-unpinned .pinned-comment-content { color: var(--text-muted); }
++
++.movement-map-status { position: absolute; z-index: 3; inset: 0; margin: 0; padding: .7rem; background: var(--surface); color: var(--text); font-size: .85rem; }
++.timeline-window-spacer { pointer-events: none; }
+--- baseline/src/web/client/TaskAttentionPanel.tsx
++++ src/web/client/TaskAttentionPanel.tsx
+@@ -9,6 +9,7 @@
+   reasons,
+   highlightedReasonId,
+   interruption,
++  onSource,
+   onChanged,
+   onFeedback,
+ }: {
+@@ -22,6 +23,7 @@
+     mayStartNext?: boolean;
+     reasonDescription: string;
+   } | undefined;
++  onSource?(sourceId: string): void;
+   onChanged(): Promise<void>;
+   onFeedback(feedback: { role: "status" | "alert"; text: string }): void;
+ }): ReactNode {
+@@ -39,7 +41,7 @@
+               inspectable
+               highlighted={highlightedReasonId === attention.id}
+               onOpenMention={(sourceEventId) => {
+-                if (sourceEventId !== null) focusTimelineSource(sourceEventId);
++                if (sourceEventId !== null) (onSource ?? focusTimelineSource)(sourceEventId);
+                 else document.getElementById("timeline-heading")?.focus();
+               }}
+               {...(attention.type === "automation-suspended" && interruption !== undefined
+--- baseline/src/web/client/TaskMovementMap.tsx
++++ src/web/client/TaskMovementMap.tsx
+@@ -1,4 +1,4 @@
+-import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
++import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
+ import { createPortal } from "react-dom";
+ 
+ import type {
+@@ -6,7 +6,10 @@
+   ProcessColumnView,
+   TaskActivityView,
+ } from "../../application/browser-transport-contract.ts";
+-import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
++import { readTaskMovementMap } from "./api.ts";
++import { usePolling } from "./live-refresh.ts";
++import { errorMessage } from "./feedback.ts";
++import { timelineSourceElementId } from "./timeline-scroll-anchor.ts";
+ 
+ const movementStep = 28;
+ const viewportBottomGutter = 16;
+@@ -27,18 +30,39 @@
+ };
+ 
+ export function TaskMovementMap({
+-  movements,
++  taskId,
++  onSource,
+   columns,
+   agents,
+ }: {
+-  movements: Movement[];
++  taskId: string;
++  onSource(sourceId: string): void;
+   columns: ProcessColumnView[];
+   agents: Pick<CollaboratorView, "id" | "name">[];
+ }): ReactNode {
+-  const ordered = useMemo(
+-    () => [...movements].sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)),
+-    [movements],
+-  );
++  const [mapMovements, setMapMovements] = useState<Movement[]>([]);
++  const [mapError, setMapError] = useState<string>();
++  const [mapLoaded, setMapLoaded] = useState(false);
++  const mapCursor = useRef(0);
++  const mapReading = useRef(false);
++  const mapMounted = useRef(true);
++  useEffect(() => () => { mapMounted.current = false; }, []);
++  const refreshMap = async (): Promise<void> => {
++    if (mapReading.current) return;
++    mapReading.current = true;
++    try {
++      const next = await readTaskMovementMap(taskId, mapCursor.current);
++      if (!mapMounted.current) return;
++      mapCursor.current = next.cursor;
++      if (next.movements.length > 0) setMapMovements((current) => {
++        const ids = new Set(current.map((movement) => movement.id));
++        return [...next.movements.filter((movement) => !ids.has(movement.id)), ...current];
++      });
++      setMapLoaded(true); setMapError(undefined);
++    } catch (error) { if (mapMounted.current) setMapError(errorMessage(error)); }
++    finally { mapReading.current = false; }
++  };
++  const ordered = useMemo(() => mapMovements, [mapMovements]);
+   const mapRef = useRef<HTMLDivElement>(null);
+   const plotRef = useRef<HTMLDivElement>(null);
+   const stripRef = useRef<HTMLDivElement>(null);
+@@ -49,12 +73,18 @@
+   const dragRef = useRef<DragState | null>(null);
+   const dragAnimationRef = useRef<number | null>(null);
+   const suppressClickRef = useRef(false);
++  const lastScrubSource = useRef<string | undefined>(undefined);
++  const scrubTimer = useRef<number | undefined>(undefined);
+   const naturalControlsTopRef = useRef<number | null>(null);
+   const [available, setAvailable] = useState(false);
+   const [bottomDocked, setBottomDocked] = useState(false);
+   const [dragReady, setDragReady] = useState(false);
+   const dragReadyRef = useRef(false);
+   const minimumDragScrollYRef = useRef(0);
++  useEffect(() => {
++    if (available && !mapLoaded && !mapError) void refreshMap();
++  }, [available, mapLoaded, mapError]);
++  usePolling(refreshMap, available && mapLoaded ? 1_000 : undefined, (error) => setMapError(errorMessage(error)));
+   const stripHeight = Math.max(movementStep, ordered.length * movementStep);
+ 
+   useLayoutEffect(() => () => {
+@@ -62,6 +92,7 @@
+       ?.closest<HTMLElement>(".detail-sticky-controls-slot")
+       ?.style.removeProperty("height");
+     clearDockingStyles();
++    if (scrubTimer.current !== undefined) window.clearTimeout(scrubTimer.current);
+   }, []);
+ 
+   const updateMapPosition = useCallback(() => {
+@@ -85,11 +116,18 @@
+         mapY: index * movementStep + movementStep / 2,
+       }];
+     });
+-    if (movementPoints.length === 0) return;
++    const section = timeline.querySelector<HTMLElement>(".timeline-section");
++    const start = Number(section?.dataset.historyStart ?? 0);
++    const total = Number(section?.dataset.historyTotal ?? ordered.length);
++    const rendered = section?.querySelectorAll(".timeline > li").length ?? ordered.length;
++    const listBounds = section?.querySelector(".timeline")?.getBoundingClientRect() ?? timelineBounds;
++    const hasUnloadedSources = movementPoints.length < ordered.length;
++    const firstMapY = movementPoints[0]?.mapY ?? stripHeight * start / Math.max(1, total);
++    const lastMapY = movementPoints.at(-1)?.mapY ?? stripHeight * (start + rendered) / Math.max(1, total);
+     const points = [
+-      { documentY: window.scrollY + timelineBounds.top, mapY: 0 },
++      { documentY: window.scrollY + listBounds.top, mapY: hasUnloadedSources ? Math.max(0, firstMapY - movementStep / 2) : 0 },
+       ...movementPoints,
+-      { documentY: window.scrollY + timelineBounds.bottom, mapY: stripHeight },
++      { documentY: window.scrollY + listBounds.bottom, mapY: hasUnloadedSources ? Math.min(stripHeight, lastMapY + movementStep / 2) : stripHeight },
+     ].sort((left, right) => left.documentY - right.documentY);
+     const topbar = document.querySelector<HTMLElement>(".detail-topbar")?.getBoundingClientRect();
+     const topInset = Math.max(0, topbar?.bottom ?? 0);
+@@ -209,8 +247,20 @@
+     const drag = dragRef.current;
+     if (drag === null || !drag.dragging) return;
+     const pointerDelta = drag.latestY - drag.startY;
+-    const mapDelta = dragModel === "viewport-scrub" ? pointerDelta : -pointerDelta;
++    const section = document.querySelector<HTMLElement>(".timeline-section");
++    const loadedSources = ordered.reduce((count, movement) => count + (document.getElementById(timelineSourceElementId(movement.id)) === null ? 0 : 1), 0);
++    const paged = Number(section?.dataset.historyTotal ?? 0) > (section?.querySelectorAll(".timeline > li").length ?? 0) || loadedSources < ordered.length;
++    const mapDelta = (dragModel === "viewport-scrub" ? pointerDelta : -pointerDelta) * (paged ? stripHeight / Math.max(1, plotRef.current?.clientHeight ?? 1) : 1);
+     const targetMapY = clamp(drag.startMapY + mapDelta, 0, stripHeight);
++    if (paged) {
++      const movement = ordered[Math.min(ordered.length - 1, Math.floor(targetMapY / movementStep))];
++      if (movement && movement.id !== lastScrubSource.current) {
++        lastScrubSource.current = movement.id;
++        if (scrubTimer.current !== undefined) window.clearTimeout(scrubTimer.current);
++        scrubTimer.current = window.setTimeout(() => { scrubTimer.current = undefined; onSource(movement.id); }, 60);
++      }
++      return;
++    }
+     const targetDocumentY = interpolate(drag.points, targetMapY, "mapY", "documentY");
+     const maximumScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+     window.scrollTo({
+@@ -221,6 +271,12 @@
+       ),
+     });
+     updateMapPosition();
++  };
++
++  const navigateToSource = (sourceId: string): void => {
++    if (scrubTimer.current !== undefined) window.clearTimeout(scrubTimer.current);
++    scrubTimer.current = undefined; lastScrubSource.current = undefined;
++    onSource(sourceId);
+   };
+ 
+   const scheduleDragTarget = (): void => {
+@@ -245,7 +301,6 @@
+     window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+   };
+ 
+-  if (ordered.length === 0) return <div ref={mapRef} className="movement-map" data-testid="movement-map" />;
+   return (
+     <div
+       ref={mapRef}
+@@ -255,6 +310,7 @@
+       data-drag-ready={dragReady ? "true" : "false"}
+       aria-hidden={available ? undefined : true}
+     >
++      {mapError ? <p role="alert" className="movement-map-status">Unable to load movement map. <button className="secondary" onClick={() => void refreshMap()}>Retry map</button></p> : available && !mapLoaded ? <p role="status" className="movement-map-status">Loading movement map…</p> : null}
+       <div className="movement-map-legend" style={{ gridTemplateColumns: laneColumns(columns.length) }}>
+         {columns.map((column) => <MovementMapLegendItem key={column.id} column={column} />)}
+       </div>
+@@ -263,6 +319,8 @@
+         className="movement-map-plot"
+         onPointerDown={(event) => {
+           if (event.button !== 0 || !dragReadyRef.current) return;
++          if (scrubTimer.current !== undefined) window.clearTimeout(scrubTimer.current);
++          scrubTimer.current = undefined; lastScrubSource.current = undefined;
+           const scale = scaleRef.current;
+           const frame = frameRef.current;
+           if (scale === null || frame === null) return;
+@@ -378,8 +436,19 @@
+               data-source-id={movement.id}
+               aria-label={movementLabel(movement, columns, agents)}
+               title={movementLabel(movement, columns, agents)}
++              onKeyDown={(event) => {
++                const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? ordered.length - 1 : event.key === "ArrowDown" ? Math.min(ordered.length - 1, index + 1) : event.key === "ArrowUp" ? Math.max(0, index - 1) : undefined;
++                if (nextIndex === undefined) return;
++                event.preventDefault();
++                const target = ordered[nextIndex];
++                if (target) {
++                  const button = stripRef.current?.querySelector<HTMLButtonElement>(`[data-source-id="${CSS.escape(target.id)}"]`);
++                  button?.focus({ preventScroll: true });
++                  navigateToSource(target.id);
++                }
++              }}
+               onClick={() => {
+-                if (!suppressClickRef.current) focusTimelineSource(movement.id);
++                if (!suppressClickRef.current) navigateToSource(movement.id);
+               }}
+             />
+           ))}
+@@ -464,9 +533,9 @@
+   columns: ProcessColumnView[],
+   agents: Pick<CollaboratorView, "id" | "name">[],
+ ): string {
+-  const from = columns.find((column) => column.id === movement.details.fromColumnId)?.name ?? movement.details.fromColumnId;
+-  const to = columns.find((column) => column.id === movement.details.toColumnId)?.name ?? movement.details.toColumnId;
+-  const actor = movement.actor.kind === "user" ? "You" : agentName(movement.actor.id, agents);
++  const from = movement.details.fromColumnName ?? columns.find((column) => column.id === movement.details.fromColumnId)?.name ?? movement.details.fromColumnId;
++  const to = movement.details.toColumnName ?? columns.find((column) => column.id === movement.details.toColumnId)?.name ?? movement.details.toColumnId;
++  const actor = movement.actor.kind === "user" ? "You" : movement.details.actorName ?? agentName(movement.actor.id, agents);
+   return `Moved from ${from} to ${to} by ${actor}`;
+ }
+ 
+--- baseline/src/web/client/TaskPage.tsx
++++ src/web/client/TaskPage.tsx
+@@ -151,7 +151,7 @@
+   const interruptedAgentId = inspection.currentActivation?.state === "interrupted"
+     ? inspection.currentActivation.targetAgentId
+     : interruptedActivation?.targetAgentId;
+-  const mostRecentTaskAgentId = findMostRecentlyRunAgentId(task.activations);
++  const mostRecentTaskAgentId = detail.mostRecentAgentId ?? findMostRecentlyRunAgentId(task.activations);
+   const interruption = interruptedActivationId === undefined || interruptedAgentId === undefined
+     ? undefined
+     : {
+@@ -245,6 +245,7 @@
+                   reasons={inspection.unresolvedAttention}
+                   highlightedReasonId={highlightedReasonId}
+                   interruption={interruption}
++                  onSource={(sourceId) => setTimelineSourceRequest((previous) => ({ sourceId, sequence: (previous?.sequence ?? 0) + 1 }))}
+                   onChanged={refresh}
+                   onFeedback={setFeedback}
+                 />
+@@ -308,7 +309,7 @@
+             </section>
+ 
+             <div data-task-section="activity">
+-              <PinnedComments key={task.id} taskId={task.id} comments={task.comments} readOnly={!!task.archived}
++              <PinnedComments key={task.id} taskId={task.id} comments={inspection.pinnedComments} readOnly={!!task.archived}
+                 onSource={(sourceId) => setTimelineSourceRequest((previous) => ({ sourceId, sequence: (previous?.sequence ?? 0) + 1 }))}
+                 onChanged={refresh} onError={(error) => setFeedback({ role: "alert", text: errorMessage(error) })} />
+               <AgentActivityPanel
+@@ -339,6 +340,8 @@
+             >
+               <TaskTimeline
+                 taskId={task.id}
++                page={detail.timeline}
++                pins={inspection.pinnedComments}
+                 comments={task.comments}
+                 activity={task.activity}
+                 activations={task.activations}
+@@ -378,12 +381,13 @@
+                   {task.archived ? null : (
+                     <div data-task-section="move">
+                       <MoveTaskPanel
++                        taskId={task.id}
++                        onSource={(sourceId) => setTimelineSourceRequest((previous) => ({ sourceId, sequence: (previous?.sequence ?? 0) + 1 }))}
+                         columns={board.columns}
+                         currentColumnId={task.columnId}
+                         currentColumnName={board.columns.find((column) => column.id === task.columnId)?.name ?? task.columnId}
+-                        {...(currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id })}
+-                        movementCount={task.activity.filter((entry) => entry.type === "task.moved").length}
+-                        movements={task.activity.filter((entry): entry is typeof entry & { type: "task.moved" } => entry.type === "task.moved")}
++                        {...(detail.movementSummary?.latestSourceId === undefined ? currentColumnMovement === undefined ? {} : { currentColumnSourceId: currentColumnMovement.id } : { currentColumnSourceId: detail.movementSummary.latestSourceId })}
++                        movementCount={detail.movementSummary?.total ?? task.activity.filter((entry) => entry.type === "task.moved").length}
+                         agents={detail.collaborators}
+                         pending={pendingTaskId !== undefined}
+                         onMove={async (column) => move({ id: task.id, revision: task.revision }, column)}
+--- baseline/src/web/client/timeline-model.ts
++++ src/web/client/timeline-model.ts
+@@ -7,30 +7,8 @@
+   TaskCommentView,
+ } from "../../application/browser-transport-contract.ts";
+ 
+-export type AttemptTimelineContent =
+-  | { kind: "comment"; occurredAt: string; comment: TaskCommentView }
+-  | { kind: "activity"; occurredAt: string; activity: TaskActivityView };
+-
+-export type TimelineRecord =
+-  | { key: string; kind: "comment"; occurredAt: string; comment: TaskCommentView }
+-  | { key: string; kind: "activity"; occurredAt: string; activity: TaskActivityView }
+-  | {
+-      key: string;
+-      kind: "attempt";
+-      occurredAt: string;
+-      activation: ActivationView;
+-      attempt: AttemptView;
+-      number: number;
+-      previousAttempt: AttemptView | null;
+-      content: AttemptTimelineContent[];
+-    }
+-  | {
+-      key: string;
+-      kind: "startup-failure";
+-      occurredAt: string;
+-      failure: ActivationStartupFailureView;
+-      activation: ActivationView;
+-    };
++import type { TimelineRecord, AttemptTimelineContent } from "../../application/timeline-contract.ts";
++export type { TimelineRecord, AttemptTimelineContent } from "../../application/timeline-contract.ts";
+ 
+ const foldedActivityTypes = new Set<TaskActivityView["type"]>([
+   "activation.created",
+--- baseline/src/web/client/timeline-window.ts
++++ src/web/client/timeline-window.ts
+@@ -0,0 +1,162 @@
++import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
++import type { TimelinePage, TimelineRecord } from "../../application/timeline-contract.ts";
++import { readTaskTimeline } from "./api.ts";
++import { captureTimelineViewportAnchor, restoreTimelineViewportAnchor, type TimelineViewportAnchor } from "./timeline-scroll-anchor.ts";
++import { captureTextSelectionWithin, restoreCapturedTextSelection, type CapturedTextSelection } from "./text-selection.ts";
++import { errorMessage } from "./feedback.ts";
++
++const maximumRecords = 150;
++
++export function useTimelineWindow(taskId: string, initial: TimelinePage | undefined) {
++  const [page, setPage] = useState(initial);
++  const pageRef = useRef(page); pageRef.current = page;
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState<string>();
++  const generation = useRef(0);
++  const anchor = useRef<TimelineViewportAnchor | null>(null);
++  const selection = useRef<CapturedTextSelection | null>(null);
++  const retry = useRef<() => void>(() => {});
++  const sourceQueue = useRef<{ id: string; done(): void } | undefined>(undefined);
++  const navigating = useRef(false);
++  const busy = useRef(false);
++  const mounted = useRef(true);
++  useEffect(() => () => { mounted.current = false; generation.current++; }, []);
++
++  const apply = useCallback((incoming: TimelinePage) => {
++    const next = mergeWindowMetadata(pageRef.current, incoming);
++    const selected = window.getSelection();
++    const selectedKeys = [selected?.anchorNode, selected?.focusNode].flatMap((node) => {
++      const element = node instanceof Element ? node : node?.parentElement;
++      const key = element?.closest<HTMLElement>(".timeline > [data-history-record]")?.dataset.historyRecord;
++      return key === undefined ? [] : [key];
++    });
++    const sourceIds = new Set(next.records.flatMap((record) => record.kind === "comment" ? [record.comment.id] : record.kind === "activity" ? [record.activity.id] : record.kind === "startup-failure" ? [record.activation.id] : [record.attempt.id, `outcome-${record.attempt.id}`, ...record.content.map((entry) => entry.kind === "comment" ? entry.comment.id : entry.activity.id)]));
++    const selectedSources = [selected?.anchorNode, selected?.focusNode].flatMap((node) => {
++      const element = node instanceof Element ? node : node?.parentElement;
++      const id = element?.closest<HTMLElement>("[data-timeline-record]")?.dataset.timelineRecord;
++      return id === undefined ? [] : [id];
++    });
++    if (selected && !selected.isCollapsed && (selectedKeys.some((key) => !next.records.some((record) => record.key === key)) || selectedSources.some((id) => !sourceIds.has(id)))) {
++      throw new Error("Clear the text selection before moving to another timeline window.");
++    }
++    anchor.current = captureTimelineViewportAnchor("sticky-header");
++    selection.current = captureTextSelectionWithin(document.querySelector(".timeline-section"), document.querySelector(".transcript-content"));
++    setPage(next);
++  }, []);
++
++  useLayoutEffect(() => {
++    restoreTimelineViewportAnchor(anchor.current); anchor.current = null;
++    restoreCapturedTextSelection(selection.current); selection.current = null;
++  }, [page]);
++
++  useLayoutEffect(() => {
++    if (!initial || busy.current || navigating.current) return;
++    const current = pageRef.current;
++    if (!current || (current.start === 0 && current.records.length <= 50)) {
++      const records = mergeRecords(initial.records, current?.records ?? []).slice(0, maximumRecords);
++      try { apply({ ...initial, records, olderCursor: current && records.length > initial.records.length ? current.olderCursor : initial.olderCursor }); }
++      catch (cause) { setError(errorMessage(cause)); }
++      return;
++    }
++    const token = ++generation.current;
++    void readTaskTimeline(taskId, { ...(current.start === 0 ? {} : { cursor: current.refreshCursor, refresh: true }), pageSize: current.records.length || 50 }).then((next) => {
++      if (mounted.current && token === generation.current && !busy.current && !navigating.current) apply({ ...next, records: mergeRecords(next.records, current.records).slice(0, next.records.length) });
++    }).catch((cause) => { if (mounted.current && token === generation.current) setError(errorMessage(cause)); });
++  }, [initial, taskId, apply]);
++
++  const load = useCallback(async (direction: "older" | "newer") => {
++    const current = pageRef.current;
++    const cursor = direction === "older" ? current?.olderCursor : current?.newerCursor;
++    if (!current || !cursor || busy.current || navigating.current) return;
++    const token = ++generation.current;
++    busy.current = true; setLoading(true);
++    retry.current = () => { void load(direction); };
++    try {
++      const next = await readTaskTimeline(taskId, { cursor });
++      if (!mounted.current || token !== generation.current) return;
++      const all = direction === "older" ? mergeRecords(current.records, next.records) : mergeRecords(next.records, current.records);
++      const removed = Math.max(0, all.length - maximumRecords);
++      const records = direction === "older" ? all.slice(-maximumRecords) : all.slice(0, maximumRecords);
++      // When an edge is evicted, reload directly from its durable source rather than retaining its page.
++      const first = records[0];
++      const bounded = removed > 0 && first ? await readTaskTimeline(taskId, { sourceId: recordSource(first), pageSize: maximumRecords }) : undefined;
++      if (!mounted.current || token !== generation.current) return;
++      apply(bounded ?? { ...current, ...next, records, start: direction === "newer" ? next.start : current.start,
++        olderCursor: direction === "older" ? next.olderCursor : current.olderCursor,
++        newerCursor: direction === "newer" ? next.newerCursor : current.newerCursor,
++        refreshCursor: direction === "newer" ? next.refreshCursor : current.refreshCursor });
++      setError(undefined);
++    } catch (cause) { if (mounted.current && token === generation.current) setError(errorMessage(cause)); }
++    finally { busy.current = false; if (mounted.current && token === generation.current) setLoading(false); }
++  }, [taskId, loading, apply]);
++
++  const source = useCallback((id: string): Promise<void> => new Promise((done) => {
++    generation.current++;
++    sourceQueue.current?.done();
++    sourceQueue.current = { id, done };
++    const drain = async (): Promise<void> => {
++      if (navigating.current) return;
++      navigating.current = true;
++      setLoading(true);
++      while (mounted.current && sourceQueue.current) {
++        const target = sourceQueue.current; sourceQueue.current = undefined;
++        const token = generation.current;
++        retry.current = () => { void source(target.id); };
++        try {
++          const next = await readTaskTimeline(taskId, { sourceId: target.id });
++          if (mounted.current && token === generation.current) { apply(next); setError(undefined); }
++        } catch (cause) { if (mounted.current && token === generation.current) setError(errorMessage(cause)); }
++        target.done();
++      }
++      navigating.current = false;
++      if (mounted.current) setLoading(false);
++    };
++    void drain();
++  }), [taskId, apply]);
++
++  const content = async (record: Extract<TimelineRecord, { kind: "attempt" }>): Promise<void> => {
++    const cursor = record.contentPage?.olderCursor;
++    if (!cursor || busy.current || navigating.current) return;
++    const token = ++generation.current;
++    busy.current = true; setLoading(true); retry.current = () => { void content(record); };
++    try {
++      const next = await readTaskTimeline(taskId, { cursor });
++      if (mounted.current && token === generation.current && pageRef.current) {
++        apply({ ...pageRef.current, ...(next.inspectableSources === undefined ? {} : { inspectableSources: next.inspectableSources }), ...(next.relatedTasks === undefined ? {} : { relatedTasks: next.relatedTasks }), records: pageRef.current.records.map((item) => item.key === record.key ? next.records[0]! : item) });
++        setError(undefined);
++      }
++    } catch (cause) { if (mounted.current && token === generation.current) setError(errorMessage(cause)); }
++    finally { busy.current = false; if (mounted.current && token === generation.current) setLoading(false); }
++  };
++  const cancelSource = (): void => {
++    generation.current++;
++    sourceQueue.current?.done(); sourceQueue.current = undefined;
++    setLoading(false);
++  };
++  return { page, loading, error, load, source, cancelSource, content, retry: () => retry.current() };
++}
++
++function mergeRecords(first: TimelineRecord[], second: TimelineRecord[]): TimelineRecord[] {
++  const seen = new Set(first.map((record) => record.key));
++  const previous = new Map(second.map((record) => [record.key, record]));
++  return [...first.map((record) => {
++    const retained = previous.get(record.key);
++    return record.kind === "attempt" && retained?.kind === "attempt" && retained.contentPage?.sourceId !== undefined ? { ...record, content: retained.content, contentPage: retained.contentPage } : record;
++  }), ...second.filter((record) => !seen.has(record.key))];
++}
++function recordSource(record: TimelineRecord): string {
++  return record.kind === "attempt" ? record.attempt.id : record.kind === "startup-failure" ? record.activation.id : record.kind === "comment" ? record.comment.id : record.activity.id;
++}
++
++function mergeWindowMetadata(current: TimelinePage | undefined, next: TimelinePage): TimelinePage {
++  const comments = next.records.flatMap((record) => record.kind === "comment" ? [record.comment.id] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "comment" ? [entry.comment.id] : []) : []);
++  const activity = next.records.flatMap((record) => record.kind === "activity" ? [record.activity] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "activity" ? [entry.activity] : []) : []);
++  const relatedIds = new Set(activity.flatMap((entry) => entry.details.relatedTaskId ? [entry.details.relatedTaskId] : []));
++  const references = new Map([...(current?.relatedTasks ?? []), ...(next.relatedTasks ?? [])].map((task) => [task.id, task]));
++  const allowedComments = new Set([...(current?.inspectableSources?.commentIds ?? []), ...(next.inspectableSources?.commentIds ?? [])]);
++  const allowedActivity = new Set([...(current?.inspectableSources?.activityIds ?? []), ...(next.inspectableSources?.activityIds ?? [])]);
++  return { ...next,
++    ...(next.relatedTasks === undefined && current?.relatedTasks === undefined ? {} : { relatedTasks: [...references.values()].filter(({ id }) => relatedIds.has(id)) }),
++    ...(next.inspectableSources === undefined && current?.inspectableSources === undefined ? {} : { inspectableSources: { commentIds: comments.filter((id) => allowedComments.has(id)), activityIds: activity.map(({ id }) => id).filter((id) => allowedActivity.has(id)) } }),
++  };
++}
+--- baseline/src/web/client/Timeline.tsx
++++ src/web/client/Timeline.tsx
+@@ -12,6 +12,8 @@
+   TaskRelationshipView,
+   UserTimelineRelatedTaskView,
+ } from "../../application/browser-transport-contract.ts";
++import { useTimelineWindow } from "./timeline-window.ts";
++import type { TimelinePage } from "../../application/timeline-contract.ts";
+ import { findParticipantMentions } from "../../application/participant-mentions.ts";
+ import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
+ import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
+@@ -50,6 +52,8 @@
+ 
+ export function TaskTimeline({
+   taskId,
++  page,
++  pins,
+   comments,
+   activity,
+   activations,
+@@ -66,6 +70,8 @@
+   agentInspectableContent,
+ }: {
+   taskId: string;
++  page?: TimelinePage;
++  pins?: TaskCommentView[];
+   comments: TaskCommentView[];
+   activity: TaskActivityView[];
+   activations: ActivationView[];
+@@ -85,21 +91,46 @@
+   const [expandedText, setExpandedText] = useState<Set<string>>(() => new Set());
+   const [agentInspectableOnly, setAgentInspectableOnly] = useState(false);
+   const pendingFilterAnchor = useRef<TimelineViewportAnchor | null>(null);
+-  const records = buildTimelineRecords(comments, activity, activations);
++  const history = useTimelineWindow(taskId, page);
++  const records = history.page?.records ?? buildTimelineRecords(comments, activity, activations);
++  useEffect(() => {
++    const keys = new Set(records.flatMap((record) => record.kind === "comment" ? [`comment-${record.comment.id}`] : record.kind === "activity" ? [`activity-${record.activity.id}`] : record.kind === "startup-failure" ? [`startup-${record.activation.id}`] : [`outcome-${record.attempt.id}`, ...record.content.map((entry) => entry.kind === "comment" ? `comment-${entry.comment.id}` : `activity-${entry.activity.id}`)]));
++    setExpandedText((current) => {
++      const next = new Set([...current].filter((key) => keys.has(key)));
++      return next.size === current.size ? current : next;
++    });
++  }, [history.page]);
++  const sourceSequence = useRef(0);
++  const pendingSourceFocus = useRef<{ id: string; sequence: number } | undefined>(undefined);
++  const olderRef = useRef<HTMLDivElement>(null);
++  const newerRef = useRef<HTMLDivElement>(null);
++  const loadRef = useRef(history.load); loadRef.current = history.load;
++  useEffect(() => {
++    const observer = new IntersectionObserver((entries) => {
++      for (const entry of entries) if (entry.isIntersecting) void loadRef.current(entry.target === olderRef.current ? "older" : "newer");
++    }, { rootMargin: "120px" });
++    if (olderRef.current) observer.observe(olderRef.current);
++    if (newerRef.current) observer.observe(newerRef.current);
++    return () => observer.disconnect();
++  }, [history.page?.olderCursor, history.page?.newerCursor]);
++  const windowInspectable = history.page?.inspectableSources === undefined ? agentInspectableContent : { ...agentInspectableContent, ...history.page.inspectableSources };
++  const windowComments = history.page === undefined ? comments : records.flatMap((record) => record.kind === "comment" ? [record.comment] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "comment" ? [entry.comment] : []) : []);
++  const windowActivity = history.page === undefined ? activity : records.flatMap((record) => record.kind === "activity" ? [record.activity] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "activity" ? [entry.activity] : []) : []);
+   const visibleRecords = agentInspectableOnly
+-    ? filterTimelineRecordsForAgents(records, agentInspectableContent)
++    ? filterTimelineRecordsForAgents(records, windowInspectable)
+     : records;
+   const context: TimelineContext = {
+     readOnly,
++    pinnedCommentIds: pins === undefined ? undefined : new Set(pins.map(({ id }) => id)),
+     taskId,
+-    comments,
+-    activity,
+-    activations,
++    comments: windowComments,
++    activity: windowActivity,
++    activations: [...new Map([...activations, ...records.flatMap((record) => record.kind === "attempt" ? [{ ...record.activation, attempts: records.flatMap((candidate) => candidate.kind === "attempt" && candidate.activation.id === record.activation.id ? [candidate.attempt] : []) }] : [])].map((activation) => [activation.id, activation])).values()],
+     agents,
+     columns,
+-    tasks,
++    tasks: history.page?.relatedTasks ?? tasks,
+     unresolvedAttention,
+-    agentInspectableContent,
++    agentInspectableContent: windowInspectable,
+     onAttentionChanged,
+     onAttentionError,
+     onSource: (sourceId) => followSource(sourceId),
+@@ -114,22 +145,25 @@
+       return next;
+     });
+   };
+-  const followSource = (sourceId: string): void => {
+-    if (agentInspectableOnly && !visibleRecords.some((record) =>
+-      record.kind === "comment" ? record.comment.id === sourceId
+-        : record.kind === "activity" ? record.activity.id === sourceId
+-          : record.kind === "attempt" && record.content.some((entry) =>
+-            (entry.kind === "comment" ? entry.comment.id : entry.activity.id) === sourceId))) {
+-      setAgentInspectableOnly(false);
+-    }
++  const focusPendingSource = (): void => {
++    const pending = pendingSourceFocus.current;
++    if (!pending || pending.sequence !== sourceSequence.current || !document.getElementById(timelineSourceElementId(pending.id))) return;
++    pendingSourceFocus.current = undefined;
++    focusTimelineSource(pending.id);
++  };
++  const followSource = async (sourceId: string): Promise<void> => {
++    const sequence = ++sourceSequence.current;
++    history.cancelSource();
++    pendingSourceFocus.current = { id: sourceId, sequence };
++    setAgentInspectableOnly(false);
+     setTextExpanded(`comment-${sourceId}`, true);
+     setTextExpanded(`activity-${sourceId}`, true);
+-    window.setTimeout(() => {
+-      focusTimelineSource(sourceId);
+-    });
++    if (!document.getElementById(timelineSourceElementId(sourceId)) && page !== undefined) await history.source(sourceId);
++    if (sequence === sourceSequence.current) window.requestAnimationFrame(focusPendingSource);
+   };
++  useLayoutEffect(focusPendingSource, [history.page, expandedText, agentInspectableOnly]);
+   useEffect(() => {
+-    if (sourceRequest !== undefined) followSource(sourceRequest.sourceId);
++    if (sourceRequest !== undefined) void followSource(sourceRequest.sourceId);
+   }, [sourceRequest?.sequence]);
+   useLayoutEffect(() => {
+     restoreTimelineViewportAnchor(pendingFilterAnchor.current);
+@@ -143,7 +177,9 @@
+ 
+   return (
+     <>
+-      <section className="timeline-section" aria-labelledby="timeline-heading">
++      <section className="timeline-section" aria-labelledby="timeline-heading"
++        data-history-start={history.page?.start ?? 0} data-history-total={history.page?.total ?? records.length}>
++
+         <div className="timeline-heading-row">
+           <h2 id="timeline-heading" tabIndex={-1}>Task timeline</h2>
+           <fieldset className="timeline-filters" aria-label="Filter task timeline">
+@@ -158,6 +194,10 @@
+             </label>
+           </fieldset>
+         </div>
++        {history.error === undefined ? null : <p role="alert">{history.error} <button className="secondary" onClick={history.retry}>Retry timeline</button></p>}
++        {history.loading ? <p role="status">Loading timeline…</p> : null}
++        <div aria-hidden="true" className="timeline-window-spacer" style={{ height: (history.page?.start ?? 0) * 180 }} />
++        {history.page?.newerCursor ? <div ref={newerRef}><button className="secondary" disabled={history.loading} onClick={() => void history.load("newer")}>Load newer timeline</button></div> : null}
+         {records.length === 0 ? <p className="quiet">No task history yet.</p> : visibleRecords.length === 0 ? (
+           <p className="quiet timeline-empty">No timeline content matches this filter.</p>
+         ) : (
+@@ -171,11 +211,13 @@
+                 onTextExpanded={setTextExpanded}
+                 onSource={followSource}
+                 agentInspectableOnly={agentInspectableOnly}
++                onOlderContent={history.content}
+                 {...(transcriptsAvailable ? { onConversation: setConversationSelection } : {})}
+               />
+             ))}
+           </ol>
+         )}
++        {history.page?.olderCursor ? <div ref={olderRef}><button className="secondary" disabled={history.loading} onClick={() => void history.load("older")}>Load older timeline</button></div> : null}
+       </section>
+       {conversationSelection === undefined ? null : (
+         <AgentConversationDialog
+@@ -203,6 +245,7 @@
+ interface TimelineContext {
+   onSource(sourceId: string): void;
+   readOnly: boolean;
++  pinnedCommentIds: Set<string> | undefined;
+   taskId: string;
+   comments: TaskCommentView[];
+   activity: TaskActivityView[];
+@@ -225,6 +268,7 @@
+   onSource,
+   onConversation,
+   agentInspectableOnly,
++  onOlderContent,
+ }: {
+   record: TimelineRecord;
+   context: TimelineContext;
+@@ -233,10 +277,11 @@
+   onSource(sourceId: string): void;
+   onConversation?: (selection: ConversationSelection) => void;
+   agentInspectableOnly: boolean;
++  onOlderContent(record: Extract<TimelineRecord, { kind: "attempt" }>): Promise<void>;
+ }): ReactNode {
+   if (record.kind === "comment") {
+     return (
+-      <li className="timeline-entry comment-entry" data-timeline-record={record.comment.id}>
++      <li className="timeline-entry comment-entry" data-history-record={record.key} data-timeline-record={record.comment.id}>
+         <div className="timeline-marker" aria-hidden="true">✎</div>
+         <CommentCard
+           comment={record.comment}
+@@ -251,7 +296,7 @@
+     return (
+       <li
+         className={`timeline-entry event-entry${record.activity.type === "task.moved" ? " movement-entry" : ""}`}
+-        data-timeline-record={record.activity.id}
++        data-history-record={record.key} data-timeline-record={record.activity.id}
+       >
+         <div className="timeline-marker" aria-hidden="true">{record.activity.type === "task.moved" ? "→" : "◆"}</div>
+         <ActivityCard
+@@ -267,7 +312,7 @@
+   if (record.kind === "startup-failure") {
+     const agentName = nameForAgent(record.activation.targetAgentId, context.agents);
+     return (
+-      <li className="timeline-entry attempt-entry failed-attempt" data-timeline-record={record.activation.id}>
++      <li className="timeline-entry attempt-entry failed-attempt" data-history-record={record.key} data-timeline-record={record.activation.id}>
+         <div className="timeline-marker" aria-hidden="true">!</div>
+         <article id={timelineSourceElementId(record.activation.id)} tabIndex={-1}>
+           <div className="entry-meta">
+@@ -297,6 +342,7 @@
+       onTextExpanded={onTextExpanded}
+       onSource={onSource}
+       agentInspectableOnly={agentInspectableOnly}
++      onOlderContent={onOlderContent}
+       {...(onConversation === undefined ? {} : { onConversation })}
+     />
+   );
+@@ -310,6 +356,7 @@
+   onSource,
+   onConversation,
+   agentInspectableOnly,
++  onOlderContent,
+ }: {
+   record: Extract<TimelineRecord, { kind: "attempt" }>;
+   context: TimelineContext;
+@@ -318,13 +365,14 @@
+   onSource(sourceId: string): void;
+   onConversation?: (selection: ConversationSelection) => void;
+   agentInspectableOnly: boolean;
++  onOlderContent(record: Extract<TimelineRecord, { kind: "attempt" }>): Promise<void>;
+ }): ReactNode {
+   const { attempt, activation } = record;
+   const agentName = nameForAgent(activation.targetAgentId, context.agents);
+   const status = attemptStatus(attempt);
+   const outcomeTextId = `outcome-${attempt.id}`;
+   return (
+-    <li className={`timeline-entry attempt-entry ${status.className}`} data-timeline-record={attempt.id}>
++    <li className={`timeline-entry attempt-entry ${status.className}`} data-history-record={record.key} data-timeline-record={attempt.id}>
+       <div className="timeline-marker" aria-hidden="true">▶</div>
+       <article id={timelineSourceElementId(attempt.id)} tabIndex={-1}>
+         <div className="entry-meta attempt-heading">
+@@ -366,6 +414,7 @@
+             ))}
+           </ol>
+         )}
++        {record.contentPage?.olderCursor ? <button className="secondary" onClick={() => void onOlderContent(record)}>Load older attempt activity</button> : null}
+         <footer className="attempt-footer">
+           <div className="attempt-metadata">
+             <TriggerLink record={record} context={context} onSource={onSource} />
+@@ -456,7 +505,7 @@
+         <span className="entry-meta-actions">
+           <RelativeTime value={comment.occurredAt} />
+           <CopyMarkdownButton source={comment.body} label="Copy comment Markdown" />
+-          {context.readOnly ? null : <CommentPinButton taskId={context.taskId} commentId={comment.id} pinned={!!comment.pinned}
++          {context.readOnly ? null : <CommentPinButton taskId={context.taskId} commentId={comment.id} pinned={context.pinnedCommentIds?.has(comment.id) ?? !!comment.pinned}
+             onChanged={context.onAttentionChanged} onError={context.onAttentionError} />}
+           {context.agentInspectableContent.commentIds.includes(comment.id) ? <AgentInspectableMarker /> : null}
+         </span>
+@@ -557,13 +606,13 @@
+       {activity.type === "automation.resumed" && activity.details.resolution !== "dismissed" ? (
+         <ResumeInstructions activity={activity} />
+       ) : pinChange ? <div className="pin-activity-reference">
+-        {pinnedComment === undefined ? <p>Comment {activity.details.commentId ?? "unavailable"}</p> : <>
++        {pinnedComment === undefined ? <p>Comment {activity.details.commentId ?? "unavailable"}</p> : (
+           <TextPreview id={`activity-${activity.id}`} text={pinnedComment.body}
+             expanded={expanded} onExpanded={onExpanded} renderedLineLimit={2}
+             participants={participantNamesById(context.agents)} />
+-          <button className="comment-icon-button" aria-label="View in task history" title="View in task history"
+-            onClick={() => context.onSource(pinnedComment.id)}><CommentActionIcon action="source" /></button>
+-        </>}
++        )}
++        {activity.details.commentId === undefined ? null : <button className="comment-icon-button" aria-label="View in task history" title="View in task history"
++          onClick={() => context.onSource(activity.details.commentId!)}><CommentActionIcon action="source" /></button>}
+       </div> : (activity.type === "conversation.continued" && activity.details.messageBody !== undefined) ||
+         (activity.type === "conversation.retired" && activity.details.reason !== undefined) ? (
+         <TextPreview
+@@ -582,8 +631,9 @@
+           {activity.type !== "stall.recovery-exhausted" ? null :
+             activity.details.activationIds?.split(",").map((id, index) => {
+               const attempt = context.activations.find((activation) => activation.id === id)?.attempts.at(-1);
+-              return attempt === undefined ? null : <button className="secondary" key={id}
+-                onClick={() => context.onSource(attempt.id)}>View recovery {index + 1}</button>;
++              const attemptId = attempt?.id ?? activity.details.recoveryAttemptIds?.split(",")[index];
++              return attemptId === undefined ? null : <button className="secondary" key={id}
++                onClick={() => context.onSource(attemptId)}>View recovery {index + 1}</button>;
+             })}
+           <small>{actorName(activity.actor, context.agents)}</small>
+           {onConversation === undefined || conversationId === undefined || activationId === undefined || messageId === undefined ? null : (
+--- baseline/src/application/internal/task-command-store.ts
++++ src/application/internal/task-command-store.ts
+@@ -241,6 +241,9 @@
+         {
+           fromColumnId: currentTask.columnId,
+           toColumnId: command.destinationColumnId,
++          fromColumnName: (this.#database.prepare("SELECT name FROM columns WHERE board_id = ? AND id = ?").get(currentTask.boardId, currentTask.columnId) as { name: string } | undefined)?.name ?? currentTask.columnId,
++          toColumnName: (this.#database.prepare("SELECT name FROM columns WHERE board_id = ? AND id = ?").get(currentTask.boardId, command.destinationColumnId) as { name: string } | undefined)?.name ?? command.destinationColumnId,
++          actorName: command.actor.kind === "agent" ? (this.#database.prepare("SELECT name FROM agents WHERE id = ?").get(command.actor.id) as { name: string } | undefined)?.name ?? command.actor.id : command.actor.id,
+           ...this.agentActivityProvenance(command, origin),
+         },
+       );
+--- baseline/src/application/internal/task-discovery.ts
++++ src/application/internal/task-discovery.ts
+@@ -181,7 +181,7 @@
+       }
+     | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
+     | { available: false; reason: "not-found" } {
+-    const loaded = this.readTask(taskId, true, true);
++    const loaded = this.readTask(taskId, { includeUnmapped: true, includeArchived: true, mode: "browser" });
+     if (!loaded.available) return loaded;
+     const board = this.#processStore.readBoard(loaded.task.boardId, true);
+     const overview = this.#taskProjections.readTaskOverviewRecord(taskId, loaded.task.relationships)?.task;
+@@ -195,7 +195,7 @@
+       board,
+       inspection: this.projectTaskInspection(loaded.task, overview, column, true),
+       agentInspectable: loaded.task.archived === true || this.#taskProjections.isTaskInspectableByAgent(taskId),
+-      attachments: this.#taskProjections.readTaskAttachments(taskId),
++      attachments: [],
+     };
+   }
+ 
+@@ -212,7 +212,7 @@
+     options: { audience: "agent" | "user" },
+   ): TaskInspectionQueryResult | UserTaskInspectionQueryResult {
+     const includeUnmapped = options.audience === "user";
+-    const loaded = this.readTask(taskId, includeUnmapped, true, !includeUnmapped);
++    const loaded = this.readTask(taskId, { includeUnmapped, includeArchived: true, mode: includeUnmapped ? "full" : "agent-context" });
+     if (!loaded.available) return loaded;
+     const { task } = loaded;
+     const board = includeUnmapped || task.archived || task.columnId === "completion"
+@@ -299,14 +299,14 @@
+   }
+ 
+   queryTaskActivity(taskId: string): TaskActivityQueryResult {
+-    const loaded = this.readTask(taskId, false, true);
++    const loaded = this.readTask(taskId, { includeArchived: true });
+     return loaded.available
+       ? { available: true, activity: loaded.task.activity }
+       : loaded;
+   }
+ 
+   queryTaskAttachments(taskId: string, query?: { pageSize?: number; cursor?: string }): TaskAttachmentsQueryResult {
+-    const loaded = this.readTask(taskId, false, true, true);
++    const loaded = this.readTask(taskId, { includeArchived: true, mode: "agent-context" });
+     if (!loaded.available) return loaded;
+     const attachments = this.#taskProjections.readTaskAttachments(taskId);
+     if (query === undefined) return { available: true, attachments };
+@@ -328,9 +328,7 @@
+ 
+   private readTask(
+     taskId: string,
+-    includeUnmapped = false,
+-    includeArchived = false,
+-    bounded = false,
++    options: { includeUnmapped?: boolean; includeArchived?: boolean; mode?: "full" | "agent-context" | "browser" } = {},
+   ):
+     | { available: true; task: TaskView }
+     | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
+@@ -342,7 +340,8 @@
+         diagnostics: this.#startup.diagnostics,
+       };
+     }
+-    const task = this.#taskProjections.readTask(taskId, bounded);
++    const { includeUnmapped = false, includeArchived = false, mode = "full" } = options;
++    const task = this.#taskProjections.readTask(taskId, mode);
+     if (task === undefined) return { available: false, reason: "not-found" };
+     return !includeUnmapped && !(includeArchived && task.archived) && !this.#taskProjections.isTaskInspectableByAgent(taskId)
+       ? { available: false, reason: "not-found" }
+--- baseline/src/application/internal/task-projection-store.ts
++++ src/application/internal/task-projection-store.ts
+@@ -21,6 +21,7 @@
+   TaskView,
+ } from "../task-contract.ts";
+ import type { CoordinationDatabase } from "./coordination-database.ts";
++import { TaskTimelinePages } from "./task-timeline-pages.ts";
+ import { TaskHistoryStore } from "./task-history-store.ts";
+ 
+ export interface StoredTaskOverview {
+@@ -66,14 +67,18 @@
+ 
+ export class TaskProjectionStore {
+   readonly history: TaskHistoryStore;
++  readonly timeline: TaskTimelinePages;
+   readonly #database: DatabaseSync;
+ 
+   constructor(database: CoordinationDatabase) {
+     this.#database = database.connection;
+     this.history = new TaskHistoryStore(database);
+-  }
+-
+-  readTask(taskId: string, bounded = false): TaskView | undefined {
++    this.timeline = new TaskTimelinePages(this.#database, this);
++  }
++
++  readTask(taskId: string, mode: "full" | "agent-context" | "browser" = "full"): TaskView | undefined {
++    const bounded = mode !== "full";
++    const browser = mode === "browser";
+     const row = this.#database
+       .prepare(
+         "SELECT id, title, description, board_id, column_id, revision, archived_at FROM tasks WHERE id = ?",
+@@ -137,8 +142,44 @@
+             : { messageBody: event.conversation_message_body }),
+         },
+       })),
+-      activations: this.readTaskActivations(taskId),
++      activations: browser ? this.readBrowserControls(taskId) : this.readTaskActivations(taskId),
+     };
++  }
++
++  private readBrowserControls(taskId: string): ActivationView[] {
++    const ids = this.#database.prepare(`SELECT id FROM activations WHERE task_id = ? AND
++      (status <> 'completed' OR id = (SELECT id FROM activations WHERE task_id = ? ORDER BY sequence DESC LIMIT 1)) ORDER BY sequence`)
++      .all(taskId, taskId) as Array<{ id: string }>;
++    return ids.map(({ id }) => ({ ...this.readTaskActivations(taskId, id, false)[0]!, attempts: this.readActivationAttempts(id, 1, undefined, true) }));
++  }
++
++  readTimelineAttempt(attemptId: string): AttemptView | undefined {
++    const row = this.#database.prepare("SELECT activation_id FROM attempts WHERE id = ?").get(attemptId) as { activation_id: string } | undefined;
++    return row ? this.readActivationAttempts(row.activation_id, 1, attemptId)[0] : undefined;
++  }
++
++  readTimelineComment(id: string): TaskView["comments"][number] | undefined {
++    const source = this.readSourceEvent(id);
++    return source && "body" in source ? source : undefined;
++  }
++
++  readTimelineActivity(id: string): TaskActivityView | undefined {
++    const source = this.readSourceEvent(id);
++    if (!source || !("type" in source)) return undefined;
++    if (source.type === "conversation.continued" && source.details.messageId) {
++      const message = this.#database.prepare("SELECT body FROM agent_conversation_messages WHERE id = ?").get(source.details.messageId) as { body: string } | undefined;
++      if (message) source.details.messageBody = message.body;
++    }
++    if (source.type === "stall.recovery-exhausted" && source.details.activationIds) {
++      source.details.recoveryAttemptIds = source.details.activationIds.split(",").map((activationId) =>
++        (this.#database.prepare("SELECT id FROM attempts WHERE activation_id = ? ORDER BY rowid DESC LIMIT 1").get(activationId) as { id: string } | undefined)?.id ?? "").join(",");
++    }
++    return source;
++  }
++
++  readMostRecentAgentId(taskId: string): string | undefined {
++    return (this.#database.prepare(`SELECT activation.target_agent_id FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id
++      WHERE activation.task_id = ? ORDER BY attempt.rowid DESC LIMIT 1`).get(taskId) as { target_agent_id: string } | undefined)?.target_agent_id;
+   }
+ 
+   readTasksInColumn(boardId: string, columnId: string): TaskView[] {
+@@ -603,11 +644,13 @@
+           attempt_id: string | null;
+           origin_task_id: string | null;
+           origin_task_title: string | null;
++          pinned: number;
+         }
+       | undefined;
+     return comment === undefined
+       ? undefined
+       : {
++          ...(comment.pinned === 1 ? { pinned: true as const } : {}),
+           id: comment.id,
+           body: comment.body,
+           actor: { kind: comment.actor_kind, id: comment.actor_id },
+@@ -812,21 +855,21 @@
+         };
+   }
+ 
+-  readActivationAttempts(activationId: string, limit?: number): ActivationView["attempts"] {
++  readActivationAttempts(activationId: string, limit?: number, attemptId?: string, newest = false): ActivationView["attempts"] {
+     const rows = this.#database
+       .prepare(
+         `SELECT id, status, workspace_path, started_at, completed_at,
+                 outcome_status, outcome_summary, outcome_kind, thread_id, model, reasoning_effort,
+                 thread_continuity, reviewer_allowances_json
+          FROM attempts
+-         WHERE activation_id = ?
++         WHERE activation_id = ? ${attemptId === undefined ? "" : "AND id = ?"}
+            AND NOT EXISTS (
+              SELECT 1 FROM activation_dispatch_claims claim
+              WHERE claim.attempt_id = attempts.id
+            )
+-         ORDER BY rowid ${limit === undefined ? "" : "LIMIT ?"}`,
+-      )
+-      .all(activationId, ...(limit === undefined ? [] : [limit])) as Array<{
++         ORDER BY rowid ${newest ? "DESC" : "ASC"} ${limit === undefined ? "" : "LIMIT ?"}`,
++      )
++      .all(activationId, ...(attemptId === undefined ? [] : [attemptId]), ...(limit === undefined ? [] : [limit])) as Array<{
+         id: string;
+         status: "running" | "completed" | "failed";
+         workspace_path: string;
+@@ -876,10 +919,10 @@
+                 COALESCE(origin.title, comment.origin_task_title) AS origin_task_title
+          FROM task_comments comment
+          LEFT JOIN tasks origin ON origin.id = comment.origin_task_id
+-         WHERE comment.task_id = ? AND (? = 0 OR comment.pinned = 1)
++         WHERE comment.task_id = ? ${pinsOnly ? "AND comment.pinned = 1" : ""}
+          ORDER BY comment.sequence`,
+       )
+-      .all(taskId, pinsOnly ? 1 : 0) as Array<{
++      .all(taskId) as Array<{
+       id: string;
+       body: string;
+       actor_kind: Actor["kind"];
+--- baseline/src/application/internal/task-timeline-pages.ts
++++ src/application/internal/task-timeline-pages.ts
+@@ -0,0 +1,152 @@
++import { createHmac, timingSafeEqual } from "node:crypto";
++import type { DatabaseSync } from "node:sqlite";
++import type { TimelinePage, TimelineQuery, TimelineQueryResult, TimelineRecord, MovementMapQueryResult } from "../timeline-contract.ts";
++import type { TaskProjectionStore } from "./task-projection-store.ts";
++
++interface Position { occurred_at: string; sequence: number }
++interface Row extends Position { id: string; kind: TimelineRecord["kind"]; source_id: string }
++interface Cursor { version: 1; taskId: string; watermark: number; direction: "older" | "newer" | "refresh" | "content"; position?: Position; recordId?: string; targetSource?: string }
++
++/** Browser-only indexed selections. Hydration happens after SQL has bounded the window. */
++export class TaskTimelinePages {
++  readonly #db: DatabaseSync;
++  readonly #projections: TaskProjectionStore;
++  readonly #secret: string;
++  constructor(db: DatabaseSync, projections: TaskProjectionStore) {
++    this.#db = db;
++    this.#projections = projections;
++    this.#secret = (db.prepare("SELECT secret FROM history_cursor_identity WHERE singleton = 1").get() as { secret: string }).secret;
++  }
++
++  query(taskId: string, query: TimelineQuery = {}): TimelineQueryResult {
++    if (this.#db.prepare("SELECT 1 FROM tasks WHERE id = ?").get(taskId) === undefined) return { available: false, reason: "not-found" };
++    const limit = query.pageSize ?? 50;
++    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 150) return { available: false, reason: "invalid-page" };
++    let cursor: Cursor | undefined = query.cursor === undefined ? { version: 1, taskId, watermark: this.watermark(taskId), direction: "refresh" } : this.decode(query.cursor, taskId);
++    if (cursor === undefined) return { available: false, reason: "invalid-page" };
++    if (cursor.direction === "content") return this.contentPage(cursor, limit);
++    if (query.refresh) cursor = { ...cursor, watermark: this.watermark(taskId) };
++    let target: Row | undefined;
++    if (query.sourceId !== undefined) {
++      target = this.resolveSource(taskId, query.sourceId);
++      if (!target) return { available: false, reason: "not-found" };
++      cursor = { ...cursor, watermark: this.watermark(taskId), direction: "refresh", position: target, targetSource: query.sourceId };
++    }
++    const newer = cursor.direction === "newer";
++    const operator = newer ? ">" : cursor.direction === "refresh" ? "<=" : "<";
++    const rows = this.#db.prepare(`SELECT * FROM task_timeline_records INDEXED BY task_timeline_position
++      WHERE task_id = ? AND sequence <= ? ${cursor.position === undefined ? "" : `AND (occurred_at, sequence) ${operator} (?, ?)`}
++      ORDER BY occurred_at ${newer ? "ASC" : "DESC"}, sequence ${newer ? "ASC" : "DESC"} LIMIT ?`)
++      .all(taskId, cursor.watermark, ...(cursor.position === undefined ? [] : [cursor.position.occurred_at, cursor.position.sequence]), limit) as unknown as Row[];
++    if (newer) rows.reverse();
++    const records = rows.map((row) => this.hydrate(taskId, row, (target?.id ?? rows[0]?.id) === row.id ? query.sourceId ?? cursor.targetSource : undefined));
++    const first = rows[0]; const last = rows.at(-1);
++    const base: Cursor = { version: 1, taskId, watermark: cursor.watermark, direction: "older" };
++    const count = (condition = "", position?: Position): number => (this.#db.prepare(`SELECT count(*) AS total FROM task_timeline_records WHERE task_id = ? AND sequence <= ? ${condition}`)
++      .get(taskId, cursor!.watermark, ...(position === undefined ? [] : [position.occurred_at, position.sequence])) as { total: number }).total;
++    const total = count();
++    const start = first ? count("AND (occurred_at, sequence) > (?, ?)", first) : 0;
++    const page: TimelinePage = {
++      records, total, start,
++      olderCursor: last && count("AND (occurred_at, sequence) < (?, ?)", last) > 0 ? this.encode({ ...base, position: last }) : null,
++      newerCursor: first && start > 0 ? this.encode({ ...base, direction: "newer", position: first }) : null,
++      refreshCursor: this.encode({ ...base, direction: "refresh", ...(first === undefined ? {} : { position: first }), ...(cursor.targetSource === undefined ? {} : { targetSource: cursor.targetSource }) }),
++      ...this.disclosure(taskId, records),
++    };
++    return { available: true, page };
++  }
++
++  movementMap(taskId: string, after = 0): MovementMapQueryResult {
++    if (!Number.isSafeInteger(after) || after < 0) return { available: false, reason: "invalid-page" };
++    if (!this.#db.prepare("SELECT 1 FROM tasks WHERE id = ?").get(taskId)) return { available: false, reason: "not-found" };
++    const rows = this.#db.prepare("SELECT * FROM task_movement_metadata WHERE task_id = ? AND sequence > ? ORDER BY sequence DESC")
++      .all(taskId, after) as Array<{ sequence: number; id: string; record_id: string; occurred_at: string; actor_kind: "user" | "agent"; actor_id: string; details_json: string }>;
++    const summary = this.movementSummary(taskId);
++    const cursor = (this.#db.prepare("SELECT coalesce(max(sequence), 0) AS value FROM task_movement_metadata WHERE task_id = ?").get(taskId) as { value: number }).value;
++    return { available: true, map: { movements: rows.map((row) => ({ id: row.id, type: "task.moved", sequence: row.sequence, recordId: row.record_id,
++      occurredAt: row.occurred_at, actor: { kind: row.actor_kind, id: row.actor_id }, details: JSON.parse(row.details_json) as Record<string, string> })), cursor, total: summary.total } };
++  }
++
++  movementSummary(taskId: string): { total: number; latestSourceId?: string } {
++    const total = (this.#db.prepare("SELECT count(*) AS value FROM task_movement_metadata WHERE task_id = ?").get(taskId) as { value: number }).value;
++    const latest = this.#db.prepare("SELECT id FROM task_movement_metadata WHERE task_id = ? ORDER BY sequence DESC LIMIT 1").get(taskId) as { id: string } | undefined;
++    return { total, ...(latest === undefined ? {} : { latestSourceId: latest.id }) };
++  }
++
++  private watermark(taskId: string): number {
++    return (this.#db.prepare("SELECT coalesce(max(sequence), 0) AS value FROM task_timeline_records WHERE task_id = ?").get(taskId) as { value: number }).value;
++  }
++  private resolveSource(taskId: string, sourceId: string): Row | undefined {
++    const source = this.#db.prepare("SELECT record_id FROM task_timeline_sources WHERE task_id = ? AND id = ?").get(taskId, sourceId) as { record_id: string } | undefined;
++    const root = source ? this.#db.prepare("SELECT * FROM task_timeline_records WHERE task_id = ? AND id = ?").get(taskId, source.record_id)
++      : this.#db.prepare("SELECT * FROM task_timeline_records WHERE task_id = ? AND source_id = ? LIMIT 1").get(taskId, sourceId);
++    if (root) return root as unknown as Row;
++    // Attention and trigger identities can point to an activation or a folded lifecycle event.
++    const event = this.#db.prepare("SELECT details_json FROM activity_ledger WHERE task_id = ? AND id = ?").get(taskId, sourceId) as { details_json: string } | undefined;
++    const details = event ? JSON.parse(event.details_json) as Record<string, string> : {};
++    const attemptId = details.attemptId ?? (this.#db.prepare("SELECT id FROM attempts WHERE activation_id = ? ORDER BY rowid DESC LIMIT 1").get(details.activationId ?? sourceId) as { id: string } | undefined)?.id;
++    return attemptId ? this.#db.prepare("SELECT * FROM task_timeline_records WHERE task_id = ? AND source_id = ? LIMIT 1").get(taskId, attemptId) as unknown as Row | undefined : undefined;
++  }
++  private disclosure(taskId: string, records: TimelineRecord[]): Pick<TimelinePage, "relatedTasks" | "inspectableSources"> {
++    const comments = records.flatMap((record) => record.kind === "comment" ? [record.comment] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "comment" ? [entry.comment] : []) : []);
++    const activity = records.flatMap((record) => record.kind === "activity" ? [record.activity] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "activity" ? [entry.activity] : []) : []);
++    const ids = [...new Set(activity.flatMap((entry) => entry.details.relatedTaskId ? [entry.details.relatedTaskId] : []))];
++    const references = new Map(this.#projections.readTaskReferences(ids).map((task) => [task.id, task]));
++    const inspectable = this.#projections.isTaskInspectableByAgent(taskId) || (this.#db.prepare("SELECT archived_at FROM tasks WHERE id = ?").get(taskId) as { archived_at: string | null }).archived_at !== null;
++    return { relatedTasks: ids.map((id) => {
++      const task = references.get(id);
++      return task ? { id, title: task.title, available: true, completed: task.column.id === "completion", archived: task.archived } : { id, available: false };
++    }), inspectableSources: { commentIds: inspectable ? comments.map(({ id }) => id) : [], activityIds: inspectable ? activity.map(({ id }) => id) : [] } };
++  }
++  private hydrate(taskId: string, row: Row, sourceId?: string): TimelineRecord {
++    if (row.kind === "comment") return { key: row.id, kind: "comment", occurredAt: row.occurred_at, comment: this.#projections.readTimelineComment(row.source_id)! };
++    if (row.kind === "activity") return { key: row.id, kind: "activity", occurredAt: row.occurred_at, activity: this.#projections.readTimelineActivity(row.source_id)! };
++    const activationId = row.kind === "attempt" ? (this.#db.prepare("SELECT activation_id FROM attempts WHERE id = ?").get(row.source_id) as { activation_id: string }).activation_id : row.source_id;
++    const activation = this.#projections.readTaskActivations(taskId, activationId, false)[0]!;
++    if (row.kind === "startup-failure") return { key: row.id, kind: row.kind, occurredAt: row.occurred_at, activation, failure: activation.startupFailure! };
++    const attempt = this.#projections.readTimelineAttempt(row.source_id)!;
++    const number = (this.#db.prepare("SELECT count(*) AS value FROM attempts WHERE activation_id = ? AND rowid <= (SELECT rowid FROM attempts WHERE id = ?) AND NOT EXISTS (SELECT 1 FROM activation_dispatch_claims claim WHERE claim.attempt_id = attempts.id)")
++      .get(activationId, attempt.id) as { value: number }).value;
++    const previous = this.#db.prepare("SELECT id FROM attempts WHERE activation_id = ? AND rowid < (SELECT rowid FROM attempts WHERE id = ?) AND NOT EXISTS (SELECT 1 FROM activation_dispatch_claims claim WHERE claim.attempt_id = attempts.id) ORDER BY rowid DESC LIMIT 1")
++      .get(activationId, attempt.id) as { id: string } | undefined;
++    const content = this.readContent({ version: 1, taskId, watermark: 0, direction: "content", recordId: row.id }, 50, sourceId);
++    return { key: row.id, kind: "attempt", occurredAt: row.occurred_at, activation, attempt, number,
++      previousAttempt: previous ? this.#projections.readTimelineAttempt(previous.id)! : null, content: content.items, contentPage: { olderCursor: content.cursor, total: content.total, ...(sourceId === undefined ? {} : { sourceId }) } };
++  }
++  private readContent(cursor: Cursor, limit: number, sourceId?: string) {
++    const watermark = cursor.watermark || (this.#db.prepare("SELECT coalesce(max(sequence), 0) AS value FROM task_timeline_sources WHERE task_id = ? AND record_id = ?").get(cursor.taskId, cursor.recordId!) as { value: number }).value;
++    const position = sourceId === undefined ? cursor.position : this.#db.prepare("SELECT occurred_at, sequence FROM task_timeline_sources WHERE task_id = ? AND record_id = ? AND id = ?")
++      .get(cursor.taskId, cursor.recordId!, sourceId) as Position | undefined;
++    const rows = this.#db.prepare(`SELECT * FROM task_timeline_sources WHERE task_id = ? AND record_id = ? AND sequence <= ?
++      ${position === undefined ? "" : `AND (occurred_at, sequence) ${sourceId === undefined ? "<" : "<="} (?, ?)`} ORDER BY occurred_at DESC, sequence DESC LIMIT ?`)
++      .all(cursor.taskId, cursor.recordId!, watermark, ...(position === undefined ? [] : [position.occurred_at, position.sequence]), limit + 1) as unknown as Array<Position & { id: string; kind: "comment" | "activity" }>;
++    const hasMore = rows.length > limit; rows.splice(limit);
++    const items = rows.map((source) => source.kind === "comment"
++      ? { kind: "comment" as const, occurredAt: source.occurred_at, comment: this.#projections.readTimelineComment(source.id)! }
++      : { kind: "activity" as const, occurredAt: source.occurred_at, activity: this.#projections.readTimelineActivity(source.id)! });
++    const total = (this.#db.prepare("SELECT count(*) AS value FROM task_timeline_sources WHERE task_id = ? AND record_id = ?").get(cursor.taskId, cursor.recordId!) as { value: number }).value;
++    return { items, total, cursor: hasMore ? this.encode({ ...cursor, watermark, position: rows.at(-1)! }) : null };
++  }
++  private contentPage(cursor: Cursor, limit: number): TimelineQueryResult {
++    const row = this.#db.prepare("SELECT * FROM task_timeline_records WHERE task_id = ? AND id = ?").get(cursor.taskId, cursor.recordId!) as Row | undefined;
++    if (!row || row.kind !== "attempt") return { available: false, reason: "invalid-page" };
++    const record = this.hydrate(cursor.taskId, row) as Extract<TimelineRecord, { kind: "attempt" }>;
++    const content = this.readContent(cursor, limit);
++    return { available: true, page: { records: [{ ...record, content: content.items, contentPage: { olderCursor: content.cursor, total: content.total, ...(content.items[0] === undefined ? {} : { sourceId: content.items[0].kind === "comment" ? content.items[0].comment.id : content.items[0].activity.id }) } }],
++      olderCursor: null, newerCursor: null, refreshCursor: this.encode(cursor), total: 1, start: 0, ...this.disclosure(cursor.taskId, [{ ...record, content: content.items }]) } };
++  }
++  private encode(cursor: Cursor): string {
++    const payload = Buffer.from(JSON.stringify(cursor)).toString("base64url");
++    return `${payload}.${createHmac("sha256", this.#secret).update(payload).digest("base64url")}`;
++  }
++  private decode(value: string, taskId: string): Cursor | undefined {
++    try {
++      const [payload, signature, extra] = value.split(".");
++      if (!payload || !signature || extra) return undefined;
++      const expected = createHmac("sha256", this.#secret).update(payload).digest(); const actual = Buffer.from(signature, "base64url");
++      if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return undefined;
++      const cursor = JSON.parse(Buffer.from(payload, "base64url").toString()) as Cursor;
++      return cursor.version === 1 && cursor.taskId === taskId ? cursor : undefined;
++    } catch { return undefined; }
++  }
++}
+--- baseline/src/application/internal/migrations/0011-task-timeline.ts
++++ src/application/internal/migrations/0011-task-timeline.ts
+@@ -0,0 +1,116 @@
++import type { DatabaseSync } from "node:sqlite";
++
++/** Indexed browser groups and sources; authored evidence remains in its original tables. */
++export const taskTimelineMigration = {
++  id: "0011_task_timeline",
++  apply(database: DatabaseSync): void {
++    database.exec(`
++      CREATE TABLE task_timeline_records (
++        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
++        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
++        id TEXT NOT NULL UNIQUE,
++        kind TEXT NOT NULL,
++        source_id TEXT NOT NULL,
++        occurred_at TEXT NOT NULL
++      );
++      CREATE INDEX task_timeline_position ON task_timeline_records(task_id, occurred_at DESC, sequence DESC);
++      CREATE INDEX task_timeline_task_sequence ON task_timeline_records(task_id, sequence);
++      CREATE INDEX task_timeline_record_source ON task_timeline_records(task_id, source_id);
++      CREATE TABLE task_timeline_sources (
++        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
++        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
++        id TEXT NOT NULL UNIQUE,
++        record_id TEXT NOT NULL,
++        kind TEXT NOT NULL,
++        occurred_at TEXT NOT NULL
++      );
++      CREATE INDEX task_timeline_source_position ON task_timeline_sources(task_id, record_id, occurred_at DESC, sequence DESC);
++      CREATE TABLE task_movement_metadata (
++        sequence INTEGER PRIMARY KEY,
++        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
++        id TEXT NOT NULL UNIQUE,
++        record_id TEXT NOT NULL,
++        occurred_at TEXT NOT NULL,
++        actor_kind TEXT NOT NULL,
++        actor_id TEXT NOT NULL,
++        details_json TEXT NOT NULL
++      );
++      CREATE INDEX task_movement_task_sequence ON task_movement_metadata(task_id, sequence);
++      CREATE INDEX task_comments_current_pins ON task_comments(task_id, pinned, sequence);
++      INSERT INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++        SELECT activation.task_id, 'attempt-' || attempt.id, 'attempt', attempt.id, attempt.started_at
++        FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id
++        WHERE NOT EXISTS (SELECT 1 FROM activation_dispatch_claims claim WHERE claim.attempt_id = attempt.id);
++      CREATE TRIGGER task_timeline_attempt AFTER INSERT ON attempts
++        WHEN NOT EXISTS (SELECT 1 FROM activation_dispatch_claims claim WHERE claim.attempt_id = NEW.id) BEGIN
++        INSERT OR IGNORE INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++          SELECT task_id, 'attempt-' || NEW.id, 'attempt', NEW.id, NEW.started_at FROM activations WHERE id = NEW.activation_id;
++      END;
++      CREATE TRIGGER task_timeline_attempt_published AFTER DELETE ON activation_dispatch_claims BEGIN
++        INSERT OR IGNORE INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++          SELECT activation.task_id, 'attempt-' || attempt.id, 'attempt', attempt.id, attempt.started_at
++          FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id WHERE attempt.id = OLD.attempt_id;
++      END;
++      CREATE TRIGGER task_timeline_attempt_claim AFTER INSERT ON activation_dispatch_claims BEGIN
++        DELETE FROM task_timeline_records WHERE id = 'attempt-' || NEW.attempt_id;
++      END;
++      CREATE TRIGGER task_timeline_attempt_delete AFTER DELETE ON attempts BEGIN
++        DELETE FROM task_timeline_records WHERE id = 'attempt-' || OLD.id;
++      END;
++      CREATE VIEW task_timeline_comment_positions AS
++        SELECT comment.task_id, comment.id, comment.occurred_at,
++          CASE WHEN EXISTS (SELECT 1 FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id
++            WHERE attempt.id = comment.attempt_id AND activation.task_id = comment.task_id)
++          THEN 'attempt-' || comment.attempt_id ELSE 'comment-' || comment.id END AS record_id
++        FROM task_comments comment;
++      INSERT INTO task_timeline_sources(task_id, id, record_id, kind, occurred_at)
++        SELECT task_id, id, record_id, 'comment', occurred_at FROM task_timeline_comment_positions;
++      INSERT INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++        SELECT task_id, record_id, 'comment', id, occurred_at FROM task_timeline_comment_positions WHERE record_id = 'comment-' || id;
++      CREATE TRIGGER task_timeline_comment AFTER INSERT ON task_comments BEGIN
++        INSERT INTO task_timeline_sources(task_id, id, record_id, kind, occurred_at)
++          SELECT task_id, id, record_id, 'comment', occurred_at FROM task_timeline_comment_positions WHERE id = NEW.id;
++        INSERT OR IGNORE INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++          SELECT task_id, record_id, 'comment', id, occurred_at FROM task_timeline_comment_positions WHERE id = NEW.id AND record_id = 'comment-' || id;
++      END;
++      CREATE VIEW task_timeline_activity_positions AS
++        SELECT activity.task_id, activity.id, activity.occurred_at,
++          CASE WHEN EXISTS (SELECT 1 FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id
++            WHERE attempt.id = json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.attemptId') AND activation.task_id = activity.task_id)
++          THEN 'attempt-' || json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.attemptId') ELSE 'activity-' || activity.id END AS record_id
++        FROM activity_ledger activity WHERE activity.type NOT IN ('activation.created', 'attempt.started', 'attempt.completed', 'attention.created');
++      INSERT INTO task_timeline_sources(task_id, id, record_id, kind, occurred_at)
++        SELECT task_id, id, record_id, 'activity', occurred_at FROM task_timeline_activity_positions;
++      INSERT INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++        SELECT task_id, record_id, 'activity', id, occurred_at FROM task_timeline_activity_positions WHERE record_id = 'activity-' || id;
++      CREATE TRIGGER task_timeline_activity AFTER INSERT ON activity_ledger BEGIN
++        INSERT INTO task_timeline_sources(task_id, id, record_id, kind, occurred_at)
++          SELECT task_id, id, record_id, 'activity', occurred_at FROM task_timeline_activity_positions WHERE id = NEW.id;
++        INSERT OR IGNORE INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++          SELECT task_id, record_id, 'activity', id, occurred_at FROM task_timeline_activity_positions WHERE id = NEW.id AND record_id = 'activity-' || id;
++      END;
++      CREATE VIEW task_movement_projection AS
++        SELECT activity.sequence, activity.task_id, activity.id, position.record_id, activity.occurred_at, activity.actor_kind, activity.actor_id,
++          json_object('fromColumnId', json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.fromColumnId'),
++            'toColumnId', json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.toColumnId'),
++            'fromColumnName', coalesce(json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.fromColumnName'), json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.fromColumnId')),
++            'toColumnName', coalesce(json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.toColumnName'), json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.toColumnId')),
++            'actorName', coalesce(json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.actorName'), activity.actor_id)) AS details_json
++        FROM activity_ledger activity JOIN task_timeline_activity_positions position ON position.id = activity.id WHERE activity.type = 'task.moved';
++      INSERT INTO task_movement_metadata SELECT * FROM task_movement_projection;
++      CREATE TRIGGER task_movement_insert AFTER INSERT ON activity_ledger WHEN NEW.type = 'task.moved' BEGIN
++        INSERT INTO task_movement_metadata SELECT * FROM task_movement_projection WHERE id = NEW.id;
++      END;
++      INSERT INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++        SELECT activation.task_id, 'startup-failure-' || failure.activation_id, 'startup-failure', failure.activation_id, failure.occurred_at
++        FROM activation_startup_failures failure JOIN activations activation ON activation.id = failure.activation_id;
++      CREATE TRIGGER task_timeline_startup AFTER INSERT ON activation_startup_failures BEGIN
++        INSERT INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++          SELECT task_id, 'startup-failure-' || NEW.activation_id, 'startup-failure', NEW.activation_id, NEW.occurred_at FROM activations WHERE id = NEW.activation_id;
++      END;
++      CREATE TRIGGER task_timeline_startup_update AFTER UPDATE ON activation_startup_failures BEGIN
++        UPDATE task_timeline_records SET occurred_at = NEW.occurred_at WHERE id = 'startup-failure-' || NEW.activation_id;
++      END;
++    `);
++  },
++} as const;
+--- baseline/src/application/internal/migrations/current-schema.sql
++++ src/application/internal/migrations/current-schema.sql
+@@ -300,6 +300,18 @@
+       attempt_id TEXT REFERENCES attempts(id) ON DELETE SET NULL
+     , origin_task_id TEXT, origin_task_title TEXT, pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)));
+ 
++-- table task_movement_metadata on task_movement_metadata
++CREATE TABLE task_movement_metadata (
++        sequence INTEGER PRIMARY KEY,
++        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
++        id TEXT NOT NULL UNIQUE,
++        record_id TEXT NOT NULL,
++        occurred_at TEXT NOT NULL,
++        actor_kind TEXT NOT NULL,
++        actor_id TEXT NOT NULL,
++        details_json TEXT NOT NULL
++      );
++
+ -- table task_numbers on task_numbers
+ CREATE TABLE task_numbers (
+       number INTEGER PRIMARY KEY AUTOINCREMENT
+@@ -326,6 +338,26 @@
+       task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+       starting_ref TEXT NOT NULL
+     );
++
++-- table task_timeline_records on task_timeline_records
++CREATE TABLE task_timeline_records (
++        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
++        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
++        id TEXT NOT NULL UNIQUE,
++        kind TEXT NOT NULL,
++        source_id TEXT NOT NULL,
++        occurred_at TEXT NOT NULL
++      );
++
++-- table task_timeline_sources on task_timeline_sources
++CREATE TABLE task_timeline_sources (
++        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
++        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
++        id TEXT NOT NULL UNIQUE,
++        record_id TEXT NOT NULL,
++        kind TEXT NOT NULL,
++        occurred_at TEXT NOT NULL
++      );
+ 
+ -- table task_workspaces on task_workspaces
+ CREATE TABLE task_workspaces (
+@@ -409,6 +441,12 @@
+ CREATE INDEX task_comments_by_task_sequence
+         ON task_comments(task_id, sequence);
+ 
++-- index task_comments_current_pins on task_comments
++CREATE INDEX task_comments_current_pins ON task_comments(task_id, pinned, sequence);
++
++-- index task_movement_task_sequence on task_movement_metadata
++CREATE INDEX task_movement_task_sequence ON task_movement_metadata(task_id, sequence);
++
+ -- index task_relationships_by_source on task_relationships
+ CREATE INDEX task_relationships_by_source
+         ON task_relationships(source_task_id);
+@@ -416,6 +454,18 @@
+ -- index task_relationships_by_target on task_relationships
+ CREATE INDEX task_relationships_by_target
+         ON task_relationships(target_task_id);
++
++-- index task_timeline_position on task_timeline_records
++CREATE INDEX task_timeline_position ON task_timeline_records(task_id, occurred_at DESC, sequence DESC);
++
++-- index task_timeline_record_source on task_timeline_records
++CREATE INDEX task_timeline_record_source ON task_timeline_records(task_id, source_id);
++
++-- index task_timeline_source_position on task_timeline_sources
++CREATE INDEX task_timeline_source_position ON task_timeline_sources(task_id, record_id, occurred_at DESC, sequence DESC);
++
++-- index task_timeline_task_sequence on task_timeline_records
++CREATE INDEX task_timeline_task_sequence ON task_timeline_records(task_id, sequence);
+ 
+ -- trigger activations_start_in_task_order on activations
+ CREATE TRIGGER activations_start_in_task_order
+@@ -539,6 +589,62 @@
+             SELECT source_task_id FROM task_relationships WHERE target_task_id = NEW.id
+           );
+         END;
++
++-- trigger task_movement_insert on activity_ledger
++CREATE TRIGGER task_movement_insert AFTER INSERT ON activity_ledger WHEN NEW.type = 'task.moved' BEGIN
++        INSERT INTO task_movement_metadata SELECT * FROM task_movement_projection WHERE id = NEW.id;
++      END;
++
++-- trigger task_timeline_activity on activity_ledger
++CREATE TRIGGER task_timeline_activity AFTER INSERT ON activity_ledger BEGIN
++        INSERT INTO task_timeline_sources(task_id, id, record_id, kind, occurred_at)
++          SELECT task_id, id, record_id, 'activity', occurred_at FROM task_timeline_activity_positions WHERE id = NEW.id;
++        INSERT OR IGNORE INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++          SELECT task_id, record_id, 'activity', id, occurred_at FROM task_timeline_activity_positions WHERE id = NEW.id AND record_id = 'activity-' || id;
++      END;
++
++-- trigger task_timeline_attempt on attempts
++CREATE TRIGGER task_timeline_attempt AFTER INSERT ON attempts
++        WHEN NOT EXISTS (SELECT 1 FROM activation_dispatch_claims claim WHERE claim.attempt_id = NEW.id) BEGIN
++        INSERT OR IGNORE INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++          SELECT task_id, 'attempt-' || NEW.id, 'attempt', NEW.id, NEW.started_at FROM activations WHERE id = NEW.activation_id;
++      END;
++
++-- trigger task_timeline_attempt_claim on activation_dispatch_claims
++CREATE TRIGGER task_timeline_attempt_claim AFTER INSERT ON activation_dispatch_claims BEGIN
++        DELETE FROM task_timeline_records WHERE id = 'attempt-' || NEW.attempt_id;
++      END;
++
++-- trigger task_timeline_attempt_delete on attempts
++CREATE TRIGGER task_timeline_attempt_delete AFTER DELETE ON attempts BEGIN
++        DELETE FROM task_timeline_records WHERE id = 'attempt-' || OLD.id;
++      END;
++
++-- trigger task_timeline_attempt_published on activation_dispatch_claims
++CREATE TRIGGER task_timeline_attempt_published AFTER DELETE ON activation_dispatch_claims BEGIN
++        INSERT OR IGNORE INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++          SELECT activation.task_id, 'attempt-' || attempt.id, 'attempt', attempt.id, attempt.started_at
++          FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id WHERE attempt.id = OLD.attempt_id;
++      END;
++
++-- trigger task_timeline_comment on task_comments
++CREATE TRIGGER task_timeline_comment AFTER INSERT ON task_comments BEGIN
++        INSERT INTO task_timeline_sources(task_id, id, record_id, kind, occurred_at)
++          SELECT task_id, id, record_id, 'comment', occurred_at FROM task_timeline_comment_positions WHERE id = NEW.id;
++        INSERT OR IGNORE INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++          SELECT task_id, record_id, 'comment', id, occurred_at FROM task_timeline_comment_positions WHERE id = NEW.id AND record_id = 'comment-' || id;
++      END;
++
++-- trigger task_timeline_startup on activation_startup_failures
++CREATE TRIGGER task_timeline_startup AFTER INSERT ON activation_startup_failures BEGIN
++        INSERT INTO task_timeline_records(task_id, id, kind, source_id, occurred_at)
++          SELECT task_id, 'startup-failure-' || NEW.activation_id, 'startup-failure', NEW.activation_id, NEW.occurred_at FROM activations WHERE id = NEW.activation_id;
++      END;
++
++-- trigger task_timeline_startup_update on activation_startup_failures
++CREATE TRIGGER task_timeline_startup_update AFTER UPDATE ON activation_startup_failures BEGIN
++        UPDATE task_timeline_records SET occurred_at = NEW.occurred_at WHERE id = 'startup-failure-' || NEW.activation_id;
++      END;
+ 
+ -- trigger unwatched_column_resets_stall on columns
+ CREATE TRIGGER unwatched_column_resets_stall
+@@ -611,3 +717,29 @@
+       JOIN columns column
+         ON column.board_id = task.board_id AND column.id = task.column_id AND column.applied = 1
+       WHERE task.archived_at IS NULL;
++
++-- view task_movement_projection on task_movement_projection
++CREATE VIEW task_movement_projection AS
++        SELECT activity.sequence, activity.task_id, activity.id, position.record_id, activity.occurred_at, activity.actor_kind, activity.actor_id,
++          json_object('fromColumnId', json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.fromColumnId'),
++            'toColumnId', json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.toColumnId'),
++            'fromColumnName', coalesce(json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.fromColumnName'), json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.fromColumnId')),
++            'toColumnName', coalesce(json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.toColumnName'), json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.toColumnId')),
++            'actorName', coalesce(json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.actorName'), activity.actor_id)) AS details_json
++        FROM activity_ledger activity JOIN task_timeline_activity_positions position ON position.id = activity.id WHERE activity.type = 'task.moved';
++
++-- view task_timeline_activity_positions on task_timeline_activity_positions
++CREATE VIEW task_timeline_activity_positions AS
++        SELECT activity.task_id, activity.id, activity.occurred_at,
++          CASE WHEN EXISTS (SELECT 1 FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id
++            WHERE attempt.id = json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.attemptId') AND activation.task_id = activity.task_id)
++          THEN 'attempt-' || json_extract(CASE WHEN json_valid(activity.details_json) THEN activity.details_json ELSE '{}' END, '$.attemptId') ELSE 'activity-' || activity.id END AS record_id
++        FROM activity_ledger activity WHERE activity.type NOT IN ('activation.created', 'attempt.started', 'attempt.completed', 'attention.created');
++
++-- view task_timeline_comment_positions on task_timeline_comment_positions
++CREATE VIEW task_timeline_comment_positions AS
++        SELECT comment.task_id, comment.id, comment.occurred_at,
++          CASE WHEN EXISTS (SELECT 1 FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id
++            WHERE attempt.id = comment.attempt_id AND activation.task_id = comment.task_id)
++          THEN 'attempt-' || comment.attempt_id ELSE 'comment-' || comment.id END AS record_id
++        FROM task_comments comment;
+--- baseline/src/application/internal/migrations/registry.ts
++++ src/application/internal/migrations/registry.ts
+@@ -8,6 +8,7 @@
+ import { stallRecoveryMigration } from "./0008-stall-recovery.ts";
+ import { reviewerAllowancesMigration } from "./0009-reviewer-allowances.ts";
+ import { conversationHistoryItemsMigration } from "./0010-conversation-history-items.ts";
++import { taskTimelineMigration } from "./0011-task-timeline.ts";
+ 
+ export const coordinationMigrations = [
+   initialReleasedMigration,
+@@ -20,4 +21,5 @@
+   stallRecoveryMigration,
+   reviewerAllowancesMigration,
+   conversationHistoryItemsMigration,
++  taskTimelineMigration,
+ ] as const;
+--- baseline/test/application/released-schema-migrations.test.ts
++++ test/application/released-schema-migrations.test.ts
+@@ -28,6 +28,7 @@
+   "0008_stall_recovery",
+   "0009_reviewer_allowances",
+   "0010_conversation_history_items",
++  "0011_task_timeline",
+ ];
+ 
+ test("migration 0010 backfills a large released transcript without changing original evidence", async (t) => {
+@@ -68,6 +69,48 @@
+   t.after(() => inspection.close());
+   assert.equal(inspection.prepare("SELECT items_json FROM attempt_transcripts WHERE attempt_id = 'released-attempt'").get()?.items_json, original);
+   assert.deepEqual(readMigrationHistory(inspection), productionMigrationIds);
++});
++
++test("migration 0011 backfills bounded attempt groups and complete compact movements without rewriting sources", async (t) => {
++  const fixture = await createStartupFixture("timeline-upgrade");
++  const old = new DatabaseSync(fixture.databasePath);
++  old.exec("PRAGMA foreign_keys = ON");
++  for (const [index, migration] of coordinationMigrations.slice(0, 10).entries()) {
++    migration.apply(old);
++    old.prepare("INSERT INTO coordination_migrations(position, migration_id) VALUES (?, ?)").run(index + 1, migration.id);
++  }
++  old.exec(`INSERT INTO runtime VALUES (1, 'Released schema process', 'legacy-version', 'paused', NULL);
++    INSERT INTO boards VALUES ('delivery', 'Delivery', 'Deliver work.', 0, 1);
++    INSERT INTO columns VALUES ('delivery', 'backlog', 'Backlog', 0, NULL, 0, 1);`);
++  old.exec(await readFile(join(import.meta.dirname, "../fixtures/released-schema/0009-reviewer-allowances-data.sql"), "utf8"));
++  const insert = old.prepare("INSERT INTO activity_ledger(id, task_id, type, actor_kind, actor_id, occurred_at, details_json) VALUES (?, 'released-task', 'task.moved', 'agent', 'implementer', '2027-01-01', ?)");
++  const details = JSON.stringify({ attemptId: "released-attempt", fromColumnId: "backlog", toColumnId: "completion", fromColumnName: "Original backlog", toColumnName: "Original completion", authoredEvidence: "Whole retained evidence" });
++  old.exec("BEGIN");
++  for (let i = 0; i < 10_000; i++) insert.run(`legacy-move-${i}`, details);
++  old.exec("COMMIT");
++  const transcript = old.prepare("SELECT items_json FROM attempt_transcripts WHERE attempt_id = 'released-attempt'").get()?.items_json;
++  old.close();
++  const content = join(fixture.directory, "conversation-attachments", "content", "released-task", "released-conversation");
++  await mkdir(content, { recursive: true });
++  await writeFile(join(content, "released-conversation-attachment"), Buffer.alloc(17));
++  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath });
++  t.after(() => app.close());
++  assert.equal(app.queryStartup().mode, "paused");
++  const result = app.queryUserTaskDetail("released-task");
++  assert.ok(result.available);
++  const attempt = result.timeline.records.find((record) => record.kind === "attempt");
++  assert.ok(attempt?.kind === "attempt");
++  assert.equal(attempt.content.length, 50);
++  const map = app.queryTaskMovementMap("released-task");
++  assert.ok(map.available);
++  assert.equal(map.map.movements.length, 10_000);
++  assert.equal(map.map.movements[0]?.recordId, "attempt-released-attempt");
++  assert.equal(map.map.movements[0]?.details.fromColumnName, "Original backlog");
++  assert.equal(map.map.movements[0]?.details.authoredEvidence, undefined);
++  const original = new DatabaseSync(fixture.databasePath, { readOnly: true });
++  t.after(() => original.close());
++  assert.equal(original.prepare("SELECT details_json FROM activity_ledger WHERE id = 'legacy-move-0'").get()?.details_json, details);
++  assert.equal(original.prepare("SELECT items_json FROM attempt_transcripts WHERE attempt_id = 'released-attempt'").get()?.items_json, transcript);
+ });
+ 
+ test("released comments recover only evidenced origin without inventing legacy provenance", async (t) => {
+--- baseline/test/application/task-archival.test.ts
++++ test/application/task-archival.test.ts
+@@ -449,7 +449,7 @@
+       {
+         type: "task.moved",
+         actor: { kind: "user", id: "local-user" },
+-        details: { fromColumnId: "backlog", toColumnId: "completion" },
++        details: { fromColumnId: "backlog", toColumnId: "completion", fromColumnName: "Backlog", toColumnName: "Completion", actorName: "local-user" },
+       },
+       {
+         type: "task.archived",
+--- baseline/test/application/timeline-pages.test.ts
++++ test/application/timeline-pages.test.ts
+@@ -0,0 +1,139 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { DatabaseSync } from "node:sqlite";
++import { performance } from "node:perf_hooks";
++import { CoordinationApplication } from "../../src/application/coordination-application.ts";
++import { createHandoffFixture } from "../support/handoff-fixture.ts";
++
++test("task detail hydrates only fifty newest records and retains independently pinned guidance", async (t) => {
++  const fixture = await createHandoffFixture();
++  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath });
++  t.after(() => app.close());
++  const created = app.createTask({ boardId: "delivery", columnId: "implementation", title: "Large timeline", description: "Whole messages", actor: { kind: "user", id: "paul" }, idempotencyKey: "timeline" });
++  assert.ok(created.accepted, JSON.stringify(app.queryStartup()));
++  const seed = new DatabaseSync(fixture.databasePath);
++  t.after(() => seed.close());
++  const insert = seed.prepare("INSERT INTO task_comments(id, task_id, body, actor_kind, actor_id, occurred_at, pinned) VALUES (?, ?, ?, 'user', 'paul', '2027-01-01', ?)");
++  seed.exec("BEGIN");
++  for (let i = 0; i < 100; i++) insert.run(`comment-${i}`, created.task.id, `Evidence ${i}`, i === 0 ? 1 : 0);
++  seed.exec("COMMIT");
++  const smallStart = performance.now();
++  const small = app.queryUserTaskDetail(created.task.id);
++  const smallTime = performance.now() - smallStart;
++  seed.exec("BEGIN");
++  for (let i = 100; i < 10_000; i++) insert.run(`comment-${i}`, created.task.id, `Evidence ${i}`, 0);
++  seed.exec("COMMIT");
++  const largeStart = performance.now();
++  const result = app.queryUserTaskDetail(created.task.id);
++  const largeTime = performance.now() - largeStart;
++  assert.ok(result.available);
++  assert.equal(result.task.comments.length, 50);
++  assert.equal(result.task.comments[0]?.id, "comment-9999");
++  assert.equal(result.inspection.pinnedComments[0]?.id, "comment-0");
++  assert.ok(result.task.activity.length <= 50);
++  assert.equal(result.timeline.total, 10_001);
++  const older = app.queryTaskTimeline(created.task.id, { cursor: result.timeline.olderCursor! });
++  assert.ok(older.available);
++  assert.equal(older.page.records[0]?.key, "comment-comment-9949");
++  insert.run("arriving", created.task.id, "New live content", 0);
++  const next = app.queryTaskTimeline(created.task.id, { cursor: older.page.olderCursor! });
++  assert.ok(next.available);
++  assert.equal(next.page.records[0]?.key, "comment-comment-9899");
++  const refresh = app.queryTaskTimeline(created.task.id);
++  assert.ok(refresh.available);
++  assert.equal(refresh.page.records[0]?.key, "comment-arriving");
++  const direct = app.queryTaskTimeline(created.task.id, { sourceId: "comment-0" });
++  assert.ok(direct.available);
++  assert.equal(direct.page.records[0]?.key, "comment-comment-0");
++  assert.equal(direct.page.start, 10_000);
++  t.diagnostic(`Initial projection: 100 comments ${smallTime.toFixed(2)}ms / ${Buffer.byteLength(JSON.stringify(small))} bytes; 10,000 comments ${largeTime.toFixed(2)}ms / ${Buffer.byteLength(JSON.stringify(result))} bytes. Hydrated comments: 50 plus one independent pin; no transcript reads. Indexed logical counts aggregate compact identities.`);
++  assert.deepEqual(app.queryTaskTimeline(created.task.id, { cursor: "forged" }), { available: false, reason: "invalid-page" });
++  assert.deepEqual(app.queryTaskTimeline(created.task.id, { pageSize: 151 }), { available: false, reason: "invalid-page" });
++  const plan = seed.prepare("EXPLAIN QUERY PLAN SELECT * FROM task_timeline_records INDEXED BY task_timeline_position WHERE task_id = ? AND sequence <= ? AND (occurred_at, sequence) < (?, ?) ORDER BY occurred_at DESC, sequence DESC LIMIT 50")
++    .all(created.task.id, 20_000, "2027-01-01", 9999);
++  t.diagnostic(JSON.stringify(plan));
++  assert.doesNotMatch(JSON.stringify(plan), /SCAN task_timeline_records|TEMP B-TREE/);
++  const directPlan = seed.prepare("EXPLAIN QUERY PLAN SELECT * FROM task_timeline_records WHERE task_id = ? AND source_id = ? LIMIT 1").all(created.task.id, "comment-0");
++  assert.match(JSON.stringify(directPlan), /task_timeline_record_source/);
++  seed.prepare("UPDATE tasks SET archived_at = '2027-02-01' WHERE id = ?").run(created.task.id);
++  const archived = app.queryUserTaskDetail(created.task.id);
++  assert.ok(archived.available && archived.task.archived);
++  assert.equal(archived.inspection.pinnedComments[0]?.id, "comment-0");
++  assert.ok(app.queryTaskTimeline(created.task.id, { sourceId: "comment-0" }).available);
++});
++
++test("one large attempt keeps bounded grouped disclosure and every movement navigates directly", async (t) => {
++  const fixture = await createHandoffFixture();
++  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath });
++  t.after(() => app.close());
++  const created = app.createTask({ boardId: "delivery", columnId: "implementation", title: "Grouped journey", description: "Compact map", actor: { kind: "user", id: "paul" }, idempotencyKey: "journey" });
++  assert.ok(created.accepted);
++  const activation = created.task.activations[0]!;
++  const seed = new DatabaseSync(fixture.databasePath);
++  t.after(() => seed.close());
++  seed.prepare("INSERT INTO attempts(id, activation_id, status, workspace_path, started_at) VALUES ('large-attempt', ?, 'running', 'fixture', '2027-01-01')").run(activation.id);
++  const insert = seed.prepare("INSERT INTO activity_ledger(id, task_id, type, actor_kind, actor_id, occurred_at, details_json) VALUES (?, ?, 'task.moved', 'agent', 'implementer', '2027-01-01', ?)");
++  seed.exec("BEGIN");
++  for (let i = 0; i < 10_000; i++) insert.run(`move-${i}`, created.task.id, JSON.stringify({ attemptId: "large-attempt", fromColumnId: "backlog", toColumnId: "implementation", fromColumnName: "Historical backlog", toColumnName: "Historical implementation", unrelatedEvidence: "X".repeat(1000) }));
++  seed.exec("COMMIT");
++  const result = app.queryUserTaskDetail(created.task.id);
++  assert.ok(result.available);
++  const attempt = result.timeline.records.find((record) => record.kind === "attempt");
++  assert.ok(attempt?.kind === "attempt");
++  assert.equal(attempt.content.length, 50);
++  assert.equal(attempt.contentPage?.total, 10_000);
++  const nested = app.queryTaskTimeline(created.task.id, { cursor: attempt.contentPage!.olderCursor! });
++  assert.ok(nested.available);
++  assert.equal(nested.page.records[0]?.kind === "attempt" && nested.page.records[0].content.length, 50);
++  const map = app.queryTaskMovementMap(created.task.id);
++  assert.ok(map.available);
++  assert.equal(map.map.movements.length, 10_000);
++  assert.equal(map.map.movements[0]?.recordId, "attempt-large-attempt");
++  assert.equal(map.map.movements[0]?.details.fromColumnName, "Historical backlog");
++  assert.equal(map.map.movements[0]?.details.unrelatedEvidence, undefined);
++  const direct = app.queryTaskTimeline(created.task.id, { sourceId: "move-0" });
++  assert.ok(direct.available);
++  const target = direct.page.records[0];
++  assert.ok(target?.kind === "attempt");
++  assert.equal(target.content.length, 1);
++  assert.equal(target.content[0]?.kind === "activity" && target.content[0].activity.id, "move-0");
++  assert.deepEqual(app.queryTaskMovementMap(created.task.id, map.map.cursor), { available: true, map: { movements: [], cursor: map.map.cursor, total: 10_000 } });
++  seed.prepare("UPDATE attempts SET status = 'completed', completed_at = '2027-01-02', outcome_status = 'completed', outcome_summary = 'Settled' WHERE id = 'large-attempt'").run();
++  const settled = app.queryTaskTimeline(created.task.id, { cursor: direct.page.refreshCursor, refresh: true });
++  assert.ok(settled.available);
++  assert.equal(settled.page.records[0]?.kind === "attempt" && settled.page.records[0].attempt.outcome?.summary, "Settled");
++});
++
++test("ten thousand settled activations leave current controls and costs independent of the timeline page", async (t) => {
++  const fixture = await createHandoffFixture();
++  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath });
++  t.after(() => app.close());
++  const created = app.createTask({ boardId: "delivery", columnId: "implementation", title: "Many runs", description: "Bounded controls", actor: { kind: "user", id: "paul" }, idempotencyKey: "runs" });
++  assert.ok(created.accepted);
++  const first = created.task.activations[0]!;
++  const seed = new DatabaseSync(fixture.databasePath);
++  t.after(() => seed.close());
++  seed.prepare("UPDATE activations SET status = 'completed' WHERE id = ?").run(first.id);
++  const activation = seed.prepare("INSERT INTO activations(id, task_id, target_agent_id, reason_type, source_event_id, status, created_at, definition_version, conversation_id) SELECT ?, task_id, target_agent_id, reason_type, source_event_id, 'completed', created_at, definition_version, conversation_id FROM activations WHERE id = ?");
++  const attempt = seed.prepare("INSERT INTO attempts(id, activation_id, status, workspace_path, started_at, completed_at) VALUES (?, ?, 'completed', 'fixture', '2027-01-01', '2027-01-02')");
++  const cost = seed.prepare("INSERT INTO attempt_transcripts(attempt_id, items_json, usage_json) VALUES (?, '[]', '{\"estimatedCostUsd\":0.01}')");
++  seed.exec("BEGIN");
++  for (let i = 0; i < 10_000; i++) { activation.run(`activation-${i}`, first.id); attempt.run(`attempt-${i}`, `activation-${i}`); cost.run(`attempt-${i}`); }
++  seed.exec("COMMIT");
++  // Unloaded invalid evidence is a sentinel: queries must not parse all activity.
++  seed.prepare("INSERT INTO activity_ledger(id, task_id, type, actor_kind, actor_id, occurred_at, details_json) VALUES ('unloaded-sentinel', ?, 'relationship.removed', 'user', 'paul', '2020-01-01', 'invalid JSON')").run(created.task.id);
++  const result = app.queryUserTaskDetail(created.task.id);
++  assert.ok(result.available);
++  assert.equal(result.timeline.records.length, 50);
++  assert.equal(result.task.activations.length, 1);
++  assert.ok(Math.abs(result.conversationCost!.costEstimate!.amount - 100) < 0.000001);
++  assert.equal(result.timeline.records[0]?.kind === "attempt" && result.timeline.records[0].number, 1);
++  seed.prepare("UPDATE activity_ledger SET details_json = '{}' WHERE id = 'unloaded-sentinel'").run();
++  const direct = app.queryTaskTimeline(created.task.id, { sourceId: "attempt-0" });
++  assert.ok(direct.available);
++  assert.equal(direct.page.records[0]?.kind === "attempt" && direct.page.records[0].attempt.id, "attempt-0");
++  const other = app.createTask({ boardId: "delivery", columnId: "implementation", title: "Scope", description: "Cursor scope", actor: { kind: "user", id: "paul" }, idempotencyKey: "scope" });
++  assert.ok(other.accepted);
++  assert.deepEqual(app.queryTaskTimeline(other.task.id, { cursor: result.timeline.olderCursor! }), { available: false, reason: "invalid-page" });
++  assert.deepEqual(app.queryTaskTimeline(other.task.id, { sourceId: "attempt-0" }), { available: false, reason: "not-found" });
++});
+--- baseline/test/browser/browser-fixture.ts
++++ test/browser/browser-fixture.ts
+@@ -13,6 +13,36 @@
+ } from "../../src/application/conversation-contract.ts";
+ import type { AttemptTranscriptItem } from "../../src/application/runtime-contract.ts";
+ import { startBrowserFixture } from "./fixture-server.ts";
++import { buildTimelineRecords } from "../../src/web/client/timeline-model.ts";
++import type { UserTaskDetailView } from "../../src/application/user-task-detail-contract.ts";
++
++const taskScenarios = new WeakMap<Page, Map<string, UserTaskDetailView>>();
++
++/** Keep authored-content scenarios coherent with the separate timeline/map transport. */
++export async function fulfillTaskScenario(route: Route, response: APIResponse, detail: UserTaskDetailView): Promise<void> {
++  const page = route.request().frame().page();
++  let scenarios = taskScenarios.get(page);
++  if (!scenarios) {
++    scenarios = new Map(); taskScenarios.set(page, scenarios);
++    await page.route("**/api/tasks/*/movement-map?*", async (mapRoute) => {
++      const id = new URL(mapRoute.request().url()).pathname.split("/")[3]!;
++      const scenario = taskScenarios.get(page)?.get(id);
++      if (!scenario) return mapRoute.continue();
++      const movements = scenario.task.activity.filter((entry) => entry.type === "task.moved").toReversed().map((entry, index) => ({ ...entry, sequence: scenario.task.activity.length - index, recordId: `activity-${entry.id}` }));
++      const after = Number(new URL(mapRoute.request().url()).searchParams.get("after") ?? 0);
++      await mapRoute.fulfill({ json: { available: true, map: { movements: after ? [] : movements, cursor: scenario.task.activity.length, total: movements.length } } });
++    });
++  }
++  const latestAttempt = detail.task.activations.flatMap((activation) => activation.attempts.map((attempt) => ({ agentId: activation.targetAgentId, at: attempt.startedAt }))).sort((a, b) => b.at.localeCompare(a.at))[0];
++  detail.mostRecentAgentId = latestAttempt?.agentId;
++  const records = buildTimelineRecords(detail.task.comments, detail.task.activity, detail.task.activations);
++  detail.timeline = { records, total: records.length, start: 0, olderCursor: null, newerCursor: null, refreshCursor: "scenario" };
++  detail.inspection.pinnedComments = detail.task.comments.filter((comment) => comment.pinned);
++  const movements = detail.task.activity.filter((entry) => entry.type === "task.moved");
++  detail.movementSummary = { total: movements.length, ...(movements.at(-1) ? { latestSourceId: movements.at(-1)!.id } : {}) };
++  scenarios.set(detail.task.id, detail);
++  await route.fulfill({ response, json: detail });
++}
+ 
+ export { expect };
+ 
+--- baseline/test/browser/conversation-lifecycle.browser.spec.ts
++++ test/browser/conversation-lifecycle.browser.spec.ts
+@@ -1,3 +1,4 @@
++import { fulfillTaskScenario } from "./browser-fixture.ts";
+ import type {
+   AgentConversationHistoryEntry,
+   AgentConversationMessageView,
+@@ -170,7 +171,7 @@
+       { ...template, id: "running-conversation", status: "running" },
+       { ...template, id: "attention-conversation", status: "needs-attention" },
+     ];
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -241,7 +242,7 @@
+         messageBody: "Focus this exact authored follow-up.",
+       },
+     });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+     const items: AttemptTranscriptItem[] = Array.from({ length: 40 }, (_, index) => ({
+@@ -295,7 +296,7 @@
+       detail.task.activations[0].attempts.push(retryAttempt);
+       selectedAttemptIds = [firstAttempt.id, retryAttempt.id];
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+     if (selectedAttemptIds.length !== 2) throw new Error("Expected an attempt and retry before opening their conversation.");
+@@ -379,7 +380,7 @@
+       attempt.completedAt = null;
+       attempt.outcome = null;
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+     reads += 1;
+@@ -452,7 +453,7 @@
+       attempt.completedAt = null;
+       attempt.outcome = null;
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+     reads += 1;
+@@ -617,7 +618,7 @@
+       attempt.completedAt = "2026-08-09T12:05:00.000Z";
+       attempt.outcome = { status: "completed", summary: "Historical run complete." };
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   let reads = 0;
+   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+--- baseline/test/browser/conversation-transcript.browser.spec.ts
++++ test/browser/conversation-transcript.browser.spec.ts
+@@ -1,3 +1,4 @@
++import { fulfillTaskScenario } from "./browser-fixture.ts";
+ import type {
+   AgentConversationHistoryEntry,
+   AgentConversationMessageView,
+@@ -849,7 +850,7 @@
+     if (outcome !== undefined && outcome !== null) {
+       outcome.summary = "No further response from @implementer is required.";
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+--- baseline/test/browser/pinned-comments.browser.spec.ts
++++ test/browser/pinned-comments.browser.spec.ts
+@@ -1,3 +1,4 @@
++import { fulfillTaskScenario } from "./browser-fixture.ts";
+ import { contrastRatio, expect, test } from "./browser-fixture.ts";
+ 
+ test("pins expose quiet current guidance with keyboard curation and original timeline navigation", async ({ page }) => {
+@@ -55,7 +56,7 @@
+     detail.task.activity.push({ id: "pin-reference", type: "comment.unpinned", actor: { kind: "agent", id: "implementer" },
+       occurredAt: new Date().toISOString(), details: { commentId: comment.id,
+         attemptId: detail.task.activations.flatMap((activation: { attempts: Array<{ id: string }> }) => activation.attempts)[0].id } });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+   const activity = page.locator('[data-timeline-record="pin-reference"]');
+@@ -87,7 +88,7 @@
+     detail.task.description = "Source navigation context.";
+     detail.task.comments[0].pinned = true;
+     detail.task.comments[0].body = "Long pinned source context. ".repeat(600);
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+   await page.getByRole("region", { name: "Pinned comments" }).getByRole("button", { name: "View in task history" }).click();
+@@ -115,7 +116,7 @@
+         attemptId: "external-attempt", originTask: { id: "T-0099", title: "Parent requirements" } });
+       if (archived) { detail.task.archived = true; detail.inspection.archived = true; }
+       // Intentionally absent from the browser's agent visibility filter.
+-      await route.fulfill({ response, json: detail });
++      await fulfillTaskScenario(route, response, detail);
+     });
+     await page.goto("/tasks/T-0001");
+     const pins = page.getByRole("region", { name: "Pinned comments" });
+--- baseline/test/browser/task-attention.browser.spec.ts
++++ test/browser/task-attention.browser.spec.ts
+@@ -1,3 +1,4 @@
++import { fulfillTaskScenario } from "./browser-fixture.ts";
+ import { contrastRatio, expect, setAppearance, test } from "./browser-fixture.ts";
+ 
+ test("exhausted stall recovery exposes evidence and an addressable action in both themes", async ({ page, request }) => {
+@@ -65,7 +66,7 @@
+       id: "reply-local-attention", type: "user-mention", sourceEventId: "reply-local-comment",
+       createdAt: "2026-08-15T12:31:00.000Z",
+     }].filter((reason) => !addressed.has(reason.id));
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001?attention=source-local-attention");
+--- baseline/test/browser/task-authored-content-and-timeline.browser.spec.ts
++++ test/browser/task-authored-content-and-timeline.browser.spec.ts
+@@ -1,3 +1,4 @@
++import { fulfillTaskScenario } from "./browser-fixture.ts";
+ import { contrastRatio, expect, test } from "./browser-fixture.ts";
+ 
+ test("external participant comments remain visible with origin title and task address in both themes", async ({ page }) => {
+@@ -14,7 +15,7 @@
+       id: "unknown-origin-comment", body: "@user Legacy question with no origin evidence.",
+       actor: { kind: "agent", id: "implementer" }, occurredAt: new Date().toISOString(),
+     });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+   const comment = page.locator('[data-timeline-record="external-comment"]');
+@@ -49,7 +50,7 @@
+     detail.task.comments[0].body = representativeContent;
+     const activation = detail.task.activations.find((candidate: { attempts: unknown[] }) => candidate.attempts.length > 0);
+     activation.attempts[0].outcome.summary = representativeContent;
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+ 
+@@ -162,7 +163,7 @@
+         messageBody: "Review the [activity message file](docs/message.md:5).",
+       },
+     });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   const openedReferences: string[] = [];
+   await page.route("**/api/tasks/T-0001/workspace/files/open", async (route) => {
+@@ -270,7 +271,7 @@
+         messageBody: `Conversation message code\n\n${codeBlock}`,
+       },
+     });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+@@ -351,7 +352,7 @@
+         messageBody: wideTable,
+       },
+     });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -416,7 +417,7 @@
+     detail.task.title = `Table polling refresh ${taskReads}`;
+     detail.task.description = wideTable;
+     detail.task.comments[0].body = wideTable;
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.setViewportSize({ width: 390, height: 800 });
+@@ -791,7 +792,7 @@
+       );
+       detail.agentInspectableContent.commentIds.push("filter-live-inspectable");
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -853,7 +854,7 @@
+     const detail = await response.json();
+     detail.agentInspectableContent.commentIds = [];
+     detail.agentInspectableContent.activityIds = [];
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -876,7 +877,7 @@
+     if (authoredComment !== undefined) {
+       authoredComment.body = authoredBody;
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -942,7 +943,7 @@
+         });
+       }
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -1043,7 +1044,7 @@
+       signalDelayedRefresh();
+       await delayedRefreshRelease;
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.setViewportSize({ width: 1280, height: 500 });
+@@ -1107,7 +1108,7 @@
+         },
+       });
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -1155,7 +1156,7 @@
+         outcome: { status: "completed", summary: "The retry completed the handoff." },
+       });
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -1245,7 +1246,7 @@
+         stale: false,
+       },
+     );
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+--- baseline/test/browser/task-comment-composition.browser.spec.ts
++++ test/browser/task-comment-composition.browser.spec.ts
+@@ -1,3 +1,4 @@
++import { fulfillTaskScenario } from "./browser-fixture.ts";
+ import { expect, test } from "./browser-fixture.ts";
+ 
+ test("the comment composer does not cover the hit area of the first timeline relationship link", async ({ page }) => {
+@@ -23,7 +24,7 @@
+         relatedTaskId: "T-9005",
+       },
+     });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -77,7 +78,7 @@
+         stale: false,
+       });
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -203,7 +204,7 @@
+       stale: false,
+       dismissal: null,
+     });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -260,7 +261,7 @@
+       stale: false,
+       dismissal: null,
+     });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -312,7 +313,7 @@
+       stale: false,
+       dismissal: null,
+     });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   for (const status of ["failed", "interrupted"] as const) {
+@@ -347,7 +348,7 @@
+         occurredAt: `2026-08-16T12:${String(index).padStart(2, "0")}:00.000Z`,
+       });
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -594,7 +595,7 @@
+         occurredAt: `2026-08-18T12:${String(index).padStart(2, "0")}:00.000Z`,
+       });
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.route("**/api/tasks/T-0001/comments", async (route) => {
+     postingAttempts += 1;
+@@ -675,7 +676,7 @@
+       actor: { kind: "agent", id: "removed" },
+       occurredAt: "2026-08-09T12:31:00.000Z",
+     });
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -718,7 +719,7 @@
+         occurredAt: `2026-08-17T12:${String(index).padStart(2, "0")}:00.000Z`,
+       });
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -756,7 +757,7 @@
+       occurredAt: "2026-08-09T12:32:00.000Z",
+     });
+     if (archived) detail.task.archived = true;
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+   const draft = page.getByRole("textbox", { name: "Comment" });
+--- baseline/test/browser/task-comment-docking.browser.spec.ts
++++ test/browser/task-comment-docking.browser.spec.ts
+@@ -1,3 +1,4 @@
++import { fulfillTaskScenario } from "./browser-fixture.ts";
+ import { expect, test } from "./browser-fixture.ts";
+ import type { Locator } from "@playwright/test";
+ 
+@@ -24,7 +25,7 @@
+           detail.task.description = longDescription
+             ? Array.from({ length: 40 }, (_, index) => `Description line ${index + 1}.`).join("  \n")
+             : "A short description.";
+-          await route.fulfill({ response, json: detail });
++          await fulfillTaskScenario(route, response, detail);
+         });
+         await page.goto("/tasks/T-0001");
+         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+@@ -61,7 +62,7 @@
+         id: `live-attention-${index}`, type: "user-mention", sourceEventId: detail.task.comments[0].id,
+         createdAt: "2026-08-15T12:30:00.000Z",
+       })) : [];
+-      await route.fulfill({ response, json: detail });
++      await fulfillTaskScenario(route, response, detail);
+     });
+     await page.goto("/tasks/T-0001");
+     const composer = page.getByRole("region", { name: "Add comment" });
+--- baseline/test/browser/task-description-collapse.browser.spec.ts
++++ test/browser/task-description-collapse.browser.spec.ts
+@@ -1,3 +1,4 @@
++import { fulfillTaskScenario } from "./browser-fixture.ts";
+ import type { Locator } from "@playwright/test";
+ 
+ import { expect, test } from "./browser-fixture.ts";
+@@ -16,7 +17,7 @@
+     const response = await route.fetch();
+     const detail = await response.json();
+     detail.task.description = longFormattedDescription;
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -50,7 +51,7 @@
+     const response = await route.fetch();
+     const detail = await response.json();
+     detail.task.description = "A short **Markdown** description.";
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+@@ -68,7 +69,7 @@
+     const response = await route.fetch();
+     const detail = await response.json();
+     detail.task.description = responsiveDescription;
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.setViewportSize({ width: 1280, height: 900 });
+@@ -130,7 +131,7 @@
+       detail.task.description = Array.from(
+         { length: 16 }, (_, index) => `Requirement \`${index + 1}\` stays on one row.  `,
+       ).join("\n");
+-      await route.fulfill({ response, json: detail });
++      await fulfillTaskScenario(route, response, detail);
+     });
+     await page.goto("/tasks/T-0001");
+     const description = page.getByRole("region", { name: "Description" });
+@@ -165,7 +166,7 @@
+         const response = await route.fetch();
+         const detail = await response.json();
+         detail.task.description = source;
+-        await route.fulfill({ response, json: detail });
++        await fulfillTaskScenario(route, response, detail);
+       });
+       await page.goto("/tasks/T-0001");
+       const description = page.getByRole("region", { name: "Description" });
+--- baseline/test/browser/task-movement.browser.spec.ts
++++ test/browser/task-movement.browser.spec.ts
+@@ -1,3 +1,4 @@
++import { fulfillTaskScenario } from "./browser-fixture.ts";
+ import { contrastRatio, expect, setAppearance, test } from "./browser-fixture.ts";
+ 
+ test("task position summarizes durable movement without making the summary interactive", async ({ page }) => {
+@@ -30,7 +31,7 @@
+     const response = await route.fetch();
+     const detail = await response.json();
+     detail.task.description = "Long resize alignment context. ".repeat(900);
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+ 
+@@ -106,7 +107,7 @@
+     const response = await route.fetch();
+     const detail = await response.json();
+     detail.task.description = "Long relationship growth context. ".repeat(700);
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+   await expect(page.getByRole("region", { name: "Task position" })).toBeVisible();
+@@ -157,7 +158,7 @@
+         details: { fromColumnId, toColumnId },
+       });
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+ 
+@@ -413,7 +414,7 @@
+         details: { fromColumnId, toColumnId },
+       });
+     }
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+   const map = page.getByTestId("movement-map");
+@@ -688,7 +689,7 @@
+     const response = await route.fetch();
+     const detail = await response.json();
+     detail.task.description = "Long movement context. ".repeat(700);
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+ 
+@@ -748,7 +749,7 @@
+     const response = await route.fetch();
+     const detail = await response.json();
+     detail.task.columnId = "retired-column";
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0002");
+ 
+--- baseline/test/browser/task-relationships.browser.spec.ts
++++ test/browser/task-relationships.browser.spec.ts
+@@ -1,3 +1,4 @@
++import { fulfillTaskScenario } from "./browser-fixture.ts";
+ import { contrastRatio, expect, setAppearance, test } from "./browser-fixture.ts";
+ 
+ test("circular waiting is rejected through the browser without changing relationships", async ({ page, request }) => {
+@@ -28,7 +29,7 @@
+     const response = await route.fetch();
+     const detail = await response.json();
+     detail.task.description += "\n\nReview the [related task](/tasks/T-0002).";
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+   await page.goto("/tasks/T-0001");
+ 
+@@ -87,7 +88,7 @@
+         details: { relationshipType: "dependency", relationshipRole: "target", relatedTaskId: "T-9004" },
+       },
+     );
+-    await route.fulfill({ response, json: detail });
++    await fulfillTaskScenario(route, response, detail);
+   });
+ 
+   await page.goto("/tasks/T-0001");
+--- baseline/test/browser/timeline-pages.browser.spec.ts
++++ test/browser/timeline-pages.browser.spec.ts
+@@ -0,0 +1,293 @@
++import { clearTextSelection, contrastRatio, expect, selectRenderedText, selectedText, test } from "./browser-fixture.ts";
++import type { UserTaskDetailQueryResult } from "../../src/application/user-task-detail-contract.ts";
++
++test("large timeline keeps three pages and navigates unloaded map destinations", async ({ page }) => {
++  let baseline: Extract<UserTaskDetailQueryResult, { available: true }> | undefined;
++  let mapReads = 0;
++  const targetReads: string[] = [];
++  const record = (index: number) => ({ key: `activity-move-${index}`, kind: "activity", occurredAt: "2027-01-01", activity: { id: `move-${index}`, type: index === 75 ? "relationship.removed" : "task.moved", actor: { kind: "user", id: "paul" }, occurredAt: "2027-01-01", details: index === 75 ? { relatedTaskId: "T-0002", relationshipType: "dependency", relationshipRole: "source" } : { fromColumnId: "backlog", toColumnId: "implementation" } } });
++  const windowPage = (start: number, size = 50) => ({ records: Array.from({ length: Math.min(size, 10_000 - start) }, (_, i) => record(start + i)), total: 10_000, start, olderCursor: start + size < 10_000 ? `older:${start + size}` : null, newerCursor: start > 0 ? `newer:${Math.max(0, start - 50)}` : null, refreshCursor: `refresh:${start}`, inspectableSources: { commentIds: [], activityIds: Array.from({ length: Math.min(size, 10_000 - start) }, (_, i) => `move-${start + i}`) }, relatedTasks: start <= 75 && start + size > 75 ? [{ id: "T-0002", title: "Earlier relationship label", available: true, archived: false, completed: false }] : [] });
++  await page.route("**/api/tasks/T-0001", async (route) => {
++    if (!baseline) {
++      const result = await (await route.fetch()).json() as UserTaskDetailQueryResult;
++      expect(result.available).toBe(true);
++      if (!result.available) throw new Error("Fixture task unavailable");
++      baseline = result;
++    }
++    await route.fulfill({ json: { ...baseline, timeline: windowPage(0), movementSummary: { total: 10_000, latestSourceId: "move-0" } } });
++  });
++  await page.route("**/api/tasks/T-0001/timeline?*", async (route) => {
++    const params = new URL(route.request().url()).searchParams;
++    const source = params.get("sourceId");
++    if (source) targetReads.push(source);
++    const start = source ? Number(source.split("-")[1]) : Number(params.get("cursor")?.split(":")[1] ?? 0);
++    await route.fulfill({ json: { available: true, page: windowPage(start, Number(params.get("pageSize") ?? 50)) } });
++  });
++  await page.route("**/api/tasks/T-0001/movement-map?*", async (route) => {
++    mapReads++;
++    const after = Number(new URL(route.request().url()).searchParams.get("after"));
++    await route.fulfill({ json: { available: true, map: { movements: after ? [] : Array.from({ length: 10_000 }, (_, i) => ({ ...record(i).activity, recordId: `activity-move-${i}`, sequence: 10_000 - i })), cursor: 10_000, total: 10_000 } } });
++  });
++  await page.setViewportSize({ width: 1200, height: 900 });
++  await page.goto("/tasks/T-0001");
++  await expect(page.locator(".timeline > li")).toHaveCount(50);
++  expect(mapReads).toBe(0);
++  for (let i = 0; i < 4; i++) {
++    await page.getByRole("button", { name: "Load older timeline" }).evaluate((element) => (element as HTMLButtonElement).click());
++    await expect(page.locator(".timeline > li")).toHaveCount(Math.min(150, 100 + i * 50));
++    await expect(page.getByText("Loading timeline…", { exact: true })).toHaveCount(0);
++    if (i === 0) {
++      await page.getByRole("checkbox", { name: "Visible to agents" }).check();
++      await expect(page.locator(".timeline > li")).toHaveCount(100);
++      await expect(page.getByRole("link", { name: "Earlier relationship label", exact: true })).toBeVisible();
++      await page.getByRole("checkbox", { name: "Visible to agents" }).uncheck();
++    }
++  }
++  await page.locator(".timeline > li").last().scrollIntoViewIfNeeded();
++  await expect(page.locator(".movement-map-landmark")).toHaveCount(10_000);
++  await page.locator('[data-testid="movement-map"] button[data-source-id="move-9999"]').evaluate((element) => (element as HTMLButtonElement).click());
++  await expect(page.locator("#timeline-source-move-9999")).toHaveClass(/timeline-source-target/);
++  expect(targetReads).toContain("move-9999");
++  expect(await page.locator(".timeline > li").count()).toBeLessThanOrEqual(150);
++});
++
++
++test("map waits for an available layout, retries locally and keyboard targets reject stale responses in both themes", async ({ page }) => {
++  let mapReads = 0;
++  let failures = 1;
++  let releaseOld: (() => void) | undefined;
++  let holdOld = true;
++  const oldGate = new Promise<void>((resolve) => { releaseOld = resolve; });
++  const targets: string[] = [];
++  const record = (index: number) => ({ key: `activity-race-${index}`, kind: "activity", occurredAt: "2027-01-01", activity: { id: `race-${index}`, type: "task.moved", actor: { kind: "user", id: "paul" }, occurredAt: "2027-01-01", details: { fromColumnId: "backlog", toColumnId: "implementation" } } });
++  const windowPage = (start: number) => ({ records: Array.from({ length: Math.min(50, 10_000 - start) }, (_, i) => record(start + i)), total: 10_000, start, olderCursor: null, newerCursor: null, refreshCursor: `refresh:${start}` });
++  await page.route("**/api/tasks/T-0001", async (route) => {
++    const detail = await (await route.fetch()).json();
++    await route.fulfill({ json: { ...detail, timeline: windowPage(0), movementSummary: { total: 10_000 } } });
++  });
++  await page.route("**/api/tasks/T-0001/timeline?*", async (route) => {
++    const params = new URL(route.request().url()).searchParams;
++    const source = params.get("sourceId");
++    const start = source ? Number(source.split("-")[1]) : Number(params.get("cursor")?.split(":")[1] ?? 0);
++    if (source) targets.push(source);
++    if (source === "race-9999" && holdOld) await oldGate;
++    await route.fulfill({ json: { available: true, page: windowPage(start) } }).catch(() => undefined);
++  });
++  await page.route("**/api/tasks/T-0001/movement-map?*", async (route) => {
++    mapReads++;
++    if (failures-- > 0) return route.fulfill({ status: 503, json: { error: "Temporary map failure" } });
++    const after = Number(new URL(route.request().url()).searchParams.get("after"));
++    await route.fulfill({ json: { available: true, map: { movements: after ? [] : Array.from({ length: 10_000 }, (_, i) => ({ ...record(i).activity, recordId: `activity-race-${i}`, sequence: 10_000 - i })), cursor: 10_000, total: 10_000 } } });
++  });
++  await page.setViewportSize({ width: 1200, height: 600 });
++  await page.goto("/tasks/T-0001");
++  await page.locator(".timeline > li").last().scrollIntoViewIfNeeded();
++  expect(mapReads).toBe(0);
++  await expect(page.getByRole("textbox", { name: "Comment" })).toBeEnabled();
++  await page.setViewportSize({ width: 1200, height: 900 });
++  const map = page.locator('[data-testid="movement-map"]');
++  await expect(map.getByRole("alert")).toBeVisible();
++  for (const theme of ["dark", "light"] as const) {
++    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
++    expect(await contrastRatio(map.getByRole("alert"))).toBeGreaterThanOrEqual(4.5);
++  }
++  await map.getByRole("button", { name: "Retry map" }).focus();
++  await page.keyboard.press("Enter");
++  await expect(map.locator(".movement-map-landmark")).toHaveCount(10_000);
++  await map.locator('button[data-source-id="race-9999"]').evaluate((element) => (element as HTMLButtonElement).click());
++  await expect.poll(() => targets.includes("race-9999")).toBe(true);
++  for (const id of [4000, 5000, 6000]) await map.locator(`button[data-source-id="race-${id}"]`).evaluate((element) => (element as HTMLButtonElement).click());
++  holdOld = false; releaseOld!();
++  await expect(page.locator("#timeline-source-race-6000")).toBeFocused();
++  expect(targets).toEqual(["race-9999", "race-6000"]);
++  await expect(page.locator("#timeline-source-race-9999")).toHaveCount(0);
++  await map.locator('button[data-source-id="race-6000"]').evaluate((element) => (element as HTMLButtonElement).focus({ preventScroll: true }));
++  await page.keyboard.press("End");
++  await expect(page.locator("#timeline-source-race-9999")).toBeFocused();
++  await map.locator('button[data-source-id="race-9999"]').evaluate((element) => (element as HTMLButtonElement).focus({ preventScroll: true }));
++  await page.keyboard.press("Home");
++  await expect(page.locator("#timeline-source-race-0")).toBeFocused();
++});
++
++test("timeline failures retry without losing a reading anchor or selected text", async ({ page }) => {
++  let failOlder = true;
++  let releaseOlder: (() => void) | undefined;
++  const olderGate = new Promise<void>((resolve) => { releaseOlder = resolve; });
++  const record = (index: number) => ({ key: `comment-selection-${index}`, kind: "comment", occurredAt: "2027-01-01", comment: { id: `selection-${index}`, body: `Selection evidence ${index}`, actor: { kind: "user", id: "paul" }, occurredAt: "2027-01-01" } });
++  const windowPage = (start: number, size: number) => ({ records: Array.from({ length: size }, (_, i) => record(start + i)), total: 10_000, start, olderCursor: `older:${start + size}`, newerCursor: start > 0 ? `newer:${Math.max(0, start - 50)}` : null, refreshCursor: `refresh:${start}` });
++  await page.route("**/api/tasks/T-0001", async (route) => {
++    const detail = await (await route.fetch()).json();
++    await route.fulfill({ json: { ...detail, timeline: windowPage(0, 50) } });
++  });
++  await page.route("**/api/tasks/T-0001/timeline?*", async (route) => {
++    const params = new URL(route.request().url()).searchParams;
++    const cursor = params.get("cursor");
++    if (cursor?.startsWith("older:")) {
++      if (failOlder) { failOlder = false; return route.fulfill({ status: 503, json: { error: "Temporary timeline failure" } }); }
++      await olderGate;
++    }
++    const start = Number(params.get("sourceId")?.split("-")[1] ?? cursor?.split(":")[1] ?? 0);
++    await route.fulfill({ json: { available: true, page: windowPage(start, Number(params.get("pageSize") ?? 50)) } });
++  });
++  await page.goto("/tasks/T-0001");
++  await page.getByRole("button", { name: "Load older timeline" }).evaluate((element) => (element as HTMLButtonElement).click());
++  await expect(page.getByRole("button", { name: "Retry timeline" })).toBeVisible();
++  await page.getByRole("button", { name: "Retry timeline" }).evaluate((element) => (element as HTMLButtonElement).click());
++  await page.locator('[data-timeline-record="selection-20"]').evaluate((element) => {
++    const header = document.querySelector(".detail-topbar")!;
++    window.scrollBy(0, element.getBoundingClientRect().top - header.getBoundingClientRect().bottom - 10);
++  });
++  const anchor = page.locator('[data-timeline-record="selection-20"]');
++  const text = await selectRenderedText(anchor.getByText("Selection evidence 20", { exact: true }));
++  const before = (await anchor.boundingBox())!.y;
++  releaseOlder!();
++  await expect(page.locator(".timeline > li")).toHaveCount(100);
++  expect(Math.abs((await anchor.boundingBox())!.y - before)).toBeLessThanOrEqual(1);
++  expect(await selectedText(page)).toBe(text);
++  await clearTextSelection(page);
++  await page.getByRole("button", { name: "Load older timeline" }).evaluate((element) => (element as HTMLButtonElement).click());
++  await expect(page.locator(".timeline > li")).toHaveCount(150);
++});
++
++
++test("one large attempt keeps nested metadata, survives loaded-target races and scrubs the complete journey", async ({ page }) => {
++  let mapReads = 0;
++  let releaseMap: (() => void) | undefined;
++  const mapGate = new Promise<void>((resolve) => { releaseMap = resolve; });
++  let releaseTarget: (() => void) | undefined;
++  const targetGate = new Promise<void>((resolve) => { releaseTarget = resolve; });
++  let holdTarget = true;
++  let oldTargetReturned = false;
++  const targets: string[] = [];
++  let attempt: Extract<import("../../src/application/timeline-contract.ts").TimelineRecord, { kind: "attempt" }> | undefined;
++  const content = (index: number) => ({ kind: "activity", occurredAt: "2027-01-01", activity: { id: `nested-${index}`, type: index === 50 ? "relationship.removed" : "task.moved", actor: { kind: "user", id: "paul" }, occurredAt: "2027-01-01", details: index === 50 ? { relationshipType: "dependency", relationshipRole: "source", relatedTaskId: "T-0002" } : { fromColumnId: "backlog", toColumnId: "implementation" } } });
++  const windowPage = (start: number, direct = false) => ({ records: [{ ...attempt, content: Array.from({ length: direct ? 1 : 50 }, (_, i) => content(start + i)), contentPage: { total: 10_000, olderCursor: direct ? null : `nested:${start + 50}`, ...(start ? { sourceId: `nested-${start}` } : {}) } }], total: 1, start: 0, olderCursor: null, newerCursor: null, refreshCursor: "refresh",
++    inspectableSources: { commentIds: [], activityIds: Array.from({ length: direct ? 1 : 50 }, (_, i) => `nested-${start + i}`) }, relatedTasks: start === 50 ? [{ id: "T-0002", title: "Old related task", available: true, completed: false, archived: false }] : [] });
++  await page.route("**/api/tasks/T-0001", async (route) => {
++    const detail = await (await route.fetch()).json();
++    attempt ??= detail.timeline.records.find((record: { kind: string }) => record.kind === "attempt");
++    await route.fulfill({ json: { ...detail, timeline: windowPage(0), movementSummary: { total: 10_000 } } });
++  });
++  await page.route("**/api/tasks/T-0001/movement-map?*", async (route) => {
++    mapReads++;
++    const after = Number(new URL(route.request().url()).searchParams.get("after"));
++    if (!after) await mapGate;
++    await route.fulfill({ json: { available: true, map: { movements: after ? [] : Array.from({ length: 10_000 }, (_, i) => ({ ...content(i).activity, type: "task.moved", details: { fromColumnId: "backlog", toColumnId: "implementation" }, recordId: attempt!.key, sequence: 10_000 - i })), cursor: 10_000, total: 10_000 } } });
++  });
++  await page.route("**/api/tasks/T-0001/timeline?*", async (route) => {
++    const params = new URL(route.request().url()).searchParams;
++    const source = params.get("sourceId");
++    if (source) targets.push(source);
++    if (source === "nested-9999" && holdTarget) { await targetGate; oldTargetReturned = true; }
++    const start = Number(source?.split("-")[1] ?? params.get("cursor")?.split(":")[1] ?? 0);
++    await route.fulfill({ json: { available: true, page: windowPage(start, source !== null) } });
++  });
++  await page.setViewportSize({ width: 1200, height: 900 });
++  await page.goto("/tasks/T-0001");
++  await page.locator(".attempt-history > li").last().scrollIntoViewIfNeeded();
++  await expect.poll(() => mapReads).toBe(1);
++  await page.setViewportSize({ width: 1200, height: 600 });
++  await page.setViewportSize({ width: 1200, height: 900 });
++  expect(mapReads).toBe(1);
++  releaseMap!();
++  const map = page.locator('[data-testid="movement-map"]');
++  await expect(map.locator(".movement-map-landmark")).toHaveCount(10_000);
++  await map.locator('button[data-source-id="nested-9999"]').evaluate((element) => (element as HTMLButtonElement).click());
++  await expect.poll(() => targets.includes("nested-9999")).toBe(true);
++  await map.locator('button[data-source-id="nested-0"]').evaluate((element) => (element as HTMLButtonElement).click());
++  await expect(page.locator("#timeline-source-nested-0")).toBeFocused();
++  holdTarget = false; releaseTarget!();
++  await expect.poll(() => oldTargetReturned).toBe(true);
++  await expect(page.locator("#timeline-source-nested-9999")).toHaveCount(0);
++  await expect(page.locator("#timeline-source-nested-0")).toBeFocused();
++  await page.getByRole("checkbox", { name: "Visible to agents" }).check();
++  await page.getByRole("button", { name: "Load older attempt activity" }).evaluate((element) => (element as HTMLButtonElement).click());
++  await expect(page.locator(".attempt-history > li")).toHaveCount(50);
++  await expect(page.getByRole("link", { name: "Old related task", exact: true })).toBeVisible();
++  // Markers remain present even when the evidence came from a nested page.
++  await expect(page.locator("#timeline-source-nested-51 .agent-inspectable-marker")).toHaveCount(1);
++  await page.getByRole("checkbox", { name: "Visible to agents" }).uncheck();
++  await page.locator(".attempt-history > li").last().scrollIntoViewIfNeeded();
++  await page.evaluate(() => window.scrollBy(0, 500));
++  await expect(map).toHaveAttribute("data-drag-ready", "true");
++  const plot = (await map.locator(".movement-map-plot").boundingBox())!;
++  const frame = (await map.locator(".movement-map-viewport").boundingBox())!;
++  await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
++  await page.mouse.down();
++  await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2 + plot.height, { steps: 5 });
++  await page.mouse.up();
++  await expect(page.locator("#timeline-source-nested-9999")).toBeFocused();
++  await expect(page.locator(".attempt-history > li")).toHaveCount(1);
++  await expect(page.locator(".timeline > li")).toHaveCount(1);
++});
++
++
++test("historical window refresh rejects delayed older evidence and current pins update independently", async ({ page }) => {
++  let refreshes = 0;
++  let releaseFirst: (() => void) | undefined;
++  const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
++  let firstReturned = false;
++  let pinned = true;
++  const record = (index: number, text?: string) => ({ key: `comment-refresh-${index}`, kind: "comment", occurredAt: "2027-01-01", comment: { id: `refresh-${index}`, body: text ?? `Refresh evidence ${index}`, actor: { kind: "user", id: "paul" }, occurredAt: "2027-01-01", pinned: index === 5000 } });
++  const windowPage = (start: number, text?: string) => ({ records: Array.from({ length: 50 }, (_, i) => record(start + i, i === 0 ? text : undefined)), total: 10_000, start, olderCursor: null, newerCursor: null, refreshCursor: `refresh:${start}` });
++  await page.route("**/api/tasks/T-0001", async (route) => {
++    const detail = await (await route.fetch()).json();
++    await route.fulfill({ json: { ...detail, timeline: windowPage(0), inspection: { ...detail.inspection, pinnedComments: pinned ? [record(5000).comment] : [] } } });
++  });
++  await page.route("**/api/tasks/T-0001/comments/refresh-5000/unpin", async (route) => {
++    pinned = false;
++    await route.fulfill({ json: { accepted: true } });
++  });
++  await page.route("**/api/tasks/T-0001/timeline?*", async (route) => {
++    const params = new URL(route.request().url()).searchParams;
++    const source = params.get("sourceId");
++    if (source) return route.fulfill({ json: { available: true, page: windowPage(5000) } });
++    refreshes++;
++    const old = refreshes === 1;
++    if (old) await firstGate;
++    await route.fulfill({ json: { available: true, page: windowPage(5000, old ? "Stale refresh evidence" : "Newest refreshed evidence") } });
++    if (old) firstReturned = true;
++  });
++  await page.goto("/tasks/T-0001");
++  await page.getByRole("region", { name: "Pinned comments" }).getByRole("button", { name: "View in task history" }).click();
++  const source = page.locator("#timeline-source-refresh-5000");
++  await expect(source).toBeFocused();
++  await expect(source).toContainText("Newest refreshed evidence", { timeout: 7000 });
++  expect(refreshes).toBeGreaterThanOrEqual(2);
++  releaseFirst!();
++  await expect.poll(() => firstReturned).toBe(true);
++  await expect(source).toContainText("Newest refreshed evidence");
++  await expect(source).not.toContainText("Stale refresh evidence");
++  await source.getByRole("button", { name: "Unpin comment refresh-5000", exact: true }).click();
++  await expect(page.getByRole("region", { name: "Pinned comments" })).toHaveCount(0);
++  await expect(source.getByRole("button", { name: "Pin comment refresh-5000", exact: true })).toBeVisible();
++});
++
++
++test("a newest pin activity retains direct navigation to an old unloaded authored comment", async ({ page }) => {
++  const targets: string[] = [];
++  await page.route("**/api/tasks/T-0001", async (route) => {
++    const detail = await (await route.fetch()).json();
++    await route.fulfill({ json: { ...detail, task: { ...detail.task, comments: [] }, timeline: { records: [{ key: "activity-old-pin", kind: "activity", occurredAt: "2027-01-01", activity: { id: "old-pin", type: "comment.unpinned", actor: { kind: "user", id: "paul" }, occurredAt: "2027-01-01", details: { commentId: "old-authored-comment" } } }], total: 10_000, start: 0, olderCursor: null, newerCursor: null, refreshCursor: "latest" } } });
++  });
++  await page.route("**/api/tasks/T-0001/timeline?*", async (route) => {
++    const params = new URL(route.request().url()).searchParams;
++    if (params.get("sourceId")) targets.push(params.get("sourceId")!);
++    await route.fulfill({ json: { available: true, page: { records: [{ key: "comment-old-authored-comment", kind: "comment", occurredAt: "2020-01-01", comment: { id: "old-authored-comment", body: "Original old authored evidence", actor: { kind: "user", id: "paul" }, occurredAt: "2020-01-01" } }], total: 10_000, start: 9999, olderCursor: null, newerCursor: null, refreshCursor: "old" } } });
++  });
++  await page.goto("/tasks/T-0001");
++  const source = page.locator("#timeline-source-old-pin").getByRole("button", { name: "View in task history" });
++  for (const theme of ["dark", "light"] as const) {
++    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
++    expect(await contrastRatio(source)).toBeGreaterThanOrEqual(4.5);
++    const centers = await source.evaluate((button) => {
++      const control = button.getBoundingClientRect(); const icon = button.querySelector("svg")!.getBoundingClientRect();
++      return { x: Math.abs(control.x + control.width / 2 - icon.x - icon.width / 2), y: Math.abs(control.y + control.height / 2 - icon.y - icon.height / 2) };
++    });
++    expect(centers.x).toBeLessThanOrEqual(1); expect(centers.y).toBeLessThanOrEqual(1);
++  }
++  await source.focus(); await page.keyboard.press("Enter");
++  await expect(page.locator("#timeline-source-old-authored-comment")).toBeFocused();
++  await expect(page.locator("#timeline-source-old-authored-comment")).toContainText("Original old authored evidence");
++  expect(targets).toEqual(["old-authored-comment"]);
++});
+--- baseline/test/web/route-inventory.test.ts
++++ test/web/route-inventory.test.ts
+@@ -21,6 +21,8 @@
+     "GET /api/tasks/:taskId",
+     "GET /api/tasks/:taskId/conversations/:conversationId",
+     "GET /api/tasks/:taskId/conversations/:conversationId/attachments/:attachmentId",
++    "GET /api/tasks/:taskId/movement-map",
++    "GET /api/tasks/:taskId/timeline",
+     "GET /api/tasks/:taskId/workspace/git-state",
+     "PATCH /api/settings/notifications",
+     "PATCH /api/tasks/:taskId",
+--- baseline/test/web/timeline-pages-http.test.ts
++++ test/web/timeline-pages-http.test.ts
+@@ -0,0 +1,45 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { mkdtemp, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { DatabaseSync } from "node:sqlite";
++import { CoordinationApplication } from "../../src/application/coordination-application.ts";
++import { startWebServer } from "../../src/web/web-server.ts";
++import { createHandoffFixture } from "../support/handoff-fixture.ts";
++import type { TimelineQueryResult, MovementMapQueryResult } from "../../src/application/timeline-contract.ts";
++
++test("HTTP task history is bounded, directly navigable and map refresh is compact", async (t) => {
++  const fixture = await createHandoffFixture();
++  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath });
++  t.after(() => app.close());
++  const created = app.createTask({ boardId: "delivery", columnId: "implementation", title: "HTTP journey", description: "Bounded", actor: { kind: "user", id: "paul" }, idempotencyKey: "http-journey" });
++  assert.ok(created.accepted);
++  const seed = new DatabaseSync(fixture.databasePath);
++  const insert = seed.prepare("INSERT INTO activity_ledger(id, task_id, type, actor_kind, actor_id, occurred_at, details_json) VALUES (?, ?, 'task.moved', 'user', 'paul', '2027-01-01', '{\"fromColumnId\":\"backlog\",\"toColumnId\":\"implementation\"}')");
++  seed.exec("BEGIN");
++  for (let i = 0; i < 10_000; i++) insert.run(`http-move-${i}`, created.task.id);
++  seed.exec("COMMIT"); seed.close();
++  const assets = await mkdtemp(join(tmpdir(), "timeline-assets-"));
++  await writeFile(join(assets, "index.html"), "<div></div>");
++  const server = await startWebServer(app, { host: "127.0.0.1", port: 0, assetDirectory: assets });
++  t.after(() => server.close());
++  const endpoint = `${server.baseUrl}/api/tasks/${created.task.id}`;
++  const response = await fetch(`${endpoint}/timeline`);
++  assert.equal(response.status, 200);
++  const result = await response.json() as TimelineQueryResult;
++  assert.ok(result.available);
++  assert.equal(result.page.records.length, 50);
++  const target = await (await fetch(`${endpoint}/timeline?sourceId=http-move-0`)).json() as TimelineQueryResult;
++  assert.ok(target.available);
++  assert.equal(target.page.records[0]?.key, "activity-http-move-0");
++  assert.equal((await fetch(`${endpoint}/timeline?pageSize=151`)).status, 400);
++  assert.equal((await fetch(`${endpoint}/timeline?cursor=forged`)).status, 400);
++  const map = await (await fetch(`${endpoint}/movement-map`)).json() as MovementMapQueryResult;
++  assert.ok(map.available);
++  assert.equal(map.map.movements.length, 10_000);
++  const delta = await (await fetch(`${endpoint}/movement-map?after=${map.map.cursor}`)).json() as MovementMapQueryResult;
++  assert.ok(delta.available);
++  assert.equal(delta.map.movements.length, 0);
++  assert.equal((await fetch(`${endpoint}/movement-map?after=-1`)).status, 400);
++});
+--- baseline/docs/architecture.md
++++ docs/architecture.md
+@@ -89,11 +89,25 @@
+ Complete user-facing board and task-detail read projections are assembled
+ inside this boundary before the web adapter serializes them. The adapter does
+ not reconstruct those authoritative views by coordinating lower-level queries.
+-Task-detail projection reads the inspected task's history once, carries only
+-board and column metadata rather than other tasks' histories, and resolves
+-current and historical relationship labels through deduplicated task-ID
+-lookups. Supporting task-scoped indexes keep those reads independent of
+-unrelated accumulated history for active and archived tasks.
++Browser task detail selects its newest 50 top-level timeline groups from
++migration 0011's task-scoped index before hydrating authored sources. Each
++attempt discloses at most 50 nested records with its own paging cursor. Current
++pins, unfinished activation controls, attention, participants, relationships,
++and conversation cost totals are independent of that history window. Selected
++pages resolve only their historical relationship references. Agent history and
++context-delivery queries retain their separate contracts.
++
++The movement map has its own compact durable projection, retaining containing
++record identity, source identity, movement order and labels. Its query reads no
++comment bodies, transcripts or unrelated activity. The browser loads it when
++its desktop layout reveals it, then requests sequence deltas while visible.
++Source links and coalesced map scrubbing resolve bounded windows directly;
++stale responses cannot replace the latest destination. The timeline retains at
++most 150 top-level records, with measured anchors and logical-position spacers.
++Map geometry uses available source anchors and logical history position when
++records are absent; after hydration navigation aligns to the actual source.
++[ADR 0027](adr/0027-page-task-timelines-and-load-the-movement-map-independently.md)
++records grouping, cursor, hydration and map contracts.
+ 
+ Each command workflow owns its SQLite transaction and records the state change,
+ activity provenance, projection updates, notifications, and idempotent response
+--- baseline/docs/adr/0027-page-task-timelines-and-load-the-movement-map-independently.md
++++ docs/adr/0027-page-task-timelines-and-load-the-movement-map-independently.md
+@@ -0,0 +1,51 @@
++# Page task timelines and load the movement map independently
++
++Status: accepted
++
++Migration 0011 maintains compact task-scoped top-level records, grouped source
++identities and movement metadata in the same SQLite transactions as original
++evidence. It backfills existing authored history without rewriting it. Comments
++and activity belong to their local attempt when immutable provenance proves
++that ownership; external attempt comments remain independent. Lifecycle events
++already folded by the timeline stay folded. Startup failures remain separate.
++Provisional dispatch claims have no public attempt group until published, and
++deleting a provisional attempt removes its projection. Archival retains task
++timeline and movement history, while conversation archival remains unchanged.
++
++Application queries select newest-first groups using `(occurred_at, sequence)`
++and a signed task-scoped insertion watermark. Equal timestamps have a durable
++tie-breaker. Default size is 50, maximum 150; nested attempt disclosure selects
++50 sources and has independent signed backward cursors. Sources hydrate only
++after selection, including whole authored messages and historical relationship
++references. Current controls, all current pins, attention and total costs are
++separate reads. Running attempt metadata refreshes inside the loaded window.
++Direct source queries locate the containing group and nested source window
++without fetching intervening history. Browser paging does not change agent
++context composition or its checkpoint contracts.
++
++The movement query reads only the compact movement projection. Every entry has
++its source ID, containing group ID, sequence, timestamp, column and actor facts.
++New movement journal entries snapshot column and actor labels. Older evidence
++without snapshots uses durable IDs honestly; a later process rename must not
++masquerade as a known historical label. The full map is inherently linear in
++movement count; subsequent reads request only entries after its sequence cursor.
++It never hydrates authored bodies or transcripts. Indexed counts and cost totals
++can still aggregate compact retained evidence; response and hydration bounds
++must be measured separately from these aggregate reads.
++
++The browser keeps 150 top-level records at most, bounded nested disclosure,
++reloadable edges and reading/selection anchors. Logical-position spacers reserve
++space for evicted groups; their estimated height is not a claim of pixel accuracy
++for unloaded variable-height history. Map geometry combines logical history
++position with available real source anchors. Direct hydration then aligns the
++actual source. Selection prevents eviction of selected evidence until cleared.
++The desktop map starts loading only when its layout reveals it; unavailable
++layouts make no request. Loading and retry stay local to the map. Only visible
++maps poll deltas. Clicks, keyboard navigation and debounced scrub destinations
++share bounded source navigation; queued requests coalesce to the latest source,
++and generation checks reject stale responses across window changes and unmount.
++
++This preserves complete journey navigation without retaining or rendering full
++authored history. It deliberately allows compact complete map metadata, all
++current pins and current unfinished controls to scale with their actual current
++sets, rather than silently dropping destinations or actionable work.
+--- baseline/CONTEXT.md
++++ CONTEXT.md
+@@ -239,6 +239,19 @@
+ pages. Its backward watermark describes retained browser history, not agent
+ context delivery or an activation composition checkpoint. Conversation cost and
+ live state remain authoritative across the complete conversation.
++
++**Browser task timeline window**:
++A bounded newest-first selection of top-level comments, framework events,
++attempt groups and startup failures. Attempt groups retain provenance and have
++independent bounded nested disclosure. Current shared pins and task controls
++remain available outside this window; browser cursors never serve as agent
++context-delivery checkpoints.
++
++**Task movement map**:
++The compact complete task journey, with immutable movement/source identities,
++containing timeline group identities and historical labels where retained.
++A map destination remains navigable when its timeline record is unloaded or
++has been evicted. Its live sequence cursor is independent of timeline windows.
+ 
+ **Permission block**:
+ An agent run outcome in which the agent runtime's permission policy prevents a

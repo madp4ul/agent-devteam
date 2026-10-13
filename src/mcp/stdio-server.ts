@@ -112,7 +112,7 @@ server.registerTool(
 server.registerTool(
   "task.comment.add",
   {
-    description: "Append a comment on a mapped mutable project task. taskId is current or a concrete ID. Mentions address participants on the destination task, including the same agent ID on a different task. The author and origin are derived from the caller. Exact retries with the same key replay; changed payloads reject.",
+    description: "Append a comment on a mapped mutable project task. A canonical @<agent-id> mention requests activation of that agent on the destination task. For ordinary references, use the display name or agent ID without the @ prefix. Request: @review-agent please review. Reference: Review Agent completed the review. taskId is current or a concrete ID. Mentions address destination participants, including the same agent ID on a different task. The author and origin are derived from the caller. Exact retries with the same key replay; changed payloads reject.",
     inputSchema: {
       taskId: z.string().min(1),
       body: z.string().min(1),

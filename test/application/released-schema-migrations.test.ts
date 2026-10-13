@@ -27,7 +27,120 @@ const productionMigrationIds = [
   "0007_conversation_pin_checkpoints",
   "0008_stall_recovery",
   "0009_reviewer_allowances",
+  "0010_conversation_history_items",
+  "0011_task_timeline",
+  "0012_runtime_recovery",
 ];
+
+test("migration 0012 preserves released history, journal sequence and all derived index triggers", async () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    database.exec("PRAGMA foreign_keys = ON");
+    for (const migration of coordinationMigrations.slice(0, 11)) migration.apply(database);
+    database.exec(`INSERT INTO runtime VALUES (1, 'Released schema process', 'legacy-version', 'paused', NULL);
+      INSERT INTO boards VALUES ('delivery', 'Delivery', 'Deliver work.', 0, 1);
+      INSERT INTO columns VALUES ('delivery', 'backlog', 'Backlog', 0, NULL, 0, 1);`);
+    database.exec(await readFile(join(import.meta.dirname, "../fixtures/released-schema/0009-reviewer-allowances-data.sql"), "utf8"));
+    const before = database.prepare("SELECT * FROM activity_ledger ORDER BY sequence").all();
+    const transcript = database.prepare("SELECT * FROM attempt_transcripts").all();
+    const dependents = database.prepare("SELECT type, name, sql FROM sqlite_master WHERE type IN ('trigger', 'view') ORDER BY name").all();
+    database.prepare("UPDATE sqlite_sequence SET seq = 100 WHERE name = 'activity_ledger'").run();
+    database.exec("PRAGMA foreign_keys = OFF; BEGIN IMMEDIATE");
+    coordinationMigrations[11]!.apply(database);
+    database.exec("COMMIT; PRAGMA foreign_keys = ON");
+    assert.deepEqual(database.prepare("SELECT * FROM activity_ledger ORDER BY sequence").all(), before);
+    assert.deepEqual(database.prepare("SELECT * FROM attempt_transcripts").all(), transcript);
+    assert.deepEqual(database.prepare("SELECT type, name, sql FROM sqlite_master WHERE type IN ('trigger', 'view') ORDER BY name").all(), dependents);
+    database.exec(`INSERT INTO activity_ledger(id, task_id, type, actor_kind, actor_id, occurred_at, details_json)
+      VALUES ('waiting-upgrade', 'released-task', 'runtime.waiting', 'framework', 'coordination', '2027-01-01', '{}')`);
+    assert.equal(database.prepare("SELECT sequence FROM activity_ledger WHERE id = 'waiting-upgrade'").get()?.sequence, 101);
+    assert.ok(database.prepare("SELECT 1 FROM task_timeline_sources WHERE id = 'waiting-upgrade'").get());
+    assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
+    assert.equal(database.prepare("PRAGMA integrity_check").get()?.integrity_check, "ok");
+  } finally { database.close(); }
+});
+
+test("migration 0010 backfills a large released transcript without changing original evidence", async (t) => {
+  const fixture = await createStartupFixture("conversation-items-upgrade");
+  const old = new DatabaseSync(fixture.databasePath);
+  old.exec("PRAGMA foreign_keys = ON");
+  for (const [index, migration] of coordinationMigrations.slice(0, 9).entries()) {
+    migration.apply(old);
+    old.prepare("INSERT INTO coordination_migrations(position, migration_id) VALUES (?, ?)").run(index + 1, migration.id);
+  }
+  old.exec(`INSERT INTO runtime VALUES (1, 'Released schema process', 'legacy-version', 'paused', NULL);
+    INSERT INTO boards VALUES ('delivery', 'Delivery', 'Deliver work.', 0, 1);
+    INSERT INTO columns VALUES ('delivery', 'backlog', 'Backlog', 0, NULL, 0, 1);`);
+  old.exec(await readFile(join(import.meta.dirname, "../fixtures/released-schema/0009-reviewer-allowances-data.sql"), "utf8"));
+  const original = JSON.stringify(Array.from({ length: 10_000 }, (_, index) => ({ id: `legacy-${index}`, kind: "message", role: "agent", text: `Retained legacy ${index}` })));
+  old.prepare("UPDATE attempt_transcripts SET items_json = ? WHERE attempt_id = 'released-attempt'").run(original);
+  // Released archival retains the activation after deleting its authored source.
+  old.exec(`INSERT INTO activations(id, task_id, target_agent_id, reason_type, source_event_id, status, created_at, definition_version, conversation_id)
+    SELECT 'deleted-message-activation', task_id, target_agent_id, 'user-follow-up', 'deleted-message', 'completed', '2027-01-01', definition_version, conversation_id
+    FROM activations WHERE id = 'released-activation';`);
+  old.close();
+  const content = join(fixture.directory, "conversation-attachments", "content", "released-task", "released-conversation");
+  await mkdir(content, { recursive: true });
+  await writeFile(join(content, "released-conversation-attachment"), Buffer.alloc(17));
+  const application = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath });
+  t.after(() => application.close());
+  assert.equal(application.queryStartup().mode, "paused");
+  const page = await application.queryAgentConversation("released-task", "released-conversation");
+  assert.ok(page.available);
+  assert.equal(page.conversation.history.length, 50);
+  assert.equal(page.conversation.page!.recordIds.length, page.conversation.history.length);
+  const last = page.conversation.history.at(-1);
+  assert.equal(last?.kind === "item" && last.item.id, "legacy-9999");
+  const direct = await application.queryAgentConversation("released-task", "released-conversation", { attemptId: "released-attempt" });
+  assert.ok(direct.available);
+  assert.equal(direct.conversation.history[0]?.kind, "activation");
+  const inspection = new DatabaseSync(fixture.databasePath, { readOnly: true });
+  t.after(() => inspection.close());
+  assert.equal(inspection.prepare("SELECT items_json FROM attempt_transcripts WHERE attempt_id = 'released-attempt'").get()?.items_json, original);
+  assert.deepEqual(readMigrationHistory(inspection), productionMigrationIds);
+});
+
+test("migration 0011 backfills bounded attempt groups and complete compact movements without rewriting sources", async (t) => {
+  const fixture = await createStartupFixture("timeline-upgrade");
+  const old = new DatabaseSync(fixture.databasePath);
+  old.exec("PRAGMA foreign_keys = ON");
+  for (const [index, migration] of coordinationMigrations.slice(0, 10).entries()) {
+    migration.apply(old);
+    old.prepare("INSERT INTO coordination_migrations(position, migration_id) VALUES (?, ?)").run(index + 1, migration.id);
+  }
+  old.exec(`INSERT INTO runtime VALUES (1, 'Released schema process', 'legacy-version', 'paused', NULL);
+    INSERT INTO boards VALUES ('delivery', 'Delivery', 'Deliver work.', 0, 1);
+    INSERT INTO columns VALUES ('delivery', 'backlog', 'Backlog', 0, NULL, 0, 1);`);
+  old.exec(await readFile(join(import.meta.dirname, "../fixtures/released-schema/0009-reviewer-allowances-data.sql"), "utf8"));
+  const insert = old.prepare("INSERT INTO activity_ledger(id, task_id, type, actor_kind, actor_id, occurred_at, details_json) VALUES (?, 'released-task', 'task.moved', 'agent', 'implementer', '2027-01-01', ?)");
+  const details = JSON.stringify({ attemptId: "released-attempt", fromColumnId: "backlog", toColumnId: "completion", fromColumnName: "Original backlog", toColumnName: "Original completion", authoredEvidence: "Whole retained evidence" });
+  old.exec("BEGIN");
+  for (let i = 0; i < 10_000; i++) insert.run(`legacy-move-${i}`, details);
+  old.exec("COMMIT");
+  const transcript = old.prepare("SELECT items_json FROM attempt_transcripts WHERE attempt_id = 'released-attempt'").get()?.items_json;
+  old.close();
+  const content = join(fixture.directory, "conversation-attachments", "content", "released-task", "released-conversation");
+  await mkdir(content, { recursive: true });
+  await writeFile(join(content, "released-conversation-attachment"), Buffer.alloc(17));
+  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath });
+  t.after(() => app.close());
+  assert.equal(app.queryStartup().mode, "paused");
+  const result = app.queryUserTaskDetail("released-task");
+  assert.ok(result.available);
+  const attempt = result.timeline.records.find((record) => record.kind === "attempt");
+  assert.ok(attempt?.kind === "attempt");
+  assert.equal(attempt.content.length, 50);
+  const map = app.queryTaskMovementMap("released-task");
+  assert.ok(map.available);
+  assert.equal(map.map.movements.length, 10_000);
+  assert.equal(map.map.movements[0]?.recordId, "attempt-released-attempt");
+  assert.equal(map.map.movements[0]?.details.fromColumnName, "Original backlog");
+  assert.equal(map.map.movements[0]?.details.authoredEvidence, undefined);
+  const original = new DatabaseSync(fixture.databasePath, { readOnly: true });
+  t.after(() => original.close());
+  assert.equal(original.prepare("SELECT details_json FROM activity_ledger WHERE id = 'legacy-move-0'").get()?.details_json, details);
+  assert.equal(original.prepare("SELECT items_json FROM attempt_transcripts WHERE attempt_id = 'released-attempt'").get()?.items_json, transcript);
+});
 
 test("released comments recover only evidenced origin without inventing legacy provenance", async (t) => {
   const fixture = await createStartupFixture("comment-origin-upgrade");

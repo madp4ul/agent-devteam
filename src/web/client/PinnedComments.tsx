@@ -9,16 +9,16 @@ export function PinnedComments({ taskId, comments, readOnly, onSource, onChanged
   onSource(sourceId: string): void; onChanged(): Promise<void>; onError(error: unknown): void;
 }): ReactNode {
   const [expanded, setExpanded] = useState(new Set<string>());
-  const previousPins = useRef(comments.filter((comment) => comment.pinned).map(({ id }) => id));
-  const [retained, setRetained] = useState<Array<{ id: string; expiresAt: number }>>([]);
+  const previousPins = useRef(comments.filter((comment) => comment.pinned));
+  const [retained, setRetained] = useState<Array<{ comment: TaskCommentView; expiresAt: number }>>([]);
   useEffect(() => {
     const pinned = comments.filter((comment) => comment.pinned);
     const currentIds = new Set(pinned.map(({ id }) => id));
-    const removed = previousPins.current.filter((id) => !currentIds.has(id));
-    previousPins.current = [...currentIds];
+    const removed = previousPins.current.filter((comment) => !currentIds.has(comment.id));
+    previousPins.current = pinned;
     setRetained((current) => [
-      ...current.filter(({ id }) => !currentIds.has(id)),
-      ...removed.map((id) => ({ id, expiresAt: Date.now() + 2000 })),
+      ...current.filter(({ comment }) => !currentIds.has(comment.id)),
+      ...removed.map((comment) => ({ comment, expiresAt: Date.now() + 2000 })),
     ]);
   }, [comments]);
   useEffect(() => {
@@ -28,8 +28,12 @@ export function PinnedComments({ taskId, comments, readOnly, onSource, onChanged
     return () => window.clearTimeout(timer);
   }, [retained]);
   // Bridge the incoming snapshot until the effect captures removals, preserving the row and focus.
-  const retainedIds = new Set([...previousPins.current, ...retained.map(({ id }) => id)]);
-  const visible = comments.filter((comment) => comment.pinned || retainedIds.has(comment.id));
+  const currentIds = new Set(comments.filter((comment) => comment.pinned).map(({ id }) => id));
+  const previous = new Map([...previousPins.current, ...retained.map(({ comment }) => comment)].map((comment) => [comment.id, comment]));
+  const visible: TaskCommentView[] = [...comments.filter((comment) => comment.pinned), ...[...previous.values()].filter((comment) => !currentIds.has(comment.id)).map((comment) => {
+    const { pinned: _pinned, ...unpinned } = comment;
+    return unpinned;
+  })];
   if (visible.length === 0) return null;
   return <section className="detail-panel pinned-comments" aria-label="Pinned comments">
     <h2>Pinned comments</h2>

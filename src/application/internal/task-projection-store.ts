@@ -1,3 +1,5 @@
+import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
+import { ActivityJournal } from "./activity-journal.ts";
 import type { DatabaseSync } from "node:sqlite";
 
 import type { ActivationView } from "../automation-contract.ts";
@@ -21,6 +23,7 @@ import type {
   TaskView,
 } from "../task-contract.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
+import { TaskTimelinePages } from "./task-timeline-pages.ts";
 import { TaskHistoryStore } from "./task-history-store.ts";
 
 export interface StoredTaskOverview {
@@ -65,15 +68,21 @@ const taskOverviewRecordColumns = `
   MAX(CASE WHEN a.status = 'running' THEN a.target_agent_id END) AS active_agent_id`;
 
 export class TaskProjectionStore {
+  readonly #runtimeRecovery: RuntimeRecoveryStore;
   readonly history: TaskHistoryStore;
+  readonly timeline: TaskTimelinePages;
   readonly #database: DatabaseSync;
 
   constructor(database: CoordinationDatabase) {
     this.#database = database.connection;
+    this.#runtimeRecovery = new RuntimeRecoveryStore(this.#database, new ActivityJournal(this.#database));
     this.history = new TaskHistoryStore(database);
+    this.timeline = new TaskTimelinePages(this.#database, this);
   }
 
-  readTask(taskId: string, bounded = false): TaskView | undefined {
+  readTask(taskId: string, mode: "full" | "agent-context" | "browser" = "full"): TaskView | undefined {
+    const bounded = mode !== "full";
+    const browser = mode === "browser";
     const row = this.#database
       .prepare(
         "SELECT id, title, description, board_id, column_id, revision, archived_at FROM tasks WHERE id = ?",
@@ -137,8 +146,44 @@ export class TaskProjectionStore {
             : { messageBody: event.conversation_message_body }),
         },
       })),
-      activations: this.readTaskActivations(taskId),
+      activations: browser ? this.readBrowserControls(taskId) : this.readTaskActivations(taskId),
     };
+  }
+
+  private readBrowserControls(taskId: string): ActivationView[] {
+    const ids = this.#database.prepare(`SELECT id FROM activations WHERE task_id = ? AND
+      (status <> 'completed' OR id = (SELECT id FROM activations WHERE task_id = ? ORDER BY sequence DESC LIMIT 1)) ORDER BY sequence`)
+      .all(taskId, taskId) as Array<{ id: string }>;
+    return ids.map(({ id }) => ({ ...this.readTaskActivations(taskId, id, false)[0]!, attempts: this.readActivationAttempts(id, 1, undefined, true) }));
+  }
+
+  readTimelineAttempt(attemptId: string): AttemptView | undefined {
+    const row = this.#database.prepare("SELECT activation_id FROM attempts WHERE id = ?").get(attemptId) as { activation_id: string } | undefined;
+    return row ? this.readActivationAttempts(row.activation_id, 1, attemptId)[0] : undefined;
+  }
+
+  readTimelineComment(id: string): TaskView["comments"][number] | undefined {
+    const source = this.readSourceEvent(id);
+    return source && "body" in source ? source : undefined;
+  }
+
+  readTimelineActivity(id: string): TaskActivityView | undefined {
+    const source = this.readSourceEvent(id);
+    if (!source || !("type" in source)) return undefined;
+    if (source.type === "conversation.continued" && source.details.messageId) {
+      const message = this.#database.prepare("SELECT body FROM agent_conversation_messages WHERE id = ?").get(source.details.messageId) as { body: string } | undefined;
+      if (message) source.details.messageBody = message.body;
+    }
+    if (source.type === "stall.recovery-exhausted" && source.details.activationIds) {
+      source.details.recoveryAttemptIds = source.details.activationIds.split(",").map((activationId) =>
+        (this.#database.prepare("SELECT id FROM attempts WHERE activation_id = ? ORDER BY rowid DESC LIMIT 1").get(activationId) as { id: string } | undefined)?.id ?? "").join(",");
+    }
+    return source;
+  }
+
+  readMostRecentAgentId(taskId: string): string | undefined {
+    return (this.#database.prepare(`SELECT activation.target_agent_id FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id
+      WHERE activation.task_id = ? ORDER BY attempt.rowid DESC LIMIT 1`).get(taskId) as { target_agent_id: string } | undefined)?.target_agent_id;
   }
 
   readTasksInColumn(boardId: string, columnId: string): TaskView[] {
@@ -603,11 +648,13 @@ export class TaskProjectionStore {
           attempt_id: string | null;
           origin_task_id: string | null;
           origin_task_title: string | null;
+          pinned: number;
         }
       | undefined;
     return comment === undefined
       ? undefined
       : {
+          ...(comment.pinned === 1 ? { pinned: true as const } : {}),
           id: comment.id,
           body: comment.body,
           actor: { kind: comment.actor_kind, id: comment.actor_id },
@@ -677,7 +724,7 @@ export class TaskProjectionStore {
     }));
   }
 
-  readTaskActivations(taskId: string): ActivationView[] {
+  readTaskActivations(taskId: string, activationId?: string, includeAttempts = true): ActivationView[] {
     const taskState = this.#database.prepare(
       `SELECT automation_suspended, suspended_activation_id
        FROM tasks WHERE id = ?`,
@@ -691,10 +738,10 @@ export class TaskProjectionStore {
                 model, reasoning_effort, retry_due_at, retry_cycle_start,
                 failure_kind, failure_summary, resolution, stale
          FROM activations
-         WHERE task_id = ?
+         WHERE task_id = ? ${activationId === undefined ? "" : "AND id = ?"}
          ORDER BY sequence`,
       )
-      .all(taskId) as Array<{
+      .all(taskId, ...(activationId === undefined ? [] : [activationId])) as Array<{
         id: string;
         conversation_id: string | null;
         target_agent_id: string;
@@ -711,9 +758,13 @@ export class TaskProjectionStore {
         stale: number;
       }>;
     return rows.map((row) => {
-      const attempts = this.readActivationAttempts(row.id);
+      const attempts = includeAttempts ? this.readActivationAttempts(row.id) : [];
+      const attemptCount = includeAttempts ? attempts.length : (this.#database.prepare(`SELECT count(*) AS value FROM attempts
+        WHERE activation_id = ? AND NOT EXISTS (SELECT 1 FROM activation_dispatch_claims claim WHERE claim.attempt_id = attempts.id)`)
+        .get(row.id) as { value: number }).value;
+      const waiting = this.#runtimeRecovery.readWaiting(row.id);
       const dismissible = row.status === "queued" && row.resolution === null &&
-        row.stale === 0 && (attempts.length === 0 || (
+        row.stale === 0 && (attemptCount === 0 || waiting !== undefined || (
           taskState.automation_suspended === 1 &&
           taskState.suspended_activation_id === row.id
         ));
@@ -725,7 +776,7 @@ export class TaskProjectionStore {
         reason: { type: row.reason_type, sourceEventId: row.source_event_id },
         attempts,
         startupFailure: this.readActivationStartupFailure(row.id),
-        recovery: row.retry_due_at === null
+        recovery: waiting ?? (row.retry_due_at === null
           ? row.status !== "failed" || row.failure_summary === null
             ? null
             : {
@@ -734,9 +785,9 @@ export class TaskProjectionStore {
               }
           : {
               state: "scheduled",
-              nextAttempt: attempts.length + 1,
+              nextAttempt: attemptCount + 1,
               dueAt: row.retry_due_at,
-            },
+            }),
         model: row.model,
         reasoningEffort: row.reasoning_effort,
         stale: row.stale === 1,
@@ -809,21 +860,21 @@ export class TaskProjectionStore {
         };
   }
 
-  readActivationAttempts(activationId: string): ActivationView["attempts"] {
+  readActivationAttempts(activationId: string, limit?: number, attemptId?: string, newest = false): ActivationView["attempts"] {
     const rows = this.#database
       .prepare(
         `SELECT id, status, workspace_path, started_at, completed_at,
                 outcome_status, outcome_summary, outcome_kind, thread_id, model, reasoning_effort,
                 thread_continuity, reviewer_allowances_json
          FROM attempts
-         WHERE activation_id = ?
+         WHERE activation_id = ? ${attemptId === undefined ? "" : "AND id = ?"}
            AND NOT EXISTS (
              SELECT 1 FROM activation_dispatch_claims claim
              WHERE claim.attempt_id = attempts.id
            )
-         ORDER BY rowid`,
+         ORDER BY rowid ${newest ? "DESC" : "ASC"} ${limit === undefined ? "" : "LIMIT ?"}`,
       )
-      .all(activationId) as Array<{
+      .all(activationId, ...(attemptId === undefined ? [] : [attemptId]), ...(limit === undefined ? [] : [limit])) as Array<{
         id: string;
         status: "running" | "completed" | "failed";
         workspace_path: string;
@@ -873,10 +924,10 @@ export class TaskProjectionStore {
                 COALESCE(origin.title, comment.origin_task_title) AS origin_task_title
          FROM task_comments comment
          LEFT JOIN tasks origin ON origin.id = comment.origin_task_id
-         WHERE comment.task_id = ? AND (? = 0 OR comment.pinned = 1)
+         WHERE comment.task_id = ? ${pinsOnly ? "AND comment.pinned = 1" : ""}
          ORDER BY comment.sequence`,
       )
-      .all(taskId, pinsOnly ? 1 : 0) as Array<{
+      .all(taskId) as Array<{
       id: string;
       body: string;
       actor_kind: Actor["kind"];

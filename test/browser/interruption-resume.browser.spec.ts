@@ -1,7 +1,7 @@
 import type { AgentConversationHistoryEntry } from "../../src/application/conversation-contract.ts";
 import type { TaskActivityView } from "../../src/application/task-contract.ts";
 import type { UserTaskDetailQueryResult } from "../../src/application/browser-transport-contract.ts";
-import { contrastRatio, expect, runningConversationScenario, test } from "./browser-fixture.ts";
+import { fulfillTaskScenario, contrastRatio, expect, runningConversationScenario, test } from "./browser-fixture.ts";
 
 for (const theme of ["dark", "light"] as const) {
   test(`resume instructions survive disclosure, refresh and reload in ${theme} mode`, async ({ page }) => {
@@ -22,7 +22,7 @@ for (const theme of ["dark", "light"] as const) {
       const detail: UserTaskDetailQueryResult = await response.json();
       if (!detail.available) throw new Error("Expected task detail");
       detail.task.activity.push(...resumes);
-      await route.fulfill({ response, json: detail });
+      await fulfillTaskScenario(route, response, detail);
     });
     await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
       const result = runningConversationScenario([{ kind: "message", role: "agent", text: "Interrupted work" }]);

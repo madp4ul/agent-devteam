@@ -1072,7 +1072,7 @@ test("a streamed Codex failure remains inspectable while its retry waits at the 
   assert.equal(failed.available, true);
   if (!failed.available) return;
   assert.equal(failed.task.activations[0]?.status, "queued");
-  assert.equal(failed.task.activations[0]?.recovery?.state, "scheduled");
+  assert.equal(failed.task.activations[0]?.recovery?.state, "waiting");
   const inspection = application.queryTaskInspection(created.task.id);
   assert.equal(inspection.available, true);
   if (inspection.available) {

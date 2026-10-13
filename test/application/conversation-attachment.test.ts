@@ -283,7 +283,8 @@ test("archiving a task removes its immutable conversation attachments", async (t
   assert.ok(conversationId);
 
   await application.resumeAutomation();
-  await runtime.waitForRequest(1);
+  const live = await runtime.waitForRequest(1);
+  runtime.setTranscript(live.attemptId, [{ id: "live-archive-evidence", kind: "message", role: "agent", text: "Streamed evidence without a settled transcript snapshot" }]);
   application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Ready for archival evidence.", threadId: "attachment-archive-thread" });
   await application.waitForAutomationIdle();
@@ -330,6 +331,9 @@ test("archiving a task removes its immutable conversation attachments", async (t
     idempotencyKey: "archive-attached-evidence",
   });
   assert.equal(archived.accepted, true);
+  const archivedConversation = await application.queryAgentConversation(created.task.id, conversationId);
+  assert.ok(archivedConversation.available);
+  assert.equal(archivedConversation.conversation.history.some((entry) => entry.kind === "item"), false);
   assert.deepEqual(application.readConversationAttachment({
     taskId: created.task.id,
     conversationId,

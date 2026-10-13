@@ -9,6 +9,7 @@ export function TaskAttentionPanel({
   reasons,
   highlightedReasonId,
   interruption,
+  onSource,
   onChanged,
   onFeedback,
 }: {
@@ -22,6 +23,7 @@ export function TaskAttentionPanel({
     mayStartNext?: boolean;
     reasonDescription: string;
   } | undefined;
+  onSource?(sourceId: string): void;
   onChanged(): Promise<void>;
   onFeedback(feedback: { role: "status" | "alert"; text: string }): void;
 }): ReactNode {
@@ -39,7 +41,7 @@ export function TaskAttentionPanel({
               inspectable
               highlighted={highlightedReasonId === attention.id}
               onOpenMention={(sourceEventId) => {
-                if (sourceEventId !== null) focusTimelineSource(sourceEventId);
+                if (sourceEventId !== null) (onSource ?? focusTimelineSource)(sourceEventId);
                 else document.getElementById("timeline-heading")?.focus();
               }}
               {...(attention.type === "automation-suspended" && interruption !== undefined

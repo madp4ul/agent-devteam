@@ -14,6 +14,7 @@ import type {
   EditTaskRequest,
   EmptyBrowserRequest,
   IdempotentBrowserRequest,
+  InterruptTaskRequest,
   MoveTaskRequest,
   TaskOverviewView,
   AttemptTranscriptQueryResult,
@@ -92,6 +93,18 @@ export async function readTask(taskId: string): Promise<BrowserTaskDetail> {
   );
   const { available: _available, ...detail } = result;
   return detail;
+}
+
+export async function readTaskTimeline(taskId: string, query: import("../../application/timeline-contract.ts").TimelineQuery = {}): Promise<import("../../application/timeline-contract.ts").TimelinePage> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));
+  const result = await request<Extract<import("../../application/timeline-contract.ts").TimelineQueryResult, { available: true }>>(`/api/tasks/${encodeURIComponent(taskId)}/timeline?${params}`);
+  return result.page;
+}
+
+export async function readTaskMovementMap(taskId: string, after = 0): Promise<import("../../application/timeline-contract.ts").MovementMapPage> {
+  const result = await request<Extract<import("../../application/timeline-contract.ts").MovementMapQueryResult, { available: true }>>(`/api/tasks/${encodeURIComponent(taskId)}/movement-map?after=${after}`);
+  return result.map;
 }
 
 export async function readArchivedTasks(): Promise<TaskOverviewView[]> {
@@ -268,10 +281,10 @@ export async function pauseAutomation(): Promise<void> {
   });
 }
 
-export async function interruptTask(taskId: string, idempotencyKey: string): Promise<void> {
+export async function interruptTask(taskId: string, idempotencyKey: string, activationId?: string): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/interrupt`, {
     method: "POST",
-    body: serializeBrowserRequest<IdempotentBrowserRequest>({ idempotencyKey }),
+    body: serializeBrowserRequest<InterruptTaskRequest>({ idempotencyKey, ...(activationId === undefined ? {} : { activationId }) }),
   });
 }
 
@@ -336,9 +349,12 @@ export async function readAttemptTranscript(
 export async function readAgentConversation(
   taskId: string,
   conversationId: string,
+  query: import("../../application/conversation-contract.ts").ConversationHistoryQuery = {},
 ): Promise<AgentConversationQueryResult> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));
   const response = await fetch(
-    `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}`,
+    `/api/tasks/${encodeURIComponent(taskId)}/conversations/${encodeURIComponent(conversationId)}${params.size === 0 ? "" : `?${params}`}`,
   );
   const body = await response.json() as AgentConversationQueryResult;
   if (!response.ok) throw new ApiError(response.status, body);

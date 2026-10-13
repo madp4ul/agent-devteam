@@ -18,6 +18,19 @@ const usage = {
   reasoning_output_tokens: 12,
 };
 
+test("preserves structured transient failure codes and reset deadlines from runtime envelopes", async () => {
+  for (const envelope of [
+    { type: "turn.failed", error: { message: "Budget rejected", code: "usage_limit_reached", data: { reset_at: 1798808400 } } },
+    { type: "error", message: "Service unavailable", error: { code: "service_unavailable", statusCode: 503, retry_at: "2027-01-01T13:00:00Z" } },
+  ]) {
+    const result = await projectCodexTurn(events({ type: "thread.started", thread_id: "thread-retry" }, envelope), { taskId: "T-0001", attemptId: "retry" }, { started() {}, publish() {} });
+    assert.equal(result.terminal.kind, "failed");
+    if (result.terminal.kind !== "failed") throw new Error("Expected failure");
+    assert.equal(result.terminal.failure?.retryAt, "2027-01-01T13:00:00.000Z");
+    assert.equal(result.terminal.failure?.code, envelope.error.code);
+  }
+});
+
 test("projects every SDK item variant in first-seen order and keeps the latest completed message", async () => {
   const started: string[] = [];
   const published: AttemptTranscriptItem[][] = [];

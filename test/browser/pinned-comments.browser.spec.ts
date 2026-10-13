@@ -1,3 +1,4 @@
+import { fulfillTaskScenario } from "./browser-fixture.ts";
 import { contrastRatio, expect, test } from "./browser-fixture.ts";
 
 test("pins expose quiet current guidance with keyboard curation and original timeline navigation", async ({ page }) => {
@@ -55,7 +56,7 @@ test("pin activity offers an expandable comment preview and a separate source ic
     detail.task.activity.push({ id: "pin-reference", type: "comment.unpinned", actor: { kind: "agent", id: "implementer" },
       occurredAt: new Date().toISOString(), details: { commentId: comment.id,
         attemptId: detail.task.activations.flatMap((activation: { attempts: Array<{ id: string }> }) => activation.attempts)[0].id } });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
   const activity = page.locator('[data-timeline-record="pin-reference"]');
@@ -87,7 +88,7 @@ test(`pinned source navigation settles the movement map without another scroll a
     detail.task.description = "Source navigation context.";
     detail.task.comments[0].pinned = true;
     detail.task.comments[0].body = "Long pinned source context. ".repeat(600);
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
   await page.getByRole("region", { name: "Pinned comments" }).getByRole("button", { name: "View in task history" }).click();
@@ -115,7 +116,7 @@ for (const archived of [false, true]) {
         attemptId: "external-attempt", originTask: { id: "T-0099", title: "Parent requirements" } });
       if (archived) { detail.task.archived = true; detail.inspection.archived = true; }
       // Intentionally absent from the browser's agent visibility filter.
-      await route.fulfill({ response, json: detail });
+      await fulfillTaskScenario(route, response, detail);
     });
     await page.goto("/tasks/T-0001");
     const pins = page.getByRole("region", { name: "Pinned comments" });

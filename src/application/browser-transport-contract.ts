@@ -3,6 +3,10 @@ export interface IdempotentBrowserRequest {
   idempotencyKey: string;
 }
 
+export interface InterruptTaskRequest extends IdempotentBrowserRequest {
+  activationId?: string;
+}
+
 export type EmptyBrowserRequest = Record<string, never>;
 
 export interface CreateTaskRequest extends IdempotentBrowserRequest {
@@ -132,3 +136,5 @@ export type {
   ConfiguredModelPriceView,
   ProcessCostStatisticsView,
 } from "./process-cost-statistics-contract.ts";
+
+export type { TimelineRecord, TimelinePage, TimelineQuery, TimelineQueryResult, TaskMovementMetadata, MovementMapPage, MovementMapQueryResult } from "./timeline-contract.ts";

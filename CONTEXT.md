@@ -232,6 +232,28 @@ messages and tool activity from the agent runtime. It is read through the
 containing agent conversation while remaining attributable to the attempt, and
 is distinct from task activity history and authored task comments.
 
+**Browser conversation history window**:
+A bounded, chronological selection of whole conversation causes, runtime
+transcript items, resumes and retirement evidence. Stable record identities and
+conversation-scoped cursors allow direct source navigation and reloading evicted
+pages. Its backward watermark describes retained browser history, not agent
+context delivery or an activation composition checkpoint. Conversation cost and
+live state remain authoritative across the complete conversation.
+
+**Browser task timeline window**:
+An initially bounded newest-first selection of top-level comments, framework
+events, attempt groups and startup failures. Browser pages and nested activity
+remain rendered once requested, until the user leaves the task. Direct source
+navigation retains earlier pages and marks skipped ranges with load controls;
+unloaded history creates no blank scrollbar area. Server selections and polling
+requests stay bounded. Current shared pins and task controls remain available
+independently; browser cursors never serve as agent context-delivery checkpoints.
+
+**Task movement map**:
+The compact complete task journey, with immutable movement/source identities,
+containing timeline group identities and historical labels where retained.
+A map destination remains navigable when its timeline record is not yet loaded. Its live sequence cursor is independent of timeline windows.
+
 **Permission block**:
 An agent run outcome in which the agent runtime's permission policy prevents a
 required action and no interactive approval channel is available. It requires
@@ -314,10 +336,24 @@ comments added since the failure. Retrying does not create a new activation.
 Only technical failures reported by the agent runtime are eligible for automatic
 retry; the coordination framework does not interpret a normally completed run
 to judge whether its process outcome was adequate. Each activation receives one
-framework-wide retry policy of three total automatic attempts with capped
-exponential backoff. This operational policy is not process-configurable. Each
+ordinary retry policy of three technical attempts with capped exponential
+backoff. Recognized connection loss, temporary service failures and Codex message
+budget exhaustion instead wait and retry the same activation indefinitely. A
+provider deadline takes precedence; otherwise retries wait at least 60 seconds.
+Transient failures do not consume the ordinary budget or request attention. This operational policy is not process-configurable. Each
 explicit user retry begins a fresh cycle of up to three attempts for the same
 activation.
+
+**Runtime recovery episode**:
+A durable waiting interval for recognized transient runtime failures on one
+activation. It records first/latest diagnostics, at most three distinct samples,
+classification, retry eligibility, failure count and dispatched retry count. The
+first failure and meaningful runs retain ordinary evidence. Subsequent probes
+stay provisional until output, accepted coordination effects, continuity changes
+or new/uncertain usage evidence makes them meaningful; empty rejected probes
+update the episode without publishing attempts or history. Waiting releases
+execution capacity and can be explicitly dismissed, while pause, suspension,
+process compatibility and restart retain their ordinary authority.
 
 **Activation dismissal**:
 An explicit user decision to abandon one activation whose expectation will not

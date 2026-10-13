@@ -350,6 +350,14 @@ export interface AgentRunOutcome {
   summary: string;
   threadId?: string;
   threadContinuity?: "replaced";
+  failure?: RuntimeFailureEvidence;
+}
+
+export interface RuntimeFailureEvidence {
+  code?: string;
+  statusCode?: number;
+  retryAt?: string;
+  retryAfterSeconds?: number;
 }
 
 export type AttemptOutcomeView = AgentRunOutcome | {
@@ -371,6 +379,7 @@ export interface AgentRuntime {
 }
 
 export interface AttemptTranscriptAccess {
+  release?(attemptId: string): void;
   read(attemptId: string): Promise<AttemptTranscriptItem[] | null>;
   readUsage?(attemptId: string): Promise<AttemptTokenUsage | null>;
   readContextWindowUsage?(attemptId: string): Promise<AttemptContextWindowUsage | null>;
@@ -378,6 +387,7 @@ export interface AttemptTranscriptAccess {
 
 export interface AgentRunLifecycle {
   started(threadId?: string): void;
+  transcriptItemUpdated?(ordinal: number, item: AttemptTranscriptItem): void;
   reviewerPolicyConfigured?(configuration: ReviewerPolicyConfiguration): void;
 }
 

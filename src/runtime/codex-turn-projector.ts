@@ -1,3 +1,5 @@
+import { runtimeFailureEvidence } from "../application/runtime-failure.ts";
+import type { RuntimeFailureEvidence } from "../application/runtime-contract.ts";
 import type { ThreadEvent, ThreadItem } from "@openai/codex-sdk";
 
 import type {
@@ -10,6 +12,7 @@ type AttemptScope = Readonly<{ attemptId: string; taskId: string }>;
 type ProjectionPorts = Readonly<{
   started(threadId: string): void;
   publish(transcript: readonly AttemptTranscriptItem[]): void;
+  itemUpdated?(ordinal: number, item: AttemptTranscriptItem): void;
 }>;
 
 export interface CodexTurnProjection {
@@ -19,7 +22,7 @@ export interface CodexTurnProjection {
   terminal:
     | { kind: "completed"; summary: string }
     | { kind: "permission-blocked"; summary: string }
-    | { kind: "failed"; summary: string };
+    | { kind: "failed"; summary: string; failure?: RuntimeFailureEvidence };
 }
 
 type ItemRecord = Record<string, unknown> & { type: string };
@@ -40,16 +43,18 @@ export async function projectCodexTurn(
   let permissionBlockSummary: string | undefined;
 
   const snapshot = (): readonly AttemptTranscriptItem[] => structuredClone(transcript);
-  const publish = (): void => {
+  const publish = (ordinal = transcript.length - 1): void => {
+    if (ordinal >= 0) ports.itemUpdated?.(ordinal, structuredClone(transcript[ordinal]!));
     if (threadId !== undefined) ports.publish(snapshot());
   };
   const failed = (
     diagnostic: string,
     outcomeSummary = `Codex could not complete the activation: ${diagnostic}`,
+    evidence?: unknown,
   ): CodexTurnProjection => {
     transcript.push({ kind: "diagnostic", text: diagnostic });
     publish();
-    return projection(threadId, snapshot(), usage, { kind: "failed", summary: outcomeSummary });
+    return projection(threadId, snapshot(), usage, { kind: "failed", summary: outcomeSummary, ...(runtimeFailureEvidence(evidence) === undefined ? {} : { failure: runtimeFailureEvidence(evidence)! }) });
   };
 
   try {
@@ -81,8 +86,8 @@ export async function projectCodexTurn(
             return failed(`Codex emitted a malformed ${event.type} event.`);
           }
           const item = event.item as ItemRecord;
-          upsertTranscriptItem(transcript, itemIndexes, item, event.type, scope);
-          publish();
+          const ordinal = upsertTranscriptItem(transcript, itemIndexes, item, event.type, scope);
+          publish(ordinal);
           const coordinationCall = coordinationToolCall(item);
           if (coordinationCall?.status === "failed") {
             failedCoordinationTools.set(coordinationCall.name, coordinationCall.diagnostic);
@@ -109,19 +114,19 @@ export async function projectCodexTurn(
           if (!isRecord(event.error) || typeof event.error.message !== "string") {
             return failed("Codex emitted a malformed turn.failed event.");
           }
-          return failed(event.error.message);
+          return failed(event.error.message, undefined, event);
         case "error":
           if (typeof event.message !== "string") {
             return failed("Codex emitted a malformed error event.");
           }
-          return failed(event.message);
+          return failed(event.message, undefined, event);
         default:
           return failed(`Codex emitted an unsupported event type: ${boundedLabel(event.type)}.`);
       }
     }
   } catch (error) {
     if (threadId === undefined) throw error;
-    return failed(error instanceof Error ? error.message : "the streamed run failed");
+    return failed(error instanceof Error ? error.message : "the streamed run failed", undefined, error);
   }
 
   if (threadId === undefined) {
@@ -175,15 +180,17 @@ function upsertTranscriptItem(
   item: ItemRecord,
   eventType: ItemEventType,
   scope: AttemptScope,
-): void {
+): number {
   const next = transcriptItem(item, eventType, scope);
   const itemId = typeof item.id === "string" ? item.id : undefined;
   const existingIndex = itemId === undefined ? undefined : indexes.get(itemId);
   if (existingIndex === undefined) {
     if (itemId !== undefined) indexes.set(itemId, transcript.length);
     transcript.push(next);
+    return transcript.length - 1;
   } else {
     transcript[existingIndex] = next;
+    return existingIndex;
   }
 }
 

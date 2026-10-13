@@ -1,3 +1,5 @@
+import { classifyRuntimeFailure } from "../runtime-failure.ts";
+import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
 import type { DatabaseSync } from "node:sqlite";
 
 import type {
@@ -49,6 +51,7 @@ export class ActiveAttemptModule {
   readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
   readonly #attentionRecorder: AttentionRecorder;
+  readonly #recovery: RuntimeRecoveryStore;
   readonly #attemptEvidence: AttemptEvidenceModule;
 
   constructor(
@@ -64,6 +67,26 @@ export class ActiveAttemptModule {
     this.#activityJournal = activityJournal;
     this.#attentionRecorder = attentionRecorder;
     this.#attemptEvidence = attemptEvidence;
+    this.#recovery = new RuntimeRecoveryStore(this.#database, activityJournal);
+  }
+
+  recordTranscriptItem(attemptId: string, ordinal: number, item: AttemptTranscriptItem): void {
+    if (!Number.isSafeInteger(ordinal) || ordinal < 0) throw new Error("Invalid transcript ordinal");
+    this.#owner.transaction(() => {
+      if (!meaningfulTranscriptItem(item)) {
+        const probe = this.#database.prepare("SELECT provisional_probe FROM attempts WHERE id = ?").get(attemptId) as { provisional_probe: number } | undefined;
+        if (probe?.provisional_probe === 1) return;
+      }
+      this.#activityJournal.promoteProbe(attemptId, new Date().toISOString());
+      this.#database.prepare(`INSERT INTO conversation_history_items(id, conversation_id, position, kind, activation_id, attempt_id, item_json)
+        SELECT 'item:' || attempt.id || ':' || printf('%d', ?), positions.conversation_id,
+          positions.position || '|' || printf('%020d', attempt.rowid) || '|2|' || printf('%020d', ?),
+          'item', attempt.activation_id, attempt.id, ?
+        FROM attempts attempt JOIN conversation_history_activation_positions positions ON positions.id = attempt.activation_id
+        WHERE attempt.id = ? AND attempt.status = 'running' AND positions.conversation_id IS NOT NULL
+        ON CONFLICT(id) DO UPDATE SET item_json = excluded.item_json`)
+        .run(ordinal, ordinal, JSON.stringify(item), attemptId);
+    });
   }
 
   recoverInterruptedAttempts(now = new Date()): number {
@@ -71,7 +94,7 @@ export class ActiveAttemptModule {
       const interrupted = this.#database
         .prepare(
           `SELECT attempt.id, attempt.activation_id, activation.task_id,
-                  activation.target_agent_id, activation.retry_cycle_start
+                  activation.target_agent_id, activation.retry_cycle_start, attempt.provisional_probe
            FROM attempts attempt
            JOIN activations activation ON activation.id = attempt.activation_id
            WHERE attempt.status = 'running' AND activation.status = 'running'
@@ -83,8 +106,18 @@ export class ActiveAttemptModule {
           task_id: string;
           target_agent_id: string;
           retry_cycle_start: number;
+          provisional_probe: number;
         }>;
       for (const attempt of interrupted) {
+        const waiting = this.#recovery.readWaiting(attempt.activation_id);
+        if (attempt.provisional_probe === 1 && waiting) {
+          this.#database.prepare("DELETE FROM attempts WHERE id = ?").run(attempt.id);
+          const dueAt = new Date(Math.max(Date.parse(waiting.dueAt), now.getTime() + 60_000)).toISOString();
+          this.#database.prepare("UPDATE runtime_recovery_episodes SET next_eligible_at = ? WHERE id = ?").run(dueAt, waiting.episodeId);
+          this.#database.prepare("UPDATE activations SET status = 'queued', retry_due_at = ? WHERE id = ?").run(dueAt, attempt.activation_id);
+          continue;
+        }
+        this.#recovery.finishWithinTransaction(attempt.activation_id, "ordinary", now);
         const occurredAt = now.toISOString();
         const summary = "The previous host stopped while this attempt was active.";
         this.#database
@@ -150,6 +183,8 @@ export class ActiveAttemptModule {
       });
       const occurredAt = input.now.toISOString();
       const summary = "The user interrupted this attempt.";
+      this.#activityJournal.promoteProbe(input.attemptId, occurredAt);
+      this.#recovery.finishWithinTransaction(attempt.activation_id, "stopped", input.now);
       this.#database
         .prepare(
           `UPDATE attempts
@@ -280,10 +315,16 @@ export class ActiveAttemptModule {
 
   recordThreadStarted(attemptId: string, threadId: string): void {
     this.#owner.transaction(() => {
+      const scope = this.#database.prepare(`SELECT attempt.provisional_probe, conversation.current_thread_id FROM attempts attempt
+        JOIN activations activation ON activation.id = attempt.activation_id
+        LEFT JOIN agent_conversations conversation ON conversation.id = activation.conversation_id WHERE attempt.id = ?`).get(attemptId) as
+        { provisional_probe: number; current_thread_id: string | null } | undefined;
+      if (scope?.provisional_probe === 1 && scope.current_thread_id !== threadId) this.#activityJournal.promoteProbe(attemptId, new Date().toISOString());
       const result = this.#database
         .prepare("UPDATE attempts SET thread_id = ? WHERE id = ? AND status = 'running'")
         .run(threadId, attemptId);
       if (result.changes !== 1) throw new Error(`Attempt ${attemptId} is not running`);
+      if (scope?.provisional_probe === 1 && scope.current_thread_id === threadId) return;
       const activity = this.#database
         .prepare(
           `SELECT id, details_json
@@ -328,7 +369,7 @@ export class ActiveAttemptModule {
         .prepare(
           `SELECT attempt.activation_id, attempt.thread_id,
                   a.task_id, a.target_agent_id,
-                  a.retry_cycle_start
+                  a.retry_cycle_start, attempt.provisional_probe
            FROM attempts attempt
            JOIN activations a ON a.id = attempt.activation_id
            WHERE attempt.id = ? AND attempt.status = 'running'`,
@@ -340,9 +381,27 @@ export class ActiveAttemptModule {
             task_id: string;
             target_agent_id: string;
             retry_cycle_start: number;
+            provisional_probe: number;
           }
         | undefined;
       if (attempt === undefined) throw new Error(`Attempt ${input.attemptId} is not running`);
+      const transient = input.outcome.status === "failed" ? classifyRuntimeFailure(input.outcome.summary, input.outcome.failure, input.now) : undefined;
+      const usageEvidence = { attemptId: input.attemptId,
+        ...(input.usage === undefined ? {} : { reportedUsage: input.usage }),
+        ...(input.resumedThreadId === undefined ? {} : { resumedThreadId: input.resumedThreadId }),
+        ...(input.outcome.threadId === undefined && attempt.thread_id === null ? {} : { completedThreadId: input.outcome.threadId ?? attempt.thread_id! }) };
+      const meaningful = input.transcript?.some(meaningfulTranscriptItem) ||
+        this.#attemptEvidence.hasMeaningfulUsage(usageEvidence) || input.contextWindowUsage !== undefined ||
+        input.outcome.threadContinuity !== undefined || (input.outcome.threadId !== undefined && input.outcome.threadId !== input.resumedThreadId);
+      if (attempt.provisional_probe === 1 && transient && !meaningful) {
+        this.#database.prepare("DELETE FROM attempts WHERE id = ?").run(input.attemptId);
+        this.#recovery.recordFailureWithinTransaction(attempt.activation_id, transient, input.now);
+        return;
+      }
+      this.#activityJournal.promoteProbe(input.attemptId, input.now.toISOString());
+      if (transient) this.#database.prepare("UPDATE attempts SET runtime_failure_class = ?, runtime_failure_json = ? WHERE id = ?")
+        .run(transient.kind, JSON.stringify(input.outcome.failure ?? {}), input.attemptId);
+      else this.#recovery.finishWithinTransaction(attempt.activation_id, input.outcome.status === "completed" ? "recovered" : "ordinary", input.now);
       this.#attemptEvidence.recordWithinSettlement({
         attemptId: input.attemptId,
         ...(input.transcript === undefined ? {} : { transcript: input.transcript }),
@@ -394,6 +453,8 @@ export class ActiveAttemptModule {
           )
           .run(input.outcome.summary, attempt.activation_id);
         this.createFailureAttention(attempt.task_id, attempt.activation_id, occurredAt);
+      } else if (transient) {
+        this.#recovery.recordFailureWithinTransaction(attempt.activation_id, transient, input.now);
       } else {
         this.settleTechnicalFailure(
           attempt.activation_id,
@@ -450,9 +511,9 @@ export class ActiveAttemptModule {
     now: Date,
   ): void {
     const attempts = this.#database
-      .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
-      .get(activationId) as { count: number };
-    const cycleAttempt = attempts.count - retryCycleStart;
+      .prepare("SELECT COUNT(*) AS count FROM (SELECT runtime_failure_class FROM attempts WHERE activation_id = ? ORDER BY rowid LIMIT -1 OFFSET ?) WHERE runtime_failure_class IS NULL")
+      .get(activationId, retryCycleStart) as { count: number };
+    const cycleAttempt = attempts.count;
     if (cycleAttempt < 3) {
       this.#database
         .prepare(
@@ -479,6 +540,10 @@ export class ActiveAttemptModule {
 
 function serializedContextWindowUsage(usage: AttemptContextWindowUsage | undefined): string | null {
   return usage === undefined ? null : JSON.stringify(usage);
+}
+
+function meaningfulTranscriptItem(item: AttemptTranscriptItem): boolean {
+  return item.kind !== "diagnostic" && (item.kind !== "message" || item.text.trim().length > 0);
 }
 
 function retryDueAt(now: Date, cycleAttempt: number): string {

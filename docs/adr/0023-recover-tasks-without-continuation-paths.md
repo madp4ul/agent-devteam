@@ -28,7 +28,9 @@ narrow exception does not change ordinary queue semantics or retarget activation
 Allow three recovery activations per episode. Regular activation, waiting, or
 user attention resets count; an unwatched column or Completion ends the episode.
 Recovery itself and prose-only edits do not reset it. Pause/interruption preserve
-count. Technical retries repeat one activation under existing failure policy.
+count. Technical retries repeat one activation under failure policy. ADR 0028 adds
+indefinite classified transient retries within that same activation; they do not
+consume further stall-recovery slots or alter the three-recovery budget.
 If recovery three finishes normally without continuation, create framework
 attention explaining exhaustion without claiming to diagnose the agent.
 

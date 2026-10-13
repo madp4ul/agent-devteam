@@ -1,0 +1,51 @@
+✔ conversation lineage stays isolated by both task and stable agent identity (334.3349ms)
+✔ a source delivered earlier remains exact outside its queued activation's bounded updates (657.3711ms)
+✔ a self-authored activation source stays available through retained conversation history (630.2933ms)
+✔ ordinary activations reuse the task-and-agent conversation and deliver only new task context (799.4671ms)
+✔ continuing a conversation persists one authored message and activation idempotently (516.0609ms)
+✔ retiring a settled conversation preserves it and the next ordinary activation creates its replacement (950.534ms)
+✔ a follow-up resumes the owning agent's thread and existing task workspace in activation order (839.3979ms)
+✔ task conversation index stays compact, recent, distinguishable, and historically navigable (513.9811ms)
+✔ a finished attempt transcript remains inspectable after application restart (740.6996ms)
+✔ a streamed Codex failure remains inspectable while its retry waits at the queue head (453.8734ms)
+✔ conversation index status follows running work and unresolved attention (411.6939ms)
+✔ an attachment-only follow-up binds a sanitized upload for runtime delivery (767.491ms)
+✔ replaying an attachment follow-up is idempotent and leaves unrelated pending uploads disposable (686.461ms)
+✔ a bound attachment remains downloadable after restart (860.5843ms)
+✔ conversation attachments are unavailable outside their owning conversation (477.5007ms)
+✔ a conversation rejects uploads beyond its attachment-count limit (670.4687ms)
+✔ a conversation rejects a streamed upload beyond its total-byte limit (741.2717ms)
+✔ archiving a task removes its immutable conversation attachments (829.3071ms)
+✔ a ten thousand item attempt pages newest first without reading retained transcripts (754.2207ms)
+ℹ four bounded application queries over 10,000 items: 11.04ms; full transcript reads: 0
+ℹ [{"id":5,"parent":0,"notused":51,"detail":"SEARCH conversation_history_items USING INDEX conversation_history_position (conversation_id=? AND position<?)"}]
+ℹ [{"id":5,"parent":0,"notused":62,"detail":"SEARCH conversation_history_items USING INDEX conversation_history_position (conversation_id=?)"}]
+✔ backward pages keep their watermark while latest refresh updates live items and discovers new content (576.8017ms)
+✔ equal timestamp activation pages hydrate only selected causes while full costs remain authoritative (1959.9074ms)
+ℹ 50-cause page: 100 attempts 36.00ms; 10,000 attempts 66.77ms. Remaining linear aggregate reads 10,000 compact usage rows for authoritative $100, never transcript item arrays; cause hydration capped at50.
+ℹ [{"id":4,"parent":0,"notused":39,"detail":"SEARCH activations USING INDEX sqlite_autoindex_activations_1 (id=?)"}]
+✔ attempt cost bills ordinary input after cached and cache-write input exactly once (1.6006ms)
+✔ cost aggregation excludes running attempts and preserves pending and lower-bound facts (0.3535ms)
+✔ attempt cost rejects malformed and internally inconsistent usage (0.1903ms)
+✔ compact aggregation groups only matching categories and historical rates (0.1931ms)
+✔ cost aggregation does not publish a total that exceeds finite numeric bounds (0.1229ms)
+✔ a completed attempt retains its snapshotted price after process pricing changes (818.8077ms)
+✔ conversation cost totals preserve the known subtotal when a settled run has no usage (919.3138ms)
+✔ continued turns price cumulative Codex usage snapshots exactly once (843.4677ms)
+✔ conversation context fill follows the latest Codex thread and survives restart (637.9982ms)
+▶ complete task detail owns the conversation cost summary
+  ✔ omits a summary when conversations have no available or pending cost (0.1611ms)
+  ✔ projects pending zero for a first priceable running attempt (0.1604ms)
+  ✔ groups equal category rates without erasing historical rate changes (0.2857ms)
+  ✔ retains the known-cost lower bound when settled usage is unavailable (0.2615ms)
+✔ complete task detail owns the conversation cost summary (836.8455ms)
+✔ process cost statistics aggregate retained tasks without repricing history (2443.3013ms)
+✔ HTTP pages bound a large attempt and validate limits, scopes and direct sources (558.5014ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7137.7649

@@ -1,3 +1,4 @@
+import { fulfillTaskScenario } from "./browser-fixture.ts";
 import { contrastRatio, expect, setAppearance, test } from "./browser-fixture.ts";
 
 test("exhausted stall recovery exposes evidence and an addressable action in both themes", async ({ page, request }) => {
@@ -65,7 +66,7 @@ test("task attention navigates to the exact mention and resolves beside its sour
       id: "reply-local-attention", type: "user-mention", sourceEventId: "reply-local-comment",
       createdAt: "2026-08-15T12:31:00.000Z",
     }].filter((reason) => !addressed.has(reason.id));
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001?attention=source-local-attention");

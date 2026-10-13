@@ -125,7 +125,7 @@ function describeAgentInspectableTaskContent(
 ): AgentInspectableTaskContentView {
   return {
     taskFields: [...Object.keys(task).filter((key) => key !== "comments"), "history"] as Array<keyof TaskInspectionView>,
-    commentIds: task.comments.map(({ id }) => id),
+    commentIds: [...new Set([...task.comments, ...task.pinnedComments].map(({ id }) => id))],
     relationshipIds: task.relationships.map(({ id }) => id),
     activityIds: activity.map(({ id }) => id),
     conversationMessageIds: activity.flatMap(({ details }) =>
@@ -471,6 +471,7 @@ export class CoordinationApplication {
       command.taskId,
       command.actor,
       command.idempotencyKey,
+      command.activationId,
     );
     if (!result.accepted) return result;
     const accepted = {
@@ -607,6 +608,14 @@ export class CoordinationApplication {
   queryUserTaskDetail(taskId: string): UserTaskDetailQueryResult {
     const context = this.#discovery.queryUserTaskDetailContext(taskId);
     if (!context.available) return context;
+    const timeline = this.#persistence.taskProjections.timeline.query(taskId);
+    if (!timeline.available) return { available: false, reason: "not-found" };
+    const pins = context.inspection.pinnedComments;
+    context.task.comments = timeline.page.records.flatMap((record) => record.kind === "comment" ? [record.comment] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "comment" ? [entry.comment] : []) : []);
+    context.task.activity = timeline.page.records.flatMap((record) => record.kind === "activity" ? [record.activity] : record.kind === "attempt" ? record.content.flatMap((entry) => entry.kind === "activity" ? [entry.activity] : []) : []);
+    context.task.activity.reverse();
+    context.inspection.comments = context.task.comments;
+    context.inspection.pinnedComments = pins;
     let agentInspectableContent: AgentInspectableTaskContentView = {
       taskFields: [],
       commentIds: [],
@@ -632,6 +641,9 @@ export class CoordinationApplication {
     return {
       available: true,
       task: context.task,
+      timeline: timeline.page,
+      movementSummary: this.#persistence.taskProjections.timeline.movementSummary(taskId),
+      mostRecentAgentId: this.#persistence.taskProjections.readMostRecentAgentId(taskId),
       board: context.board,
       inspection: context.inspection,
       relationshipTasks: relatedTasks.relationshipTasks,
@@ -647,6 +659,14 @@ export class CoordinationApplication {
         ? {}
         : { conversationCost }),
     };
+  }
+
+  queryTaskTimeline(taskId: string, query: import("./timeline-contract.ts").TimelineQuery = {}): import("./timeline-contract.ts").TimelineQueryResult {
+    return this.#persistence.taskProjections.timeline.query(taskId, query);
+  }
+
+  queryTaskMovementMap(taskId: string, after = 0): import("./timeline-contract.ts").MovementMapQueryResult {
+    return this.#persistence.taskProjections.timeline.movementMap(taskId, after);
   }
 
   private readUserRelatedTaskReferences(task: TaskView): {
@@ -738,6 +758,7 @@ export class CoordinationApplication {
   async queryAgentConversation(
     taskId: string,
     conversationId: string,
+    query: import("./conversation-contract.ts").ConversationHistoryQuery = {},
   ): Promise<AgentConversationQueryResult> {
     if (this.#startup.mode === "configuration-error") {
       return {
@@ -746,7 +767,8 @@ export class CoordinationApplication {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const conversation = await this.#persistence.conversationProjections.readConversation(taskId, conversationId);
+    const conversation = await this.#persistence.conversationProjections.readConversation(taskId, conversationId, query);
+    if (conversation === "invalid-page") return { available: false, reason: "invalid-page" };
     if (conversation === undefined) return { available: false, reason: "not-found" };
     return { available: true, conversation };
   }

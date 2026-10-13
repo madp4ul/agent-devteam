@@ -1,3 +1,4 @@
+import { runtimeFailureEvidence } from "../runtime-failure.ts";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import type {
@@ -58,6 +59,7 @@ export interface AutomationCoordinatorOptions {
 
 interface ActiveRunControl {
   attemptId: string;
+  activationId: string;
   controller: AbortController;
   state: "running" | "interrupting";
   interruptedBy?: Actor & { kind: "user" };
@@ -203,9 +205,10 @@ export class AutomationCoordinator {
     taskId: string,
     actor: Actor & { kind: "user" },
     idempotencyKey: string,
+    activationId?: string,
   ): InterruptTaskResult {
     const active = this.#activeRuns.get(taskId);
-    if (active === undefined) return { accepted: false, reason: "not-running" };
+    if (active === undefined || (activationId !== undefined && active.activationId !== activationId)) return { accepted: false, reason: "not-running" };
     if (active.state === "interrupting") {
       return { accepted: false, reason: "already-interrupting" };
     }
@@ -286,6 +289,7 @@ export class AutomationCoordinator {
         if (firstError !== undefined) throw firstError;
         return;
       }
+      if (first && inFlightCompletions.size === 0 && dueAt !== undefined) { first = false; onFirstDispatch(); }
       let wake: (() => void) | undefined;
       const nextKick = new Promise<void>((resolve) => {
         wake = resolve;
@@ -346,6 +350,7 @@ export class AutomationCoordinator {
     });
     const activeRun: ActiveRunControl = {
       attemptId: attempt.id,
+      activationId: claim.activation.id,
       controller,
       state: "running" as "running" | "interrupting",
       confirmed,
@@ -412,6 +417,7 @@ export class AutomationCoordinator {
           },
         },
         {
+          transcriptItemUpdated: (ordinal, item) => this.#activeAttempts.recordTranscriptItem(attempt.id, ordinal, item),
           reviewerPolicyConfigured: (configuration) => {
             this.#activeAttempts.recordReviewerPolicyConfigured(attempt.id, configuration);
           },
@@ -435,6 +441,7 @@ export class AutomationCoordinator {
           outcome = {
             status: "failed",
             summary: error instanceof Error ? error.message : "Agent runtime dispatch failed",
+            ...(runtimeFailureEvidence(error) === undefined ? {} : { failure: runtimeFailureEvidence(error)! }),
           };
         }
         if (this.#closed) {
@@ -487,6 +494,7 @@ export class AutomationCoordinator {
               : { resumedThreadId: resumeThreadId }),
           });
         }
+        this.#transcriptAccess?.release?.(attempt.id);
         activeRun.confirm();
       } catch (error) {
         if (activeRun.state === "interrupting") activeRun.fail(error);

@@ -21,6 +21,8 @@ test("browser route catalog accounts for the complete pre-dispatcher API invento
     "GET /api/tasks/:taskId",
     "GET /api/tasks/:taskId/conversations/:conversationId",
     "GET /api/tasks/:taskId/conversations/:conversationId/attachments/:attachmentId",
+    "GET /api/tasks/:taskId/movement-map",
+    "GET /api/tasks/:taskId/timeline",
     "GET /api/tasks/:taskId/workspace/git-state",
     "PATCH /api/settings/notifications",
     "PATCH /api/tasks/:taskId",

@@ -365,6 +365,14 @@ without choosing the implementation yet.
   — Decide how a user deliberately abandons preserved interrupted work, what
   happens to later queued activations, and how the decision remains auditable.
 
+- [Remind Agents About Activation Mentions at the Comment Tool](./issues/97-remind-agents-about-activation-mentions-at-comment-tool.md)
+  — Put an explicit activation warning and a plain-name alternative directly
+  in comment-tool metadata where agents compose comments.
+  **Resolved:** The comment-tool description now prominently explains canonical
+  mention activation on the destination task and plain-reference alternatives,
+  with request/reference examples verified through MCP discovery; parsing and
+  activation behavior remain unchanged.
+
 ## Maintainer refactoring research
 
 - [Evaluate the Web API Routing Boundary](./issues/84-evaluate-web-api-routing-boundary.md)

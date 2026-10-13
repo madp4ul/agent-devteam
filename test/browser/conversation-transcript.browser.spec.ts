@@ -1,3 +1,4 @@
+import { fulfillTaskScenario } from "./browser-fixture.ts";
 import type {
   AgentConversationHistoryEntry,
   AgentConversationMessageView,
@@ -102,7 +103,7 @@ test("conversation messages render Markdown and commands remain quiet but inspec
   await expect(dialog).not.toContainText("Codex message");
   await expect(dialog.locator(".conversation-run")).toHaveCount(0);
   await expect(dialog.locator(".conversation-message")).toHaveCount(1);
-  expect(await dialog.locator(".conversation-stream > .transcript-item, .conversation-stream > .transcript-command")
+  expect(await dialog.locator(".conversation-stream .transcript-item, .conversation-stream .transcript-command")
     .evaluateAll((entries) => entries.map((entry) => entry.classList.contains("message") ? "message" : "command")))
     .toEqual(["message", "command", "command", "command"]);
 
@@ -849,7 +850,7 @@ test("attempt outcomes show canonical-looking participant text without executabl
     if (outcome !== undefined && outcome !== null) {
       outcome.summary = "No further response from @implementer is required.";
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");

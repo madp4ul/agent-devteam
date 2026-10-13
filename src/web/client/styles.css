@@ -77,6 +77,25 @@
   --detail-sticky-offset: 4.5rem;
 }
 
+.conversation-page-control {
+  display: block;
+  margin: 0.5rem auto;
+  padding: 0.35rem 0.75rem;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.conversation-page-control:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.conversation-page-boundary {
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.85rem;
+}
+
 html[data-theme="dark"] {
   color-scheme: dark;
   --canvas: #121714;
@@ -990,3 +1009,13 @@ html[data-theme] .comment-icon-button:hover:not(:disabled), html[data-theme] .co
 .comment-icon-button svg { display: block; width: 1rem; height: 1rem; fill: none; stroke: currentcolor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .comment-icon-button[aria-disabled="true"] { cursor: wait; opacity: .65; }
 .recently-unpinned .pinned-comment-content { color: var(--text-muted); }
+
+.movement-map-status { position: absolute; z-index: 3; inset: 0; margin: 0; padding: .7rem; background: var(--surface); color: var(--text); font-size: .85rem; }
+
+.runtime-waiting-summary { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--surface); margin: 0.5rem 0; color: var(--text); }
+.runtime-waiting-summary p { margin: 0.4rem 0; font-size: 0.85rem; overflow-wrap: anywhere; }
+.runtime-waiting-heading { display: flex; gap: 1rem; align-items: center; justify-content: space-between; }
+.runtime-waiting-summary details { font-size: 0.85rem; }
+
+.timeline-history-gap { list-style: none; padding: 0.75rem 0; border-block: 1px dashed var(--border); }
+.timeline-history-gap .secondary { font-size: 0.85rem; }

@@ -1,0 +1,38 @@
+✔ migration 0010 backfills a large released transcript without changing original evidence (1048.6562ms)
+✔ migration 0011 backfills bounded attempt groups and complete compact movements without rewriting sources (1126.9822ms)
+✔ released comments recover only evidenced origin without inventing legacy provenance (329.8616ms)
+✔ fresh startup applies the released migration registry and matches the current schema snapshot (249.1475ms)
+✔ the released task-detail indexes keep selected-history lookups off unrelated table scans (47.4301ms)
+✔ an exact 0001 database upgrades through the released task-detail lookup migration (72.5528ms)
+✔ the relationship-owner migration preserves legacy relationships for explicit repair (94.3325ms)
+✔ repeat startup opens an already-current released database without changing its history or schema (81.3054ms)
+✔ startup refuses an unsupported pre-release database and leaves all SQLite files untouched (51.7733ms)
+✔ startup does not adopt an existing empty ledger-less database (25.9524ms)
+✔ startup refuses divergent, gapped, reordered, future, and malformed released histories without changing SQLite files (484.588ms)
+✔ a skipped-release upgrade preserves representative retained state and backs up committed WAL data (118.21ms)
+✔ a direct one-step upgrade preserves released identities and values through application projections (111.3088ms)
+✔ a late migration failure rolls back the whole pending sequence, reports its verified backup, and blocks dispatch (300.7647ms)
+✔ an upgrade that omits coordination-enforcing indexes and triggers rolls back before startup (314.4239ms)
+▶ startup rejects changed schema behavior even when required object names still exist
+  ✔ index one_running_activation_per_task (89.8648ms)
+  ✔ index one_current_agent_conversation_per_task_agent (84.365ms)
+  ✔ trigger activations_start_in_task_order (81.7125ms)
+  ✔ table task_starting_refs (82.9217ms)
+  ✔ table task_relationships (86.4584ms)
+  ✔ view mapped_tasks (82.4247ms)
+  ✔ table forgotten_probe (87.9107ms)
+  ✔ table sqliteProbe (88.1137ms)
+✔ startup rejects changed schema behavior even when required object names still exist (684.7821ms)
+✔ an already-current database with an omitted invariant does not bypass verification (81.3589ms)
+✔ schema verification preserves exact string literals even when they contain line endings (87.6589ms)
+✔ harmless SQLite ALTER TABLE quoting and DDL formatting remain valid on upgrade and restart (115.9248ms)
+✔ an unavailable reviewed snapshot produces a blocking diagnostic without recursively failing the error shell (301.7966ms)
+✔ backup and post-migration verification failures block startup before accepting an upgrade (150.3259ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6128.3923

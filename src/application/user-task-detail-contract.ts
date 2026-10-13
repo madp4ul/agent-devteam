@@ -56,6 +56,9 @@ export interface AgentInspectableTaskContentView {
 
 export interface UserTaskDetailView {
   task: TaskView;
+  timeline: import("./timeline-contract.ts").TimelinePage;
+  movementSummary: { total: number; latestSourceId?: string };
+  mostRecentAgentId?: string | undefined;
   board: ProcessBoardView;
   inspection: UserTaskInspectionView;
   activeRun: ActiveRunView | null;

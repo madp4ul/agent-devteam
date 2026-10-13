@@ -32,6 +32,7 @@ export class PausedRetryClock implements AutomationClock {
 export class ControlledAgentRuntime implements AgentRuntime, AttemptTranscriptAccess {
   readonly requests: AgentRunRequest[] = [];
   readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
+  readonly #lifecycles = new Map<string, AgentRunLifecycle>();
   readonly #usage = new Map<string, AttemptTokenUsage>();
   readonly #contextWindowUsage = new Map<string, AttemptContextWindowUsage>();
   readonly #startedThreadId: string | null;
@@ -47,6 +48,7 @@ export class ControlledAgentRuntime implements AgentRuntime, AttemptTranscriptAc
 
   run(request: AgentRunRequest, lifecycle: AgentRunLifecycle): Promise<AgentRunOutcome> {
     this.requests.push(request);
+    this.#lifecycles.set(request.attemptId, lifecycle);
     if (this.#startedThreadId === null) lifecycle.started();
     else lifecycle.started(this.#startedThreadId);
     for (const waiter of this.#waiters.splice(0)) {
@@ -71,8 +73,9 @@ export class ControlledAgentRuntime implements AgentRuntime, AttemptTranscriptAc
     this.#complete = undefined;
   }
 
-  setTranscript(attemptId: string, transcript: AttemptTranscriptItem[]): void {
+  setTranscript(attemptId: string, transcript: AttemptTranscriptItem[], publishLive = true): void {
     this.#transcripts.set(attemptId, structuredClone(transcript));
+    if (publishLive) transcript.forEach((item, ordinal) => this.#lifecycles.get(attemptId)?.transcriptItemUpdated?.(ordinal, item));
   }
 
   setUsage(attemptId: string, usage: AttemptTokenUsage): void {

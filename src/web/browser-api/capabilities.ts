@@ -26,6 +26,8 @@ export type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
   | "queryTaskInspectionForUser"
   | "queryTaskWorkspaceGitState"
   | "queryUserTaskDetail"
+  | "queryTaskTimeline"
+  | "queryTaskMovementMap"
   | "interruptTask"
   | "continueInterruptedTask"
   | "editTask"

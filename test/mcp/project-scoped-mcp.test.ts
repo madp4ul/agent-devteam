@@ -320,6 +320,12 @@ boards:
     listed.tools.map((tool) => tool.name),
   );
   const toolByName = new Map(listed.tools.map((tool) => [tool.name, tool]));
+  const commentTool = toolByName.get("task.comment.add");
+  assert.ok(commentTool);
+  assert.match(commentTool.description ?? "", /canonical @<agent-id> mention requests activation of that agent on the destination task/u);
+  assert.match(commentTool.description ?? "", /display name or agent ID without the @ prefix/u);
+  assert.match(commentTool.description ?? "", /@review-agent please review/u);
+  assert.match(commentTool.description ?? "", /Review Agent completed the review/u);
   assert.equal(listed.tools.length, 20);
   for (const tool of listed.tools) {
     const properties = tool.inputSchema.properties ?? {};

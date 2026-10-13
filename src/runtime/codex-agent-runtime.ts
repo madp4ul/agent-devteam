@@ -185,6 +185,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
             lifecycle.started(threadId);
           },
           publish: (transcript) => this.#remember(request.attemptId, transcript),
+          itemUpdated: (ordinal, item) => lifecycle.transcriptItemUpdated?.(ordinal, item),
         });
         let projected;
         try {
@@ -232,6 +233,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
             : {
                 status: "failed" as const,
                 summary: projected.terminal.summary,
+                ...(projected.terminal.failure === undefined ? {} : { failure: projected.terminal.failure }),
                 ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
               };
         return withThreadContinuity(outcome, threadReplaced);
@@ -248,6 +250,10 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
     } finally {
       this.#options.mcpServer.release?.(request);
     }
+  }
+
+  release(attemptId: string): void {
+    this.#transcripts.delete(attemptId); this.#usage.delete(attemptId); this.#contextWindowUsage.delete(attemptId);
   }
 
   async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {

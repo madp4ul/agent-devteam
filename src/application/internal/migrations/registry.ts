@@ -7,6 +7,9 @@ import { historyCursorSigningMigration } from "./0006-history-cursor-signing.ts"
 import { conversationPinCheckpointsMigration } from "./0007-conversation-pin-checkpoints.ts";
 import { stallRecoveryMigration } from "./0008-stall-recovery.ts";
 import { reviewerAllowancesMigration } from "./0009-reviewer-allowances.ts";
+import { conversationHistoryItemsMigration } from "./0010-conversation-history-items.ts";
+import { taskTimelineMigration } from "./0011-task-timeline.ts";
+import { runtimeRecoveryMigration } from "./0012-runtime-recovery.ts";
 
 export const coordinationMigrations = [
   initialReleasedMigration,
@@ -18,4 +21,7 @@ export const coordinationMigrations = [
   conversationPinCheckpointsMigration,
   stallRecoveryMigration,
   reviewerAllowancesMigration,
+  conversationHistoryItemsMigration,
+  taskTimelineMigration,
+  runtimeRecoveryMigration,
 ] as const;

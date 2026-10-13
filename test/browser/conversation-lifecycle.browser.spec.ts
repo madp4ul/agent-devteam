@@ -1,3 +1,4 @@
+import { fulfillTaskScenario } from "./browser-fixture.ts";
 import type {
   AgentConversationHistoryEntry,
   AgentConversationMessageView,
@@ -170,7 +171,7 @@ test("compact conversation indicators expose running and attention without decor
       { ...template, id: "running-conversation", status: "running" },
       { ...template, id: "attention-conversation", status: "needs-attention" },
     ];
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -241,7 +242,7 @@ test("conversation continuation navigation focuses and scrolls to its authored m
         messageBody: "Focus this exact authored follow-up.",
       },
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     const items: AttemptTranscriptItem[] = Array.from({ length: 40 }, (_, index) => ({
@@ -295,7 +296,7 @@ test("attempt and retry navigation scroll to their shared later activation cause
       detail.task.activations[0].attempts.push(retryAttempt);
       selectedAttemptIds = [firstAttempt.id, retryAttempt.id];
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     if (selectedAttemptIds.length !== 2) throw new Error("Expected an attempt and retry before opening their conversation.");
@@ -379,7 +380,7 @@ test("an open conversation replaces one running tool entry with its terminal evi
       attempt.completedAt = null;
       attempt.outcome = null;
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     reads += 1;
@@ -452,7 +453,7 @@ test("polling replaces one live MCP row without closing its disclosure or moving
       attempt.completedAt = null;
       attempt.outcome = null;
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
     reads += 1;
@@ -617,7 +618,7 @@ test("a live conversation follows appended items only while the reader is at the
       attempt.completedAt = "2026-08-09T12:05:00.000Z";
       attempt.outcome = { status: "completed", summary: "Historical run complete." };
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   let reads = 0;
   await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {

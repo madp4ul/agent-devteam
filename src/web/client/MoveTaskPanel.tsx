@@ -1,28 +1,30 @@
 import type { ReactNode } from "react";
 
-import type { CollaboratorView, ProcessColumnView, TaskActivityView } from "../../application/browser-transport-contract.ts";
+import type { CollaboratorView, ProcessColumnView } from "../../application/browser-transport-contract.ts";
 import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { TaskMovementMap } from "./TaskMovementMap.tsx";
-import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
+import { timelineSourceElementId } from "./timeline-scroll-anchor.ts";
 
 export function MoveTaskPanel({
+  taskId,
+  onSource,
   columns,
   currentColumnId,
   currentColumnName,
   currentColumnSourceId,
   movementCount,
-  movements,
   agents,
   pending,
   onMove,
   inspectable,
 }: {
+  taskId: string;
+  onSource(sourceId: string): void;
   columns: ProcessColumnView[];
   currentColumnId: string;
   currentColumnName: string;
   currentColumnSourceId?: string;
   movementCount: number;
-  movements: Array<TaskActivityView & { type: "task.moved" }>;
   agents: Pick<CollaboratorView, "id" | "name">[];
   pending: boolean;
   onMove(column: ProcessColumnView): Promise<void>;
@@ -79,11 +81,11 @@ export function MoveTaskPanel({
           href={`#${timelineSourceElementId(currentColumnSourceId)}`}
           onClick={(event) => {
             event.preventDefault();
-            focusTimelineSource(currentColumnSourceId);
+            onSource(currentColumnSourceId);
           }}
         >View move to {currentColumnName} in timeline</a>
       )}
-      <TaskMovementMap movements={movements} columns={columns} agents={agents} />
+      <TaskMovementMap taskId={taskId} onSource={onSource} columns={columns} agents={agents} />
     </section>
   );
 }

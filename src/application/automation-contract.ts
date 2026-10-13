@@ -22,11 +22,27 @@ export interface ActivationView extends AgentExecutionProfile {
   attempts: AttemptView[];
   startupFailure: ActivationStartupFailureView | null;
   recovery:
+    | RuntimeWaitingView
     | { state: "scheduled"; nextAttempt: number; dueAt: string }
     | { state: "awaiting-retry" | "permission-blocked"; summary: string }
     | null;
   stale: boolean;
   dismissal?: { mayStartNext: boolean } | null;
+}
+
+export interface RuntimeWaitingView {
+  state: "waiting";
+  episodeId: string;
+  activationId: string;
+  classification: "connection-lost" | "service-unavailable" | "budget-exhausted";
+  firstFailure: string;
+  latestFailure: string;
+  firstAt: string;
+  latestAt: string;
+  dueAt: string;
+  failureCount: number;
+  retryCount: number;
+  retrying: boolean;
 }
 
 export type AutomationView =
@@ -84,6 +100,8 @@ export type PauseAutomationResult = {
 
 export interface InterruptTaskCommand {
   taskId: string;
+  /** Optional scope guard for a recovery control targeting one activation. */
+  activationId?: string;
   actor: Actor & { kind: "user" };
   idempotencyKey: string;
 }

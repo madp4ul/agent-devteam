@@ -1,4 +1,4 @@
-import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import type {
@@ -6,7 +6,10 @@ import type {
   ProcessColumnView,
   TaskActivityView,
 } from "../../application/browser-transport-contract.ts";
-import { focusTimelineSource, timelineSourceElementId } from "./timeline-scroll-anchor.ts";
+import { readTaskMovementMap } from "./api.ts";
+import { usePolling } from "./live-refresh.ts";
+import { errorMessage } from "./feedback.ts";
+import { timelineSourceElementId } from "./timeline-scroll-anchor.ts";
 
 const movementStep = 28;
 const viewportBottomGutter = 16;
@@ -27,18 +30,39 @@ type DragState = {
 };
 
 export function TaskMovementMap({
-  movements,
+  taskId,
+  onSource,
   columns,
   agents,
 }: {
-  movements: Movement[];
+  taskId: string;
+  onSource(sourceId: string): void;
   columns: ProcessColumnView[];
   agents: Pick<CollaboratorView, "id" | "name">[];
 }): ReactNode {
-  const ordered = useMemo(
-    () => [...movements].sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)),
-    [movements],
-  );
+  const [mapMovements, setMapMovements] = useState<Movement[]>([]);
+  const [mapError, setMapError] = useState<string>();
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const mapCursor = useRef(0);
+  const mapReading = useRef(false);
+  const mapMounted = useRef(true);
+  useEffect(() => () => { mapMounted.current = false; }, []);
+  const refreshMap = async (): Promise<void> => {
+    if (mapReading.current) return;
+    mapReading.current = true;
+    try {
+      const next = await readTaskMovementMap(taskId, mapCursor.current);
+      if (!mapMounted.current) return;
+      mapCursor.current = next.cursor;
+      if (next.movements.length > 0) setMapMovements((current) => {
+        const ids = new Set(current.map((movement) => movement.id));
+        return [...next.movements.filter((movement) => !ids.has(movement.id)), ...current];
+      });
+      setMapLoaded(true); setMapError(undefined);
+    } catch (error) { if (mapMounted.current) setMapError(errorMessage(error)); }
+    finally { mapReading.current = false; }
+  };
+  const ordered = useMemo(() => mapMovements, [mapMovements]);
   const mapRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
@@ -49,12 +73,18 @@ export function TaskMovementMap({
   const dragRef = useRef<DragState | null>(null);
   const dragAnimationRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
+  const lastScrubSource = useRef<string | undefined>(undefined);
+  const scrubTimer = useRef<number | undefined>(undefined);
   const naturalControlsTopRef = useRef<number | null>(null);
   const [available, setAvailable] = useState(false);
   const [bottomDocked, setBottomDocked] = useState(false);
   const [dragReady, setDragReady] = useState(false);
   const dragReadyRef = useRef(false);
   const minimumDragScrollYRef = useRef(0);
+  useEffect(() => {
+    if (available && !mapLoaded && !mapError) void refreshMap();
+  }, [available, mapLoaded, mapError]);
+  usePolling(refreshMap, available && mapLoaded ? 1_000 : undefined, (error) => setMapError(errorMessage(error)));
   const stripHeight = Math.max(movementStep, ordered.length * movementStep);
 
   useLayoutEffect(() => () => {
@@ -62,6 +92,7 @@ export function TaskMovementMap({
       ?.closest<HTMLElement>(".detail-sticky-controls-slot")
       ?.style.removeProperty("height");
     clearDockingStyles();
+    if (scrubTimer.current !== undefined) window.clearTimeout(scrubTimer.current);
   }, []);
 
   const updateMapPosition = useCallback(() => {
@@ -85,11 +116,18 @@ export function TaskMovementMap({
         mapY: index * movementStep + movementStep / 2,
       }];
     });
-    if (movementPoints.length === 0) return;
+    const section = timeline.querySelector<HTMLElement>(".timeline-section");
+    const start = Number(section?.dataset.historyStart ?? 0);
+    const total = Number(section?.dataset.historyTotal ?? ordered.length);
+    const rendered = section?.querySelectorAll(".timeline > li").length ?? ordered.length;
+    const listBounds = section?.querySelector(".timeline")?.getBoundingClientRect() ?? timelineBounds;
+    const hasUnloadedSources = movementPoints.length < ordered.length;
+    const firstMapY = movementPoints[0]?.mapY ?? stripHeight * start / Math.max(1, total);
+    const lastMapY = movementPoints.at(-1)?.mapY ?? stripHeight * (start + rendered) / Math.max(1, total);
     const points = [
-      { documentY: window.scrollY + timelineBounds.top, mapY: 0 },
+      { documentY: window.scrollY + listBounds.top, mapY: hasUnloadedSources ? Math.max(0, firstMapY - movementStep / 2) : 0 },
       ...movementPoints,
-      { documentY: window.scrollY + timelineBounds.bottom, mapY: stripHeight },
+      { documentY: window.scrollY + listBounds.bottom, mapY: hasUnloadedSources ? Math.min(stripHeight, lastMapY + movementStep / 2) : stripHeight },
     ].sort((left, right) => left.documentY - right.documentY);
     const topbar = document.querySelector<HTMLElement>(".detail-topbar")?.getBoundingClientRect();
     const topInset = Math.max(0, topbar?.bottom ?? 0);
@@ -209,8 +247,20 @@ export function TaskMovementMap({
     const drag = dragRef.current;
     if (drag === null || !drag.dragging) return;
     const pointerDelta = drag.latestY - drag.startY;
-    const mapDelta = dragModel === "viewport-scrub" ? pointerDelta : -pointerDelta;
+    const section = document.querySelector<HTMLElement>(".timeline-section");
+    const loadedSources = ordered.reduce((count, movement) => count + (document.getElementById(timelineSourceElementId(movement.id)) === null ? 0 : 1), 0);
+    const paged = Number(section?.dataset.historyTotal ?? 0) > (section?.querySelectorAll(".timeline > li").length ?? 0) || loadedSources < ordered.length;
+    const mapDelta = (dragModel === "viewport-scrub" ? pointerDelta : -pointerDelta) * (paged ? stripHeight / Math.max(1, plotRef.current?.clientHeight ?? 1) : 1);
     const targetMapY = clamp(drag.startMapY + mapDelta, 0, stripHeight);
+    if (paged) {
+      const movement = ordered[Math.min(ordered.length - 1, Math.floor(targetMapY / movementStep))];
+      if (movement && movement.id !== lastScrubSource.current) {
+        lastScrubSource.current = movement.id;
+        if (scrubTimer.current !== undefined) window.clearTimeout(scrubTimer.current);
+        scrubTimer.current = window.setTimeout(() => { scrubTimer.current = undefined; onSource(movement.id); }, 60);
+      }
+      return;
+    }
     const targetDocumentY = interpolate(drag.points, targetMapY, "mapY", "documentY");
     const maximumScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
     window.scrollTo({
@@ -221,6 +271,12 @@ export function TaskMovementMap({
       ),
     });
     updateMapPosition();
+  };
+
+  const navigateToSource = (sourceId: string): void => {
+    if (scrubTimer.current !== undefined) window.clearTimeout(scrubTimer.current);
+    scrubTimer.current = undefined; lastScrubSource.current = undefined;
+    onSource(sourceId);
   };
 
   const scheduleDragTarget = (): void => {
@@ -245,7 +301,6 @@ export function TaskMovementMap({
     window.setTimeout(() => { suppressClickRef.current = false; }, 0);
   };
 
-  if (ordered.length === 0) return <div ref={mapRef} className="movement-map" data-testid="movement-map" />;
   return (
     <div
       ref={mapRef}
@@ -255,6 +310,7 @@ export function TaskMovementMap({
       data-drag-ready={dragReady ? "true" : "false"}
       aria-hidden={available ? undefined : true}
     >
+      {mapError ? <p role="alert" className="movement-map-status">Unable to load movement map. <button className="secondary" onClick={() => void refreshMap()}>Retry map</button></p> : available && !mapLoaded ? <p role="status" className="movement-map-status">Loading movement map…</p> : null}
       <div className="movement-map-legend" style={{ gridTemplateColumns: laneColumns(columns.length) }}>
         {columns.map((column) => <MovementMapLegendItem key={column.id} column={column} />)}
       </div>
@@ -263,6 +319,8 @@ export function TaskMovementMap({
         className="movement-map-plot"
         onPointerDown={(event) => {
           if (event.button !== 0 || !dragReadyRef.current) return;
+          if (scrubTimer.current !== undefined) window.clearTimeout(scrubTimer.current);
+          scrubTimer.current = undefined; lastScrubSource.current = undefined;
           const scale = scaleRef.current;
           const frame = frameRef.current;
           if (scale === null || frame === null) return;
@@ -378,8 +436,19 @@ export function TaskMovementMap({
               data-source-id={movement.id}
               aria-label={movementLabel(movement, columns, agents)}
               title={movementLabel(movement, columns, agents)}
+              onKeyDown={(event) => {
+                const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? ordered.length - 1 : event.key === "ArrowDown" ? Math.min(ordered.length - 1, index + 1) : event.key === "ArrowUp" ? Math.max(0, index - 1) : undefined;
+                if (nextIndex === undefined) return;
+                event.preventDefault();
+                const target = ordered[nextIndex];
+                if (target) {
+                  const button = stripRef.current?.querySelector<HTMLButtonElement>(`[data-source-id="${CSS.escape(target.id)}"]`);
+                  button?.focus({ preventScroll: true });
+                  navigateToSource(target.id);
+                }
+              }}
               onClick={() => {
-                if (!suppressClickRef.current) focusTimelineSource(movement.id);
+                if (!suppressClickRef.current) navigateToSource(movement.id);
               }}
             />
           ))}
@@ -464,9 +533,9 @@ function movementLabel(
   columns: ProcessColumnView[],
   agents: Pick<CollaboratorView, "id" | "name">[],
 ): string {
-  const from = columns.find((column) => column.id === movement.details.fromColumnId)?.name ?? movement.details.fromColumnId;
-  const to = columns.find((column) => column.id === movement.details.toColumnId)?.name ?? movement.details.toColumnId;
-  const actor = movement.actor.kind === "user" ? "You" : agentName(movement.actor.id, agents);
+  const from = movement.details.fromColumnName ?? columns.find((column) => column.id === movement.details.fromColumnId)?.name ?? movement.details.fromColumnId;
+  const to = movement.details.toColumnName ?? columns.find((column) => column.id === movement.details.toColumnId)?.name ?? movement.details.toColumnId;
+  const actor = movement.actor.kind === "user" ? "You" : movement.details.actorName ?? agentName(movement.actor.id, agents);
   return `Moved from ${from} to ${to} by ${actor}`;
 }
 

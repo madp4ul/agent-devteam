@@ -58,6 +58,12 @@ export class AttemptEvidenceModule {
       );
   }
 
+  hasMeaningfulUsage(input: RetainAttemptEvidence): boolean {
+    if (input.reportedUsage === undefined) return false;
+    const delta = this.#isolateAttemptUsage(input.attemptId, input.reportedUsage, input.resumedThreadId, input.completedThreadId);
+    return delta === undefined || Object.values(delta).some((value) => value > 0);
+  }
+
   #isolateAttemptUsage(
     attemptId: string,
     reportedUsage: AttemptTokenUsage,

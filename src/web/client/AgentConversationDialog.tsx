@@ -1,3 +1,4 @@
+import { RuntimeWaitingSummary } from "./RuntimeWaitingSummary.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import type { AgentConversationView, AgentInspectableTaskContentView } from "../../application/browser-transport-contract.ts";
@@ -53,6 +54,14 @@ export function AgentConversationDialog({
   const [retirementSubmitting, setRetirementSubmitting] = useState(false);
   const [retirementError, setRetirementError] = useState<string>();
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const conversationRef = useRef<AgentConversationView | undefined>(undefined);
+  const pagingIntent = useRef<"older" | "newer" | undefined>(undefined);
+  const pagingBusy = useRef(false);  const historyScrollIntent = useRef(false);
+  const [pageLoading, setPageLoading] = useState(false);
+  const [pageError, setPageError] = useState<string>();
+  const failedPageDirection = useRef<"older" | "newer">("older");
+  const [spacers, setSpacers] = useState({ top: 0, bottom: 0 });
+  const pendingAnchor = useRef<{ id: string; offset: number } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const moreActionsButtonRef = useRef<HTMLButtonElement>(null);
@@ -103,10 +112,16 @@ export function AgentConversationDialog({
     } else if (pendingScrollPosition.current !== null) {
       content.scrollTop = pendingScrollPosition.current;
     }
+    const anchor = pendingAnchor.current;
+    if (anchor !== null) {
+      const element = Array.from(content.querySelectorAll<HTMLElement>("[data-history-record]")).find((entry) => entry.dataset.historyRecord === anchor.id);
+      if (element !== undefined) content.scrollTop += element.getBoundingClientRect().top - content.getBoundingClientRect().top - anchor.offset;
+    }
+    pendingAnchor.current = null;
     pendingScrollPosition.current = null;
     restoreCapturedTextSelection(pendingTextSelection.current);
     pendingTextSelection.current = null;
-  }, [conversation]);
+  }, [conversation, pageLoading, pageError]);
   useEffect(() => {
     const content = contentRef.current;
     if (content === null) return;
@@ -146,7 +161,28 @@ export function AgentConversationDialog({
   }, [conversationId]);
 
   const refresh = useLatestRefresh(
-    () => readAgentConversation(taskId, conversationId),
+    async () => {
+      const current = conversationRef.current;
+      const intent = pagingIntent.current;
+      const cursor = intent === "older" ? current?.page?.olderCursor : intent === "newer" ? current?.page?.newerCursor : undefined;
+      if (cursor !== undefined && cursor !== null) {
+        const edge = await readAgentConversation(taskId, conversationId, { cursor, pageSize: 50 });
+        if (!edge.available || edge.conversation.page === undefined) return edge;
+        return readAgentConversation(taskId, conversationId, {
+          cursor: intent === "older" ? edge.conversation.page.refreshCursor : edge.conversation.page.endingCursor,
+          pageSize: 150,
+        });
+      }
+      if (current === undefined) {
+        return readAgentConversation(taskId, conversationId,
+          selectedMessageId !== undefined ? { messageId: selectedMessageId } :
+          selectedAttemptId !== undefined ? { attemptId: selectedAttemptId } :
+          selectedPendingActivationId !== undefined ? { activationId: selectedPendingActivationId } : {});
+      }
+      const content = contentRef.current;
+      const following = current.page?.atLatest === true && content !== null && isAtConversationBottom(content, BOTTOM_FOLLOW_TOLERANCE_PX);
+      return readAgentConversation(taskId, conversationId, current.page === undefined ? {} : following ? { pageSize: 150 } : { cursor: current.page.refreshCursor, pageSize: 150 });
+    },
     (result) => {
         if (result.available) {
           const content = contentRef.current;
@@ -162,30 +198,84 @@ export function AgentConversationDialog({
               ? "bottom"
               : content.scrollTop;
           pendingTextSelection.current = captureTextSelectionWithin(content);
-          setConversation(result.conversation);
+          const prior = conversationRef.current;
+          const next = result.conversation;
+          if (next.page !== undefined && content !== null) {
+            const selection = window.getSelection();
+            const selectedRecords = [selection?.anchorNode, selection?.focusNode].flatMap((node) => {
+              const element = node instanceof Element ? node : node?.parentElement;
+              const record = element?.closest<HTMLElement>("[data-history-record]");
+              return record === null || record === undefined ? [] : [record.dataset.historyRecord!];
+            });
+            if (selection !== null && !selection.isCollapsed && selectedRecords.some((id) => !next.page!.recordIds.includes(id))) {
+              pendingScrollPosition.current = null;
+              setPageError("Clear the text selection before moving to another history window.");
+              return;
+            }
+          }
+          if (content !== null && prior?.page !== undefined && next.page !== undefined) {
+            const nodes = Array.from(content.querySelectorAll<HTMLElement>("[data-history-record]"));
+            const retained = new Set(next.page.recordIds);
+            const anchor = nodes.find((element) => retained.has(element.dataset.historyRecord!) && element.getBoundingClientRect().bottom > content.getBoundingClientRect().top);
+            if (anchor !== undefined && pendingScrollPosition.current !== "bottom") pendingAnchor.current = { id: anchor.dataset.historyRecord!, offset: anchor.getBoundingClientRect().top - content.getBoundingClientRect().top };
+            const removed = nodes.filter((element) => !retained.has(element.dataset.historyRecord!));
+            const removedHeight = removed.reduce((height, element) => height + element.getBoundingClientRect().height, 0);
+            const sharedIndex = nodes.findIndex((element) => retained.has(element.dataset.historyRecord!));
+            setSpacers((value) => ({
+              top: next.page!.olderCursor === null ? 0 : Math.max(0, value.top + (sharedIndex > 0 ? removedHeight : -removedHeight)),
+              bottom: next.page!.newerCursor === null ? 0 : Math.max(0, value.bottom + (sharedIndex === 0 ? removedHeight : -removedHeight)),
+            }));
+          }
+          conversationRef.current = next;
+          setConversation(next);
+          if (pagingIntent.current !== undefined) setPageError(undefined);
           const pendingAppeared = pendingActivationId.current !== undefined &&
             result.conversation.history.some((entry) =>
               (entry.kind === "activation" || entry.kind === "message") && entry.activationId === pendingActivationId.current
             );
           if (pendingAppeared) pendingActivationId.current = undefined;
           setConversationRunning(
-            result.conversation.history.some((entry) =>
-              (entry.kind === "activation" || entry.kind === "message") && (entry.status === "queued" || entry.status === "running")
-            ) ||
+            (result.conversation.liveStatus !== undefined
+              ? result.conversation.liveStatus !== null
+              : result.conversation.history.some((entry) =>
+                (entry.kind === "activation" || entry.kind === "message") && (entry.status === "queued" || entry.status === "running")
+              )) ||
             (pendingActivationId.current !== undefined && !pendingAppeared),
           );
           setUnavailable(false);
           setError(undefined);
         } else {
-          setUnavailable(true);
+          if (conversationRef.current === undefined) setUnavailable(true);
+          else setPageError(`History unavailable: ${result.reason}`);
         }
     },
   );
+  const loadPage = async (direction: "older" | "newer"): Promise<void> => {
+    if (pagingBusy.current || conversationRef.current?.page === undefined) return;
+    if ((direction === "older" ? conversationRef.current.page.olderCursor : conversationRef.current.page.newerCursor) === null && pageError === undefined) return;
+    pagingBusy.current = true;
+    pendingTextSelection.current = captureTextSelectionWithin(contentRef.current);
+    pagingIntent.current = direction;
+    failedPageDirection.current = direction;
+    setPageLoading(true);
+    try { await refresh(); } catch (caught) { setPageError(errorMessage(caught)); }
+    finally { pagingBusy.current = false; pagingIntent.current = undefined; setPageLoading(false); }
+  };
   useEffect(() => {
+    conversationRef.current = undefined;
+    setConversation(undefined);
+    setError(undefined);
+    setPageError(undefined);
+    setUnavailable(false);
+    pendingActivationId.current = selectedPendingActivationId;
+    setSpacers({ top: 0, bottom: 0 });
+    bottomFollowing.current = "inactive";
+    pendingScrollPosition.current = selectedAttemptId === undefined && selectedMessageId === undefined ? "bottom" : null;
     void refresh().catch((caught) => setError(errorMessage(caught)));
-  }, [conversationId, refresh, refreshVersion, taskId]);
+  }, [conversationId, refresh, taskId]);
+  useEffect(() => { if (refreshVersion > 0) void refresh().catch((caught) => setError(errorMessage(caught))); }, [refreshVersion, refresh]);
   usePolling(
-    refresh,
+    async () => { if (!pagingBusy.current) await refresh(); },
     conversationRunning
       ? ACTIVE_CONVERSATION_POLL_INTERVAL_MILLISECONDS
       : IDLE_CONVERSATION_POLL_INTERVAL_MILLISECONDS,
@@ -282,18 +372,19 @@ export function AgentConversationDialog({
             <CloseIconButton buttonRef={closeButtonRef} label="Close conversation" onClick={onClose} />
           </div>
         </header>
+        {conversation?.runtimeRecovery === undefined ? null : <RuntimeWaitingSummary taskId={taskId} recovery={conversation.runtimeRecovery} onChanged={refresh} />}
         <div
           ref={contentRef}
           className="transcript-content"
-          onWheelCapture={(event) => {
+          onWheelCapture={(event) => {            historyScrollIntent.current = true;
             if (event.deltaY < 0) cancelBottomFollowing();
           }}
-          onTouchMove={(event) => {
+          onTouchMove={(event) => {            historyScrollIntent.current = true;
             cancelIfViewportMoved(event.currentTarget.scrollTop);
           }}
           onPointerDown={(event) => {
             const bounds = event.currentTarget.getBoundingClientRect();
-            pointerScrolling.current = event.clientX >= bounds.right - 24 && event.clientX <= bounds.right;
+            pointerScrolling.current = event.clientX >= bounds.right - 24 && event.clientX <= bounds.right;            if (pointerScrolling.current) historyScrollIntent.current = true;
           }}
           onPointerUp={() => {
             pointerScrolling.current = false;
@@ -302,11 +393,19 @@ export function AgentConversationDialog({
             pointerScrolling.current = false;
           }}
           onScroll={(event) => {
+            const content = event.currentTarget;
+            const stream = content.querySelector<HTMLElement>(".conversation-stream");
+            if (stream !== null && !pagingBusy.current && historyScrollIntent.current) {              historyScrollIntent.current = false;
+              const bounds = stream.getBoundingClientRect();
+              const viewport = content.getBoundingClientRect();
+              if (bounds.top >= viewport.top - 80) void loadPage("older");
+              else if (bounds.bottom <= viewport.bottom + 80) void loadPage("newer");
+            }
             const atResumeBottom = isAtConversationBottom(event.currentTarget, BOTTOM_RESUME_TOLERANCE_PX);
             if (pointerScrolling.current && !atResumeBottom) cancelBottomFollowing();
             if (bottomFollowing.current === "cancelled" && atResumeBottom) bottomFollowing.current = "following";
           }}
-          onKeyDown={(event) => {
+          onKeyDown={(event) => {            if (!isTextEditingTarget(event.target) && ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) historyScrollIntent.current = true;
             if (
               bottomFollowing.current === "following" &&
               !isTextEditingTarget(event.target) &&
@@ -314,15 +413,19 @@ export function AgentConversationDialog({
             ) cancelBottomFollowing();
           }}
         >
-          {error !== undefined ? (
-            <p className="unavailable" role="alert">{error}</p>
-          ) : unavailable ? (
+          {error === undefined ? null : <p className="unavailable" role="alert">{error} <button type="button" className="secondary" onClick={() => void refresh().catch((caught) => setError(errorMessage(caught)))}>Retry conversation</button></p>}
+          {unavailable && conversation === undefined ? (
             <p className="unavailable">
               This conversation is unavailable. Durable coordination history remains complete.
             </p>
           ) : conversation === undefined ? (
             <p className="unavailable">Loading conversation…</p>
           ) : (
+            <>
+            <div aria-hidden="true" style={{ height: spacers.top }} />
+            {conversation.page?.olderCursor ? <button type="button" className="conversation-page-control" disabled={pageLoading} onClick={() => void loadPage("older")}>Load earlier history</button> : conversation.page !== undefined ? <p className="conversation-page-boundary">Beginning of conversation</p> : null}
+            {pageLoading ? <p role="status" className="conversation-page-boundary">Loading history…</p> : null}
+            {pageError === undefined ? null : <p role="alert" className="conversation-page-boundary">{pageError} <button type="button" className="secondary" onClick={() => void loadPage(failedPageDirection.current)}>Retry history</button></p>}
             <ConversationHistory
               conversation={conversation}
               agentInspectableContent={agentInspectableContent}
@@ -335,6 +438,9 @@ export function AgentConversationDialog({
                 },
               })}
             />
+            {conversation.page?.newerCursor ? <button type="button" className="conversation-page-control" disabled={pageLoading} onClick={() => void loadPage("newer")}>Load later history</button> : null}
+            <div aria-hidden="true" style={{ height: spacers.bottom }} />
+            </>
           )}
           {conversation?.continuation.available !== true ? null : (
             <ConversationFollowUpComposer
@@ -354,7 +460,7 @@ export function AgentConversationDialog({
               onAccepted={(result) => {
                 pendingActivationId.current = result.activationId;
                 setConversationRunning(true);
-                setConversation((current) => current === undefined || current.history.some((entry) => entry.kind === "message" && entry.message.id === result.message.id)
+                setConversation((current) => current === undefined || current.page !== undefined || current.history.some((entry) => entry.kind === "message" && entry.message.id === result.message.id)
                   ? current
                   : {
                       ...current,

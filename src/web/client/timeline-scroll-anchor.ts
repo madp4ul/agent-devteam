@@ -10,7 +10,12 @@ export type TimelineViewportAnchor = {
 
 let sourceHighlightTimer: number | undefined;
 let sourceScrollFrame: number | undefined;
+let sourceScrollInput: AbortController | undefined;
 const sourceScrollDuration = 480;
+
+export function timelineSourceScrollIsActive(): boolean {
+  return sourceScrollFrame !== undefined;
+}
 
 export function captureTimelineViewportAnchor(
   reference: "viewport-center" | "sticky-header" = "viewport-center",
@@ -97,6 +102,7 @@ export function focusTimelineSource(sourceId: string): void {
   const source = document.getElementById(timelineSourceElementId(sourceId));
   if (sourceHighlightTimer !== undefined) window.clearTimeout(sourceHighlightTimer);
   if (sourceScrollFrame !== undefined) window.cancelAnimationFrame(sourceScrollFrame);
+  sourceScrollInput?.abort();
   document.querySelector(".timeline-source-target")?.classList.remove("timeline-source-target");
   source?.classList.add("timeline-source-target");
   source?.focus({ preventScroll: true });
@@ -110,29 +116,46 @@ export function focusTimelineSource(sourceId: string): void {
 }
 
 function animateSourceToViewportCenter(source: HTMLElement): void {
+  const input = new AbortController();
+  sourceScrollInput = input;
+  const cancel = (): void => {
+    if (sourceScrollFrame !== undefined) window.cancelAnimationFrame(sourceScrollFrame);
+    sourceScrollFrame = undefined;
+    input.abort();
+  };
+  window.addEventListener("wheel", cancel, { passive: true, signal: input.signal });
+  window.addEventListener("touchstart", cancel, { passive: true, signal: input.signal });
+  window.addEventListener("pointerdown", cancel, { signal: input.signal });
+  window.addEventListener("keydown", (event) => {
+    if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) cancel();
+  }, { signal: input.signal });
   const startScrollY = window.scrollY;
-  const sourceBounds = source.getBoundingClientRect();
-  const documentHeight = document.documentElement.scrollHeight;
-  const targetScrollY = Math.min(
-    Math.max(0, startScrollY + elementCenter(sourceBounds) - window.innerHeight / 2),
-    Math.max(0, documentHeight - window.innerHeight),
+  const targetPosition = (): number => Math.min(
+    Math.max(0, window.scrollY + elementCenter(source.getBoundingClientRect()) - window.innerHeight / 2),
+    Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
   );
-  const distance = targetScrollY - startScrollY;
+  const distance = targetPosition() - startScrollY;
   if (Math.abs(distance) < 1) {
     sourceScrollFrame = undefined;
+    input.abort();
     return;
   }
   const startedAt = performance.now();
-  const animate = (now: number): void => {
-    const progress = Math.min(1, (now - startedAt) / sourceScrollDuration);
+  let settling = false;
+  const animate = (): void => {
+    if (!source.isConnected) { cancel(); return; }
+    const progress = Math.min(1, Math.max(0, (performance.now() - startedAt) / sourceScrollDuration));
     const eased = progress < .5
       ? 4 * progress * progress * progress
       : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-    window.scrollTo({ top: startScrollY + distance * eased });
-    if (progress < 1) {
+    // Page hydration and docking can change geometry during navigation; align against the live source.
+    window.scrollTo({ top: startScrollY + (targetPosition() - startScrollY) * eased });
+    if (progress < 1 || !settling || Math.abs(window.scrollY - targetPosition()) > 1) {
+      if (progress >= 1) settling = true;
       sourceScrollFrame = window.requestAnimationFrame(animate);
     } else {
       sourceScrollFrame = undefined;
+      input.abort();
     }
   };
   sourceScrollFrame = window.requestAnimationFrame(animate);

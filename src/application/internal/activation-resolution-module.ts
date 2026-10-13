@@ -1,3 +1,4 @@
+import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
 import type { DatabaseSync } from "node:sqlite";
 
 import type {
@@ -19,6 +20,7 @@ import type { CoordinationDatabase } from "./coordination-database.ts";
 import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 
 export class ActivationResolutionModule {
+  readonly #runtimeRecovery: RuntimeRecoveryStore;
   readonly #database: DatabaseSync;
   readonly #idempotentCommands: IdempotentCommandExecutor;
   readonly #activityJournal: ActivityJournal;
@@ -33,6 +35,7 @@ export class ActivationResolutionModule {
     this.#database = database.connection;
     this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
+    this.#runtimeRecovery = new RuntimeRecoveryStore(this.#database, activityJournal);
     this.#now = now;
   }
 
@@ -69,7 +72,9 @@ export class ActivationResolutionModule {
       if (activation === undefined) {
         result = { accepted: false, reason: "not-found" };
       } else {
-        const dismissesUntouchedQueueEntry = activation.attempt_count === 0;
+        const recovery = this.#runtimeRecovery;
+        const waiting = recovery.readWaiting(command.activationId);
+        const dismissesUntouchedQueueEntry = activation.attempt_count === 0 || waiting !== undefined;
         const dismissesInterruptedHead = activation.automation_suspended === 1 &&
           activation.suspended_activation_id === command.activationId;
         const dismissible = activation.status === "queued" &&
@@ -80,6 +85,7 @@ export class ActivationResolutionModule {
           result = { accepted: false, reason: "not-dismissible" };
         } else {
           const occurredAt = this.#now().toISOString();
+          this.#runtimeRecovery.finishWithinTransaction(command.activationId, "stopped", this.#now());
           this.#database.prepare(
             `UPDATE activations
              SET status = 'completed', resolution = 'dismissed',
@@ -135,6 +141,7 @@ export class ActivationResolutionModule {
         result = { accepted: false, reason: "not-stale" };
       } else {
         const resolvedAt = this.#now().toISOString();
+        this.#runtimeRecovery.finishWithinTransaction(command.activationId, "stopped", this.#now());
         this.#database.prepare(
           `UPDATE activations
            SET status = 'completed', resolution = 'dismissed', stale = 0,

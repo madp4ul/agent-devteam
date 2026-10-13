@@ -1,3 +1,4 @@
+import { fulfillTaskScenario } from "./browser-fixture.ts";
 import { contrastRatio, expect, setAppearance, test } from "./browser-fixture.ts";
 
 test("task position summarizes durable movement without making the summary interactive", async ({ page }) => {
@@ -30,7 +31,7 @@ test("docked task controls stay aligned with their lanes during viewport resizin
     const response = await route.fetch();
     const detail = await response.json();
     detail.task.description = "Long resize alignment context. ".repeat(900);
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
 
@@ -106,7 +107,7 @@ test("task controls recalculate docking when child creation grows relationships"
     const response = await route.fetch();
     const detail = await response.json();
     detail.task.description = "Long relationship growth context. ".repeat(700);
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
   await expect(page.getByRole("region", { name: "Task position" })).toBeVisible();
@@ -157,7 +158,7 @@ test("scrolling reveals a fixed-scale movement map while conversations remain bo
         details: { fromColumnId, toColumnId },
       });
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
 
@@ -413,7 +414,7 @@ test("a long movement map scrubs the viewport without runaway scrolling or text 
         details: { fromColumnId, toColumnId },
       });
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
   const map = page.getByTestId("movement-map");
@@ -688,7 +689,7 @@ test("movement stays immediately above conversations while long task content scr
     const response = await route.fetch();
     const detail = await response.json();
     detail.task.description = "Long movement context. ".repeat(700);
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
 
@@ -748,7 +749,7 @@ test("unmapped tasks keep explicit destinations without guessing a next column",
     const response = await route.fetch();
     const detail = await response.json();
     detail.task.columnId = "retired-column";
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0002");
 

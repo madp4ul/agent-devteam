@@ -2,6 +2,10 @@ interface TextSelectionSnapshot {
   text: string;
   startOffset: number;
   backwards: boolean;
+  historyEndpoints?: {
+    start: { record: HTMLElement; offset: number };
+    end: { record: HTMLElement; offset: number };
+  };
 }
 
 export interface CapturedTextSelection {
@@ -46,11 +50,39 @@ function captureTextSelection(container: Node | null): TextSelectionSnapshot | n
     text,
     startOffset: prefix.cloneContents().textContent?.length ?? 0,
     backwards: selection.anchorNode === range.endContainer && selection.anchorOffset === range.endOffset,
+    ...historyEndpoints(range),
   };
+}
+
+function historyEndpoints(range: Range): Pick<TextSelectionSnapshot, "historyEndpoints"> {
+  const endpoint = (node: Node, offset: number): { record: HTMLElement; offset: number } | undefined => {
+    const element = node instanceof Element ? node : node.parentElement;
+    const record = element?.closest<HTMLElement>("[data-history-record]");
+    if (record === undefined || record === null) return undefined;
+    const prefix = document.createRange();
+    prefix.setStart(record, 0);
+    prefix.setEnd(node, offset);
+    return { record, offset: prefix.cloneContents().textContent?.length ?? 0 };
+  };
+  const start = endpoint(range.startContainer, range.startOffset);
+  const end = endpoint(range.endContainer, range.endOffset);
+  return start === undefined || end === undefined ? {} : { historyEndpoints: { start, end } };
 }
 
 function restoreTextSelection(container: Node | null, snapshot: TextSelectionSnapshot | null): void {
   if (container === null || snapshot === null) return;
+  const endpoints = snapshot.historyEndpoints;
+  if (endpoints !== undefined) {
+    if (!endpoints.start.record.isConnected || !endpoints.end.record.isConnected) return;
+    const start = textPointAt(endpoints.start.record, endpoints.start.offset, true);
+    const end = textPointAt(endpoints.end.record, endpoints.end.offset, false);
+    if (start === null || end === null) return;
+    window.getSelection()?.setBaseAndExtent(
+      snapshot.backwards ? end.node : start.node, snapshot.backwards ? end.offset : start.offset,
+      snapshot.backwards ? start.node : end.node, snapshot.backwards ? start.offset : end.offset,
+    );
+    return;
+  }
   const startOffset = nearestOccurrence(container.textContent ?? "", snapshot.text, snapshot.startOffset);
   if (startOffset === null) return;
   const start = textPointAt(container, startOffset, true);

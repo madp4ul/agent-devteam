@@ -1,0 +1,21 @@
+
+Running 14 tests using 1 worker
+
+(node:37264) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 test\browser\conversation-lifecycle.browser.spec.ts:229:1 › conversation continuation navigation focuses and scrolls to its authored message (1.2s)
+  ok  2 test\browser\conversation-lifecycle.browser.spec.ts:444:1 › polling replaces one live MCP row without closing its disclosure or moving the reader (1.3s)
+  ok  3 test\browser\conversation-transcript.browser.spec.ts:845:1 › attempt outcomes show canonical-looking participant text without executable mention styling (970ms)
+  ok  4 test\browser\pinned-comments.browser.spec.ts:4:1 › pins expose quiet current guidance with keyboard curation and original timeline navigation (7.8s)
+  ok  5 test\browser\pinned-comments.browser.spec.ts:51:1 › pin activity offers an expandable comment preview and a separate source icon (1.2s)
+  ok  6 test\browser\pinned-comments.browser.spec.ts:84:1 › pinned source navigation settles the movement map without another scroll at 1100 (2.2s)
+  ok  7 test\browser\pinned-comments.browser.spec.ts:84:1 › pinned source navigation settles the movement map without another scroll at 1600 (2.2s)
+  ok  8 test\browser\pinned-comments.browser.spec.ts:84:1 › pinned source navigation settles the movement map without another scroll at 900 (2.2s)
+  ok  9 test\browser\timeline-pages.browser.spec.ts:4:1 › large timeline keeps three pages and navigates unloaded map destinations (4.3s)
+  ok 10 test\browser\timeline-pages.browser.spec.ts:55:1 › map waits for an available layout, retries locally and keyboard targets reject stale responses in both themes (5.4s)
+  ok 11 test\browser\timeline-pages.browser.spec.ts:112:1 › timeline failures retry without losing a reading anchor or selected text (1.4s)
+  ok 12 test\browser\timeline-pages.browser.spec.ts:153:1 › one large attempt keeps nested metadata, survives loaded-target races and scrubs the complete journey (8.9s)
+  ok 13 test\browser\timeline-pages.browser.spec.ts:225:1 › historical window refresh rejects delayed older evidence and current pins update independently (5.4s)
+  ok 14 test\browser\timeline-pages.browser.spec.ts:267:1 › a newest pin activity retains direct navigation to an old unloaded authored comment (1.1s)
+
+  14 passed (46.9s)

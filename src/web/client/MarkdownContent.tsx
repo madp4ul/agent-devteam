@@ -1,4 +1,4 @@
-import { createContext, Fragment, useContext, useState, type MouseEvent, type ReactNode, type WheelEvent } from "react";
+import { createContext, Fragment, useContext, useMemo, useState, type MouseEvent, type ReactNode, type WheelEvent } from "react";
 import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
 import { gfmTable } from "micromark-extension-gfm-table";
 import ReactMarkdown, { defaultUrlTransform, type Components, type UrlTransform } from "react-markdown";
@@ -21,7 +21,7 @@ export function MarkdownContent({ source, participants, className }: {
   className?: string;
 }): ReactNode {
   const taskId = useContext(TaskMarkdownContext);
-  const components = markdownComponents(participants, taskId);
+  const components = useMemo(() => markdownComponents(participants, taskId), [participants, taskId]);
   return (
     <div className={`markdown-content${className === undefined ? "" : ` ${className}`}`}>
       <ReactMarkdown

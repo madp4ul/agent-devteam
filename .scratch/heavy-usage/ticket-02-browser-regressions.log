@@ -1,0 +1,245 @@
+
+Running 121 tests using 1 worker
+
+(node:30164) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok   1 test\browser\conversation-attachment.browser.spec.ts:84:1 › window drops suppress browser navigation and reject folders at the foreground composer (2.6s)
+  ok   2 test\browser\conversation-attachment.browser.spec.ts:109:1 › a dropped file renders a private, accessible attachment selection (2.5s)
+  ok   3 test\browser\conversation-attachment.browser.spec.ts:137:1 › an attachment-only follow-up submits the upload and renders its download (3.0s)
+  ok   4 test\browser\conversation-attachment.browser.spec.ts:154:1 › an attachment upload reports progress and can be retried after transfer failure (3.8s)
+  ok   5 test\browser\conversation-attachment.browser.spec.ts:220:1 › leaving an open conversation discards its pending uploaded follow-up files (3.7s)
+  ok   6 test\browser\conversation-attachment.browser.spec.ts:270:1 › a conversation follow-up retains its draft on failure and refreshes in place after retry (4.4s)
+  ok   7 test\browser\conversation-attachment.browser.spec.ts:361:1 › conversation follow-up composer remains readable and operable in both appearances (3.4s)
+  ok   8 test\browser\conversation-lifecycle.browser.spec.ts:17:1 › conversation dialog exposes its loading state until conversation evidence arrives (1.3s)
+  ok   9 test\browser\conversation-lifecycle.browser.spec.ts:36:1 › compact conversation rows stay last in the supporting column and open by keyboard (1.4s)
+  ok  10 test\browser\conversation-lifecycle.browser.spec.ts:163:1 › compact conversation indicators expose running and attention without decorating idle history (1.1s)
+  ok  11 test\browser\conversation-lifecycle.browser.spec.ts:194:1 › conversation dialog contains focus, closes with Escape, and restores its opener (1.4s)
+  ok  12 test\browser\conversation-lifecycle.browser.spec.ts:213:1 › conversation dialog opened from the conversation list covers timeline markers (1.1s)
+  x   13 test\browser\conversation-lifecycle.browser.spec.ts:228:1 › conversation continuation navigation focuses and scrolls to its authored message (30.1s)
+(node:18328) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  14 test\browser\conversation-lifecycle.browser.spec.ts:282:1 › attempt and retry navigation scroll to their shared later activation cause (920ms)
+  ok  15 test\browser\conversation-lifecycle.browser.spec.ts:370:1 › an open conversation replaces one running tool entry with its terminal evidence (1.7s)
+  x   16 test\browser\conversation-lifecycle.browser.spec.ts:443:1 › polling replaces one live MCP row without closing its disclosure or moving the reader (1.4s)
+(node:24064) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  17 test\browser\conversation-lifecycle.browser.spec.ts:522:1 › polling replaces one running coordination action with authoritative result facts (1.5s)
+  ok  18 test\browser\conversation-lifecycle.browser.spec.ts:579:1 › an idle open conversation discovers externally added evidence within two seconds (1.2s)
+  ok  19 test\browser\conversation-lifecycle.browser.spec.ts:610:1 › a live conversation follows appended items only while the reader is at the bottom (2.5s)
+  ok  20 test\browser\conversation-lifecycle.browser.spec.ts:670:1 › an assembled conversation follow-up runs and remains attributable in the task timeline (13.5s)
+  ok  21 test\browser\conversation-lifecycle.browser.spec.ts:754:1 › a settled conversation can be retired by keyboard and remains visible in dialog, list, and timeline (1.7s)
+  ok  22 test\browser\conversation-pages.browser.spec.ts:3:1 › ten thousand elements keep a bounded window, reload evicted pages and preserve the reading anchor in both themes (3.0s)
+  ok  23 test\browser\conversation-pages.browser.spec.ts:78:1 › switching tasks discards a delayed conversation response (1.3s)
+  ok  24 test\browser\conversation-pages.browser.spec.ts:101:1 › source navigation selects a direct window and history failures are retryable (3.4s)
+  ok  25 test\browser\conversation-pages.browser.spec.ts:115:1 › retry clears a failed newer edge after background refresh reaches the end (3.6s)
+  ok  26 test\browser\conversation-transcript.browser.spec.ts:15:1 › generalized mutation transcripts link the affected task in both themes (1.1s)
+  ok  27 test\browser\conversation-transcript.browser.spec.ts:42:1 › an outbound comment transcript points to its destination instead of local history (1.1s)
+  ok  28 test\browser\conversation-transcript.browser.spec.ts:57:1 › conversation messages render Markdown and commands remain quiet but inspectable (1.5s)
+  ok  29 test\browser\conversation-transcript.browser.spec.ts:228:1 › conversation messages keep wide Markdown tables inside the dialog (1.8s)
+  ok  30 test\browser\conversation-transcript.browser.spec.ts:329:1 › generic MCP calls identify the capability and disclose bounded literal evidence (1.4s)
+  ok  31 test\browser\conversation-transcript.browser.spec.ts:437:1 › a known coordination move presents only its domain transition (1.2s)
+  ok  32 test\browser\conversation-transcript.browser.spec.ts:478:1 › coordination inspections present authoritative scopes and navigable task references (1.3s)
+  ok  33 test\browser\conversation-transcript.browser.spec.ts:584:1 › coordination task actions link complete task identities and separate failures from action text (1.1s)
+  ok  34 test\browser\conversation-transcript.browser.spec.ts:643:1 › long coordination inspection scopes stay contained at a narrow viewport (1.1s)
+  ok  35 test\browser\conversation-transcript.browser.spec.ts:684:1 › a coordination comment renders its Markdown with the timeline disclosure (1.3s)
+  ok  36 test\browser\conversation-transcript.browser.spec.ts:789:1 › wide transcript content wraps without overflowing the dialog or page (1.2s)
+  x   37 test\browser\conversation-transcript.browser.spec.ts:844:1 › attempt outcomes show canonical-looking participant text without executable mention styling (5.9s)
+(node:21796) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  38 test\browser\conversation-transcript.browser.spec.ts:862:1 › a conversation discloses when Codex replaced an unusable resumed thread (1.2s)
+  ok  39 test\browser\conversation-transcript.browser.spec.ts:881:1 › one conversation presents several ordinary activations without run boundaries (1.2s)
+  ok  40 test\browser\conversation-transcript.browser.spec.ts:925:1 › conversation message, command, and MCP stream remains readable in both appearances (2.7s)
+  ok  41 test\browser\task-attention.browser.spec.ts:4:1 › exhausted stall recovery exposes evidence and an addressable action in both themes (3.8s)
+  ok  42 test\browser\task-attention.browser.spec.ts:35:1 › task attention navigates to the exact mention and resolves beside its source (3.1s)
+  ok  43 test\browser\task-attention.browser.spec.ts:111:1 › needs attention groups by task, locates the card, and opens the task action center (1.2s)
+  ok  44 test\browser\task-authored-content-and-timeline.browser.spec.ts:4:1 › external participant comments remain visible with origin title and task address in both themes (1.1s)
+  ok  45 test\browser\task-authored-content-and-timeline.browser.spec.ts:34:1 › task details give narrative history more desktop room without crowding the sidebar (1.6s)
+  ok  46 test\browser\task-authored-content-and-timeline.browser.spec.ts:138:1 › task Markdown local-file links share the owning workspace while web links stay external (1.2s)
+  ok  47 test\browser\task-authored-content-and-timeline.browser.spec.ts:242:1 › rendered Markdown code stays within every authored task surface (1.4s)
+  ok  48 test\browser\task-authored-content-and-timeline.browser.spec.ts:321:1 › Markdown tables stay semantic and locally scrollable across authored task surfaces (1.7s)
+  ok  49 test\browser\task-authored-content-and-timeline.browser.spec.ts:404:1 › a wide Markdown table keeps its horizontal position through task polling (3.2s)
+  ok  50 test\browser\task-authored-content-and-timeline.browser.spec.ts:460:1 › details keep contextual controls, one timeline, and readable transcript evidence (2.9s)
+  ok  51 test\browser\task-authored-content-and-timeline.browser.spec.ts:683:1 › task details distinguish agent-inspectable content from user-only evidence (2.3s)
+  ok  52 test\browser\task-authored-content-and-timeline.browser.spec.ts:736:1 › task timeline filters mixed grouped history and keeps the choice through live refresh (2.1s)
+  ok  53 test\browser\task-authored-content-and-timeline.browser.spec.ts:851:1 › task timeline explains an empty agent-visible result (993ms)
+  ok  54 test\browser\task-authored-content-and-timeline.browser.spec.ts:870:1 › collapsed timeline prose reports hidden rendered lines at desktop and narrow widths (3.3s)
+  ok  55 test\browser\task-authored-content-and-timeline.browser.spec.ts:916:1 › task timeline keeps the record below the sticky header stable when polling resizes visible history (4.2s)
+  ok  56 test\browser\task-authored-content-and-timeline.browser.spec.ts:1008:1 › passive polling leaves an off-screen timeline alone and anchors nested history at the visible top (4.7s)
+  ok  57 test\browser\task-authored-content-and-timeline.browser.spec.ts:1092:1 › attempt comments and movements form full-width color bands without separators (1.0s)
+  ok  58 test\browser\task-authored-content-and-timeline.browser.spec.ts:1141:1 › task timeline keeps retries separate and links each retry to the preceding attempt (1.0s)
+  ok  59 test\browser\task-authored-content-and-timeline.browser.spec.ts:1176:1 › task details keep board navigation pinned while scrolling long history (1.0s)
+  ok  60 test\browser\task-authored-content-and-timeline.browser.spec.ts:1199:1 › task details prioritize agent activity and preserve the responsive reading order (1.1s)
+  ok  61 test\browser\task-comment-composition.browser.spec.ts:4:1 › the comment composer does not cover the hit area of the first timeline relationship link (1.1s)
+  ok  62 test\browser\task-comment-composition.browser.spec.ts:42:1 › an open task reconciles external timeline changes without disturbing a focused draft (5.2s)
+  ok  63 test\browser\task-comment-composition.browser.spec.ts:100:1 › comment participants are discoverable and insert canonical mentions without submitting (1.2s)
+  ok  64 test\browser\task-comment-composition.browser.spec.ts:149:1 › an empty mention preselects the most recently run task agent for immediate keyboard reply (1.2s)
+  ok  65 test\browser\task-comment-composition.browser.spec.ts:230:1 › mention preselection falls back when the most recent task agent is unavailable and keeps pointer choice (1.0s)
+  ok  66 test\browser\task-comment-composition.browser.spec.ts:279:1 › failed and interrupted runs can each provide the most recent available mention participant (1.1s)
+  ok  67 test\browser\task-comment-composition.browser.spec.ts:331:1 › comment composer stays beside a long timeline without covering its final entry (1.4s)
+  ok  68 test\browser\task-comment-composition.browser.spec.ts:508:1 › comment textarea grows with its draft, stops before crowding out context, and shrinks again (1.2s)
+  ok  69 test\browser\task-comment-composition.browser.spec.ts:583:1 › comment failure and retry preserve timeline context while success clears and shrinks the draft (1.3s)
+  ok  70 test\browser\task-comment-composition.browser.spec.ts:642:1 › mention discovery supports dismissal and ignores email-like and inline-code text (1.0s)
+  ok  71 test\browser\task-comment-composition.browser.spec.ts:662:1 › reply to an agent mention preserves the draft, avoids duplicates, and focuses the composer (1.4s)
+  ok  72 test\browser\task-comment-composition.browser.spec.ts:705:1 › replying to several timeline comments preserves the viewport and draft selection (1.2s)
+  ok  73 test\browser\task-comment-composition.browser.spec.ts:747:1 › reply preserves trailing draft whitespace and is absent without an active composer (1.1s)
+  ok  74 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for short description in dark at 1100x1000 (1.0s)
+  ok  75 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for collapsed description in dark at 1100x1000 (1.1s)
+  ok  76 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for short description in dark at 1100x1600 (1.1s)
+  ok  77 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for collapsed description in dark at 1100x1600 (1.0s)
+  ok  78 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for short description in dark at 420x1600 (987ms)
+  ok  79 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for collapsed description in dark at 420x1600 (1.0s)
+  ok  80 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for short description in light at 1100x1000 (993ms)
+  ok  81 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for collapsed description in light at 1100x1000 (1.1s)
+  ok  82 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for short description in light at 1100x1600 (983ms)
+  ok  83 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for collapsed description in light at 1100x1600 (1.0s)
+  ok  84 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for short description in light at 420x1600 (986ms)
+  ok  85 test\browser\task-comment-docking.browser.spec.ts:19:7 › composer adopts initial docking for collapsed description in light at 420x1600 (1.0s)
+  ok  86 test\browser\task-comment-docking.browser.spec.ts:52:3 › composer follows description, content, and font layout changes without scrolling in dark (4.5s)
+  ok  87 test\browser\task-comment-docking.browser.spec.ts:52:3 › composer follows description, content, and font layout changes without scrolling in light (4.3s)
+  ok  88 test\browser\task-description-collapse.browser.spec.ts:15:1 › task descriptions collapse after 15 rendered lines and disclose with the keyboard (1.1s)
+  ok  89 test\browser\task-description-collapse.browser.spec.ts:49:1 › short task descriptions stay natural without a disclosure or reserved space (967ms)
+  ok  90 test\browser\task-description-collapse.browser.spec.ts:63:1 › task description overflow follows responsive width, font, and appearance changes (1.8s)
+  ok  91 test\browser\task-description-collapse.browser.spec.ts:126:3 › inline code and prose on the same row count as one rendered line in dark mode (1.1s)
+  ok  92 test\browser\task-description-collapse.browser.spec.ts:158:5 › description counts follow live content and preserve expansion at 1280px in dark mode (4.0s)
+  ok  93 test\browser\task-description-collapse.browser.spec.ts:158:5 › description counts follow live content and preserve expansion at 420px in dark mode (4.0s)
+  ok  94 test\browser\task-description-collapse.browser.spec.ts:126:3 › inline code and prose on the same row count as one rendered line in light mode (1.1s)
+  ok  95 test\browser\task-description-collapse.browser.spec.ts:158:5 › description counts follow live content and preserve expansion at 1280px in light mode (4.0s)
+  ok  96 test\browser\task-description-collapse.browser.spec.ts:158:5 › description counts follow live content and preserve expansion at 420px in light mode (4.0s)
+  ok  97 test\browser\task-movement.browser.spec.ts:4:1 › task position summarizes durable movement without making the summary interactive (1.1s)
+  ok  98 test\browser\task-movement.browser.spec.ts:13:1 › docked task controls stay aligned with their lanes during viewport resizing (1.2s)
+  ok  99 test\browser\task-movement.browser.spec.ts:104:1 › task controls recalculate docking when child creation grows relationships (1.3s)
+  ok 100 test\browser\task-movement.browser.spec.ts:140:1 › scrolling reveals a fixed-scale movement map while conversations remain bottom anchored (3.5s)
+  ok 101 test\browser\task-movement.browser.spec.ts:400:1 › a long movement map scrubs the viewport without runaway scrolling or text selection (3.0s)
+  ok 102 test\browser\task-movement.browser.spec.ts:618:1 › task movement offers the next board column beside the destination selector (1.2s)
+  ok 103 test\browser\task-movement.browser.spec.ts:665:1 › the next-column shortcut reports an authoritative stale-view conflict (1.2s)
+  ok 104 test\browser\task-movement.browser.spec.ts:686:1 › movement stays immediately above conversations while long task content scrolls (1.4s)
+  ok 105 test\browser\task-movement.browser.spec.ts:747:1 › unmapped tasks keep explicit destinations without guessing a next column (952ms)
+  ok 106 test\browser\task-relationships.browser.spec.ts:4:1 › circular waiting is rejected through the browser without changing relationships (1.2s)
+  ok 107 test\browser\task-relationships.browser.spec.ts:27:1 › cross-task links in authored and framework history open a new tab (1.2s)
+  ok 108 test\browser\task-relationships.browser.spec.ts:48:1 › relationship history links every direction and reports completed, archived, and unavailable targets (1.1s)
+  ok 109 test\browser\task-relationships.browser.spec.ts:116:1 › task relationships are discoverable, searchable, and recoverable (3.5s)
+  ok 110 test\browser\timeline-pages.browser.spec.ts:4:1 › large timeline keeps three pages and navigates unloaded map destinations (4.2s)
+  ok 111 test\browser\timeline-pages.browser.spec.ts:55:1 › map waits for an available layout, retries locally and keyboard targets reject stale responses in both themes (5.4s)
+  ok 112 test\browser\timeline-pages.browser.spec.ts:112:1 › timeline failures retry without losing a reading anchor or selected text (1.4s)
+  ok 113 test\browser\timeline-pages.browser.spec.ts:153:1 › one large attempt keeps nested metadata, survives loaded-target races and scrubs the complete journey (9.0s)
+  ok 114 test\browser\token-cost.browser.spec.ts:6:1 › a conversation without reported usage does not present zero as measured usage (1.1s)
+  ok 115 test\browser\token-cost.browser.spec.ts:22:1 › a single settled attempt renders its positive conversation and task totals (1.0s)
+  ok 116 test\browser\token-cost.browser.spec.ts:47:1 › conversation aggregates show known lower bounds while running totals stay visibly pending (1.4s)
+  ok 117 test\browser\token-cost.browser.spec.ts:153:1 › a first priceable running attempt shows a zero aggregate with a pending spinner (1.9s)
+  ok 118 test\browser\token-cost.browser.spec.ts:206:1 › conversation context fill is an accessible circular meter beside cost in both themes (1.8s)
+  ok 119 test\browser\token-cost.browser.spec.ts:247:1 › Cost statistics shows the exact total, contributing tasks, average, and configured rates (1.4s)
+  ok 120 test\browser\token-cost.browser.spec.ts:294:1 › Cost statistics keeps unknown totals truthful and its rate table responsive (1.1s)
+  ok 121 test\browser\token-cost.browser.spec.ts:324:1 › Cost statistics does not describe a priced-task average as a project lower bound (996ms)
+
+
+  1) test\browser\conversation-lifecycle.browser.spec.ts:228:1 › conversation continuation navigation focuses and scrolls to its authored message 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('.event-entry').filter({ hasText: 'Focus this exact authored follow-up.' }).getByRole('button', { name: 'View conversation' })
+
+
+      272 |   await page.goto("/tasks/T-0001");
+      273 |   const continuation = page.locator(".event-entry").filter({ hasText: "Focus this exact authored follow-up." });
+    > 274 |   await continuation.getByRole("button", { name: "View conversation" }).click();
+          |                                                                         ^
+      275 |   const dialog = page.getByRole("dialog", { name: "Agent conversation" });
+      276 |   const selectedMessage = dialog.locator("[data-conversation-message='selected-conversation-message']");
+      277 |   await expect(selectedMessage).toContainText("Focus this exact authored follow-up.");
+        at D:\Daten\Projekte\Software\Codex\agent-devteam\test\browser\conversation-lifecycle.browser.spec.ts:274:73
+
+    Error Context: test-results\conversation-lifecycle.bro-38c9b-lls-to-its-authored-message\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\conversation-lifecycle.bro-38c9b-lls-to-its-authored-message\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\conversation-lifecycle.bro-38c9b-lls-to-its-authored-message\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) test\browser\conversation-lifecycle.browser.spec.ts:443:1 › polling replaces one live MCP row without closing its disclosure or moving the reader 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "MCP retained transcript message 1."
+    Received: ""
+
+      511 |   await expect(call).toContainText('"number": 42');
+      512 |   expect(await transcriptContent.evaluate((element) => element.scrollTop)).toBe(readingPosition);
+    > 513 |   expect(await selectedText(page)).toBe(selectedTranscriptText);
+          |                                    ^
+      514 |   await expect(call.locator("summary")).toBeFocused();
+      515 |   const readsAfterPreservedSelection = reads;
+      516 |   await clearTextSelection(page);
+        at D:\Daten\Projekte\Software\Codex\agent-devteam\test\browser\conversation-lifecycle.browser.spec.ts:513:36
+
+    Error Context: test-results\conversation-lifecycle.bro-aa38c-losure-or-moving-the-reader\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\conversation-lifecycle.bro-aa38c-losure-or-moving-the-reader\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\conversation-lifecycle.bro-aa38c-losure-or-moving-the-reader\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) test\browser\conversation-transcript.browser.spec.ts:844:1 › attempt outcomes show canonical-looking participant text without executable mention styling 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('region', { name: 'Outcome' })
+    Timeout: 5000ms
+    - Expected substring  - 1
+    + Received string     + 8
+
+    - No further response from @implementer is required.
+    + OutcomeCompleted the handoff with verification.
+    +
+    + Tests passed
+    + Source preserved
+    +
+    + graph TD
+    +   A --> B
+    + Show 3 more lines
+
+    Call log:
+      - Expect "toContainText" with timeout 5000ms
+      - waiting for getByRole('region', { name: 'Outcome' })
+        13 × locator resolved to <section aria-label="Outcome" class="attempt-outcome" data-timeline-record="outcome-7e37ef57-9a2d-4d58-ab3e-3ca5ea77d208">…</section>
+           - unexpected value "OutcomeCompleted the handoff with verification.
+    
+    Tests passed
+    Source preserved
+    
+    graph TD
+      A --> B
+    Show 3 more lines"
+
+
+      855 |   await page.goto("/tasks/T-0001");
+      856 |   const outcome = page.getByRole("region", { name: "Outcome" });
+    > 857 |   await expect(outcome).toContainText("No further response from @implementer is required.");
+          |                         ^
+      858 |   await expect(outcome.locator(".canonical-mention")).toHaveCount(0);
+      859 | });
+      860 |
+        at D:\Daten\Projekte\Software\Codex\agent-devteam\test\browser\conversation-transcript.browser.spec.ts:857:25
+
+    Error Context: test-results\conversation-transcript.br-0e757--executable-mention-styling\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\conversation-transcript.br-0e757--executable-mention-styling\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\conversation-transcript.br-0e757--executable-mention-styling\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    test\browser\conversation-lifecycle.browser.spec.ts:228:1 › conversation continuation navigation focuses and scrolls to its authored message 
+    test\browser\conversation-lifecycle.browser.spec.ts:443:1 › polling replaces one live MCP row without closing its disclosure or moving the reader 
+    test\browser\conversation-transcript.browser.spec.ts:844:1 › attempt outcomes show canonical-looking participant text without executable mention styling 
+  118 passed (4.7m)

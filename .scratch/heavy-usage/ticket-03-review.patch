@@ -1,0 +1,1678 @@
+--- a/src/application/automation-contract.ts
++++ b/src/application/automation-contract.ts
+@@ -22,11 +22,27 @@
+   attempts: AttemptView[];
+   startupFailure: ActivationStartupFailureView | null;
+   recovery:
++    | RuntimeWaitingView
+     | { state: "scheduled"; nextAttempt: number; dueAt: string }
+     | { state: "awaiting-retry" | "permission-blocked"; summary: string }
+     | null;
+   stale: boolean;
+   dismissal?: { mayStartNext: boolean } | null;
++}
++
++export interface RuntimeWaitingView {
++  state: "waiting";
++  episodeId: string;
++  activationId: string;
++  classification: "connection-lost" | "service-unavailable" | "budget-exhausted";
++  firstFailure: string;
++  latestFailure: string;
++  firstAt: string;
++  latestAt: string;
++  dueAt: string;
++  failureCount: number;
++  retryCount: number;
++  retrying: boolean;
+ }
+ 
+ export type AutomationView =
+@@ -84,6 +100,8 @@
+ 
+ export interface InterruptTaskCommand {
+   taskId: string;
++  /** Optional scope guard for a recovery control targeting one activation. */
++  activationId?: string;
+   actor: Actor & { kind: "user" };
+   idempotencyKey: string;
+ }
+--- a/src/application/browser-transport-contract.ts
++++ b/src/application/browser-transport-contract.ts
+@@ -1,6 +1,10 @@
+ /** Shared serialized payload facts for the local browser and host adapters. */
+ export interface IdempotentBrowserRequest {
+   idempotencyKey: string;
++}
++
++export interface InterruptTaskRequest extends IdempotentBrowserRequest {
++  activationId?: string;
+ }
+ 
+ export type EmptyBrowserRequest = Record<string, never>;
+--- a/src/application/conversation-contract.ts
++++ b/src/application/conversation-contract.ts
+@@ -1,4 +1,4 @@
+-import type { ActivationView } from "./automation-contract.ts";
++import type { RuntimeWaitingView, ActivationView } from "./automation-contract.ts";
+ import type { ProcessDiagnostic } from "./process-contract.ts";
+ import type { AttemptContextWindowUsage, EstimatedTokenCost, AttemptTokenUsage, AttemptTranscriptItem, TokenCostBreakdown } from "./runtime-contract.ts";
+ import type { Actor, TaskActivityView, TaskCommentView } from "./task-contract.ts";
+@@ -28,6 +28,7 @@
+ export interface AgentConversationView {
+   /** Present on bounded browser queries. Legacy browser fixtures may omit it. */
+   page?: ConversationHistoryPage;
++  runtimeRecovery?: RuntimeWaitingView;
+   liveStatus?: "running" | "queued" | null;
+   id: string;
+   taskId: string;
+--- a/src/application/coordination-application.ts
++++ b/src/application/coordination-application.ts
+@@ -471,6 +471,7 @@
+       command.taskId,
+       command.actor,
+       command.idempotencyKey,
++      command.activationId,
+     );
+     if (!result.accepted) return result;
+     const accepted = {
+--- a/src/application/internal/activation-resolution-module.ts
++++ b/src/application/internal/activation-resolution-module.ts
+@@ -1,3 +1,4 @@
++import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
+ import type { DatabaseSync } from "node:sqlite";
+ 
+ import type {
+@@ -19,6 +20,7 @@
+ import type { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
+ 
+ export class ActivationResolutionModule {
++  readonly #runtimeRecovery: RuntimeRecoveryStore;
+   readonly #database: DatabaseSync;
+   readonly #idempotentCommands: IdempotentCommandExecutor;
+   readonly #activityJournal: ActivityJournal;
+@@ -33,6 +35,7 @@
+     this.#database = database.connection;
+     this.#idempotentCommands = idempotentCommands;
+     this.#activityJournal = activityJournal;
++    this.#runtimeRecovery = new RuntimeRecoveryStore(this.#database, activityJournal);
+     this.#now = now;
+   }
+ 
+@@ -69,7 +72,9 @@
+       if (activation === undefined) {
+         result = { accepted: false, reason: "not-found" };
+       } else {
+-        const dismissesUntouchedQueueEntry = activation.attempt_count === 0;
++        const recovery = this.#runtimeRecovery;
++        const waiting = recovery.readWaiting(command.activationId);
++        const dismissesUntouchedQueueEntry = activation.attempt_count === 0 || waiting !== undefined;
+         const dismissesInterruptedHead = activation.automation_suspended === 1 &&
+           activation.suspended_activation_id === command.activationId;
+         const dismissible = activation.status === "queued" &&
+@@ -80,6 +85,7 @@
+           result = { accepted: false, reason: "not-dismissible" };
+         } else {
+           const occurredAt = this.#now().toISOString();
++          this.#runtimeRecovery.finishWithinTransaction(command.activationId, "stopped", this.#now());
+           this.#database.prepare(
+             `UPDATE activations
+              SET status = 'completed', resolution = 'dismissed',
+@@ -135,6 +141,7 @@
+         result = { accepted: false, reason: "not-stale" };
+       } else {
+         const resolvedAt = this.#now().toISOString();
++        this.#runtimeRecovery.finishWithinTransaction(command.activationId, "stopped", this.#now());
+         this.#database.prepare(
+           `UPDATE activations
+            SET status = 'completed', resolution = 'dismissed', stale = 0,
+--- a/src/application/internal/activation-scheduling-module.ts
++++ b/src/application/internal/activation-scheduling-module.ts
+@@ -1,3 +1,4 @@
++import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
+ import { randomUUID } from "node:crypto";
+ import type { DatabaseSync } from "node:sqlite";
+ 
+@@ -129,6 +130,7 @@
+         "SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?",
+       ).get(row.id) as { count: number };
+       const attempt = { id: randomUUID(), number: priorAttempts.count + 1 };
++      const waiting = new RuntimeRecoveryStore(this.#database, this.#activityJournal).readWaiting(row.id);
+       this.#database.prepare(
+         `INSERT INTO attempts
+           (id, activation_id, status, workspace_path, started_at, model, reasoning_effort, reviewer_allowances_json)
+@@ -145,6 +147,9 @@
+           ...(selectedProjectAllowances === undefined ? {} : { projectAllowances: selectedProjectAllowances }),
+         }),
+       );
++      if (waiting) {
++        this.#database.prepare("UPDATE attempts SET provisional_probe = 1, recovery_episode_id = ? WHERE id = ?").run(waiting.episodeId, attempt.id);
++      }
+       this.#database.prepare(
+         `INSERT INTO activation_dispatch_claims (attempt_id, activation_id, claimed_at)
+          VALUES (?, ?, ?)`,
+@@ -170,8 +175,9 @@
+   readNextRetryDueAt(now: Date): string | undefined {
+     const row = this.#database.prepare(
+       `SELECT MIN(a.retry_due_at) AS retry_due_at
+-       FROM activations a
+-       WHERE a.status = 'queued' AND a.retry_due_at > ?
++       FROM activations a JOIN tasks task ON task.id = a.task_id JOIN mapped_tasks mapped ON mapped.id = task.id
++       JOIN agents agent ON agent.id = a.target_agent_id AND agent.applied = 1
++       WHERE a.stale = 0 AND task.automation_suspended = 0 AND a.status = 'queued' AND a.retry_due_at > ?
+          AND NOT EXISTS (
+            SELECT 1 FROM activations earlier
+            WHERE earlier.task_id = a.task_id
+@@ -196,7 +202,7 @@
+       }
+       const prepared = this.#database.prepare(
+         `SELECT activation.task_id, activation.target_agent_id, activation.definition_version,
+-                attempt.workspace_path
++                attempt.workspace_path, attempt.provisional_probe
+          FROM attempts attempt
+          JOIN activations activation ON activation.id = attempt.activation_id
+          JOIN activation_dispatch_claims dispatch_claim ON dispatch_claim.attempt_id = attempt.id
+@@ -207,11 +213,16 @@
+         target_agent_id: string;
+         definition_version: string;
+         workspace_path: string;
++        provisional_probe: number;
+       } | undefined;
+       if (prepared === undefined) throw new Error(`Attempt ${claim.attempt.id} is not prepared`);
+       if (prepared.workspace_path !== workspace.path) {
+         throw new Error(`Attempt ${claim.attempt.id} was prepared for a different workspace`);
+       }
++      const eligible = this.#database.prepare(`SELECT 1 FROM activations a JOIN tasks task ON task.id = a.task_id
++        JOIN mapped_tasks mapped ON mapped.id = task.id JOIN agents agent ON agent.id = a.target_agent_id AND agent.applied = 1
++        WHERE a.id = ? AND a.stale = 0 AND task.automation_suspended = 0 AND a.status = 'running'`).get(claim.activation.id);
++      if (!eligible) { this.releaseUnstartedClaim(claim); return undefined; }
+       const registered = this.readTaskWorkspace(prepared.task_id);
+       if (registered === undefined) {
+         this.#database.prepare(
+@@ -227,6 +238,10 @@
+       }
+       this.#database.prepare("UPDATE attempts SET started_at = ? WHERE id = ?")
+         .run(occurredAt, claim.attempt.id);
++      if (prepared.provisional_probe === 1) {
++        this.#database.prepare("UPDATE runtime_recovery_episodes SET retry_count = retry_count + 1 WHERE id = (SELECT recovery_episode_id FROM attempts WHERE id = ?)").run(claim.attempt.id);
++        return claim.attempt;
++      }
+       this.#activityJournal.append(
+         prepared.task_id,
+         "attempt.started",
+@@ -252,7 +267,7 @@
+       this.#deleteClaimedProvisionalAttempt(claim);
+       const released = this.#database.prepare(
+         `UPDATE activations
+-         SET status = 'queued', continuation_message = ?
++         SET status = 'queued', continuation_message = ?, retry_due_at = (SELECT next_eligible_at FROM runtime_recovery_episodes WHERE activation_id = activations.id AND state = 'waiting')
+          WHERE id = ? AND status = 'running'`,
+       ).run(claim.continuationMessage, claim.activation.id);
+       if (released.changes !== 1) throw new Error(`Activation ${claim.activation.id} is not starting`);
+@@ -266,6 +281,7 @@
+   ): RuntimeStartupDiagnostic {
+     return this.#owner.transaction(() => {
+       const occurredAt = new Date().toISOString();
++      new RuntimeRecoveryStore(this.#database, this.#activityJournal).finishWithinTransaction(claim.activation.id, "ordinary", new Date(occurredAt));
+       const failed = this.#database.prepare(
+         `UPDATE activations
+          SET status = 'failed', failure_kind = 'technical', failure_summary = ?
+--- a/src/application/internal/active-attempt-module.ts
++++ b/src/application/internal/active-attempt-module.ts
+@@ -1,3 +1,5 @@
++import { classifyRuntimeFailure } from "../runtime-failure.ts";
++import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
+ import type { DatabaseSync } from "node:sqlite";
+ 
+ import type {
+@@ -49,6 +51,7 @@
+   readonly #idempotentCommands: IdempotentCommandExecutor;
+   readonly #activityJournal: ActivityJournal;
+   readonly #attentionRecorder: AttentionRecorder;
++  readonly #recovery: RuntimeRecoveryStore;
+   readonly #attemptEvidence: AttemptEvidenceModule;
+ 
+   constructor(
+@@ -64,11 +67,17 @@
+     this.#activityJournal = activityJournal;
+     this.#attentionRecorder = attentionRecorder;
+     this.#attemptEvidence = attemptEvidence;
++    this.#recovery = new RuntimeRecoveryStore(this.#database, activityJournal);
+   }
+ 
+   recordTranscriptItem(attemptId: string, ordinal: number, item: AttemptTranscriptItem): void {
+     if (!Number.isSafeInteger(ordinal) || ordinal < 0) throw new Error("Invalid transcript ordinal");
+     this.#owner.transaction(() => {
++      if (!meaningfulTranscriptItem(item)) {
++        const probe = this.#database.prepare("SELECT provisional_probe FROM attempts WHERE id = ?").get(attemptId) as { provisional_probe: number } | undefined;
++        if (probe?.provisional_probe === 1) return;
++      }
++      this.#activityJournal.promoteProbe(attemptId, new Date().toISOString());
+       this.#database.prepare(`INSERT INTO conversation_history_items(id, conversation_id, position, kind, activation_id, attempt_id, item_json)
+         SELECT 'item:' || attempt.id || ':' || printf('%d', ?), positions.conversation_id,
+           positions.position || '|' || printf('%020d', attempt.rowid) || '|2|' || printf('%020d', ?),
+@@ -85,7 +94,7 @@
+       const interrupted = this.#database
+         .prepare(
+           `SELECT attempt.id, attempt.activation_id, activation.task_id,
+-                  activation.target_agent_id, activation.retry_cycle_start
++                  activation.target_agent_id, activation.retry_cycle_start, attempt.provisional_probe
+            FROM attempts attempt
+            JOIN activations activation ON activation.id = attempt.activation_id
+            WHERE attempt.status = 'running' AND activation.status = 'running'
+@@ -97,8 +106,18 @@
+           task_id: string;
+           target_agent_id: string;
+           retry_cycle_start: number;
++          provisional_probe: number;
+         }>;
+       for (const attempt of interrupted) {
++        const waiting = this.#recovery.readWaiting(attempt.activation_id);
++        if (attempt.provisional_probe === 1 && waiting) {
++          this.#database.prepare("DELETE FROM attempts WHERE id = ?").run(attempt.id);
++          const dueAt = new Date(Math.max(Date.parse(waiting.dueAt), now.getTime() + 60_000)).toISOString();
++          this.#database.prepare("UPDATE runtime_recovery_episodes SET next_eligible_at = ? WHERE id = ?").run(dueAt, waiting.episodeId);
++          this.#database.prepare("UPDATE activations SET status = 'queued', retry_due_at = ? WHERE id = ?").run(dueAt, attempt.activation_id);
++          continue;
++        }
++        this.#recovery.finishWithinTransaction(attempt.activation_id, "ordinary", now);
+         const occurredAt = now.toISOString();
+         const summary = "The previous host stopped while this attempt was active.";
+         this.#database
+@@ -164,6 +183,8 @@
+       });
+       const occurredAt = input.now.toISOString();
+       const summary = "The user interrupted this attempt.";
++      this.#activityJournal.promoteProbe(input.attemptId, occurredAt);
++      this.#recovery.finishWithinTransaction(attempt.activation_id, "stopped", input.now);
+       this.#database
+         .prepare(
+           `UPDATE attempts
+@@ -294,10 +315,16 @@
+ 
+   recordThreadStarted(attemptId: string, threadId: string): void {
+     this.#owner.transaction(() => {
++      const scope = this.#database.prepare(`SELECT attempt.provisional_probe, conversation.current_thread_id FROM attempts attempt
++        JOIN activations activation ON activation.id = attempt.activation_id
++        LEFT JOIN agent_conversations conversation ON conversation.id = activation.conversation_id WHERE attempt.id = ?`).get(attemptId) as
++        { provisional_probe: number; current_thread_id: string | null } | undefined;
++      if (scope?.provisional_probe === 1 && scope.current_thread_id !== threadId) this.#activityJournal.promoteProbe(attemptId, new Date().toISOString());
+       const result = this.#database
+         .prepare("UPDATE attempts SET thread_id = ? WHERE id = ? AND status = 'running'")
+         .run(threadId, attemptId);
+       if (result.changes !== 1) throw new Error(`Attempt ${attemptId} is not running`);
++      if (scope?.provisional_probe === 1 && scope.current_thread_id === threadId) return;
+       const activity = this.#database
+         .prepare(
+           `SELECT id, details_json
+@@ -342,7 +369,7 @@
+         .prepare(
+           `SELECT attempt.activation_id, attempt.thread_id,
+                   a.task_id, a.target_agent_id,
+-                  a.retry_cycle_start
++                  a.retry_cycle_start, attempt.provisional_probe
+            FROM attempts attempt
+            JOIN activations a ON a.id = attempt.activation_id
+            WHERE attempt.id = ? AND attempt.status = 'running'`,
+@@ -354,9 +381,27 @@
+             task_id: string;
+             target_agent_id: string;
+             retry_cycle_start: number;
++            provisional_probe: number;
+           }
+         | undefined;
+       if (attempt === undefined) throw new Error(`Attempt ${input.attemptId} is not running`);
++      const transient = input.outcome.status === "failed" ? classifyRuntimeFailure(input.outcome.summary, input.outcome.failure, input.now) : undefined;
++      const usageEvidence = { attemptId: input.attemptId,
++        ...(input.usage === undefined ? {} : { reportedUsage: input.usage }),
++        ...(input.resumedThreadId === undefined ? {} : { resumedThreadId: input.resumedThreadId }),
++        ...(input.outcome.threadId === undefined && attempt.thread_id === null ? {} : { completedThreadId: input.outcome.threadId ?? attempt.thread_id! }) };
++      const meaningful = input.transcript?.some(meaningfulTranscriptItem) ||
++        this.#attemptEvidence.hasMeaningfulUsage(usageEvidence) || input.contextWindowUsage !== undefined ||
++        input.outcome.threadContinuity !== undefined || (input.outcome.threadId !== undefined && input.outcome.threadId !== input.resumedThreadId);
++      if (attempt.provisional_probe === 1 && transient && !meaningful) {
++        this.#database.prepare("DELETE FROM attempts WHERE id = ?").run(input.attemptId);
++        this.#recovery.recordFailureWithinTransaction(attempt.activation_id, transient, input.now);
++        return;
++      }
++      this.#activityJournal.promoteProbe(input.attemptId, input.now.toISOString());
++      if (transient) this.#database.prepare("UPDATE attempts SET runtime_failure_class = ?, runtime_failure_json = ? WHERE id = ?")
++        .run(transient.kind, JSON.stringify(input.outcome.failure ?? {}), input.attemptId);
++      else this.#recovery.finishWithinTransaction(attempt.activation_id, input.outcome.status === "completed" ? "recovered" : "ordinary", input.now);
+       this.#attemptEvidence.recordWithinSettlement({
+         attemptId: input.attemptId,
+         ...(input.transcript === undefined ? {} : { transcript: input.transcript }),
+@@ -408,6 +453,8 @@
+           )
+           .run(input.outcome.summary, attempt.activation_id);
+         this.createFailureAttention(attempt.task_id, attempt.activation_id, occurredAt);
++      } else if (transient) {
++        this.#recovery.recordFailureWithinTransaction(attempt.activation_id, transient, input.now);
+       } else {
+         this.settleTechnicalFailure(
+           attempt.activation_id,
+@@ -464,9 +511,9 @@
+     now: Date,
+   ): void {
+     const attempts = this.#database
+-      .prepare("SELECT COUNT(*) AS count FROM attempts WHERE activation_id = ?")
+-      .get(activationId) as { count: number };
+-    const cycleAttempt = attempts.count - retryCycleStart;
++      .prepare("SELECT COUNT(*) AS count FROM (SELECT runtime_failure_class FROM attempts WHERE activation_id = ? ORDER BY rowid LIMIT -1 OFFSET ?) WHERE runtime_failure_class IS NULL")
++      .get(activationId, retryCycleStart) as { count: number };
++    const cycleAttempt = attempts.count;
+     if (cycleAttempt < 3) {
+       this.#database
+         .prepare(
+@@ -495,6 +542,10 @@
+   return usage === undefined ? null : JSON.stringify(usage);
+ }
+ 
++function meaningfulTranscriptItem(item: AttemptTranscriptItem): boolean {
++  return item.kind !== "diagnostic" && (item.kind !== "message" || item.text.trim().length > 0);
++}
++
+ function retryDueAt(now: Date, cycleAttempt: number): string {
+   const backoffMs = Math.min(5_000 * (2 ** (cycleAttempt - 1)), 30_000);
+   return new Date(now.getTime() + backoffMs).toISOString();
+--- a/src/application/internal/activity-journal.ts
++++ b/src/application/internal/activity-journal.ts
+@@ -17,6 +17,7 @@
+     details: Record<string, string>,
+     occurredAt = new Date().toISOString(),
+   ): string {
++    if (type !== "attempt.started" && details.attemptId) this.promoteProbe(details.attemptId, occurredAt);
+     const id = randomUUID();
+     this.#database
+       .prepare(
+@@ -27,4 +28,18 @@
+       .run(id, taskId, type, actor.kind, actor.id, occurredAt, JSON.stringify(details));
+     return id;
+   }
++
++  /** Publish a provisional recovery probe before retaining meaningful effects. Caller owns the transaction. */
++  promoteProbe(attemptId: string, occurredAt: string): void {
++    const row = this.#database.prepare(`SELECT attempt.activation_id, attempt.thread_id, activation.task_id,
++      activation.target_agent_id, activation.definition_version FROM attempts attempt
++      JOIN activations activation ON activation.id = attempt.activation_id
++      WHERE attempt.id = ? AND attempt.provisional_probe = 1`).get(attemptId) as
++      { activation_id: string; thread_id: string | null; task_id: string; target_agent_id: string; definition_version: string } | undefined;
++    if (!row) return;
++    this.#database.prepare("UPDATE attempts SET provisional_probe = 0 WHERE id = ?").run(attemptId);
++    this.#database.prepare("DELETE FROM activation_dispatch_claims WHERE attempt_id = ?").run(attemptId);
++    this.append(row.task_id, "attempt.started", { kind: "agent", id: row.target_agent_id },
++      { activationId: row.activation_id, attemptId, definitionVersion: row.definition_version, ...(row.thread_id === null ? {} : { threadId: row.thread_id }) }, occurredAt);
++  }
+ }
+--- a/src/application/internal/attempt-evidence-module.ts
++++ b/src/application/internal/attempt-evidence-module.ts
+@@ -56,6 +56,12 @@
+         usage === undefined ? null : JSON.stringify(persistedUsage(usage, input.pricing)),
+         input.reportedUsage === undefined ? null : JSON.stringify(input.reportedUsage),
+       );
++  }
++
++  hasMeaningfulUsage(input: RetainAttemptEvidence): boolean {
++    if (input.reportedUsage === undefined) return false;
++    const delta = this.#isolateAttemptUsage(input.attemptId, input.reportedUsage, input.resumedThreadId, input.completedThreadId);
++    return delta === undefined || Object.values(delta).some((value) => value > 0);
+   }
+ 
+   #isolateAttemptUsage(
+--- a/src/application/internal/automation-coordinator.ts
++++ b/src/application/internal/automation-coordinator.ts
+@@ -1,3 +1,4 @@
++import { runtimeFailureEvidence } from "../runtime-failure.ts";
+ import { randomUUID } from "node:crypto";
+ import { resolve } from "node:path";
+ import type {
+@@ -58,6 +59,7 @@
+ 
+ interface ActiveRunControl {
+   attemptId: string;
++  activationId: string;
+   controller: AbortController;
+   state: "running" | "interrupting";
+   interruptedBy?: Actor & { kind: "user" };
+@@ -203,9 +205,10 @@
+     taskId: string,
+     actor: Actor & { kind: "user" },
+     idempotencyKey: string,
++    activationId?: string,
+   ): InterruptTaskResult {
+     const active = this.#activeRuns.get(taskId);
+-    if (active === undefined) return { accepted: false, reason: "not-running" };
++    if (active === undefined || (activationId !== undefined && active.activationId !== activationId)) return { accepted: false, reason: "not-running" };
+     if (active.state === "interrupting") {
+       return { accepted: false, reason: "already-interrupting" };
+     }
+@@ -286,6 +289,7 @@
+         if (firstError !== undefined) throw firstError;
+         return;
+       }
++      if (first && inFlightCompletions.size === 0 && dueAt !== undefined) { first = false; onFirstDispatch(); }
+       let wake: (() => void) | undefined;
+       const nextKick = new Promise<void>((resolve) => {
+         wake = resolve;
+@@ -346,6 +350,7 @@
+     });
+     const activeRun: ActiveRunControl = {
+       attemptId: attempt.id,
++      activationId: claim.activation.id,
+       controller,
+       state: "running" as "running" | "interrupting",
+       confirmed,
+@@ -436,6 +441,7 @@
+           outcome = {
+             status: "failed",
+             summary: error instanceof Error ? error.message : "Agent runtime dispatch failed",
++            ...(runtimeFailureEvidence(error) === undefined ? {} : { failure: runtimeFailureEvidence(error)! }),
+           };
+         }
+         if (this.#closed) {
+@@ -488,6 +494,7 @@
+               : { resumedThreadId: resumeThreadId }),
+           });
+         }
++        this.#transcriptAccess?.release?.(attempt.id);
+         activeRun.confirm();
+       } catch (error) {
+         if (activeRun.state === "interrupting") activeRun.fail(error);
+--- a/src/application/internal/conversation-projection-module.ts
++++ b/src/application/internal/conversation-projection-module.ts
+@@ -1,3 +1,5 @@
++import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
++import { ActivityJournal } from "./activity-journal.ts";
+ import type { DatabaseSync } from "node:sqlite";
+ 
+ import type { ActivationView } from "../automation-contract.ts";
+@@ -222,7 +224,10 @@
+         };
+     const entries = selected.rows.flatMap((entry) => this.#hydrateHistoryRow(entry, row.task_id, retirement, query.attemptId)
+       .map((history) => ({ id: entry.id, history })));
++    const waitingActivation = this.#database.prepare(`SELECT activation_id FROM runtime_recovery_episodes episode JOIN activations activation ON activation.id = episode.activation_id WHERE activation.conversation_id = ? AND episode.state = 'waiting' LIMIT 1`).get(row.id) as { activation_id: string } | undefined;
++    const runtimeRecovery = waitingActivation === undefined ? undefined : new RuntimeRecoveryStore(this.#database, new ActivityJournal(this.#database)).readWaiting(waitingActivation.activation_id);
+     return {
++      ...(runtimeRecovery === undefined ? {} : { runtimeRecovery }),
+       id: row.id,
+       taskId: row.task_id,
+       originatingActivationId: row.originating_activation_id,
+@@ -259,7 +264,7 @@
+     }
+     const activation = this.#taskProjections.readTaskActivations(taskId, row.activation_id!, false)[0];
+     if (activation === undefined) return [];
+-    const attemptIds = (this.#database.prepare("SELECT id FROM attempts WHERE activation_id = ? ORDER BY rowid LIMIT 50").all(activation.id) as Array<{ id: string }>).map(({ id }) => id);
++    const attemptIds = (this.#database.prepare("SELECT id FROM attempts WHERE activation_id = ? AND provisional_probe = 0 ORDER BY rowid LIMIT 50").all(activation.id) as Array<{ id: string }>).map(({ id }) => id);
+     if (selectedAttemptId !== undefined && !attemptIds.includes(selectedAttemptId)) attemptIds.push(selectedAttemptId);
+     if (activation.reason.type === "user-follow-up") {
+       const message = this.#database.prepare(`SELECT ${conversationMessageColumns} FROM agent_conversation_messages WHERE id = ?`).get(row.source_id!) as unknown as ConversationMessageRow | undefined;
+--- a/src/application/internal/migrations/0012-runtime-recovery.ts
++++ b/src/application/internal/migrations/0012-runtime-recovery.ts
+@@ -0,0 +1,49 @@
++import type { CoordinationMigration } from "../coordination-database.ts";
++
++export const runtimeRecoveryMigration: CoordinationMigration = {
++  id: "0012_runtime_recovery",
++  foreignKeys: "disabled",
++  apply(database) {
++    // Preserve the released views/triggers while widening the journal's event vocabulary.
++    const dependents = database.prepare("SELECT type, name, sql FROM sqlite_master WHERE type IN ('view', 'trigger') AND sql IS NOT NULL ORDER BY rowid")
++      .all() as Array<{ type: "view" | "trigger"; name: string; sql: string }>;
++    const indexes = database.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'activity_ledger' AND sql IS NOT NULL")
++      .all() as Array<{ sql: string }>;
++    const original = (database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activity_ledger'").get() as { sql: string }).sql;
++    const sequence = (database.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'activity_ledger'").get() as { seq: number } | undefined)?.seq ?? 0;
++    const next = original.replace(/^CREATE TABLE (?:"activity_ledger"|activity_ledger)/u, "CREATE TABLE activity_ledger_next")
++      .replace("'stall.recovery-exhausted'", "'stall.recovery-exhausted', 'runtime.waiting', 'runtime.recovered', 'runtime.waiting-stopped', 'runtime.waiting-ended'");
++    if (next === original || !next.includes("'runtime.waiting'")) throw new Error("Released activity schema cannot be widened safely");
++    for (const entry of dependents.toReversed()) database.exec(`DROP ${entry.type.toUpperCase()} "${entry.name.replaceAll('"', '""')}"`);
++    database.exec(`${next}; INSERT INTO activity_ledger_next SELECT * FROM activity_ledger;
++      DROP TABLE activity_ledger; ALTER TABLE activity_ledger_next RENAME TO activity_ledger;`);
++    database.prepare("UPDATE sqlite_sequence SET seq = ? WHERE name = 'activity_ledger'").run(sequence);
++    for (const index of indexes) database.exec(index.sql);
++    for (const entry of dependents.filter((entry) => entry.type === "view")) database.exec(entry.sql);
++    for (const entry of dependents.filter((entry) => entry.type === "trigger")) database.exec(entry.sql);
++    database.exec(`
++      CREATE TABLE runtime_recovery_episodes (
++        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
++        id TEXT NOT NULL UNIQUE,
++        activation_id TEXT NOT NULL REFERENCES activations(id) ON DELETE CASCADE,
++        classification TEXT NOT NULL CHECK (classification IN ('connection-lost', 'service-unavailable', 'budget-exhausted')),
++        state TEXT NOT NULL CHECK (state IN ('waiting', 'recovered', 'stopped', 'ordinary')),
++        first_failure TEXT NOT NULL,
++        latest_failure TEXT NOT NULL,
++        first_at TEXT NOT NULL,
++        latest_at TEXT NOT NULL,
++        next_eligible_at TEXT NOT NULL,
++        failure_count INTEGER NOT NULL DEFAULT 1,
++        retry_count INTEGER NOT NULL DEFAULT 0,
++        samples_json TEXT NOT NULL,
++        resolved_at TEXT
++      );
++      CREATE UNIQUE INDEX runtime_recovery_active_activation ON runtime_recovery_episodes(activation_id) WHERE state = 'waiting';
++      CREATE INDEX runtime_recovery_activation ON runtime_recovery_episodes(activation_id, sequence);
++      ALTER TABLE attempts ADD COLUMN recovery_episode_id TEXT REFERENCES runtime_recovery_episodes(id);
++      ALTER TABLE attempts ADD COLUMN runtime_failure_class TEXT;
++      ALTER TABLE attempts ADD COLUMN runtime_failure_json TEXT;
++      ALTER TABLE attempts ADD COLUMN provisional_probe INTEGER NOT NULL DEFAULT 0 CHECK (provisional_probe IN (0, 1));
++    `);
++  },
++};
+--- a/src/application/internal/migrations/current-schema.sql
++++ b/src/application/internal/migrations/current-schema.sql
+@@ -53,7 +53,7 @@
+           'relationship.created', 'relationship.removed', 'relationship.satisfied', 'relationship.resume-agent-changed',
+           'attention.created', 'attention.resolved', 'activation.created', 'activation.dismissed',
+           'attempt.started', 'attempt.completed', 'automation.suspended', 'automation.resumed',
+-          'conversation.continued', 'conversation.retired', 'task.archived', 'task.unarchived', 'stall.detected', 'stall.recovery-skipped', 'stall.recovery-exhausted'
++          'conversation.continued', 'conversation.retired', 'task.archived', 'task.unarchived', 'stall.detected', 'stall.recovery-skipped', 'stall.recovery-exhausted', 'runtime.waiting', 'runtime.recovered', 'runtime.waiting-stopped', 'runtime.waiting-ended'
+         )),
+         actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
+         actor_id TEXT NOT NULL,
+@@ -133,7 +133,7 @@
+       context_window_usage_json TEXT,
+       outcome_kind TEXT
+       ,thread_continuity TEXT CHECK (thread_continuity IS NULL OR thread_continuity = 'replaced')
+-    , reviewer_allowances_json TEXT);
++    , reviewer_allowances_json TEXT, recovery_episode_id TEXT REFERENCES runtime_recovery_episodes(id), runtime_failure_class TEXT, runtime_failure_json TEXT, provisional_probe INTEGER NOT NULL DEFAULT 0 CHECK (provisional_probe IN (0, 1)));
+ 
+ -- table attention_reasons on attention_reasons
+ CREATE TABLE "attention_reasons" (
+@@ -272,6 +272,24 @@
+       impact_previous_version TEXT
+     );
+ 
++-- table runtime_recovery_episodes on runtime_recovery_episodes
++CREATE TABLE runtime_recovery_episodes (
++        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
++        id TEXT NOT NULL UNIQUE,
++        activation_id TEXT NOT NULL REFERENCES activations(id) ON DELETE CASCADE,
++        classification TEXT NOT NULL CHECK (classification IN ('connection-lost', 'service-unavailable', 'budget-exhausted')),
++        state TEXT NOT NULL CHECK (state IN ('waiting', 'recovered', 'stopped', 'ordinary')),
++        first_failure TEXT NOT NULL,
++        latest_failure TEXT NOT NULL,
++        first_at TEXT NOT NULL,
++        latest_at TEXT NOT NULL,
++        next_eligible_at TEXT NOT NULL,
++        failure_count INTEGER NOT NULL DEFAULT 1,
++        retry_count INTEGER NOT NULL DEFAULT 0,
++        samples_json TEXT NOT NULL,
++        resolved_at TEXT
++      );
++
+ -- table stall_recovery_activations on stall_recovery_activations
+ CREATE TABLE stall_recovery_activations (
+         activation_id TEXT PRIMARY KEY REFERENCES activations(id) ON DELETE CASCADE,
+@@ -432,6 +450,12 @@
+ -- index one_running_activation_per_task on activations
+ CREATE UNIQUE INDEX one_running_activation_per_task
+         ON activations(task_id) WHERE status = 'running';
++
++-- index runtime_recovery_activation on runtime_recovery_episodes
++CREATE INDEX runtime_recovery_activation ON runtime_recovery_episodes(activation_id, sequence);
++
++-- index runtime_recovery_active_activation on runtime_recovery_episodes
++CREATE UNIQUE INDEX runtime_recovery_active_activation ON runtime_recovery_episodes(activation_id) WHERE state = 'waiting';
+ 
+ -- index task_attachments_by_task on task_attachments
+ CREATE INDEX task_attachments_by_task
+--- a/src/application/internal/migrations/registry.ts
++++ b/src/application/internal/migrations/registry.ts
+@@ -9,6 +9,7 @@
+ import { reviewerAllowancesMigration } from "./0009-reviewer-allowances.ts";
+ import { conversationHistoryItemsMigration } from "./0010-conversation-history-items.ts";
+ import { taskTimelineMigration } from "./0011-task-timeline.ts";
++import { runtimeRecoveryMigration } from "./0012-runtime-recovery.ts";
+ 
+ export const coordinationMigrations = [
+   initialReleasedMigration,
+@@ -22,4 +23,5 @@
+   reviewerAllowancesMigration,
+   conversationHistoryItemsMigration,
+   taskTimelineMigration,
++  runtimeRecoveryMigration,
+ ] as const;
+--- a/src/application/internal/runtime-recovery-store.ts
++++ b/src/application/internal/runtime-recovery-store.ts
+@@ -0,0 +1,62 @@
++import { randomUUID } from "node:crypto";
++import type { DatabaseSync } from "node:sqlite";
++import type { RuntimeWaitingView } from "../automation-contract.ts";
++import type { TransientRuntimeFailure } from "../runtime-failure.ts";
++import type { ActivityJournal } from "./activity-journal.ts";
++
++interface EpisodeRow {
++  id: string; activation_id: string; task_id: string; classification: TransientRuntimeFailure["kind"];
++  first_failure: string; latest_failure: string; first_at: string; latest_at: string; next_eligible_at: string;
++  failure_count: number; retry_count: number; samples_json: string; status: string;
++}
++interface DiagnosticSample { at: string; diagnostic: string; code?: string }
++
++/** Mutable outage summaries; callers participate in their existing command/settlement transaction. */
++export class RuntimeRecoveryStore {
++  readonly #db: DatabaseSync;
++  readonly #journal: ActivityJournal;
++  constructor(db: DatabaseSync, journal: ActivityJournal) { this.#db = db; this.#journal = journal; }
++
++  readWaiting(activationId: string): RuntimeWaitingView | undefined {
++    const row = this.readRow(activationId);
++    if (!row) return undefined;
++    return { state: "waiting", episodeId: row.id, activationId, classification: row.classification,
++      firstFailure: row.first_failure, latestFailure: row.latest_failure, firstAt: row.first_at, latestAt: row.latest_at,
++      dueAt: row.next_eligible_at, failureCount: row.failure_count, retryCount: row.retry_count, retrying: row.status === "running" };
++  }
++
++  recordFailureWithinTransaction(activationId: string, failure: TransientRuntimeFailure, now: Date): void {
++    const row = this.readRow(activationId);
++    const at = now.toISOString();
++    const sample: DiagnosticSample = { at, diagnostic: failure.diagnostic, ...(failure.code === undefined ? {} : { code: failure.code }) };
++    if (row) {
++      const prior = JSON.parse(row.samples_json) as DiagnosticSample[];
++      const samples = prior.some((item) => item.diagnostic === sample.diagnostic && item.code === sample.code) ? prior : [prior[0]!, ...prior.slice(1).slice(-1), sample];
++      this.#db.prepare(`UPDATE runtime_recovery_episodes SET classification = ?, latest_failure = ?, latest_at = ?, next_eligible_at = ?, failure_count = failure_count + 1, samples_json = ? WHERE id = ?`)
++        .run(failure.kind, failure.diagnostic, at, failure.dueAt, JSON.stringify(samples), row.id);
++    } else {
++      const id = randomUUID();
++      this.#db.prepare(`INSERT INTO runtime_recovery_episodes(id, activation_id, classification, state, first_failure, latest_failure, first_at, latest_at, next_eligible_at, samples_json)
++        VALUES (?, ?, ?, 'waiting', ?, ?, ?, ?, ?, ?)`)
++        .run(id, activationId, failure.kind, failure.diagnostic, failure.diagnostic, at, at, failure.dueAt, JSON.stringify([sample]));
++      const taskId = (this.#db.prepare("SELECT task_id FROM activations WHERE id = ?").get(activationId) as { task_id: string }).task_id;
++      this.#journal.append(taskId, "runtime.waiting", { kind: "framework", id: "coordination" }, { activationId, episodeId: id, classification: failure.kind, summary: failure.diagnostic }, at);
++    }
++    this.#db.prepare("UPDATE activations SET status = 'queued', retry_due_at = ?, failure_kind = 'technical', failure_summary = ? WHERE id = ?")
++      .run(failure.dueAt, failure.diagnostic, activationId);
++  }
++
++  finishWithinTransaction(activationId: string, state: "recovered" | "stopped" | "ordinary", now: Date): void {
++    const row = this.readRow(activationId);
++    if (!row) return;
++    const at = now.toISOString();
++    this.#db.prepare("UPDATE runtime_recovery_episodes SET state = ?, resolved_at = ? WHERE id = ?").run(state, at, row.id);
++    this.#journal.append(row.task_id, state === "recovered" ? "runtime.recovered" : state === "stopped" ? "runtime.waiting-stopped" : "runtime.waiting-ended", { kind: "framework", id: "coordination" },
++      { activationId, episodeId: row.id, classification: row.classification, failureCount: String(row.failure_count), retryCount: String(row.retry_count), firstFailure: row.first_failure, latestFailure: row.latest_failure }, at);
++  }
++
++  private readRow(activationId: string): EpisodeRow | undefined {
++    return this.#db.prepare(`SELECT episode.*, activation.task_id, activation.status FROM runtime_recovery_episodes episode JOIN activations activation ON activation.id = episode.activation_id
++      WHERE episode.activation_id = ? AND episode.state = 'waiting'`).get(activationId) as unknown as EpisodeRow | undefined;
++  }
++}
+--- a/src/application/internal/task-command-store.ts
++++ b/src/application/internal/task-command-store.ts
+@@ -587,6 +587,7 @@
+         ...(attemptId === undefined ? {} : { attemptId }),
+         ...(originTask === undefined ? {} : { originTask }),
+       };
++      if (command.attemptId) this.#activityJournal.promoteProbe(command.attemptId, comment.occurredAt);
+       this.#database
+         .prepare(
+           `INSERT INTO task_comments
+--- a/src/application/internal/task-projection-store.ts
++++ b/src/application/internal/task-projection-store.ts
+@@ -1,3 +1,5 @@
++import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
++import { ActivityJournal } from "./activity-journal.ts";
+ import type { DatabaseSync } from "node:sqlite";
+ 
+ import type { ActivationView } from "../automation-contract.ts";
+@@ -66,12 +68,14 @@
+   MAX(CASE WHEN a.status = 'running' THEN a.target_agent_id END) AS active_agent_id`;
+ 
+ export class TaskProjectionStore {
++  readonly #runtimeRecovery: RuntimeRecoveryStore;
+   readonly history: TaskHistoryStore;
+   readonly timeline: TaskTimelinePages;
+   readonly #database: DatabaseSync;
+ 
+   constructor(database: CoordinationDatabase) {
+     this.#database = database.connection;
++    this.#runtimeRecovery = new RuntimeRecoveryStore(this.#database, new ActivityJournal(this.#database));
+     this.history = new TaskHistoryStore(database);
+     this.timeline = new TaskTimelinePages(this.#database, this);
+   }
+@@ -758,8 +762,9 @@
+       const attemptCount = includeAttempts ? attempts.length : (this.#database.prepare(`SELECT count(*) AS value FROM attempts
+         WHERE activation_id = ? AND NOT EXISTS (SELECT 1 FROM activation_dispatch_claims claim WHERE claim.attempt_id = attempts.id)`)
+         .get(row.id) as { value: number }).value;
++      const waiting = this.#runtimeRecovery.readWaiting(row.id);
+       const dismissible = row.status === "queued" && row.resolution === null &&
+-        row.stale === 0 && (attemptCount === 0 || (
++        row.stale === 0 && (attemptCount === 0 || waiting !== undefined || (
+           taskState.automation_suspended === 1 &&
+           taskState.suspended_activation_id === row.id
+         ));
+@@ -771,7 +776,7 @@
+         reason: { type: row.reason_type, sourceEventId: row.source_event_id },
+         attempts,
+         startupFailure: this.readActivationStartupFailure(row.id),
+-        recovery: row.retry_due_at === null
++        recovery: waiting ?? (row.retry_due_at === null
+           ? row.status !== "failed" || row.failure_summary === null
+             ? null
+             : {
+@@ -782,7 +787,7 @@
+               state: "scheduled",
+               nextAttempt: attemptCount + 1,
+               dueAt: row.retry_due_at,
+-            },
++            }),
+         model: row.model,
+         reasoningEffort: row.reasoning_effort,
+         stale: row.stale === 1,
+--- a/src/application/runtime-contract.ts
++++ b/src/application/runtime-contract.ts
+@@ -350,6 +350,14 @@
+   summary: string;
+   threadId?: string;
+   threadContinuity?: "replaced";
++  failure?: RuntimeFailureEvidence;
++}
++
++export interface RuntimeFailureEvidence {
++  code?: string;
++  statusCode?: number;
++  retryAt?: string;
++  retryAfterSeconds?: number;
+ }
+ 
+ export type AttemptOutcomeView = AgentRunOutcome | {
+@@ -371,6 +379,7 @@
+ }
+ 
+ export interface AttemptTranscriptAccess {
++  release?(attemptId: string): void;
+   read(attemptId: string): Promise<AttemptTranscriptItem[] | null>;
+   readUsage?(attemptId: string): Promise<AttemptTokenUsage | null>;
+   readContextWindowUsage?(attemptId: string): Promise<AttemptContextWindowUsage | null>;
+--- a/src/application/runtime-failure.ts
++++ b/src/application/runtime-failure.ts
+@@ -0,0 +1,59 @@
++import type { RuntimeFailureEvidence } from "./runtime-contract.ts";
++
++export type TransientFailureKind = "connection-lost" | "service-unavailable" | "budget-exhausted";
++export interface TransientRuntimeFailure { kind: TransientFailureKind; diagnostic: string; dueAt: string; code?: string }
++
++const connectionCodes = new Set(["econnreset", "econnrefused", "etimedout", "connection_lost", "connection_reset", "reconnect_exhausted", "reconnect_attempts_exhausted", "network_error"]);
++const serviceCodes = new Set(["service_unavailable", "server_overloaded", "internal_server_error", "bad_gateway", "gateway_timeout"]);
++const budgetCodes = new Set(["usage_limit_reached", "usage_limit_exceeded", "message_limit_exceeded", "message_budget_exhausted", "codex_message_budget_exhausted"]);
++
++/** Conservative deterministic policy; ambiguous/authentication/billing evidence stays ordinary. */
++export function classifyRuntimeFailure(summary: string, evidence: RuntimeFailureEvidence | undefined, now: Date): TransientRuntimeFailure | undefined {
++  const code = evidence?.code?.toLowerCase();
++  if (evidence?.statusCode === 401 || evidence?.statusCode === 403 || /permission denied|unauthori[sz]ed|authentication|invalid api key|billing|payment required|insufficient[_ ](?:quota|credits)|credit balance|account suspended/iu.test(`${code ?? ""} ${summary}`.replaceAll("_", " "))) return undefined;
++  const kind = code !== undefined && connectionCodes.has(code) ? "connection-lost"
++    : code !== undefined && budgetCodes.has(code) ? "budget-exhausted"
++    : (code !== undefined && serviceCodes.has(code)) || [502, 503, 504].includes(evidence?.statusCode ?? 0) ? "service-unavailable"
++    : /(?:hit|reached|exhausted).{0,35}(?:usage|message).{0,30}(?:limit|budget)|message budget (?:exhausted|exceeded)|codex usage limit|usage limit (?:reached|exceeded)/iu.test(summary) ? "budget-exhausted"
++    : /connection (?:lost|reset|closed|terminated)|econnreset|econnrefused|etimedout|network (?:error|timeout)|(?:exhausted|failed).{0,15}reconnect|reconnect(?:ion)? attempts? (?:exhausted|failed)|stream (?:disconnected|ended before turn\.completed)|websocket.{0,20}(?:closed|disconnected)/iu.test(summary) ? "connection-lost"
++    : /temporarily unavailable|temporary service|service unavailable|server overloaded|bad gateway|gateway timeout|(?:http|status).{0,8}(?:502|503|504)/iu.test(summary) ? "service-unavailable" : undefined;
++  if (kind === undefined) return undefined;
++  const explicit = evidence?.retryAt === undefined || !/(?:Z|[+-]\d\d:\d\d)$/u.test(evidence.retryAt) ? Number.NaN : Date.parse(evidence.retryAt);
++  const relative = evidence?.retryAfterSeconds === undefined || evidence.retryAfterSeconds <= 0 || evidence.retryAfterSeconds > 31_536_000 ? Number.NaN : now.getTime() + evidence.retryAfterSeconds * 1000;
++  const due = Number.isFinite(explicit) && explicit > now.getTime() ? explicit
++    : Number.isFinite(relative) && relative > now.getTime() ? relative : now.getTime() + 60_000;
++  return { kind, diagnostic: summary.slice(0, 2048), dueAt: new Date(due).toISOString(), ...(code === undefined ? {} : { code }) };
++}
++
++/** Adapt only explicit scalar envelope facts, never infer a reset from an ambiguous local time. */
++export function runtimeFailureEvidence(value: unknown): RuntimeFailureEvidence | undefined {
++  const queue: unknown[] = [value];
++  const records: Record<string, unknown>[] = [];
++  for (let i = 0; i < queue.length && i < 8; i++) {
++    const item = queue[i];
++    if (typeof item !== "object" || item === null || records.includes(item as Record<string, unknown>)) continue;
++    const record = item as Record<string, unknown>; records.push(record);
++    queue.push(...[record.error, record.data, record.cause, record.response].filter((child) => typeof child === "object" && child !== null));
++  }
++  const field = (...names: string[]): unknown => {
++    for (const record of records) for (const name of names) if (record[name] !== undefined) return record[name];
++    return undefined;
++  };
++  const code = field("code", "error_code");
++  const status = field("statusCode", "status_code", "status");
++  const reset = field("retryAt", "resetAt", "retry_at", "reset_at", "resets_at", "next_reset_at");
++  let retryAt: string | undefined;
++  if (typeof reset === "number" && Number.isFinite(reset)) {
++    const date = new Date(reset < 100_000_000_000 ? reset * 1000 : reset);
++    if (Number.isFinite(date.getTime())) retryAt = date.toISOString();
++  } else if (typeof reset === "string" && /(?:Z|[+-]\d\d:\d\d)$/u.test(reset) && Number.isFinite(Date.parse(reset))) retryAt = new Date(reset).toISOString();
++  const after = field("retryAfterSeconds", "retry_after_seconds", "retry_after");
++  const seconds = typeof after === "number" || typeof after === "string" ? Number(after) : Number.NaN;
++  const evidence: RuntimeFailureEvidence = {
++    ...(typeof code === "string" ? { code: code.slice(0, 128) } : {}),
++    ...(typeof status === "number" && Number.isSafeInteger(status) ? { statusCode: status } : {}),
++    ...(retryAt === undefined ? {} : { retryAt }),
++    ...(Number.isFinite(seconds) && seconds > 0 && seconds <= 31_536_000 ? { retryAfterSeconds: seconds } : {}),
++  };
++  return Object.keys(evidence).length === 0 ? undefined : evidence;
++}
+--- a/src/application/task-contract.ts
++++ b/src/application/task-contract.ts
+@@ -35,7 +35,8 @@
+     | "task.unarchived"
+     | "stall.detected"
+     | "stall.recovery-skipped"
+-    | "stall.recovery-exhausted";
++    | "stall.recovery-exhausted"
++    | "runtime.waiting" | "runtime.recovered" | "runtime.waiting-stopped" | "runtime.waiting-ended";
+   actor: Actor | { kind: "framework"; id: "coordination" };
+   occurredAt: string;
+   details: Record<string, string>;
+--- a/src/runtime/codex-agent-runtime.ts
++++ b/src/runtime/codex-agent-runtime.ts
+@@ -233,6 +233,7 @@
+             : {
+                 status: "failed" as const,
+                 summary: projected.terminal.summary,
++                ...(projected.terminal.failure === undefined ? {} : { failure: projected.terminal.failure }),
+                 ...(projected.threadId === undefined ? {} : { threadId: projected.threadId }),
+               };
+         return withThreadContinuity(outcome, threadReplaced);
+@@ -251,6 +252,10 @@
+     }
+   }
+ 
++  release(attemptId: string): void {
++    this.#transcripts.delete(attemptId); this.#usage.delete(attemptId); this.#contextWindowUsage.delete(attemptId);
++  }
++
+   async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {
+     const transcript = this.#transcripts.get(attemptId);
+     return transcript === undefined ? null : structuredClone(transcript);
+--- a/src/runtime/codex-turn-projector.ts
++++ b/src/runtime/codex-turn-projector.ts
+@@ -1,3 +1,5 @@
++import { runtimeFailureEvidence } from "../application/runtime-failure.ts";
++import type { RuntimeFailureEvidence } from "../application/runtime-contract.ts";
+ import type { ThreadEvent, ThreadItem } from "@openai/codex-sdk";
+ 
+ import type {
+@@ -20,7 +22,7 @@
+   terminal:
+     | { kind: "completed"; summary: string }
+     | { kind: "permission-blocked"; summary: string }
+-    | { kind: "failed"; summary: string };
++    | { kind: "failed"; summary: string; failure?: RuntimeFailureEvidence };
+ }
+ 
+ type ItemRecord = Record<string, unknown> & { type: string };
+@@ -48,10 +50,11 @@
+   const failed = (
+     diagnostic: string,
+     outcomeSummary = `Codex could not complete the activation: ${diagnostic}`,
++    evidence?: unknown,
+   ): CodexTurnProjection => {
+     transcript.push({ kind: "diagnostic", text: diagnostic });
+     publish();
+-    return projection(threadId, snapshot(), usage, { kind: "failed", summary: outcomeSummary });
++    return projection(threadId, snapshot(), usage, { kind: "failed", summary: outcomeSummary, ...(runtimeFailureEvidence(evidence) === undefined ? {} : { failure: runtimeFailureEvidence(evidence)! }) });
+   };
+ 
+   try {
+@@ -111,19 +114,19 @@
+           if (!isRecord(event.error) || typeof event.error.message !== "string") {
+             return failed("Codex emitted a malformed turn.failed event.");
+           }
+-          return failed(event.error.message);
++          return failed(event.error.message, undefined, event);
+         case "error":
+           if (typeof event.message !== "string") {
+             return failed("Codex emitted a malformed error event.");
+           }
+-          return failed(event.message);
++          return failed(event.message, undefined, event);
+         default:
+           return failed(`Codex emitted an unsupported event type: ${boundedLabel(event.type)}.`);
+       }
+     }
+   } catch (error) {
+     if (threadId === undefined) throw error;
+-    return failed(error instanceof Error ? error.message : "the streamed run failed");
++    return failed(error instanceof Error ? error.message : "the streamed run failed", undefined, error);
+   }
+ 
+   if (threadId === undefined) {
+--- a/src/web/browser-api/task-routes.ts
++++ b/src/web/browser-api/task-routes.ts
+@@ -7,6 +7,7 @@
+   EditTaskRequest,
+   EditTaskRelationshipResumeAgentRequest,
+   IdempotentBrowserRequest,
++  InterruptTaskRequest,
+   MoveTaskRequest,
+   UserTaskDetailQueryResult,
+ } from "../../application/browser-transport-contract.ts";
+@@ -82,9 +83,10 @@
+     sendJson(response, result.available ? 200 : result.reason === "not-found" ? 404 : 409, result);
+   });
+   dispatcher.register("POST", "/api/tasks/:taskId/interrupt", "browser/tasks", async ({ request, response, params }) => {
+-    const body = await readJsonBody<IdempotentBrowserRequest>(request);
++    const body = await readJsonBody<InterruptTaskRequest>(request);
+     const result = application.interruptTask({
+       taskId: params.taskId,
++      ...(body.activationId === undefined ? {} : { activationId: stringField(body, "activationId") }),
+       actor: localUserActor,
+       idempotencyKey: stringField(body, "idempotencyKey"),
+     });
+--- a/src/web/client/AgentActivityPanel.tsx
++++ b/src/web/client/AgentActivityPanel.tsx
+@@ -1,3 +1,4 @@
++import { RuntimeWaitingSummary } from "./RuntimeWaitingSummary.tsx";
+ import { useState, type ReactNode } from "react";
+ 
+ import type {
+@@ -56,6 +57,7 @@
+       aria-labelledby="agent-activity-heading"
+     >
+       <h2 id="agent-activity-heading">Agent activity</h2>
++      {state.activations.map((activation) => activation.recovery?.state === "waiting" ? <RuntimeWaitingSummary key={activation.id} taskId={state.taskId} recovery={activation.recovery} onChanged={onChanged} /> : null)}
+ 
+       {state.activeRun !== null ? (
+         <div className="activity-current running">
+--- a/src/web/client/AgentConversationDialog.tsx
++++ b/src/web/client/AgentConversationDialog.tsx
+@@ -1,3 +1,4 @@
++import { RuntimeWaitingSummary } from "./RuntimeWaitingSummary.tsx";
+ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+ 
+ import type { AgentConversationView, AgentInspectableTaskContentView } from "../../application/browser-transport-contract.ts";
+@@ -371,6 +372,7 @@
+             <CloseIconButton buttonRef={closeButtonRef} label="Close conversation" onClick={onClose} />
+           </div>
+         </header>
++        {conversation?.runtimeRecovery === undefined ? null : <RuntimeWaitingSummary taskId={taskId} recovery={conversation.runtimeRecovery} onChanged={refresh} />}
+         <div
+           ref={contentRef}
+           className="transcript-content"
+--- a/src/web/client/RuntimeWaitingSummary.tsx
++++ b/src/web/client/RuntimeWaitingSummary.tsx
+@@ -0,0 +1,42 @@
++import { useState, type ReactNode } from "react";
++import type { ActivationView } from "../../application/browser-transport-contract.ts";
++import { ApiError, readTask, dismissActivation, interruptTask } from "./api.ts";
++import { errorMessage } from "./feedback.ts";
++
++export function RuntimeWaitingSummary({ taskId, recovery, onChanged }: {
++  taskId: string;
++  recovery: Extract<NonNullable<ActivationView["recovery"]>, { state: "waiting" }>;
++  onChanged(): Promise<void>;
++}): ReactNode {
++  const [pending, setPending] = useState(false);
++  const [error, setError] = useState<string>();
++  const reason = { "connection-lost": "Connection lost", "service-unavailable": "Runtime service unavailable", "budget-exhausted": "Codex message budget exhausted" }[recovery.classification];
++  return <section className="runtime-waiting-summary" aria-label="Runtime recovery">
++    <div className="runtime-waiting-heading"><strong>{reason}</strong>
++      <button type="button" className="secondary" disabled={pending} onClick={() => {
++        setPending(true); setError(undefined);
++        void (async () => {
++          // Try dismissal first, then a scoped interruption if dispatch won the race.
++          // A conflicting response is followed by an authoritative refresh; it never targets another activation.
++          for (let retry = 0; ; retry++) {
++            const current = (await readTask(taskId)).task.activations.find((activation) => activation.id === recovery.activationId);
++            if (!current || current.status === "completed" || current.status === "dismissed" || current.status === "failed") break;
++            try { await dismissActivation(recovery.activationId, crypto.randomUUID()); break; }
++            catch (caught) { if (!(caught instanceof ApiError) || caught.status !== 409 || retry >= 4) throw caught; }
++            try { await interruptTask(taskId, crypto.randomUUID(), recovery.activationId); }
++            catch (caught) {
++              if (!(caught instanceof ApiError) || caught.status !== 409 || retry >= 4) throw caught;
++            }
++          }
++          await onChanged();
++        })().catch((caught) => setError(errorMessage(caught))).finally(() => setPending(false));
++      }}>{pending ? "Stopping…" : "Stop retries"}</button></div>
++    <p>{recovery.retrying ? "Retry in progress" : "Waiting to retry"} · {recovery.retryCount} retries · {recovery.failureCount} failures</p>
++    <p>Next eligible: <time dateTime={recovery.dueAt}>{new Date(recovery.dueAt).toLocaleString()}</time></p>
++    <details><summary>Failure details</summary>
++      <p>First failure ({new Date(recovery.firstAt).toLocaleString()}): {recovery.firstFailure}</p>
++      <p>Latest failure ({new Date(recovery.latestAt).toLocaleString()}): {recovery.latestFailure}</p>
++    </details>
++    {error === undefined ? null : <p role="alert">{error}</p>}
++  </section>;
++}
+--- a/src/web/client/Timeline.tsx
++++ b/src/web/client/Timeline.tsx
+@@ -774,6 +774,10 @@
+     "stall.detected": "Stall detected",
+     "stall.recovery-skipped": "Stall recovery skipped",
+     "stall.recovery-exhausted": "Stall recovery needs attention",
++    "runtime.waiting": "Runtime recovery waiting",
++    "runtime.recovered": "Runtime recovered",
++    "runtime.waiting-stopped": "Runtime retries stopped",
++    "runtime.waiting-ended": "Runtime recovery ended",
+   }[type];
+ }
+ 
+--- a/src/web/client/api.ts
++++ b/src/web/client/api.ts
+@@ -14,6 +14,7 @@
+   EditTaskRequest,
+   EmptyBrowserRequest,
+   IdempotentBrowserRequest,
++  InterruptTaskRequest,
+   MoveTaskRequest,
+   TaskOverviewView,
+   AttemptTranscriptQueryResult,
+@@ -280,10 +281,10 @@
+   });
+ }
+ 
+-export async function interruptTask(taskId: string, idempotencyKey: string): Promise<void> {
++export async function interruptTask(taskId: string, idempotencyKey: string, activationId?: string): Promise<void> {
+   await request(`/api/tasks/${encodeURIComponent(taskId)}/interrupt`, {
+     method: "POST",
+-    body: serializeBrowserRequest<IdempotentBrowserRequest>({ idempotencyKey }),
++    body: serializeBrowserRequest<InterruptTaskRequest>({ idempotencyKey, ...(activationId === undefined ? {} : { activationId }) }),
+   });
+ }
+ 
+--- a/src/web/client/styles.css
++++ b/src/web/client/styles.css
+@@ -1012,3 +1012,8 @@
+ 
+ .movement-map-status { position: absolute; z-index: 3; inset: 0; margin: 0; padding: .7rem; background: var(--surface); color: var(--text); font-size: .85rem; }
+ .timeline-window-spacer { pointer-events: none; }
++
++.runtime-waiting-summary { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--surface); margin: 0.5rem 0; color: var(--text); }
++.runtime-waiting-summary p { margin: 0.4rem 0; font-size: 0.85rem; overflow-wrap: anywhere; }
++.runtime-waiting-heading { display: flex; gap: 1rem; align-items: center; justify-content: space-between; }
++.runtime-waiting-summary details { font-size: 0.85rem; }
+--- a/test/application/agent-conversation.test.ts
++++ b/test/application/agent-conversation.test.ts
+@@ -1072,7 +1072,7 @@
+   assert.equal(failed.available, true);
+   if (!failed.available) return;
+   assert.equal(failed.task.activations[0]?.status, "queued");
+-  assert.equal(failed.task.activations[0]?.recovery?.state, "scheduled");
++  assert.equal(failed.task.activations[0]?.recovery?.state, "waiting");
+   const inspection = application.queryTaskInspection(created.task.id);
+   assert.equal(inspection.available, true);
+   if (inspection.available) {
+--- a/test/application/released-schema-migrations.test.ts
++++ b/test/application/released-schema-migrations.test.ts
+@@ -29,7 +29,36 @@
+   "0009_reviewer_allowances",
+   "0010_conversation_history_items",
+   "0011_task_timeline",
++  "0012_runtime_recovery",
+ ];
++
++test("migration 0012 preserves released history, journal sequence and all derived index triggers", async () => {
++  const database = new DatabaseSync(":memory:");
++  try {
++    database.exec("PRAGMA foreign_keys = ON");
++    for (const migration of coordinationMigrations.slice(0, 11)) migration.apply(database);
++    database.exec(`INSERT INTO runtime VALUES (1, 'Released schema process', 'legacy-version', 'paused', NULL);
++      INSERT INTO boards VALUES ('delivery', 'Delivery', 'Deliver work.', 0, 1);
++      INSERT INTO columns VALUES ('delivery', 'backlog', 'Backlog', 0, NULL, 0, 1);`);
++    database.exec(await readFile(join(import.meta.dirname, "../fixtures/released-schema/0009-reviewer-allowances-data.sql"), "utf8"));
++    const before = database.prepare("SELECT * FROM activity_ledger ORDER BY sequence").all();
++    const transcript = database.prepare("SELECT * FROM attempt_transcripts").all();
++    const dependents = database.prepare("SELECT type, name, sql FROM sqlite_master WHERE type IN ('trigger', 'view') ORDER BY name").all();
++    database.prepare("UPDATE sqlite_sequence SET seq = 100 WHERE name = 'activity_ledger'").run();
++    database.exec("PRAGMA foreign_keys = OFF; BEGIN IMMEDIATE");
++    coordinationMigrations[11]!.apply(database);
++    database.exec("COMMIT; PRAGMA foreign_keys = ON");
++    assert.deepEqual(database.prepare("SELECT * FROM activity_ledger ORDER BY sequence").all(), before);
++    assert.deepEqual(database.prepare("SELECT * FROM attempt_transcripts").all(), transcript);
++    assert.deepEqual(database.prepare("SELECT type, name, sql FROM sqlite_master WHERE type IN ('trigger', 'view') ORDER BY name").all(), dependents);
++    database.exec(`INSERT INTO activity_ledger(id, task_id, type, actor_kind, actor_id, occurred_at, details_json)
++      VALUES ('waiting-upgrade', 'released-task', 'runtime.waiting', 'framework', 'coordination', '2027-01-01', '{}')`);
++    assert.equal(database.prepare("SELECT sequence FROM activity_ledger WHERE id = 'waiting-upgrade'").get()?.sequence, 101);
++    assert.ok(database.prepare("SELECT 1 FROM task_timeline_sources WHERE id = 'waiting-upgrade'").get());
++    assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
++    assert.equal(database.prepare("PRAGMA integrity_check").get()?.integrity_check, "ok");
++  } finally { database.close(); }
++});
+ 
+ test("migration 0010 backfills a large released transcript without changing original evidence", async (t) => {
+   const fixture = await createStartupFixture("conversation-items-upgrade");
+--- a/test/application/transient-runtime-recovery.test.ts
++++ b/test/application/transient-runtime-recovery.test.ts
+@@ -0,0 +1,241 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { CoordinationApplication } from "../../src/application/coordination-application.ts";
++import { ControlledAgentRuntime, createHandoffFixture } from "../support/handoff-fixture.ts";
++import { ControlledRetryClock } from "../support/activation-fixture.ts";
++import { DatabaseSync } from "node:sqlite";
++import type { AgentRunOutcome } from "../../src/application/runtime-contract.ts";
++import type { RuntimeWaitingView } from "../../src/application/automation-contract.ts";
++
++async function setup(t: test.TestContext, thread: string | null = null, cleanup = true) {
++  const fixture = await createHandoffFixture();
++  const runtime = new ControlledAgentRuntime(thread);
++  const clock = new ControlledRetryClock("2027-01-01T12:00:00.000Z");
++  const options = { processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
++    runtimeDispatch: { projectRepositoryPath: fixture.repositoryPath, taskWorkspaceRoot: fixture.workspaceRoot, agentRuntime: runtime }, automationClock: clock, transcriptAccess: runtime };
++  const app = await CoordinationApplication.start(options);
++  if (cleanup) t.after(() => app.close());
++  const created = app.createTask({ boardId: "delivery", columnId: "implementation", title: "Recover", description: "Same activation", actor: { kind: "user", id: "paul" }, idempotencyKey: "recover" });
++  assert.ok(created.accepted);
++  const taskId = created.task.id;
++  const waiting = (): RuntimeWaitingView => {
++    const result = app.queryTask(taskId); assert.ok(result.available);
++    const recovery = result.task.activations[0]!.recovery; assert.equal(recovery?.state, "waiting");
++    if (recovery?.state !== "waiting") throw new Error("Expected waiting episode");
++    return recovery;
++  };
++  async function fail(outcome: AgentRunOutcome = { status: "failed", summary: "Connection lost; reconnect attempts exhausted" }) {
++    runtime.complete(outcome);
++    await until(() => { const result = app.queryTask(taskId); return result.available && result.task.activations[0]?.status !== "running"; });
++  }
++  await app.resumeAutomation(); await runtime.waitForRequest(1);
++  return { app, runtime, clock, fixture, options, taskId, waiting, fail };
++}
++
++async function until(predicate: () => boolean): Promise<void> {
++  for (let i = 0; i < 200; i++) { if (predicate()) return; await new Promise<void>((resolve) => setImmediate(resolve)); }
++  assert.fail("Expected the application to reach the observed state");
++}
++
++test("recognized connection failures wait at least a minute without failure attention or the ordinary attempt ceiling", async (t) => {
++  const fixture = await createHandoffFixture();
++  const runtime = new ControlledAgentRuntime();
++  const clock = new ControlledRetryClock("2027-01-01T12:00:00.000Z");
++  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
++    runtimeDispatch: { projectRepositoryPath: fixture.repositoryPath, taskWorkspaceRoot: fixture.workspaceRoot, agentRuntime: runtime }, automationClock: clock, transcriptAccess: runtime });
++  t.after(() => app.close());
++  const created = app.createTask({ boardId: "delivery", columnId: "implementation", title: "Recover connection", description: "Resume the same activation", actor: { kind: "user", id: "paul" }, idempotencyKey: "connection" });
++  assert.ok(created.accepted);
++  await app.resumeAutomation();
++  await runtime.waitForRequest(1);
++  runtime.complete({ status: "failed", summary: "Connection lost; reconnect attempts exhausted" });
++  await until(() => {
++    const result = app.queryTask(created.task.id);
++    return result.available && result.task.activations[0]?.status === "queued";
++  });
++  const result = app.queryTask(created.task.id);
++  assert.ok(result.available);
++  assert.equal(result.task.activations[0]?.recovery?.state, "waiting");
++  assert.equal(result.task.activations[0]?.recovery && "dueAt" in result.task.activations[0].recovery ? result.task.activations[0].recovery.dueAt : undefined, "2027-01-01T12:01:00.000Z");
++  const inspection = app.queryTaskInspectionForUser(created.task.id);
++  assert.ok(inspection.available);
++  assert.equal(inspection.task.unresolvedAttention.length, 0);
++  clock.advanceTo("2027-01-01T12:00:59.000Z");
++  await new Promise<void>((resolve) => setImmediate(resolve));
++  assert.equal(runtime.requests.length, 1);
++  app.pauseAutomation();
++  await app.waitForAutomationIdle();
++});
++
++test("1,000 no-progress failures retain one episode and bounded durable history, then recover unattended", async (t) => {
++  const { app, runtime, clock, fixture, taskId, waiting, fail } = await setup(t, "same-thread");
++  const database = new DatabaseSync(fixture.databasePath); t.after(() => database.close());
++  await fail({ status: "failed", summary: "Connection lost; reconnect attempts exhausted", threadId: "same-thread" });
++  const episode = waiting().episodeId;
++  const initial = JSON.stringify(app.queryUserTaskDetail(taskId)).length;
++  for (let i = 1; i < 1000; i++) {
++    clock.advanceTo(waiting().dueAt);
++    const request = await runtime.waitForRequest(i + 1);
++    assert.equal(request.activationId, runtime.requests[0]!.activationId);
++    assert.equal(request.resumeThreadId, "same-thread");
++    runtime.setTranscript(request.attemptId, [{ kind: "message", role: "agent", text: "" }, { kind: "diagnostic", text: "Connection lost; reconnect attempts exhausted" }]);
++    await fail({ status: "failed", summary: "Connection lost; reconnect attempts exhausted", threadId: "same-thread" });
++  }
++  assert.equal(waiting().episodeId, episode);
++  assert.equal(waiting().failureCount, 1000);
++  assert.equal(waiting().retryCount, 999);
++  for (const [table, expected] of [["attempts", 1], ["runtime_recovery_episodes", 1], ["activation_dispatch_claims", 0], ["conversation_history_items", 1]] as const) {
++    assert.equal((database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count, expected, table);
++  }
++  assert.equal((database.prepare("SELECT COUNT(*) AS count FROM activity_ledger WHERE type IN ('attempt.started', 'attempt.completed')").get() as { count: number }).count, 2);
++  assert.ok(JSON.stringify(app.queryUserTaskDetail(taskId)).length < initial + 1000);
++  const inspection = app.queryTaskInspectionForUser(taskId); assert.ok(inspection.available); assert.equal(inspection.task.unresolvedAttention.length, 0);
++  const samples = database.prepare("SELECT samples_json FROM runtime_recovery_episodes").get() as { samples_json: string };
++  assert.equal((JSON.parse(samples.samples_json) as unknown[]).length, 1);
++  clock.advanceTo(waiting().dueAt); await runtime.waitForRequest(1001);
++  runtime.complete({ status: "completed", summary: "Recovered", threadId: "same-thread" });
++  app.pauseAutomation(); await app.waitForAutomationIdle();
++  const result = app.queryTask(taskId); assert.ok(result.available);
++  assert.equal(result.task.activations[0]?.status, "completed"); assert.equal(result.task.activations[0]?.attempts.length, 2);
++  assert.equal(result.task.activations[0]?.recovery, null);
++});
++
++test("reset deadlines, changed classification, pause/resume and dismissal retain one retry episode", async (t) => {
++  const { app, runtime, clock, taskId, waiting, fail } = await setup(t);
++  await fail({ status: "failed", summary: "Usage limit reached", failure: { code: "usage_limit_reached", retryAt: "2027-01-01T13:00:00Z" } });
++  assert.equal(waiting().dueAt, "2027-01-01T13:00:00.000Z");
++  app.pauseAutomation(); await app.waitForAutomationIdle();
++  clock.advanceTo("2027-01-01T13:00:00Z"); assert.equal(runtime.requests.length, 1);
++  await app.resumeAutomation(); await runtime.waitForRequest(2);
++  await fail({ status: "failed", summary: "Service unavailable", failure: { statusCode: 503, retryAt: "2027-01-01T13:30:00Z" } });
++  assert.equal(waiting().classification, "service-unavailable"); assert.equal(waiting().dueAt, "2027-01-01T13:30:00.000Z");
++  app.pauseAutomation(); await app.waitForAutomationIdle();
++  await app.resumeAutomation(); // Future waiting must return immediately.
++  const dismissal = app.dismissActivation({ activationId: waiting().activationId, actor: { kind: "user", id: "paul" }, idempotencyKey: "stop-wait" });
++  assert.ok(dismissal.accepted);
++  clock.advanceTo("2027-01-02T00:00:00Z"); app.pauseAutomation(); await app.waitForAutomationIdle();
++  assert.equal(runtime.requests.length, 2);
++  const result = app.queryTask(taskId); assert.ok(result.available); assert.equal(result.task.activations[0]?.status, "dismissed");
++});
++
++test("transient retries preserve partial work and do not spend the three ordinary failures", async (t) => {
++  const { app, runtime, clock, taskId, waiting, fail } = await setup(t, "partial-thread");
++  await fail({ status: "failed", summary: "Connection lost", threadId: "partial-thread" });
++  clock.advanceTo(waiting().dueAt); const probe = await runtime.waitForRequest(2);
++  runtime.setTranscript(probe.attemptId, [{ kind: "message", role: "agent", text: "Completed useful work before the outage" }]);
++  const comment = app.addTaskComment({ taskId, body: "Durable partial output", actor: { kind: "agent", id: "implementer" }, attemptId: probe.attemptId, idempotencyKey: "partial" });
++  assert.ok(comment.accepted);
++  await fail({ status: "failed", summary: "Connection lost", threadId: "partial-thread" });
++  let requestCount = 2;
++  for (let i = 0; i < 3; i++) {
++    const result = app.queryTask(taskId); assert.ok(result.available);
++    const recovery = result.task.activations[0]!.recovery; assert.ok(recovery && "dueAt" in recovery);
++    clock.advanceTo(recovery.dueAt); await runtime.waitForRequest(++requestCount);
++    await fail({ status: "failed", summary: "Unrecognized application defect" });
++  }
++  app.pauseAutomation(); await app.waitForAutomationIdle();
++  const result = app.queryTask(taskId); assert.ok(result.available);
++  assert.equal(result.task.activations[0]!.status, "failed"); assert.equal(result.task.activations[0]!.attempts.length, 5);
++  assert.ok(result.task.comments.some((comment) => comment.body === "Durable partial output"));
++  const inspection = app.queryTaskInspectionForUser(taskId); assert.ok(inspection.available); assert.equal(inspection.task.unresolvedAttention.length, 1);
++});
++
++test("restart retains a waiting deadline and recovers abandoned provisional probes without noisy host-stop history", async (t) => {
++  const { app, runtime, clock, options, taskId, waiting, fail } = await setup(t, "restart-thread", false);
++  await fail({ status: "failed", summary: "Connection lost", threadId: "restart-thread" });
++  const first = waiting();
++  app.close();
++  let restarted = await CoordinationApplication.start(options);
++  t.after(() => restarted.close());
++  assert.equal(restarted.queryAutomation().state, "paused");
++  let result = restarted.queryTask(taskId); assert.ok(result.available);
++  assert.equal(result.task.activations[0]!.recovery?.state, "waiting");
++  await restarted.resumeAutomation();
++  clock.advanceTo(first.dueAt); await runtime.waitForRequest(2);
++  restarted.close(); // The host stopped before this empty probe produced evidence.
++  restarted = await CoordinationApplication.start(options);
++  result = restarted.queryTask(taskId); assert.ok(result.available);
++  const recovery = result.task.activations[0]!.recovery; assert.ok(recovery?.state === "waiting");
++  assert.equal(recovery.retryCount, 1); assert.equal(recovery.failureCount, 1);
++  assert.equal(recovery.dueAt, "2027-01-01T12:02:00.000Z");
++  assert.equal(result.task.activations[0]!.attempts.length, 1);
++  assert.equal(result.task.activity.filter((item) => item.type === "attempt.completed").length, 1);
++});
++
++test("explicit interruption publishes the probe and stops waiting before dismissal", async (t) => {
++  const { app, runtime, clock, taskId, waiting, fail } = await setup(t);
++  await fail(); clock.advanceTo(waiting().dueAt); await runtime.waitForRequest(2);
++  assert.deepEqual(app.interruptTask({ taskId, activationId: "another-activation", actor: { kind: "user", id: "paul" }, idempotencyKey: "wrong-probe" }), { accepted: false, reason: "not-running" });
++  const interruption = app.interruptTask({ taskId, actor: { kind: "user", id: "paul" }, idempotencyKey: "interrupt-probe" });
++  assert.ok(interruption.accepted);
++  runtime.complete({ status: "failed", summary: "Aborted" }); await interruption.confirmed;
++  const result = app.queryTask(taskId); assert.ok(result.available);
++  assert.equal(result.task.activations[0]!.attempts.length, 2);
++  assert.equal(result.task.activations[0]!.recovery, null);
++  assert.ok(app.dismissActivation({ activationId: result.task.activations[0]!.id, actor: { kind: "user", id: "paul" }, idempotencyKey: "dismiss-interrupted-probe" }).accepted);
++  app.pauseAutomation(); await app.waitForAutomationIdle();
++});
++
++test("permission blocks end a waiting episode immediately without automatic retries", async (t) => {
++  const { app, runtime, clock, taskId, waiting, fail } = await setup(t);
++  await fail(); clock.advanceTo(waiting().dueAt); await runtime.waitForRequest(2);
++  await fail({ status: "permission-blocked", summary: "User authorization needed" });
++  app.pauseAutomation(); await app.waitForAutomationIdle();
++  const result = app.queryTask(taskId); assert.ok(result.available);
++  assert.equal(result.task.activations[0]!.recovery?.state, "permission-blocked");
++  assert.equal(result.task.activations[0]!.status, "failed");
++});
++
++test("waiting releases other-task dispatch while cumulative usage checkpoints survive empty probes", async (t) => {
++  const { app, runtime, clock, taskId, waiting, fail } = await setup(t, "usage-thread");
++  const usage = { inputTokens: 100, cachedInputTokens: 0, cacheWriteInputTokens: 0, outputTokens: 10, reasoningOutputTokens: 0 };
++  runtime.setUsage(runtime.requests[0]!.attemptId, usage);
++  await fail({ status: "failed", summary: "Connection lost", threadId: "usage-thread" });
++  const other = app.createTask({ boardId: "delivery", columnId: "review", title: "Other task", description: "Progress during waiting", actor: { kind: "user", id: "paul" }, idempotencyKey: "other" });
++  assert.ok(other.accepted);
++  const unrelated = await runtime.waitForRequest(2); assert.equal(unrelated.task.id, other.task.id);
++  runtime.complete({ status: "completed", summary: "Other task completed", threadId: "usage-thread" });
++  await until(() => { const result = app.queryTask(other.task.id); return result.available && result.task.activations[0]?.status === "completed"; });
++  clock.advanceTo(waiting().dueAt); const empty = await runtime.waitForRequest(3);
++  runtime.setUsage(empty.attemptId, usage);
++  await fail({ status: "failed", summary: "Connection lost", threadId: "usage-thread" });
++  let result = app.queryTask(taskId); assert.ok(result.available); assert.equal(result.task.activations[0]!.attempts.length, 1);
++  clock.advanceTo(waiting().dueAt); const meaningful = await runtime.waitForRequest(4);
++  runtime.setUsage(meaningful.attemptId, { ...usage, inputTokens: 120, outputTokens: 15 });
++  await fail({ status: "failed", summary: "Connection lost", threadId: "usage-thread" });
++  app.pauseAutomation(); await app.waitForAutomationIdle();
++  result = app.queryTask(taskId); assert.ok(result.available); assert.equal(result.task.activations[0]!.attempts.length, 2);
++  const transcript = await app.queryAttemptTranscript(meaningful.attemptId);
++  assert.ok(transcript.available); assert.equal(transcript.usage?.inputTokens, 20); assert.equal(transcript.usage?.outputTokens, 5);
++});
++
++test("diagnostic recognition stays conservative for unknown, authentication, permission and billing failures", async (t) => {
++  for (const [summary, evidence, expected] of [
++    ["Reconnect attempts exhausted", undefined, "connection-lost"],
++    ["Temporary service unavailable", undefined, "service-unavailable"],
++    ["You've hit your message usage limit", undefined, "budget-exhausted"],
++    ["Billing: message budget exhausted", { code: "usage_limit_reached" }, undefined],
++    ["Budget rejected", { code: "invalid_api_key", statusCode: 401 }, undefined],
++    ["Permission denied", { code: "usage_limit_reached" }, undefined],
++    ["Unknown defect", { statusCode: 429 }, undefined],
++  ] as const) {
++    const { app, taskId, fail } = await setup(t);
++    await fail({ status: "failed", summary, ...(evidence === undefined ? {} : { failure: evidence }) });
++    app.pauseAutomation(); await app.waitForAutomationIdle();
++    const result = app.queryTask(taskId); assert.ok(result.available);
++    const recovery = result.task.activations[0]!.recovery;
++    assert.equal(recovery?.state, expected === undefined ? "scheduled" : "waiting", summary);
++    if (recovery?.state === "waiting") assert.equal(recovery.classification, expected);
++  }
++});
++
++test("accepted coordination writes publish probes even without streamed output, while rejected writes stay provisional", async (t) => {
++  const { app, runtime, clock, taskId, waiting, fail } = await setup(t);
++  await fail(); clock.advanceTo(waiting().dueAt); const probe = await runtime.waitForRequest(2);
++  assert.equal(app.addTaskComment({ taskId, body: " ", actor: { kind: "agent", id: "implementer" }, attemptId: probe.attemptId, idempotencyKey: "rejected-probe-comment" }).accepted, false);
++  let result = app.queryTask(taskId); assert.ok(result.available); assert.equal(result.task.activations[0]!.attempts.length, 1);
++  assert.ok(app.addTaskComment({ taskId, body: "Retain this effect", actor: { kind: "agent", id: "implementer" }, attemptId: probe.attemptId, idempotencyKey: "accepted-probe-comment" }).accepted);
++  await fail(); app.pauseAutomation(); await app.waitForAutomationIdle();
++  result = app.queryTask(taskId); assert.ok(result.available); assert.equal(result.task.activations[0]!.attempts.length, 2);
++  assert.equal(result.task.comments.find((comment) => comment.body === "Retain this effect")?.attemptId, probe.attemptId);
++});
+--- a/test/browser/interruption-resume.browser.spec.ts
++++ b/test/browser/interruption-resume.browser.spec.ts
+@@ -1,7 +1,7 @@
+ import type { AgentConversationHistoryEntry } from "../../src/application/conversation-contract.ts";
+ import type { TaskActivityView } from "../../src/application/task-contract.ts";
+ import type { UserTaskDetailQueryResult } from "../../src/application/browser-transport-contract.ts";
+-import { contrastRatio, expect, runningConversationScenario, test } from "./browser-fixture.ts";
++import { fulfillTaskScenario, contrastRatio, expect, runningConversationScenario, test } from "./browser-fixture.ts";
+ 
+ for (const theme of ["dark", "light"] as const) {
+   test(`resume instructions survive disclosure, refresh and reload in ${theme} mode`, async ({ page }) => {
+@@ -22,7 +22,7 @@
+       const detail: UserTaskDetailQueryResult = await response.json();
+       if (!detail.available) throw new Error("Expected task detail");
+       detail.task.activity.push(...resumes);
+-      await route.fulfill({ response, json: detail });
++      await fulfillTaskScenario(route, response, detail);
+     });
+     await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
+       const result = runningConversationScenario([{ kind: "message", role: "agent", text: "Interrupted work" }]);
+--- a/test/browser/runtime-waiting.browser.spec.ts
++++ b/test/browser/runtime-waiting.browser.spec.ts
+@@ -0,0 +1,79 @@
++import { contrastRatio, expect, test } from "./browser-fixture.ts";
++
++for (const theme of ["dark", "light"] as const) {
++  test(`runtime waiting remains readable and stoppable in task and conversation views (${theme})`, async ({ page }) => {
++    let stopped = false;
++    const recovery = { state: "waiting", episodeId: "outage", activationId: "waiting-activation", classification: "budget-exhausted",
++      firstFailure: "Usage limit reached", latestFailure: "Usage limit still reached", firstAt: "2027-01-01T12:00:00Z", latestAt: "2027-01-01T13:00:00Z",
++      dueAt: "2027-01-01T14:00:00Z", failureCount: 1000, retryCount: 999, retrying: false };
++    await page.addInitScript((selectedTheme) => localStorage.setItem("coordination-theme", selectedTheme), theme);
++    await page.route("**/api/tasks/T-0001", async (route) => {
++      const detail = await (await route.fetch()).json();
++      detail.task.activations = [{ ...detail.task.activations[0], id: recovery.activationId, status: stopped ? "dismissed" : "queued", recovery: stopped ? null : recovery, dismissal: stopped ? null : { mayStartNext: false } }];
++      detail.inspection.unresolvedAttention = [];
++      await route.fulfill({ json: detail });
++    });
++    await page.route("**/api/tasks/T-0001/conversations/*", async (route) => {
++      const result = await (await route.fetch()).json();
++      if (!stopped) result.conversation.runtimeRecovery = recovery;
++      await route.fulfill({ json: result });
++    });
++    await page.route("**/api/activations/waiting-activation/dismiss", async (route) => {
++      expect(route.request().method()).toBe("POST"); stopped = true;
++      await route.fulfill({ json: { accepted: true, activationId: recovery.activationId } });
++    });
++    await page.goto("/tasks/T-0001");
++    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
++    const summary = page.getByRole("region", { name: "Runtime recovery" });
++    await expect(summary).toContainText("Codex message budget exhausted");
++    await expect(summary).toContainText("999 retries · 1000 failures");
++    expect(await contrastRatio(summary.locator("strong"))).toBeGreaterThanOrEqual(4.5);
++    await summary.getByText("Failure details").click();
++    await expect(summary).toContainText("Usage limit still reached");
++    await page.getByRole("button", { name: "View conversation" }).first().click();
++    const dialog = page.getByRole("dialog", { name: "Agent conversation" });
++    const conversationWaiting = dialog.getByRole("region", { name: "Runtime recovery" });
++    await expect(conversationWaiting).toContainText("Next eligible:");
++    expect(await contrastRatio(conversationWaiting.locator("strong"))).toBeGreaterThanOrEqual(4.5);
++    await conversationWaiting.getByRole("button", { name: "Stop retries" }).click();
++    await expect(conversationWaiting).toHaveCount(0);
++    expect(stopped).toBe(true);
++  });
++}
++
++for (const transition of ["queued-to-running", "running-to-waiting"] as const) {
++  test(`stop retries tolerates ${transition} between polling and the command`, async ({ page }) => {
++    let state = transition === "queued-to-running" ? "queued" : "running";
++    let dismissals = 0;
++    let interruptions = 0;
++    let stopped = false;
++    await page.route("**/api/tasks/T-0001", async (route) => {
++      const detail = await (await route.fetch()).json();
++      const activation = detail.task.activations[0];
++      detail.task.activations = [{ ...activation, id: "racing-activation", status: stopped ? "dismissed" : state,
++        recovery: stopped ? null : { state: "waiting", episodeId: "race", activationId: "racing-activation", classification: "connection-lost",
++          firstFailure: "Connection lost", latestFailure: "Connection lost", firstAt: "2027-01-01", latestAt: "2027-01-01", dueAt: "2027-01-02", retryCount: 1, failureCount: 2, retrying: state === "running" } }];
++      await route.fulfill({ json: detail });
++    });
++    await page.route("**/api/activations/racing-activation/dismiss", async (route) => {
++      dismissals++;
++      if (dismissals === 1) {
++        state = transition === "queued-to-running" ? "running" : "queued";
++        return route.fulfill({ status: 409, json: { accepted: false, reason: "not-dismissible" } });
++      }
++      expect(state).toBe("queued"); stopped = true;
++      await route.fulfill({ json: { accepted: true } });
++    });
++    await page.route("**/api/tasks/T-0001/interrupt", async (route) => {
++      interruptions++;
++      expect(route.request().postDataJSON().activationId).toBe("racing-activation");
++      if (state === "queued") return route.fulfill({ status: 409, json: { accepted: false, reason: "not-running" } });
++      state = "queued"; await route.fulfill({ json: { accepted: true, state: "interrupted" } });
++    });
++    await page.goto("/tasks/T-0001");
++    const summary = page.getByRole("region", { name: "Runtime recovery" });
++    await summary.getByRole("button", { name: "Stop retries" }).click();
++    await expect(summary).toHaveCount(0);
++    expect(dismissals).toBe(2); expect(interruptions).toBe(1); expect(stopped).toBe(true);
++  });
++}
+--- a/test/runtime/codex-agent-runtime-execution.test.ts
++++ b/test/runtime/codex-agent-runtime-execution.test.ts
+@@ -927,6 +927,10 @@
+     reasoningOutputTokens: 180,
+   });
+   assert.equal(await usageAccess.readUsage("attempt-without-reported-usage"), null);
++  runtime.release("attempt-activation-with-usage");
++  assert.equal(await runtime.read("attempt-activation-with-usage"), null);
++  assert.equal(await runtime.readUsage("attempt-activation-with-usage"), null);
++  assert.equal(await runtime.readContextWindowUsage("attempt-activation-with-usage"), null);
+ });
+ 
+ test("runtime preserves cumulative usage snapshots when attempts reuse one Codex thread", async () => {
+--- a/test/runtime/codex-turn-projector.test.ts
++++ b/test/runtime/codex-turn-projector.test.ts
+@@ -17,6 +17,19 @@
+   output_tokens: 30,
+   reasoning_output_tokens: 12,
+ };
++
++test("preserves structured transient failure codes and reset deadlines from runtime envelopes", async () => {
++  for (const envelope of [
++    { type: "turn.failed", error: { message: "Budget rejected", code: "usage_limit_reached", data: { reset_at: 1798808400 } } },
++    { type: "error", message: "Service unavailable", error: { code: "service_unavailable", statusCode: 503, retry_at: "2027-01-01T13:00:00Z" } },
++  ]) {
++    const result = await projectCodexTurn(events({ type: "thread.started", thread_id: "thread-retry" }, envelope), { taskId: "T-0001", attemptId: "retry" }, { started() {}, publish() {} });
++    assert.equal(result.terminal.kind, "failed");
++    if (result.terminal.kind !== "failed") throw new Error("Expected failure");
++    assert.equal(result.terminal.failure?.retryAt, "2027-01-01T13:00:00.000Z");
++    assert.equal(result.terminal.failure?.code, envelope.error.code);
++  }
++});
+ 
+ test("projects every SDK item variant in first-seen order and keeps the latest completed message", async () => {
+   const started: string[] = [];
+--- a/test/web/runtime-waiting-http.test.ts
++++ b/test/web/runtime-waiting-http.test.ts
+@@ -0,0 +1,34 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { mkdtemp, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { CoordinationApplication } from "../../src/application/coordination-application.ts";
++import { startWebServer } from "../../src/web/web-server.ts";
++import { ControlledAgentRuntime, createHandoffFixture } from "../support/handoff-fixture.ts";
++import { ControlledRetryClock } from "../support/activation-fixture.ts";
++
++test("HTTP task and conversation expose durable waiting and existing dismissal stops retries", async (t) => {
++  const fixture = await createHandoffFixture();
++  const runtime = new ControlledAgentRuntime("http-thread");
++  const clock = new ControlledRetryClock("2027-01-01T12:00:00Z");
++  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
++    runtimeDispatch: { projectRepositoryPath: fixture.repositoryPath, taskWorkspaceRoot: fixture.workspaceRoot, agentRuntime: runtime }, automationClock: clock });
++  t.after(() => app.close());
++  const created = app.createTask({ boardId: "delivery", columnId: "implementation", title: "Waiting via HTTP", description: "Outage", actor: { kind: "user", id: "paul" }, idempotencyKey: "http-outage" });
++  assert.ok(created.accepted);
++  await app.resumeAutomation(); await runtime.waitForRequest(1);
++  runtime.complete({ status: "failed", summary: "Usage limit reached", failure: { code: "usage_limit_reached", retryAt: "2027-01-01T13:00:00Z" }, threadId: "http-thread" });
++  app.pauseAutomation(); await app.waitForAutomationIdle();
++  const assets = await mkdtemp(join(tmpdir(), "runtime-assets-")); await writeFile(join(assets, "index.html"), "<div></div>");
++  const server = await startWebServer(app, { host: "127.0.0.1", port: 0, assetDirectory: assets }); t.after(() => server.close());
++  const task = await (await fetch(`${server.baseUrl}/api/tasks/${created.task.id}`)).json();
++  const activation = task.task.activations[0]; assert.equal(activation.recovery.state, "waiting");
++  assert.equal(activation.recovery.dueAt, "2027-01-01T13:00:00.000Z"); assert.equal(task.inspection.unresolvedAttention.length, 0);
++  const conversation = await (await fetch(`${server.baseUrl}/api/tasks/${created.task.id}/conversations/${activation.conversationId}`)).json();
++  assert.equal(conversation.conversation.runtimeRecovery.episodeId, activation.recovery.episodeId);
++  const stopped = await fetch(`${server.baseUrl}/api/activations/${activation.id}/dismiss`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ idempotencyKey: "http-stop" }) });
++  assert.equal(stopped.status, 200);
++  const after = await (await fetch(`${server.baseUrl}/api/tasks/${created.task.id}`)).json();
++  assert.equal(after.task.activations[0].status, "dismissed"); assert.equal(after.task.activations[0].recovery, null);
++});
+--- a/docs/adr/0023-recover-tasks-without-continuation-paths.md
++++ b/docs/adr/0023-recover-tasks-without-continuation-paths.md
+@@ -28,7 +28,9 @@
+ Allow three recovery activations per episode. Regular activation, waiting, or
+ user attention resets count; an unwatched column or Completion ends the episode.
+ Recovery itself and prose-only edits do not reset it. Pause/interruption preserve
+-count. Technical retries repeat one activation under existing failure policy.
++count. Technical retries repeat one activation under failure policy. ADR 0028 adds
++indefinite classified transient retries within that same activation; they do not
++consume further stall-recovery slots or alter the three-recovery budget.
+ If recovery three finishes normally without continuation, create framework
+ attention explaining exhaustion without claiming to diagnose the agent.
+ 
+--- a/docs/adr/0028-retry-transient-runtime-failures-with-provisional-probes.md
++++ b/docs/adr/0028-retry-transient-runtime-failures-with-provisional-probes.md
+@@ -0,0 +1,57 @@
++# Retry transient runtime failures with provisional probes
++
++Status: accepted
++
++## Decision
++
++Classify each failed runtime outcome before counting ordinary failures. Explicit
++connection/service codes and Codex message-budget codes take precedence over
++tested diagnostic recognition. Authentication, permission, billing and ambiguous
++failures stay on the existing finite recovery path. Ordinary cycles retain three
++technical attempts; recognized transient failures do not consume that budget.
++No model call is needed to classify an unavailable runtime.
++
++Keep one durable waiting episode for the same activation and its original cause,
++queue position and conversation lineage. Persist classification, first/latest
++failure, at most three distinct diagnostic samples, failure count, dispatched
++retry count and next eligibility. A usable future provider deadline takes
++precedence; absent one, wait at least 60 seconds after rejection. Reclassify each
++rejection, respecting changed deadlines and following ordinary attention policy
++when the outcome changes. Only episode transitions append activity.
++
++Use the existing dispatch claim as the publication boundary. The first failure
++cannot be known before dispatch and keeps its ordinary attempt. During a known
++episode, create a provisional probe with the same authenticated attempt scope,
++but retain the dispatch claim until meaningful evidence arrives. Streamed output,
++accepted coordination effects, thread identity/continuity changes, usage or
++context evidence, success, ordinary failure or explicit interruption publishes
++the attempt before retaining its effects. A no-progress transient rejection
++deletes only its still-provisional row and updates the episode. Published attempt
++history is never deleted or rewritten to reduce retry noise.
++
++Compare reported usage using existing cumulative checkpoint isolation. A
++trustworthy unchanged checkpoint adds no cost evidence; positive or uncertain
++usage is retained with its normal attribution. Release native in-memory
++transcript/usage caches only after durable settlement, keeping failed settlement
++evidence available for diagnosis.
++
++Waiting releases execution capacity. Dispatch uses normal eligibility checks,
++including a second check after workspace preparation. Pause blocks dispatch;
++restart begins paused with durable deadlines and counters. An abandoned
++provisional probe returns to waiting, at least one minute after restart, without
++an ordinary host-stop history pair. Explicit interruption publishes user intent
++and ends waiting, leaving the existing suspension/continue/dismiss controls in
++charge. Queued waiting can be dismissed through the existing command.
++
++## Consequences
++
++- Redundant outages have bounded storage and browser summaries, while meaningful
++  partial work continues to accumulate retained evidence.
++- Task and conversation queries expose current waiting independently of paged
++  history. It does not create failure attention or repeated notifications.
++- Migration 0012 adds episodes/probe metadata and widens journal event types,
++  preserving the released ledger, triggers, views and existing authored history.
++- Technical retries occupy the original activation and do not consume extra
++  stall-recovery slots; ADR 0023's separate three-recovery policy is unchanged.
++- Automatic purchasing, model switching and process-configurable retry policies
++  remain outside this decision.
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -248,6 +248,27 @@
+ order of activations for each task, prevents overlapping runs on one task, and
+ allows independent tasks to run concurrently. Automation always starts paused
+ and proceeds only after the user resumes it.
++
++Transient runtime recovery is owned by settlement and scheduling in the core.
++Released migration 0012 stores mutable outage episodes and marks provisional
++probes. Deterministic classification prefers explicit runtime codes/deadlines;
++unknown, authentication, billing and permission failures keep ordinary recovery.
++Recognized failures bypass the three-attempt budget, wait for a usable provider
++deadline or at least 60 seconds, and retry the same activation through normal
++eligibility and thread continuity. Waiting frees other tasks to dispatch.
++The first failure is retained; subsequent empty probes retain their dispatch
++claim until output, accepted coordination writes, thread changes, usage evidence
++or a non-transient outcome publishes the attempt. Rejected provisional probes
++are discarded before immutable attempt history is published, updating only
++bounded episode samples and counters. Published work is never compacted away.
++Usage comparisons reuse cumulative checkpoint isolation; uncertain deltas are
++retained conservatively. Native runtime caches are released after durable
++settlement. Restart remains paused, retains waiting deadlines/counts, and
++requeues an abandoned provisional probe without host-stop attempt noise.
++Task and conversation HTTP views expose current waiting independently of paged
++history, and browser stop controls use interruption/dismissal commands.
++[ADR 0028](adr/0028-retry-transient-runtime-failures-with-provisional-probes.md)
++records this exception to the ordinary finite retry policy.
+ 
+ Stall recovery is an authoritative scheduler workflow in the coordination core.
+ When watched, mapped work has no unfinished activation, waiting relationship,
+--- a/CONTEXT.md
++++ b/CONTEXT.md
+@@ -335,10 +335,24 @@
+ Only technical failures reported by the agent runtime are eligible for automatic
+ retry; the coordination framework does not interpret a normally completed run
+ to judge whether its process outcome was adequate. Each activation receives one
+-framework-wide retry policy of three total automatic attempts with capped
+-exponential backoff. This operational policy is not process-configurable. Each
++ordinary retry policy of three technical attempts with capped exponential
++backoff. Recognized connection loss, temporary service failures and Codex message
++budget exhaustion instead wait and retry the same activation indefinitely. A
++provider deadline takes precedence; otherwise retries wait at least 60 seconds.
++Transient failures do not consume the ordinary budget or request attention. This operational policy is not process-configurable. Each
+ explicit user retry begins a fresh cycle of up to three attempts for the same
+ activation.
++
++**Runtime recovery episode**:
++A durable waiting interval for recognized transient runtime failures on one
++activation. It records first/latest diagnostics, at most three distinct samples,
++classification, retry eligibility, failure count and dispatched retry count. The
++first failure and meaningful runs retain ordinary evidence. Subsequent probes
++stay provisional until output, accepted coordination effects, continuity changes
++or new/uncertain usage evidence makes them meaningful; empty rejected probes
++update the episode without publishing attempts or history. Waiting releases
++execution capacity and can be explicitly dismissed, while pause, suspension,
++process compatibility and restart retain their ordinary authority.
+ 
+ **Activation dismissal**:
+ An explicit user decision to abandon one activation whose expectation will not

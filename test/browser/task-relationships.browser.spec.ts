@@ -1,3 +1,4 @@
+import { fulfillTaskScenario } from "./browser-fixture.ts";
 import { contrastRatio, expect, setAppearance, test } from "./browser-fixture.ts";
 
 test("circular waiting is rejected through the browser without changing relationships", async ({ page, request }) => {
@@ -28,7 +29,7 @@ test("cross-task links in authored and framework history open a new tab", async 
     const response = await route.fetch();
     const detail = await response.json();
     detail.task.description += "\n\nReview the [related task](/tasks/T-0002).";
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
 
@@ -87,7 +88,7 @@ test("relationship history links every direction and reports completed, archived
         details: { relationshipType: "dependency", relationshipRole: "target", relatedTaskId: "T-9004" },
       },
     );
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");

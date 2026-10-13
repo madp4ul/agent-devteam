@@ -35,7 +35,8 @@ export interface TaskActivityView {
     | "task.unarchived"
     | "stall.detected"
     | "stall.recovery-skipped"
-    | "stall.recovery-exhausted";
+    | "stall.recovery-exhausted"
+    | "runtime.waiting" | "runtime.recovered" | "runtime.waiting-stopped" | "runtime.waiting-ended";
   actor: Actor | { kind: "framework"; id: "coordination" };
   occurredAt: string;
   details: Record<string, string>;

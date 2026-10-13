@@ -1,0 +1,103 @@
+✔ participant discovery exposes the process roster with task-local addresses and responsibilities (114.5217ms)
+✔ inspection labels related tasks without loading their discussion (109.8821ms)
+✔ the user board projection returns complete browser-ready coordination state (87.2992ms)
+✔ the user task-detail projection returns complete browser-ready task context (111.1408ms)
+✔ task details stay bounded to the inspected task while preserving compact relationship labels (1476.7689ms)
+✔ the user task-detail projection retains historical timeline targets and reports their honest state (156.7317ms)
+✔ board summaries orient agents without returning task payloads (62.2865ms)
+✔ task overview listing requires explicit valid columns (48.6267ms)
+✔ task overview cursors remain stable when an earlier task moves within selected columns (107.7331ms)
+✔ task overviews can order cards by their most recent current-column entry (100.6104ms)
+✔ Completion is listed only when agents select it explicitly (65.7866ms)
+✔ full task inspection keeps history and attachments behind on-demand queries (99.8991ms)
+✔ discovery projects durable relationships, blockers, attention, and attachments (102.284ms)
+✔ collaborator discovery exposes names and summaries without instructions (45.9827ms)
+✔ migration 0010 backfills a large released transcript without changing original evidence (1174.6374ms)
+✔ released comments recover only evidenced origin without inventing legacy provenance (722.2782ms)
+✔ fresh startup applies the released migration registry and matches the current schema snapshot (266.2493ms)
+✔ the released task-detail indexes keep selected-history lookups off unrelated table scans (60.4231ms)
+✔ an exact 0001 database upgrades through the released task-detail lookup migration (66.6448ms)
+✔ the relationship-owner migration preserves legacy relationships for explicit repair (104.6242ms)
+✔ repeat startup opens an already-current released database without changing its history or schema (99.908ms)
+✔ startup refuses an unsupported pre-release database and leaves all SQLite files untouched (70.8942ms)
+✔ startup does not adopt an existing empty ledger-less database (32.4244ms)
+✔ startup refuses divergent, gapped, reordered, future, and malformed released histories without changing SQLite files (452.404ms)
+✔ a skipped-release upgrade preserves representative retained state and backs up committed WAL data (109.5867ms)
+✔ a direct one-step upgrade preserves released identities and values through application projections (100.3041ms)
+✔ a late migration failure rolls back the whole pending sequence, reports its verified backup, and blocks dispatch (273.3154ms)
+✔ an upgrade that omits coordination-enforcing indexes and triggers rolls back before startup (284.0676ms)
+▶ startup rejects changed schema behavior even when required object names still exist
+  ✔ index one_running_activation_per_task (81.6716ms)
+  ✔ index one_current_agent_conversation_per_task_agent (79.4381ms)
+  ✔ trigger activations_start_in_task_order (78.5168ms)
+  ✔ table task_starting_refs (81.0832ms)
+  ✔ table task_relationships (83.1151ms)
+  ✔ view mapped_tasks (84.9548ms)
+  ✔ table forgotten_probe (87.6454ms)
+  ✔ table sqliteProbe (99.1238ms)
+✔ startup rejects changed schema behavior even when required object names still exist (676.4925ms)
+✔ an already-current database with an omitted invariant does not bypass verification (92.4209ms)
+✔ schema verification preserves exact string literals even when they contain line endings (84.5137ms)
+✔ harmless SQLite ALTER TABLE quoting and DDL formatting remain valid on upgrade and restart (111.7009ms)
+✔ an unavailable reviewed snapshot produces a blocking diagnostic without recursively failing the error shell (303.7665ms)
+✔ backup and post-migration verification failures block startup before accepting an upgrade (165.578ms)
+✖ browser route catalog accounts for the complete pre-dispatcher API inventory (4.2972ms)
+✔ agent route catalog is separate and accounts for discovery and current-task APIs (0.7987ms)
+✔ the browser adapter serves the React application and authoritative board projection (195.3068ms)
+✔ task-detail endpoint cost and response size stay bounded at the investigated history scale (609.3838ms)
+✔ browser commands preserve creation idempotency and revision conflicts (156.5903ms)
+✔ browser conversation continuation accepts and replays one authored follow-up (3172.3185ms)
+✔ browser conversation retirement validates, accepts, and replays the user reason (113.4345ms)
+✔ browser attention projection is grouped and user mentions resolve through their explicit action (126.3726ms)
+✔ browser state reports configuration errors and resume rejection as JSON (54.0162ms)
+✔ open workspace uses only the authoritative provisioned path and reports host availability (912.7071ms)
+✔ open workspace file resolves local links inside the authoritative task worktree (1001.1033ms)
+✔ browser archive endpoints remove tasks from the board and support history and unarchive (87.0307ms)
+ℹ tests 54
+ℹ suites 0
+ℹ pass 53
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6738.5755
+
+✖ failing tests:
+
+test at test\web\route-inventory.test.ts:9:1
+✖ browser route catalog accounts for the complete pre-dispatcher API inventory (4.2972ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      'DELETE /api/tasks/:taskId/conversations/:conversationId/uploads/:uploadId',
+      'DELETE /api/tasks/:taskId/relationships/:relationshipId',
+      'GET /api/archive',
+      'GET /api/attempts/:attemptId/transcript',
+  ...
+      'GET /api/tasks/:taskId',
+  -   'GET /api/tasks/:taskId/timeline',
+  -   'GET /api/tasks/:taskId/movement-map',
+      'GET /api/tasks/:taskId/conversations/:conversationId',
+      'GET /api/tasks/:taskId/conversations/:conversationId/attachments/:attachmentId',
+  +   'GET /api/tasks/:taskId/movement-map',
+  +   'GET /api/tasks/:taskId/timeline',
+      'GET /api/tasks/:taskId/workspace/git-state',
+      'PATCH /api/settings/notifications',
+      'PATCH /api/tasks/:taskId',
+      'PATCH /api/tasks/:taskId/relationships/:relationshipId/resume-agent',
+      'POST /api/activations/:activationId/dismiss',
+  
+      at TestContext.<anonymous> (file:///D:/Daten/Projekte/Software/Codex/agent-devteam/test/web/route-inventory.test.ts:12:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'DELETE /api/tasks/:taskId/conversations/:conversationId/uploads/:uploadId', 'DELETE /api/tasks/:taskId/relationships/:relationshipId', 'GET /api/archive', 'GET /api/attempts/:attemptId/transcript', 'GET /api/board', 'GET /api/notification-occurrences', 'GET /api/settings/cost-statistics', 'GET /api/settings/notifications', 'GET /api/tasks/:taskId', 'GET /api/tasks/:taskId/conversations/:conversationId', 'GET /api/tasks/:taskId/conversations/:conversationId/attachments/:attachmentId', 'GET /api/tasks/:taskId/movement-map', 'GET /api/tasks/:taskId/timeline', 'GET /api/tasks/:taskId/workspace/git-state', 'PATCH /api/settings/notifications', 'PATCH /api/tasks/:taskId', 'PATCH /api/tasks/:taskId/relationships/:relationshipId/resume-agent', 'POST /api/activations/:activationId/dismiss', 'POST /api/activations/:activationId/dismiss-stale', 'POST /api/archive/completed', 'POST /api/attention/:attentionReasonId/continue', 'POST /api/attention/:attentionReasonId/dismiss', 'POST /api/attention/:attentionReasonId/mark-addressed', 'POST /api/attention/:attentionReasonId/retry', 'POST /api/automation/pause', 'POST /api/automation/resume', 'POST /api/automation/resume-with-current-process', 'POST /api/tasks', 'POST /api/tasks/:taskId/archive', 'POST /api/tasks/:taskId/children', 'POST /api/tasks/:taskId/comments', 'POST /api/tasks/:taskId/comments/:commentId/pin', 'POST /api/tasks/:taskId/comments/:commentId/unpin', 'POST /api/tasks/:taskId/continue', 'POST /api/tasks/:taskId/conversations/:conversationId', 'POST /api/tasks/:taskId/conversations/:conversationId/retire', 'POST /api/tasks/:taskId/conversations/:conversationId/uploads', 'POST /api/tasks/:taskId/interrupt', 'POST /api/tasks/:taskId/move', 'POST /api/tasks/:taskId/relationships', 'POST /api/tasks/:taskId/unarchive', 'POST /api/tasks/:taskId/workspace/files/open', 'POST /api/tasks/:taskId/workspace/open', 'POST /api/tasks/:taskId/workspace/open-vscode' ],
+    expected: [ 'DELETE /api/tasks/:taskId/conversations/:conversationId/uploads/:uploadId', 'DELETE /api/tasks/:taskId/relationships/:relationshipId', 'GET /api/archive', 'GET /api/attempts/:attemptId/transcript', 'GET /api/board', 'GET /api/notification-occurrences', 'GET /api/settings/cost-statistics', 'GET /api/settings/notifications', 'GET /api/tasks/:taskId', 'GET /api/tasks/:taskId/timeline', 'GET /api/tasks/:taskId/movement-map', 'GET /api/tasks/:taskId/conversations/:conversationId', 'GET /api/tasks/:taskId/conversations/:conversationId/attachments/:attachmentId', 'GET /api/tasks/:taskId/workspace/git-state', 'PATCH /api/settings/notifications', 'PATCH /api/tasks/:taskId', 'PATCH /api/tasks/:taskId/relationships/:relationshipId/resume-agent', 'POST /api/activations/:activationId/dismiss', 'POST /api/activations/:activationId/dismiss-stale', 'POST /api/archive/completed', 'POST /api/attention/:attentionReasonId/continue', 'POST /api/attention/:attentionReasonId/dismiss', 'POST /api/attention/:attentionReasonId/mark-addressed', 'POST /api/attention/:attentionReasonId/retry', 'POST /api/automation/pause', 'POST /api/automation/resume', 'POST /api/automation/resume-with-current-process', 'POST /api/tasks', 'POST /api/tasks/:taskId/archive', 'POST /api/tasks/:taskId/children', 'POST /api/tasks/:taskId/comments', 'POST /api/tasks/:taskId/comments/:commentId/pin', 'POST /api/tasks/:taskId/comments/:commentId/unpin', 'POST /api/tasks/:taskId/continue', 'POST /api/tasks/:taskId/conversations/:conversationId', 'POST /api/tasks/:taskId/conversations/:conversationId/retire', 'POST /api/tasks/:taskId/conversations/:conversationId/uploads', 'POST /api/tasks/:taskId/interrupt', 'POST /api/tasks/:taskId/move', 'POST /api/tasks/:taskId/relationships', 'POST /api/tasks/:taskId/unarchive', 'POST /api/tasks/:taskId/workspace/files/open', 'POST /api/tasks/:taskId/workspace/open', 'POST /api/tasks/:taskId/workspace/open-vscode' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

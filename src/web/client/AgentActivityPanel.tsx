@@ -1,3 +1,4 @@
+import { RuntimeWaitingSummary } from "./RuntimeWaitingSummary.tsx";
 import { useState, type ReactNode } from "react";
 
 import type {
@@ -56,6 +57,7 @@ export function AgentActivityPanel({
       aria-labelledby="agent-activity-heading"
     >
       <h2 id="agent-activity-heading">Agent activity</h2>
+      {state.activations.map((activation) => activation.recovery?.state === "waiting" ? <RuntimeWaitingSummary key={activation.id} taskId={state.taskId} recovery={activation.recovery} onChanged={onChanged} /> : null)}
 
       {state.activeRun !== null ? (
         <div className="activity-current running">

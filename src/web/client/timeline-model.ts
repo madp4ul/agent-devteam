@@ -7,30 +7,8 @@ import type {
   TaskCommentView,
 } from "../../application/browser-transport-contract.ts";
 
-export type AttemptTimelineContent =
-  | { kind: "comment"; occurredAt: string; comment: TaskCommentView }
-  | { kind: "activity"; occurredAt: string; activity: TaskActivityView };
-
-export type TimelineRecord =
-  | { key: string; kind: "comment"; occurredAt: string; comment: TaskCommentView }
-  | { key: string; kind: "activity"; occurredAt: string; activity: TaskActivityView }
-  | {
-      key: string;
-      kind: "attempt";
-      occurredAt: string;
-      activation: ActivationView;
-      attempt: AttemptView;
-      number: number;
-      previousAttempt: AttemptView | null;
-      content: AttemptTimelineContent[];
-    }
-  | {
-      key: string;
-      kind: "startup-failure";
-      occurredAt: string;
-      failure: ActivationStartupFailureView;
-      activation: ActivationView;
-    };
+import type { TimelineRecord, AttemptTimelineContent } from "../../application/timeline-contract.ts";
+export type { TimelineRecord, AttemptTimelineContent } from "../../application/timeline-contract.ts";
 
 const foldedActivityTypes = new Set<TaskActivityView["type"]>([
   "activation.created",

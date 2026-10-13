@@ -1,14 +1,19 @@
+import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
+import { ActivityJournal } from "./activity-journal.ts";
 import type { DatabaseSync } from "node:sqlite";
 
 import type { ActivationView } from "../automation-contract.ts";
 import type { TaskActivityView } from "../task-contract.ts";
 import type {
+  ConversationHistoryQuery,
+  AgentConversationHistoryEntry,
   AgentConversationIndexEntry,
   AgentConversationMessageView,
   AgentConversationTranscriptView,
   AgentConversationView,
 } from "../conversation-contract.ts";
 import type {
+  AttemptTranscriptItem,
   AttemptTranscriptAccess,
   AttemptTranscriptQueryResult,
   AttemptContextWindowUsage,
@@ -55,17 +60,7 @@ interface ConversationMessageRow {
   occurred_at: string;
 }
 
-interface ConversationRun {
-  activationId: string;
-  sourceMessageId?: string;
-  attempt: AttemptView;
-  transcript: AgentConversationTranscriptView;
-}
-
-interface ConversationResume {
-  activity: TaskActivityView;
-  interruptedAttemptId: string | undefined;
-}
+import { ConversationHistoryPages, type ConversationHistoryRow } from "./conversation-history-pages.ts";
 
 const conversationMessageColumns = "id, conversation_id, body, actor_id, occurred_at";
 
@@ -73,6 +68,7 @@ export class ConversationProjectionModule {
   readonly #database: DatabaseSync;
   readonly #taskProjections: TaskProjectionStore;
   readonly #transcriptAccess: AttemptTranscriptAccess | undefined;
+  readonly #pages: ConversationHistoryPages;
   readonly #attachments: ConversationAttachmentStore;
 
   constructor(
@@ -82,6 +78,7 @@ export class ConversationProjectionModule {
     transcriptAccess?: AttemptTranscriptAccess,
   ) {
     this.#database = database.connection;
+    this.#pages = new ConversationHistoryPages(this.#database);
     this.#taskProjections = taskProjections;
     this.#attachments = attachments;
     this.#transcriptAccess = transcriptAccess;
@@ -174,7 +171,7 @@ export class ConversationProjectionModule {
     }));
   }
 
-  async readConversation(taskId: string, conversationId: string): Promise<AgentConversationView | undefined> {
+  async readConversation(taskId: string, conversationId: string, query: ConversationHistoryQuery = {}): Promise<AgentConversationView | "invalid-page" | undefined> {
     const row = this.#database.prepare(
       `SELECT conversation.id, conversation.task_id, conversation.owning_agent_id,
               conversation.owning_agent_name_snapshot, conversation.originating_activation_id,
@@ -213,27 +210,11 @@ export class ConversationProjectionModule {
       agent_applied: number | null;
     } | undefined;
     if (row === undefined) return undefined;
-    const activations = this.#taskProjections.readTaskActivations(row.task_id)
-      .filter((activation) => activation.conversationId === row.id);
-    const originatingActivation = activations
-      .find((activation) => activation.id === row.originating_activation_id);
+    const selected = this.#pages.read(row.id, query);
+    if (selected === undefined) return "invalid-page";
+    const originatingActivation = this.#taskProjections.readTaskActivations(row.task_id, row.originating_activation_id, false)[0];
     if (originatingActivation === undefined) return undefined;
-    const runs = await Promise.all(this.#readRuns(row.id).map(async (run) => {
-      const transcript = await this.readAttemptTranscript(run.attempt.id);
-      return {
-        ...run,
-        transcript: transcript.available
-          ? {
-              available: true as const,
-              items: transcript.items,
-              ...(transcript.usage === undefined ? {} : { usage: transcript.usage }),
-              ...(transcript.costEstimate === undefined ? {} : { costEstimate: transcript.costEstimate }),
-              ...(transcript.costBreakdown === undefined ? {} : { costBreakdown: transcript.costBreakdown }),
-            }
-          : { available: false as const },
-      };
-    }));
-    const messages = this.#readMessages(row.id);
+    originatingActivation.attempts = this.#taskProjections.readActivationAttempts(row.originating_activation_id, 50);
     const retirement = row.conversation_retired_at === null
       ? null
       : {
@@ -241,7 +222,12 @@ export class ConversationProjectionModule {
           actor: { kind: "user" as const, id: row.retirement_actor_id! },
           occurredAt: row.conversation_retired_at,
         };
+    const entries = selected.rows.flatMap((entry) => this.#hydrateHistoryRow(entry, row.task_id, retirement, query.attemptId)
+      .map((history) => ({ id: entry.id, history })));
+    const waitingActivation = this.#database.prepare(`SELECT activation_id FROM runtime_recovery_episodes episode JOIN activations activation ON activation.id = episode.activation_id WHERE activation.conversation_id = ? AND episode.state = 'waiting' LIMIT 1`).get(row.id) as { activation_id: string } | undefined;
+    const runtimeRecovery = waitingActivation === undefined ? undefined : new RuntimeRecoveryStore(this.#database, new ActivityJournal(this.#database)).readWaiting(waitingActivation.activation_id);
     return {
+      ...(runtimeRecovery === undefined ? {} : { runtimeRecovery }),
       id: row.id,
       taskId: row.task_id,
       originatingActivationId: row.originating_activation_id,
@@ -256,96 +242,38 @@ export class ConversationProjectionModule {
       replacesConversationId: row.replaces_conversation_id,
       replacementReason: row.replacement_reason,
       retirementAvailability: this.#retirementAvailability(row),
-      history: this.#readHistory(activations, runs, messages, retirement, this.#readResumes(row.task_id, row.id)),
+      history: entries.map(({ history }) => history),
+      page: { ...selected.page, recordIds: entries.map(({ id }) => id) },
+      liveStatus: (this.#database.prepare(`SELECT CASE
+        WHEN EXISTS (SELECT 1 FROM activations WHERE conversation_id = ? AND status = 'running') THEN 'running'
+        WHEN EXISTS (SELECT 1 FROM activations WHERE conversation_id = ? AND status = 'queued') THEN 'queued'
+        ELSE NULL END AS status`).get(row.id, row.id) as { status: "running" | "queued" | null }).status,
     };
   }
 
-  #readHistory(
-    activations: ActivationView[],
-    runs: ConversationRun[],
-    messages: AgentConversationMessageView[],
-    retirement: AgentConversationView["retirement"],
-    resumes: ConversationResume[],
-  ): AgentConversationView["history"] {
-    const messagesById = new Map(messages.map((message) => [message.id, message]));
-    const runsByActivation = Map.groupBy(runs, (run) => run.activationId);
-    const groups: Array<{ occurredAt: string; entries: AgentConversationView["history"] }> = activations.flatMap((activation) => {
-      const message = activation.reason.type === "user-follow-up"
-        ? messagesById.get(activation.reason.sourceEventId)
-        : undefined;
-      const source = activation.reason.type === "user-follow-up"
-        ? undefined
-        : this.#taskProjections.readSourceEvent(activation.reason.sourceEventId);
-      if (message === undefined && source === undefined) return [];
-      const occurredAt = message?.occurredAt ?? source!.occurredAt;
-      const nonMessageSource = source!;
-      const activationRuns = runsByActivation.get(activation.id) ?? [];
-      const attemptIds = activationRuns.map(({ attempt }) => attempt.id);
-      const cause: AgentConversationView["history"][number] = message !== undefined
-        ? { kind: "message", activationId: activation.id, status: activation.status, attemptIds, message }
-        : "body" in nonMessageSource
-          ? { kind: "activation", activationId: activation.id, status: activation.status, attemptIds, occurredAt, reason: activation.reason, source: { kind: "comment", comment: nonMessageSource } }
-          : { kind: "activation", activationId: activation.id, status: activation.status, attemptIds, occurredAt, reason: activation.reason, source: { kind: "activity", activity: nonMessageSource } };
-      const resumesByAttempt = Map.groupBy(
-        resumes.filter(({ activity }) => activity.details.activationId === activation.id),
-        ({ activity, interruptedAttemptId }) => interruptedAttemptId ?? activationRuns.findLast(
-          ({ attempt }) => attempt.status === "interrupted" && attempt.completedAt !== null && attempt.completedAt <= activity.occurredAt,
-        )?.attempt.id,
-      );
-      const resumeEntries = (attemptId: string | undefined): AgentConversationView["history"] =>
-        (resumesByAttempt.get(attemptId) ?? []).map(({ activity }) => ({ kind: "resume", activationId: activation.id, activity }));
-      const items = activationRuns.flatMap((run) => [
-        ...(run.attempt.threadContinuity === "replaced" ? [{
-          kind: "continuity-loss" as const,
-          occurredAt: run.attempt.startedAt,
-          reason: "Codex could not resume the prior thread. This activation started a replacement thread, so earlier model context was not retained.",
-        }] : []),
-        ...(run.transcript.available
-          ? run.transcript.items.map((item) => ({
-              kind: "item" as const,
-              activationId: activation.id,
-              attemptId: run.attempt.id,
-              item,
-            }))
-          : []),
-        ...resumeEntries(run.attempt.id),
-      ]);
-      return [{ occurredAt, entries: [cause, ...items, ...resumeEntries(undefined)] }];
-    });
-    const systemGroups: Array<{ occurredAt: string; entries: AgentConversationView["history"] }> = [
-      ...(retirement === null ? [] : [{
-        occurredAt: retirement.occurredAt,
-        entries: [{ kind: "retirement" as const, retirement }],
-      }]),
-    ];
-    return [...groups, ...systemGroups]
-      .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
-      .flatMap(({ entries }) => entries);
-  }
-
-  #readResumes(taskId: string, conversationId: string): ConversationResume[] {
-    const rows = this.#database.prepare(
-      `SELECT activity.id,
-              (SELECT json_extract(suspension.details_json, '$.attemptId')
-               FROM activity_ledger suspension
-               WHERE suspension.task_id = activity.task_id AND suspension.type = 'automation.suspended'
-                 AND json_extract(suspension.details_json, '$.activationId') = activation.id
-                 AND suspension.sequence < activity.sequence
-               ORDER BY suspension.sequence DESC LIMIT 1) AS interrupted_attempt_id
-       FROM activity_ledger activity
-       JOIN activations activation ON activation.id = json_extract(activity.details_json, '$.activationId')
-       WHERE activity.task_id = ? AND activation.conversation_id = ?
-         AND activity.type = 'automation.resumed'
-         AND coalesce(json_extract(activity.details_json, '$.resolution'), '') <> 'dismissed'
-       ORDER BY activity.sequence`,
-    ).all(taskId, conversationId) as Array<{ id: string; interrupted_attempt_id: string | null }>;
-    return rows.flatMap(({ id, interrupted_attempt_id }) => {
-      const activity = this.#taskProjections.readSourceEvent(id);
-      return activity === undefined || "body" in activity ? [] : [{
-        activity,
-        interruptedAttemptId: activity.details.interruptedAttemptId ?? interrupted_attempt_id ?? undefined,
-      }];
-    });
+  #hydrateHistoryRow(row: ConversationHistoryRow, taskId: string, retirement: AgentConversationView["retirement"], selectedAttemptId?: string): AgentConversationHistoryEntry[] {
+    if (row.kind === "item") return [{ kind: "item", activationId: row.activation_id!, attemptId: row.attempt_id!, item: JSON.parse(row.item_json!) as AttemptTranscriptItem }];
+    if (row.kind === "retirement") return retirement === null ? [] : [{ kind: "retirement", retirement }];
+    if (row.kind === "continuity-loss") {
+      const attempt = this.#database.prepare("SELECT started_at FROM attempts WHERE id = ?").get(row.attempt_id!) as { started_at: string };
+      return [{ kind: "continuity-loss", occurredAt: attempt.started_at, reason: "Codex could not resume the prior thread. This activation started a replacement thread, so earlier model context was not retained." }];
+    }
+    if (row.kind === "resume") {
+      const activity = this.#taskProjections.readSourceEvent(row.source_id!);
+      return activity === undefined || "body" in activity ? [] : [{ kind: "resume", activationId: row.activation_id!, activity }];
+    }
+    const activation = this.#taskProjections.readTaskActivations(taskId, row.activation_id!, false)[0];
+    if (activation === undefined) return [];
+    const attemptIds = (this.#database.prepare("SELECT id FROM attempts WHERE activation_id = ? AND provisional_probe = 0 ORDER BY rowid LIMIT 50").all(activation.id) as Array<{ id: string }>).map(({ id }) => id);
+    if (selectedAttemptId !== undefined && !attemptIds.includes(selectedAttemptId)) attemptIds.push(selectedAttemptId);
+    if (activation.reason.type === "user-follow-up") {
+      const message = this.#database.prepare(`SELECT ${conversationMessageColumns} FROM agent_conversation_messages WHERE id = ?`).get(row.source_id!) as unknown as ConversationMessageRow | undefined;
+      return message === undefined ? [] : [{ kind: "message", activationId: activation.id, status: activation.status, attemptIds, message: this.#conversationMessageView(message) }];
+    }
+    const source = this.#taskProjections.readSourceEvent(row.source_id!);
+    if (source === undefined) return [];
+    return [{ kind: "activation", activationId: activation.id, status: activation.status, attemptIds, occurredAt: source.occurredAt, reason: activation.reason,
+      source: "body" in source ? { kind: "comment", comment: source } : { kind: "activity", activity: source } }];
   }
 
   readConversationCostEstimate(conversationId: string): AggregatedTokenCost {
@@ -447,16 +375,6 @@ export class ConversationProjectionModule {
         };
   }
 
-  #readMessages(conversationId: string): AgentConversationMessageView[] {
-    const rows = this.#database.prepare(
-      `SELECT ${conversationMessageColumns}
-       FROM agent_conversation_messages
-       WHERE conversation_id = ?
-       ORDER BY rowid`,
-    ).all(conversationId) as unknown as ConversationMessageRow[];
-    return rows.map((row) => this.#conversationMessageView(row));
-  }
-
   #conversationMessageView(row: ConversationMessageRow): AgentConversationMessageView {
     return {
       id: row.id,
@@ -466,27 +384,6 @@ export class ConversationProjectionModule {
       occurredAt: row.occurred_at,
       attachments: this.#attachments.readMessageAttachments(row.id),
     };
-  }
-
-  #readRuns(conversationId: string): Array<{
-    activationId: string;
-    sourceMessageId?: string;
-    attempt: AttemptView;
-  }> {
-    const activations = this.#database.prepare(
-      "SELECT id, reason_type, source_event_id FROM activations WHERE conversation_id = ? ORDER BY sequence",
-    ).all(conversationId) as Array<{
-      id: string;
-      reason_type: ActivationView["reason"]["type"];
-      source_event_id: string;
-    }>;
-    return activations.flatMap(({ id, reason_type, source_event_id }) =>
-      this.#taskProjections.readActivationAttempts(id).map((attempt) => ({
-        activationId: id,
-        ...(reason_type === "user-follow-up" ? { sourceMessageId: source_event_id } : {}),
-        attempt,
-      }))
-    );
   }
 
   #ownerAndContinuation(

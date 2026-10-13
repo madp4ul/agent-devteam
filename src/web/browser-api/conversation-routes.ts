@@ -81,9 +81,15 @@ export function registerConversationRoutes(
     for await (const chunk of result.content) response.write(chunk);
     response.end();
   });
-  dispatcher.register("GET", "/api/tasks/:taskId/conversations/:conversationId", "browser/conversations", async ({ response, params }) => {
-    const result = await application.queryAgentConversation(params.taskId, params.conversationId);
-    sendJson(response, result.available ? 200 : result.reason === "not-found" ? 404 : 409, result);
+  dispatcher.register("GET", "/api/tasks/:taskId/conversations/:conversationId", "browser/conversations", async ({ response, params, url }) => {
+    const query: import("../../application/conversation-contract.ts").ConversationHistoryQuery = {};
+    for (const field of ["cursor", "attemptId", "messageId", "activationId"] as const) {
+      const value = url.searchParams.get(field);
+      if (value !== null) query[field] = value;
+    }
+    if (url.searchParams.has("pageSize")) query.pageSize = Number(url.searchParams.get("pageSize"));
+    const result = await application.queryAgentConversation(params.taskId, params.conversationId, query);
+    sendJson(response, result.available ? 200 : result.reason === "not-found" ? 404 : result.reason === "invalid-page" ? 400 : 409, result);
   });
   dispatcher.register("POST", "/api/tasks/:taskId/conversations/:conversationId/retire", "browser/conversations", async ({ request, response, params }) => {
     const body = await readJsonBody<RetireAgentConversationRequest>(request);

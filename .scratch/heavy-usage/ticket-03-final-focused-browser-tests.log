@@ -1,0 +1,13 @@
+
+Running 6 tests using 1 worker
+
+(node:37716) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 test\browser\interruption-resume.browser.spec.ts:7:3 › resume instructions survive disclosure, refresh and reload in dark mode (3.0s)
+  ok 2 test\browser\interruption-resume.browser.spec.ts:7:3 › resume instructions survive disclosure, refresh and reload in light mode (2.9s)
+  ok 3 test\browser\runtime-waiting.browser.spec.ts:4:3 › runtime waiting remains readable and stoppable in task and conversation views (dark) (1.3s)
+  ok 4 test\browser\runtime-waiting.browser.spec.ts:4:3 › runtime waiting remains readable and stoppable in task and conversation views (light) (1.2s)
+  ok 5 test\browser\runtime-waiting.browser.spec.ts:45:3 › stop retries tolerates queued-to-running between polling and the command (1.1s)
+  ok 6 test\browser\runtime-waiting.browser.spec.ts:45:3 › stop retries tolerates running-to-waiting between polling and the command (1.2s)
+
+  6 passed (12.1s)

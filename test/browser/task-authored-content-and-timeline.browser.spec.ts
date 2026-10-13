@@ -1,3 +1,4 @@
+import { fulfillTaskScenario } from "./browser-fixture.ts";
 import { contrastRatio, expect, test } from "./browser-fixture.ts";
 
 test("external participant comments remain visible with origin title and task address in both themes", async ({ page }) => {
@@ -14,7 +15,7 @@ test("external participant comments remain visible with origin title and task ad
       id: "unknown-origin-comment", body: "@user Legacy question with no origin evidence.",
       actor: { kind: "agent", id: "implementer" }, occurredAt: new Date().toISOString(),
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
   const comment = page.locator('[data-timeline-record="external-comment"]');
@@ -49,7 +50,7 @@ test("task details give narrative history more desktop room without crowding the
     detail.task.comments[0].body = representativeContent;
     const activation = detail.task.activations.find((candidate: { attempts: unknown[] }) => candidate.attempts.length > 0);
     activation.attempts[0].outcome.summary = representativeContent;
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
 
@@ -162,7 +163,7 @@ test("task Markdown local-file links share the owning workspace while web links 
         messageBody: "Review the [activity message file](docs/message.md:5).",
       },
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   const openedReferences: string[] = [];
   await page.route("**/api/tasks/T-0001/workspace/files/open", async (route) => {
@@ -270,7 +271,7 @@ test("rendered Markdown code stays within every authored task surface", async ({
         messageBody: `Conversation message code\n\n${codeBlock}`,
       },
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -351,7 +352,7 @@ test("Markdown tables stay semantic and locally scrollable across authored task 
         messageBody: wideTable,
       },
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -416,7 +417,7 @@ test("a wide Markdown table keeps its horizontal position through task polling",
     detail.task.title = `Table polling refresh ${taskReads}`;
     detail.task.description = wideTable;
     detail.task.comments[0].body = wideTable;
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.setViewportSize({ width: 390, height: 800 });
@@ -791,7 +792,7 @@ test("task timeline filters mixed grouped history and keeps the choice through l
       );
       detail.agentInspectableContent.commentIds.push("filter-live-inspectable");
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -853,7 +854,7 @@ test("task timeline explains an empty agent-visible result", async ({ page }) =>
     const detail = await response.json();
     detail.agentInspectableContent.commentIds = [];
     detail.agentInspectableContent.activityIds = [];
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -876,7 +877,7 @@ test("collapsed timeline prose reports hidden rendered lines at desktop and narr
     if (authoredComment !== undefined) {
       authoredComment.body = authoredBody;
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -942,7 +943,7 @@ test("task timeline keeps the record below the sticky header stable when polling
         });
       }
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -1043,7 +1044,7 @@ test("passive polling leaves an off-screen timeline alone and anchors nested his
       signalDelayedRefresh();
       await delayedRefreshRelease;
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.setViewportSize({ width: 1280, height: 500 });
@@ -1107,7 +1108,7 @@ test("attempt comments and movements form full-width color bands without separat
         },
       });
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -1155,7 +1156,7 @@ test("task timeline keeps retries separate and links each retry to the preceding
         outcome: { status: "completed", summary: "The retry completed the handoff." },
       });
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -1245,7 +1246,7 @@ test("task details prioritize agent activity and preserve the responsive reading
         stale: false,
       },
     );
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");

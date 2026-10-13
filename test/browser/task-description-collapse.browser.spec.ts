@@ -1,3 +1,4 @@
+import { fulfillTaskScenario } from "./browser-fixture.ts";
 import type { Locator } from "@playwright/test";
 
 import { expect, test } from "./browser-fixture.ts";
@@ -16,7 +17,7 @@ test("task descriptions collapse after 15 rendered lines and disclose with the k
     const response = await route.fetch();
     const detail = await response.json();
     detail.task.description = longFormattedDescription;
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -50,7 +51,7 @@ test("short task descriptions stay natural without a disclosure or reserved spac
     const response = await route.fetch();
     const detail = await response.json();
     detail.task.description = "A short **Markdown** description.";
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -68,7 +69,7 @@ test("task description overflow follows responsive width, font, and appearance c
     const response = await route.fetch();
     const detail = await response.json();
     detail.task.description = responsiveDescription;
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -130,7 +131,7 @@ for (const theme of ["dark", "light"] as const) {
       detail.task.description = Array.from(
         { length: 16 }, (_, index) => `Requirement \`${index + 1}\` stays on one row.  `,
       ).join("\n");
-      await route.fulfill({ response, json: detail });
+      await fulfillTaskScenario(route, response, detail);
     });
     await page.goto("/tasks/T-0001");
     const description = page.getByRole("region", { name: "Description" });
@@ -165,7 +166,7 @@ for (const theme of ["dark", "light"] as const) {
         const response = await route.fetch();
         const detail = await response.json();
         detail.task.description = source;
-        await route.fulfill({ response, json: detail });
+        await fulfillTaskScenario(route, response, detail);
       });
       await page.goto("/tasks/T-0001");
       const description = page.getByRole("region", { name: "Description" });

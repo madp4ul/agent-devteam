@@ -1,3 +1,4 @@
+import { fulfillTaskScenario } from "./browser-fixture.ts";
 import { expect, test } from "./browser-fixture.ts";
 
 test("the comment composer does not cover the hit area of the first timeline relationship link", async ({ page }) => {
@@ -23,7 +24,7 @@ test("the comment composer does not cover the hit area of the first timeline rel
         relatedTaskId: "T-9005",
       },
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -77,7 +78,7 @@ test("an open task reconciles external timeline changes without disturbing a foc
         stale: false,
       });
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -203,7 +204,7 @@ test("an empty mention preselects the most recently run task agent for immediate
       stale: false,
       dismissal: null,
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -260,7 +261,7 @@ test("mention preselection falls back when the most recent task agent is unavail
       stale: false,
       dismissal: null,
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -312,7 +313,7 @@ test("failed and interrupted runs can each provide the most recent available men
       stale: false,
       dismissal: null,
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   for (const status of ["failed", "interrupted"] as const) {
@@ -347,7 +348,7 @@ test("comment composer stays beside a long timeline without covering its final e
         occurredAt: `2026-08-16T12:${String(index).padStart(2, "0")}:00.000Z`,
       });
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -594,7 +595,7 @@ test("comment failure and retry preserve timeline context while success clears a
         occurredAt: `2026-08-18T12:${String(index).padStart(2, "0")}:00.000Z`,
       });
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.route("**/api/tasks/T-0001/comments", async (route) => {
     postingAttempts += 1;
@@ -675,7 +676,7 @@ test("reply to an agent mention preserves the draft, avoids duplicates, and focu
       actor: { kind: "agent", id: "removed" },
       occurredAt: "2026-08-09T12:31:00.000Z",
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -718,7 +719,7 @@ test("replying to several timeline comments preserves the viewport and draft sel
         occurredAt: `2026-08-17T12:${String(index).padStart(2, "0")}:00.000Z`,
       });
     }
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   await page.goto("/tasks/T-0001");
@@ -756,7 +757,7 @@ test("reply preserves trailing draft whitespace and is absent without an active 
       occurredAt: "2026-08-09T12:32:00.000Z",
     });
     if (archived) detail.task.archived = true;
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
   await page.goto("/tasks/T-0001");
   const draft = page.getByRole("textbox", { name: "Comment" });

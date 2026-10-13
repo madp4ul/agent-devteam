@@ -13,6 +13,36 @@ import type {
 } from "../../src/application/conversation-contract.ts";
 import type { AttemptTranscriptItem } from "../../src/application/runtime-contract.ts";
 import { startBrowserFixture } from "./fixture-server.ts";
+import { buildTimelineRecords } from "../../src/web/client/timeline-model.ts";
+import type { UserTaskDetailView } from "../../src/application/user-task-detail-contract.ts";
+
+const taskScenarios = new WeakMap<Page, Map<string, UserTaskDetailView>>();
+
+/** Keep authored-content scenarios coherent with the separate timeline/map transport. */
+export async function fulfillTaskScenario(route: Route, response: APIResponse, detail: UserTaskDetailView): Promise<void> {
+  const page = route.request().frame().page();
+  let scenarios = taskScenarios.get(page);
+  if (!scenarios) {
+    scenarios = new Map(); taskScenarios.set(page, scenarios);
+    await page.route("**/api/tasks/*/movement-map?*", async (mapRoute) => {
+      const id = new URL(mapRoute.request().url()).pathname.split("/")[3]!;
+      const scenario = taskScenarios.get(page)?.get(id);
+      if (!scenario) return mapRoute.continue();
+      const movements = scenario.task.activity.filter((entry) => entry.type === "task.moved").toReversed().map((entry, index) => ({ ...entry, sequence: scenario.task.activity.length - index, recordId: `activity-${entry.id}` }));
+      const after = Number(new URL(mapRoute.request().url()).searchParams.get("after") ?? 0);
+      await mapRoute.fulfill({ json: { available: true, map: { movements: after ? [] : movements, cursor: scenario.task.activity.length, total: movements.length } } });
+    });
+  }
+  const latestAttempt = detail.task.activations.flatMap((activation) => activation.attempts.map((attempt) => ({ agentId: activation.targetAgentId, at: attempt.startedAt }))).sort((a, b) => b.at.localeCompare(a.at))[0];
+  detail.mostRecentAgentId = latestAttempt?.agentId;
+  const records = buildTimelineRecords(detail.task.comments, detail.task.activity, detail.task.activations);
+  detail.timeline = { records, total: records.length, start: 0, olderCursor: null, newerCursor: null, refreshCursor: "scenario" };
+  detail.inspection.pinnedComments = detail.task.comments.filter((comment) => comment.pinned);
+  const movements = detail.task.activity.filter((entry) => entry.type === "task.moved");
+  detail.movementSummary = { total: movements.length, ...(movements.at(-1) ? { latestSourceId: movements.at(-1)!.id } : {}) };
+  scenarios.set(detail.task.id, detail);
+  await route.fulfill({ response, json: detail });
+}
 
 export { expect };
 
@@ -67,6 +97,9 @@ export async function availableConversationResponse(
 ): Promise<AvailableConversationQueryResult> {
   const result: AgentConversationQueryResult = await response.json();
   if (!result.available) throw new Error("Expected an available conversation response.");
+  // Transcript scenarios replace/reorder server history. They supply their own
+  // paging metadata when testing windows; source cursors cannot describe mocks.
+  delete result.conversation.page;
   return result;
 }
 

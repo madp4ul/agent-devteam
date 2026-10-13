@@ -90,6 +90,7 @@ application = await CoordinationApplication.start({
               status: "running",
             },
           ]);
+          liveTranscripts.get(request.attemptId)!.forEach((item, ordinal) => lifecycle.transcriptItemUpdated?.(ordinal, item));
           // Leave enough observable running time for the browser to poll the
           // in-progress transcript before the fixture publishes completion.
           await new Promise((resolve) => setTimeout(resolve, 10_000));
@@ -103,6 +104,7 @@ application = await CoordinationApplication.start({
               output: "Assembled follow-up verified.",
             },
           ]);
+          liveTranscripts.get(request.attemptId)!.forEach((item, ordinal) => lifecycle.transcriptItemUpdated?.(ordinal, item));
         } else if (request.reason.type === "agent-mention" && request.attempt.number === 1) {
           return {
             status: "permission-blocked",

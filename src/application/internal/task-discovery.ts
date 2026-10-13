@@ -181,7 +181,7 @@ export class TaskDiscovery {
       }
     | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
     | { available: false; reason: "not-found" } {
-    const loaded = this.readTask(taskId, true, true);
+    const loaded = this.readTask(taskId, { includeUnmapped: true, includeArchived: true, mode: "browser" });
     if (!loaded.available) return loaded;
     const board = this.#processStore.readBoard(loaded.task.boardId, true);
     const overview = this.#taskProjections.readTaskOverviewRecord(taskId, loaded.task.relationships)?.task;
@@ -195,7 +195,7 @@ export class TaskDiscovery {
       board,
       inspection: this.projectTaskInspection(loaded.task, overview, column, true),
       agentInspectable: loaded.task.archived === true || this.#taskProjections.isTaskInspectableByAgent(taskId),
-      attachments: this.#taskProjections.readTaskAttachments(taskId),
+      attachments: [],
     };
   }
 
@@ -212,7 +212,7 @@ export class TaskDiscovery {
     options: { audience: "agent" | "user" },
   ): TaskInspectionQueryResult | UserTaskInspectionQueryResult {
     const includeUnmapped = options.audience === "user";
-    const loaded = this.readTask(taskId, includeUnmapped, true, !includeUnmapped);
+    const loaded = this.readTask(taskId, { includeUnmapped, includeArchived: true, mode: includeUnmapped ? "full" : "agent-context" });
     if (!loaded.available) return loaded;
     const { task } = loaded;
     const board = includeUnmapped || task.archived || task.columnId === "completion"
@@ -299,14 +299,14 @@ export class TaskDiscovery {
   }
 
   queryTaskActivity(taskId: string): TaskActivityQueryResult {
-    const loaded = this.readTask(taskId, false, true);
+    const loaded = this.readTask(taskId, { includeArchived: true });
     return loaded.available
       ? { available: true, activity: loaded.task.activity }
       : loaded;
   }
 
   queryTaskAttachments(taskId: string, query?: { pageSize?: number; cursor?: string }): TaskAttachmentsQueryResult {
-    const loaded = this.readTask(taskId, false, true, true);
+    const loaded = this.readTask(taskId, { includeArchived: true, mode: "agent-context" });
     if (!loaded.available) return loaded;
     const attachments = this.#taskProjections.readTaskAttachments(taskId);
     if (query === undefined) return { available: true, attachments };
@@ -328,9 +328,7 @@ export class TaskDiscovery {
 
   private readTask(
     taskId: string,
-    includeUnmapped = false,
-    includeArchived = false,
-    bounded = false,
+    options: { includeUnmapped?: boolean; includeArchived?: boolean; mode?: "full" | "agent-context" | "browser" } = {},
   ):
     | { available: true; task: TaskView }
     | { available: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
@@ -342,7 +340,8 @@ export class TaskDiscovery {
         diagnostics: this.#startup.diagnostics,
       };
     }
-    const task = this.#taskProjections.readTask(taskId, bounded);
+    const { includeUnmapped = false, includeArchived = false, mode = "full" } = options;
+    const task = this.#taskProjections.readTask(taskId, mode);
     if (task === undefined) return { available: false, reason: "not-found" };
     return !includeUnmapped && !(includeArchived && task.archived) && !this.#taskProjections.isTaskInspectableByAgent(taskId)
       ? { available: false, reason: "not-found" }
