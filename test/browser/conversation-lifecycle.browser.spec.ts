@@ -233,7 +233,7 @@ test("conversation continuation navigation focuses and scrolls to its authored m
     detail.task.activity.push({
       id: "selected-conversation-continuation",
       type: "conversation.continued",
-      actor: { kind: "user", id: "local-user" },
+      actor: { kind: "user", id: "user" },
       occurredAt: "2026-08-15T12:00:00.000Z",
       details: {
         conversationId: "browser-conversation",
@@ -256,7 +256,7 @@ test("conversation continuation navigation focuses and scrolls to its authored m
       id: "selected-conversation-message",
       conversationId: "browser-conversation",
       body: "Focus this exact authored follow-up.",
-      actor: { kind: "user", id: "local-user" },
+      actor: { kind: "user", id: "user" },
       occurredAt: "2026-08-15T12:00:00.000Z",
       attachments: [],
     };

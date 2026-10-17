@@ -116,7 +116,7 @@ application = await CoordinationApplication.start({
           const duringAttempt = application.addTaskComment({
             taskId: request.task.id,
             body: "Please also verify the migration behavior.",
-            actor: { kind: "user", id: "local-user" },
+            actor: { kind: "user", id: "user" },
             idempotencyKey: "browser-during-attempt-comment",
           });
           if (!duringAttempt.accepted) throw new Error("Could not add the browser fixture user comment");
@@ -197,7 +197,7 @@ const inspected = application.createTask({
     "![Remote image](https://example.com/tracker.png)",
     "[Unsafe link](javascript:window.markdownInjected=true)",
   ].join("\n"),
-  actor: { kind: "user", id: "local-user" },
+  actor: { kind: "user", id: "user" },
   idempotencyKey: "browser-inspected",
 });
 if (!inspected.accepted) throw new Error("Could not create inspected browser fixture");
@@ -205,7 +205,7 @@ const moved = application.moveTask({
   taskId: inspected.task.id,
   destinationColumnId: "implementation",
   expectedRevision: inspected.task.revision,
-  actor: { kind: "user", id: "local-user" },
+  actor: { kind: "user", id: "user" },
   idempotencyKey: "browser-inspected-move",
 });
 if (!moved.accepted) throw new Error("Could not move inspected browser fixture");
@@ -214,7 +214,7 @@ const draggable = application.createTask({
   columnId: "backlog",
   title: "Drag this task",
   description: "Exercise the pointer enhancement without losing the accessible move path.",
-  actor: { kind: "user", id: "local-user" },
+  actor: { kind: "user", id: "user" },
   idempotencyKey: "browser-draggable",
 });
 if (!draggable.accepted) throw new Error("Could not create draggable browser fixture");
@@ -223,7 +223,7 @@ const relationship = application.createTaskRelationship({
   sourceTaskId: inspected.task.id,
   targetTaskId: draggable.task.id,
   resumeAgentId: "implementer",
-  actor: { kind: "user", id: "local-user" },
+  actor: { kind: "user", id: "user" },
   idempotencyKey: "browser-relationship",
 });
 if (!relationship.accepted) throw new Error("Could not create the browser fixture relationship");
@@ -246,7 +246,7 @@ if (!userAttentionComment.accepted) throw new Error("Could not create the browse
 const permissionComment = application.addTaskComment({
   taskId: draggable.task.id,
   body: "@implementer Please retry the protected release-file write after authorization.",
-  actor: { kind: "user", id: "local-user" },
+  actor: { kind: "user", id: "user" },
   idempotencyKey: "browser-permission-comment",
 });
 if (!permissionComment.accepted) throw new Error("Could not create the browser permission activation");
@@ -260,7 +260,7 @@ const startupFailed = application.createTask({
   columnId: "implementation",
   title: "Recover a workspace startup failure",
   description: "Keep pre-attempt diagnostics visible until explicit recovery.",
-  actor: { kind: "user", id: "local-user" },
+  actor: { kind: "user", id: "user" },
   idempotencyKey: "browser-startup-failed",
 });
 if (!startupFailed.accepted) throw new Error("Could not create startup-failed browser fixture");

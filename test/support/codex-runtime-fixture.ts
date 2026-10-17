@@ -176,7 +176,7 @@ export function request(activationId: string, taskId: string): AgentRunRequest {
     sourceEvent: {
       id: "source-event-1",
       type: "task.moved",
-      actor: { kind: "user", id: "local-user" },
+      actor: { kind: "user", id: "user" },
       occurredAt: "2026-08-02T12:00:00.000Z",
       details: { fromColumnId: "backlog", toColumnId: "implementation" },
     },
@@ -191,7 +191,7 @@ export function request(activationId: string, taskId: string): AgentRunRequest {
         {
           id: "comment-1",
           body: "Earlier authored comment.",
-          actor: { kind: "user", id: "local-user" },
+          actor: { kind: "user", id: "user" },
           occurredAt: "2026-08-02T11:00:00.000Z",
         },
       ],
@@ -219,7 +219,7 @@ export function request(activationId: string, taskId: string): AgentRunRequest {
         {
           id: "comment-1",
           body: "Earlier authored comment.",
-          actor: { kind: "user", id: "local-user" },
+          actor: { kind: "user", id: "user" },
           occurredAt: "2026-08-02T11:00:00.000Z",
         },
       ],

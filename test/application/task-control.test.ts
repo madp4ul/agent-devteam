@@ -36,7 +36,7 @@ boards:
     columnId: "backlog",
     title: "   ",
     description: "A complete description.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "missing-title",
   });
   assert.deepEqual(missingTitle, { accepted: false, reason: "empty-title" });
@@ -46,7 +46,7 @@ boards:
     columnId: "backlog",
     title: "Retry corrected input",
     description: "Validation rejections remain eligible for a corrected retry.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "missing-title",
   });
   assert.equal(correctedRetry.accepted, true);
@@ -54,19 +54,19 @@ boards:
 
   const rejectedUnarchive = application.unarchiveTask({
     taskId: correctedRetry.task.id,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "retain-unarchive-rejection",
   });
   assert.deepEqual(rejectedUnarchive, { accepted: false, reason: "not-archived" });
   const archivedAfterRejection = await application.archiveTask({
     taskId: correctedRetry.task.id,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-after-unarchive-rejection",
   });
   assert.equal(archivedAfterRejection.accepted, true);
   assert.deepEqual(application.unarchiveTask({
     taskId: correctedRetry.task.id,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "retain-unarchive-rejection",
   }), rejectedUnarchive);
   const stillArchived = application.queryTask(correctedRetry.task.id);
@@ -78,7 +78,7 @@ boards:
     columnId: "backlog",
     title: "Ship a useful outcome",
     description: "  ",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "missing-description",
   });
   assert.deepEqual(missingDescription, { accepted: false, reason: "empty-description" });
@@ -88,7 +88,7 @@ boards:
     columnId: "backlog",
     title: "Ship a useful outcome",
     description: "A complete initial description.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "create-task",
   });
   assert.equal(created.accepted, true);
@@ -99,7 +99,7 @@ boards:
     title: "Ship the inspected task experience",
     description: "Users can now understand and control the complete task.",
     expectedRevision: created.task.revision,
-    actor: { kind: "user" as const, id: "local-user" },
+    actor: { kind: "user" as const, id: "user" },
     idempotencyKey: "edit-task",
   };
   const edited = application.editTask(editCommand);

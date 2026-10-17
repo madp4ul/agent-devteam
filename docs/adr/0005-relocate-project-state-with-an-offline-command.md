@@ -23,3 +23,15 @@ single guarded operation instead of a browser action or manual procedure.
   backup is not required for the ordinary relocation path.
 - Backup and restore remains a same-location recovery workflow rather than a
   supported substitute for relocation.
+
+## Stale owner recovery
+
+PIDs are reused, so a live PID alone cannot establish guard ownership. On a
+collision, inspect the process creation time (PowerShell on Windows, `ps` on
+Unix). A process started after the guard's acquisition cannot own it; recover
+that guard through the existing stale-owner path. This also handles retained
+guards from older versions without changing their format. Unavailable or
+unparseable process evidence remains blocking, and relocation still checks for
+durable running agent attempts before recovering a stale guard. Acquisition
+continues to recheck the retained record before removal, and release still
+requires the exact owning record.

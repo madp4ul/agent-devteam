@@ -1125,7 +1125,7 @@ test("continued attempts sharing one Codex thread retain isolated transcripts", 
     id: "follow-up-message",
     conversationId: "conversation-shared",
     body: "Continue the existing discussion.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     occurredAt: "2026-08-11T16:00:00.000Z",
   };
 

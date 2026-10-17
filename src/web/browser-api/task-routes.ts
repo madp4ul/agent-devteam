@@ -21,7 +21,7 @@ import {
 } from "../http/request.ts";
 import type { HttpRouteContext } from "../http/route-context.ts";
 import { sendJson, sendMutation, sendRelationshipMutation } from "../http/response.ts";
-import { localUserActor } from "./actor.ts";
+import { userActor } from "./actor.ts";
 import type { BrowserCoordinationCapabilities } from "./capabilities.ts";
 
 type TaskCapabilities = Pick<BrowserCoordinationCapabilities,
@@ -62,7 +62,7 @@ export function registerTaskRoutes(
     dispatcher.register("POST", `/api/tasks/:taskId/comments/:commentId/${action}`, "browser/tasks", async ({ request, response, params }) => {
       const body = await readJsonBody(request);
       const result = application.setTaskCommentPin({ taskId: params.taskId, commentId: params.commentId,
-        pinned, actor: localUserActor, idempotencyKey: stringField(body, "idempotencyKey") });
+        pinned, actor: userActor, idempotencyKey: stringField(body, "idempotencyKey") });
       sendJson(response, result.accepted ? 200 : 409, result);
     });
   }
@@ -74,7 +74,7 @@ export function registerTaskRoutes(
       title: stringField(body, "title"),
       description: stringField(body, "description"),
       idempotencyKey: stringField(body, "idempotencyKey"),
-      actor: localUserActor,
+      actor: userActor,
     });
     sendMutation(response, result, 201);
   });
@@ -87,7 +87,7 @@ export function registerTaskRoutes(
     const result = application.interruptTask({
       taskId: params.taskId,
       ...(body.activationId === undefined ? {} : { activationId: stringField(body, "activationId") }),
-      actor: localUserActor,
+      actor: userActor,
       idempotencyKey: stringField(body, "idempotencyKey"),
     });
     if (result.accepted) {
@@ -102,7 +102,7 @@ export function registerTaskRoutes(
     const result = application.continueInterruptedTask({
       taskId: params.taskId,
       message: stringField(body, "message"),
-      actor: localUserActor,
+      actor: userActor,
       idempotencyKey: stringField(body, "idempotencyKey"),
     });
     sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
@@ -115,7 +115,7 @@ export function registerTaskRoutes(
       description: stringField(body, "description"),
       expectedRevision: numberField(body, "expectedRevision"),
       idempotencyKey: stringField(body, "idempotencyKey"),
-      actor: localUserActor,
+      actor: userActor,
     });
     sendMutation(response, result);
   });
@@ -126,13 +126,13 @@ export function registerTaskRoutes(
       destinationColumnId: stringField(body, "destinationColumnId"),
       expectedRevision: numberField(body, "expectedRevision"),
       idempotencyKey: stringField(body, "idempotencyKey"),
-      actor: localUserActor,
+      actor: userActor,
     });
     sendMutation(response, result);
   });
   dispatcher.register("POST", "/api/tasks/:taskId/children", "browser/tasks", async ({ request, response, params }) => {
     const body = await readJsonBody<CreateChildTaskRequest>(request);
-    sendMutation(response, application.createChildTask(childTaskCommand(body, params.taskId, localUserActor)), 201);
+    sendMutation(response, application.createChildTask(childTaskCommand(body, params.taskId, userActor)), 201);
   });
   dispatcher.register("POST", "/api/tasks/:taskId/relationships", "browser/tasks", async ({ request, response, params }) => {
     const body = await readJsonBody<CreateTaskRelationshipRequest>(request);
@@ -142,7 +142,7 @@ export function registerTaskRoutes(
     }
     sendRelationshipMutation(
       response,
-      application.createTaskRelationship(relationshipCommand(body, relationshipType, params.taskId, localUserActor)),
+      application.createTaskRelationship(relationshipCommand(body, relationshipType, params.taskId, userActor)),
     );
   });
   dispatcher.register("DELETE", "/api/tasks/:taskId/relationships/:relationshipId", "browser/tasks", async ({ request, response, params }) => {
@@ -150,7 +150,7 @@ export function registerTaskRoutes(
     const result = application.removeTaskRelationship({
       ...params,
       idempotencyKey: stringField(body, "idempotencyKey"),
-      actor: localUserActor,
+      actor: userActor,
     });
     sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
   });
@@ -160,7 +160,7 @@ export function registerTaskRoutes(
       ...params,
       resumeAgentId: stringField(body, "resumeAgentId"),
       idempotencyKey: stringField(body, "idempotencyKey"),
-      actor: localUserActor,
+      actor: userActor,
     });
     sendRelationshipMutation(response, result, 200);
   });
@@ -170,7 +170,7 @@ export function registerTaskRoutes(
       taskId: params.taskId,
       body: stringField(body, "body"),
       idempotencyKey: stringField(body, "idempotencyKey"),
-      actor: localUserActor,
+      actor: userActor,
     });
     sendJson(response, result.accepted ? 201 : result.reason === "not-found" ? 404 : result.reason === "empty-comment" ? 400 : 409, result);
   });

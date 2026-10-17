@@ -343,7 +343,10 @@ async function validateRelocatedState(
   } finally {
     database.close();
   }
-  const diagnostics = await validateTaskWorkspaceConsistency(repositoryPath, taskWorkspaceRoot, records);
+  // Relocation repairs only framework task registrations, not nested artifacts.
+  const diagnostics = await validateTaskWorkspaceConsistency(repositoryPath, taskWorkspaceRoot, records, {
+    allowNestedEvidenceWorktrees: false,
+  });
   if (diagnostics.length > 0) {
     throw new Error(`Relocated project state is inconsistent: ${diagnostics.map((item) => item.rule).join("; ")}`);
   }

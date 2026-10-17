@@ -24,7 +24,7 @@ test("the browser adapter serves the React application and authoritative board p
     columnId: "backlog",
     title: "Inspect this task",
     description: "The browser reads the authoritative projection.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "fixture-task",
   });
   assert.equal(created.accepted, true);
@@ -110,7 +110,7 @@ test("task-detail endpoint cost and response size stay bounded at the investigat
     columnId: "backlog",
     title: index === 0 ? "Inspected task" : `Unrelated task ${index}`,
     description: index === 0 ? "Keep this response bounded." : `Unrelated description ${index}.`,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: `bounded-detail-task-${index}`,
   }));
   assert.equal(created.every((result) => result.accepted), true);
@@ -214,7 +214,7 @@ test("browser conversation continuation accepts and replays one authored follow-
     columnId: "implementation",
     title: "Continue through the browser adapter",
     description: "Resume the existing conversation through HTTP.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "browser-follow-up-task",
   });
   assert.equal(created.accepted, true);
@@ -289,7 +289,7 @@ test("browser conversation retirement validates, accepts, and replays the user r
     columnId: "implementation",
     title: "Retire through the browser adapter",
     description: "Keep retirement atomic at the HTTP boundary.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "browser-retirement-task",
   });
   assert.equal(created.accepted, true);
@@ -337,7 +337,7 @@ test("browser attention projection is grouped and user mentions resolve through 
     columnId: "backlog",
     title: "Approve the delivery policy",
     description: "The board must retain the request.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "attention-task",
   });
   assert.equal(created.accepted, true);
@@ -448,7 +448,7 @@ test("open workspace uses only the authoritative provisioned path and reports ho
     columnId: "implementation",
     title: "Open this workspace",
     description: "Use the persisted task worktree path.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "open-workspace-task",
   });
   assert.equal(created.accepted, true);
@@ -554,7 +554,7 @@ test("open workspace file resolves local links inside the authoritative task wor
     columnId: "implementation",
     title: "Open a linked file",
     description: "Use the persisted task worktree path.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "open-workspace-file-task",
   });
   assert.equal(created.accepted, true);
@@ -643,7 +643,7 @@ test("browser archive endpoints remove tasks from the board and support history 
     columnId: "backlog",
     title: "Archive through the browser",
     description: "The browser uses the same archival command seam.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-browser-task",
   });
   assert.equal(created.accepted, true);
@@ -736,7 +736,7 @@ function populateRepresentativeUnrelatedHistory(databasePath: string, taskIds: s
   try {
     const insertComment = database.prepare(
       `INSERT INTO task_comments (id, task_id, body, actor_kind, actor_id, occurred_at)
-       VALUES (?, ?, ?, 'user', 'local-user', ?)`,
+       VALUES (?, ?, ?, 'user', 'user', ?)`,
     );
     for (let index = 0; index < 332; index += 1) {
       insertComment.run(
@@ -750,7 +750,7 @@ function populateRepresentativeUnrelatedHistory(databasePath: string, taskIds: s
     const existingActivity = (database.prepare("SELECT COUNT(*) AS count FROM activity_ledger").get() as { count: number }).count;
     const insertActivity = database.prepare(
       `INSERT INTO activity_ledger (id, task_id, type, actor_kind, actor_id, occurred_at, details_json)
-       VALUES (?, ?, 'task.edited', 'user', 'local-user', ?, ?)`,
+       VALUES (?, ?, 'task.edited', 'user', 'user', ?, ?)`,
     );
     for (let index = existingActivity; index < 1_900; index += 1) {
       insertActivity.run(

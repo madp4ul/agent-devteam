@@ -398,3 +398,118 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await expect(taskTimeline.getByText("Dependency removed", { exact: true })).toBeVisible();
   await expect(taskTimeline.getByText("Does not depend on Recover a workspace startup failure anymore.", { exact: true })).toBeVisible();
 });
+
+test("completed relationships collapse by target satisfaction and stay stable across live refreshes", async ({ page }) => {
+  let inspectedComplete = false;
+  let targetsComplete = false;
+  let noCompleted = false;
+  let empty = false;
+  let reads = 0;
+  await page.route("**/api/tasks/T-0002", async (route) => {
+    const response = await route.fetch();
+    const detail = await response.json();
+    detail.inspection.column = inspectedComplete
+      ? { id: "completion", name: "Completion" }
+      : { id: "implementation", name: "Implementation" };
+    detail.task.columnId = detail.inspection.column.id;
+    const scenarios = [
+      ["parent-child", false, "Parent open"],
+      ["parent-child", false, "Parent completed"],
+      ["parent-child", true, "Child open"],
+      ["parent-child", true, "Child completed"],
+      ["dependency", true, "Dependency open"],
+      ["dependency", true, "Dependency completed"],
+      ["dependency", false, "Waiting open"],
+      ["dependency", false, "Waiting completed"],
+    ] as const;
+    detail.relationshipTasks = empty ? [] : scenarios.map(([, , title], index) => ({
+      id: `T-90${index.toString().padStart(2, "0")}`, title,
+      boardId: "delivery", boardName: "Product delivery",
+      column: !noCompleted && (targetsComplete || title.endsWith("completed"))
+        ? { id: "completion", name: "Completion" }
+        : { id: "implementation", name: "Implementation" },
+      waitingOn: { taskIds: [] },
+    }));
+    detail.task.relationships = empty ? [] : scenarios.map(([type, outgoing], index) => ({
+      id: `drawer-edge-${index}`, type,
+      sourceTaskId: outgoing ? "T-0002" : detail.relationshipTasks[index].id,
+      targetTaskId: outgoing ? detail.relationshipTasks[index].id : "T-0002",
+      resumeAgentId: "implementer",
+    }));
+    await fulfillTaskScenario(route, response, detail);
+    reads++;
+  });
+  await page.goto("/tasks/T-0002");
+  const relationships = page.getByRole("region", { name: "Relationships" });
+  const disclosure = relationships.getByRole("button", { name: /^Completed relationships/ });
+  const drawer = relationships.getByRole("region", { name: "Completed relationships", exact: true });
+  await expect(disclosure).toHaveAccessibleName("Completed relationships (2)");
+  await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  await expect(drawer).toBeHidden();
+  await expect(relationships.getByRole("link")).toHaveCount(6);
+  // A completed source does not satisfy an incoming edge while this target is unfinished.
+  await expect(relationships.getByRole("region", { name: "Parent tasks", exact: true }).getByRole("link")).toHaveCount(2);
+  await expect(relationships.getByRole("region", { name: "Waiting tasks", exact: true }).getByRole("link")).toHaveCount(2);
+  await disclosure.focus();
+  await disclosure.press("Enter");
+  await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+  await expect(drawer).toBeVisible();
+  expect(await disclosure.getAttribute("aria-controls")).toBe(await drawer.getAttribute("id"));
+  await expect(drawer.getByRole("region", { name: "Child tasks", exact: true }).getByRole("link", { name: "Child completed" })).toHaveAttribute("href", "/tasks/T-9003");
+  await expect(drawer.getByRole("link", { name: "Child completed" })).toHaveAttribute("target", "_blank");
+  await expect(drawer.getByRole("region", { name: "Depends on", exact: true })).toContainText("Dependency completed");
+  await expect(drawer).toContainText("T-9003 · Product delivery / Completion");
+  await expect(drawer.getByRole("button", { name: "Remove child relationship with Child completed" })).toBeVisible();
+  await expect(drawer.getByRole("combobox")).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Remove child relationship with Child completed" }).click();
+  const completedRemoval = page.getByRole("dialog", { name: "Remove child relationship?" });
+  await expect(completedRemoval).toContainText("This relationship is already satisfied.");
+  await completedRemoval.getByRole("button", { name: "Cancel" }).click();
+  const completedPopupPromise = page.waitForEvent("popup");
+  await drawer.getByRole("link", { name: "Child completed" }).click();
+  const completedPopup = await completedPopupPromise;
+  await expect(completedPopup).toHaveURL(/\/tasks\/T-9003$/);
+  await completedPopup.close();
+  await expect(relationships.getByRole("link")).toHaveCount(8);
+  const beforeRefresh = reads;
+  await expect.poll(() => reads).toBeGreaterThan(beforeRefresh);
+  await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+
+  for (const theme of ["dark", "light"] as const) {
+    await setAppearance(page, theme);
+    await expect(drawer).toBeVisible();
+    expect(await contrastRatio(disclosure)).toBeGreaterThanOrEqual(4.5);
+    await disclosure.hover();
+    expect(await contrastRatio(disclosure)).toBeGreaterThanOrEqual(4.5);
+    await disclosure.focus();
+    expect(await disclosure.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
+    expect(await disclosure.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(
+      await relationships.getByRole("button", { name: "Create child task" }).evaluate((element) => getComputedStyle(element).backgroundColor),
+    );
+  }
+  await disclosure.press("Space");
+  await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  inspectedComplete = true;
+  await expect(disclosure).toHaveAccessibleName("Completed relationships (6)");
+  await expect(drawer).toBeHidden();
+  await expect(relationships.getByRole("link")).toHaveCount(2);
+  await disclosure.click();
+  for (const group of ["Parent tasks", "Child tasks", "Depends on", "Waiting tasks"]) {
+    await expect(drawer.getByRole("region", { name: group, exact: true })).toBeVisible();
+  }
+  targetsComplete = true;
+  await expect(disclosure).toHaveAccessibleName("Completed relationships (8)");
+  await expect(relationships.getByText("No unfinished relationships.", { exact: true })).toBeVisible();
+  await expect(relationships.getByRole("link")).toHaveCount(8);
+  await disclosure.click();
+  await expect(relationships.getByRole("link")).toHaveCount(0);
+  await expect(disclosure).toBeVisible();
+  inspectedComplete = false;
+  noCompleted = true;
+  await expect(disclosure).toHaveCount(0);
+  await expect(relationships.getByRole("link")).toHaveCount(8);
+  await expect(relationships.getByText("No unfinished relationships.", { exact: true })).toHaveCount(0);
+  empty = true;
+  await expect(relationships.getByText("No task relationships.", { exact: true })).toBeVisible();
+  await expect(disclosure).toHaveCount(0);
+});

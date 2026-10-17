@@ -10,6 +10,7 @@ import { reviewerAllowancesMigration } from "./0009-reviewer-allowances.ts";
 import { conversationHistoryItemsMigration } from "./0010-conversation-history-items.ts";
 import { taskTimelineMigration } from "./0011-task-timeline.ts";
 import { runtimeRecoveryMigration } from "./0012-runtime-recovery.ts";
+import { canonicalHumanIdentityMigration } from "./0013-canonical-human-identity.ts";
 
 export const coordinationMigrations = [
   initialReleasedMigration,
@@ -24,4 +25,5 @@ export const coordinationMigrations = [
   conversationHistoryItemsMigration,
   taskTimelineMigration,
   runtimeRecoveryMigration,
+  canonicalHumanIdentityMigration,
 ] as const;

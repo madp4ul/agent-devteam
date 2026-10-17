@@ -462,6 +462,12 @@ textarea { resize: vertical; line-height: 1.5; }
 .relationship-create-options button:hover:not(:disabled) { background: #e9ede7; }
 .relationship-groups { display: grid; gap: 1rem; margin-top: .85rem; }
 .relationship-groups h3 { margin: 0 0 .45rem; color: var(--muted); font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; }
+.completed-relationships { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .65rem; }
+html[data-theme] .completed-relationships-disclosure { display: flex; align-items: center; gap: .4rem; border: 1px solid transparent; border-radius: .4rem; padding: .35rem .45rem; color: var(--text-muted); background: transparent; font-size: .78rem; font-weight: 600; text-align: left; }
+html[data-theme] .completed-relationships-disclosure:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
+.completed-relationships-disclosure:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.completed-relationships-disclosure .disclosure-icon { transform: rotate(-90deg); }
+.completed-relationships-disclosure[aria-expanded="true"] .disclosure-icon { transform: rotate(0deg); }
 .relationship-list { display: grid; gap: .55rem; margin: 0; padding: 0; list-style: none; }
 .relationship-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 1.3rem; align-items: start; gap: .65rem; border-top: 1px solid var(--line); padding-top: .65rem; }
 .relationship-row > div { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .55rem; min-width: 0; }

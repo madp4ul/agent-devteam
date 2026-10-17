@@ -65,7 +65,7 @@ test("eligible agent-authored occurrences are durable, independent, and prospect
 
   const userTask = application.createTask({
     boardId: "delivery", columnId: "backlog", title: "User task", description: "Silent.",
-    actor: { kind: "user", id: "local-user" }, idempotencyKey: "user-task",
+    actor: { kind: "user", id: "user" }, idempotencyKey: "user-task",
   });
   assert.equal(userTask.accepted, true);
   const agentTask = application.createTask({
@@ -84,12 +84,12 @@ test("eligible agent-authored occurrences are durable, independent, and prospect
   application.addTaskComment({
     taskId: agentTask.task.id,
     body: "@user note to self",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "user-self-mention",
   });
   const movedByUser = application.moveTask({
     taskId: agentTask.task.id, destinationColumnId: "implementation", expectedRevision: 1,
-    actor: { kind: "user", id: "local-user" }, idempotencyKey: "user-move",
+    actor: { kind: "user", id: "user" }, idempotencyKey: "user-move",
   });
   assert.equal(movedByUser.accepted, true);
   if (!movedByUser.accepted) return;

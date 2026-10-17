@@ -7,9 +7,53 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import type { TaskWorkspaceView } from "../../src/application/task-contract.ts";
-import { GitTaskWorkspaceManager } from "../../src/application/internal/git-task-workspace.ts";
+import { GitTaskWorkspaceManager, validateTaskWorkspaceConsistency } from "../../src/application/internal/git-task-workspace.ts";
 
 const run = promisify(execFile);
+
+test("startup preserves agent-created evidence worktrees nested inside a recorded task workspace", async () => {
+  const fixture = await createFixture("nested-evidence");
+  const workspace = await provisionWorkspace(fixture, "T-0108");
+  const evidencePath = join(workspace.path, "artifacts", "T-0108", "composed");
+  await git(fixture.repository, "worktree", "add", "--detach", evidencePath, fixture.commit);
+  await writeFile(join(evidencePath, "uncommitted-evidence.txt"), "retain this evidence\n");
+
+  assert.deepEqual(await validateTaskWorkspaceConsistency(fixture.repository, fixture.workspaceRoot, [
+    { taskId: "T-0108", workspace },
+  ]), []);
+  assert.equal((await stat(join(evidencePath, "uncommitted-evidence.txt"))).isFile(), true);
+
+  // Relocation must remain blocked until it can repair nested registrations too.
+  assert.ok((await validateTaskWorkspaceConsistency(fixture.repository, fixture.workspaceRoot, [
+    { taskId: "T-0108", workspace },
+  ], { allowNestedEvidenceWorktrees: false })).some((entry) =>
+    entry.rule === "Every framework-owned Git worktree registration must have a database workspace record"));
+
+  // Nested evidence must not conceal a missing registration for another task.
+  const recordsWithMissingTask = [{ taskId: "T-0108", workspace }, {
+    taskId: "T-0109",
+    workspace: { ...workspace, path: join(fixture.workspaceRoot, "T-0109") },
+  }];
+  const diagnostics = await validateTaskWorkspaceConsistency(fixture.repository, fixture.workspaceRoot, recordsWithMissingTask);
+  assert.ok(diagnostics.some((entry) => entry.rule === "Every database workspace record must have a Git worktree registration"));
+});
+
+test("startup still rejects unrecorded direct and nested worktree registrations", async () => {
+  const fixture = await createFixture("unowned-registration");
+  const workspace = await provisionWorkspace(fixture, "T-0108");
+  const unowned = join(fixture.workspaceRoot, "T-0109");
+  const nested = join(unowned, "artifacts", "composed");
+  await git(fixture.repository, "worktree", "add", "--detach", unowned, fixture.commit);
+  await git(fixture.repository, "worktree", "add", "--detach", nested, fixture.commit);
+
+  const diagnostics = await validateTaskWorkspaceConsistency(fixture.repository, fixture.workspaceRoot, [
+    { taskId: "T-0108", workspace },
+  ]);
+  for (const path of [unowned, nested]) {
+    assert.ok(diagnostics.some((entry) => entry.rule === "Every framework-owned Git worktree registration must have a database workspace record"
+      && (entry.invalidValue as { path: string }).path === path));
+  }
+});
 
 test("an unregistered task workspace is rejected before ownership trust", async () => {
   const fixture = await createFixture("unregistered");

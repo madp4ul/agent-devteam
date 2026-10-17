@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { open, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { promisify } from "node:util";
 
 import { resolveProjectGitCommonDirectory, runProjectGit } from "./project-git.ts";
+
+const execFileAsync = promisify(execFile);
 
 interface GuardRecord {
   token: string;
@@ -57,7 +61,7 @@ export async function acquireProjectStateOperationGuard(
           `Project-state lock ${guardPath} is incomplete or invalid; access remains blocked because stale ownership cannot be proven`,
         );
       }
-      if (processIsAlive(existing.pid)) {
+      if (await ownerProcessIsAlive(existing)) {
         throw new Error(
           `Project state is in use by ${existing.operation} (process ${existing.pid}); stop the application and agents before continuing`,
         );
@@ -104,8 +108,9 @@ function parseRecord(value: string | undefined): GuardRecord | undefined {
     if (
       typeof parsed.token !== "string" ||
       typeof parsed.pid !== "number" ||
+      !Number.isSafeInteger(parsed.pid) || parsed.pid <= 0 ||
       typeof parsed.operation !== "string" ||
-      typeof parsed.acquiredAt !== "string"
+      typeof parsed.acquiredAt !== "string" || !Number.isFinite(Date.parse(parsed.acquiredAt))
     ) return undefined;
     return parsed as GuardRecord;
   } catch {
@@ -113,11 +118,26 @@ function parseRecord(value: string | undefined): GuardRecord | undefined {
   }
 }
 
-function processIsAlive(pid: number): boolean {
+async function ownerProcessIsAlive(record: GuardRecord): Promise<boolean> {
   try {
-    process.kill(pid, 0);
-    return true;
+    process.kill(record.pid, 0);
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+  try {
+    // A surviving PID alone is not ownership: Windows (and Unix) reuse PIDs.
+    // A process born after acquisition cannot be the recorded owner. This also
+    // recovers old guards without changing their on-disk format.
+    const result = process.platform === "win32"
+      ? await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+        `(Get-Process -Id ${record.pid} -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')`],
+        { encoding: "utf8", windowsHide: true, timeout: 5_000 })
+      : await execFileAsync("ps", ["-p", String(record.pid), "-o", "lstart="],
+        { encoding: "utf8", env: { ...process.env, LC_ALL: "C" }, timeout: 5_000 });
+    const startedAt = Date.parse(result.stdout.trim());
+    return !Number.isFinite(startedAt) || startedAt <= Date.parse(record.acquiredAt);
+  } catch {
+    // Lack of process-inspection permission/evidence never proves stale ownership.
+    return true;
   }
 }

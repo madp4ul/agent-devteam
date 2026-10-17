@@ -145,9 +145,9 @@ test("scrolling reveals a fixed-scale movement map while conversations remain bo
     detail.task.description = "Long position context. ".repeat(900);
     const moves = [
       ["map-move-1", "implementation", "backlog", "agent", "implementer", "2026-08-09T13:01:00.000Z"],
-      ["map-move-2", "backlog", "completion", "user", "local-user", "2026-08-09T13:02:00.000Z"],
+      ["map-move-2", "backlog", "completion", "user", "user", "2026-08-09T13:02:00.000Z"],
       ["map-move-3", "completion", "implementation", "agent", "implementer", "2026-08-09T13:03:00.000Z"],
-      ["map-move-4", "implementation", "backlog", "user", "local-user", "2026-08-09T13:04:00.000Z"],
+      ["map-move-4", "implementation", "backlog", "user", "user", "2026-08-09T13:04:00.000Z"],
     ];
     for (const [id, fromColumnId, toColumnId, kind, actorId, occurredAt] of moves) {
       detail.task.activity.push({

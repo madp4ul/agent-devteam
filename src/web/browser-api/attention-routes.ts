@@ -6,7 +6,7 @@ import type { HttpDispatcher } from "../http/dispatcher.ts";
 import { readJsonBody, stringField } from "../http/request.ts";
 import type { HttpRouteContext } from "../http/route-context.ts";
 import { sendJson } from "../http/response.ts";
-import { localUserActor } from "./actor.ts";
+import { userActor } from "./actor.ts";
 import type { BrowserCoordinationCapabilities } from "./capabilities.ts";
 
 type AttentionCapabilities = Pick<BrowserCoordinationCapabilities,
@@ -26,7 +26,7 @@ export function registerAttentionRoutes(
     const body = await readJsonBody<IdempotentBrowserRequest>(request);
     const result = application.dismissStaleActivation({
       activationId: params.activationId,
-      actor: localUserActor,
+      actor: userActor,
       idempotencyKey: stringField(body, "idempotencyKey"),
     });
     sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
@@ -35,7 +35,7 @@ export function registerAttentionRoutes(
     const body = await readJsonBody<IdempotentBrowserRequest>(request);
     const result = application.dismissActivation({
       activationId: params.activationId,
-      actor: localUserActor,
+      actor: userActor,
       idempotencyKey: stringField(body, "idempotencyKey"),
     });
     sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
@@ -44,7 +44,7 @@ export function registerAttentionRoutes(
     const body = await readJsonBody<IdempotentBrowserRequest>(request);
     const result = application.markUserMentionAddressed({
       attentionReasonId: params.attentionReasonId,
-      actor: localUserActor,
+      actor: userActor,
       idempotencyKey: stringField(body, "idempotencyKey"),
     });
     sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
@@ -59,7 +59,7 @@ function recoveryHandler(application: AttentionCapabilities, action: "retry" | "
     const body = await readJsonBody<ActivationRecoveryRequest>(request);
     const command = {
       attentionReasonId: params.attentionReasonId,
-      actor: localUserActor,
+      actor: userActor,
       idempotencyKey: stringField(body, "idempotencyKey"),
     };
     const result = action === "continue"

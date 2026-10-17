@@ -1,4 +1,5 @@
 import {
+  useId,
   useMemo,
   useRef,
   useState,
@@ -42,6 +43,9 @@ export function TaskRelationshipsPanel({
   onChanged(): Promise<void>;
   onFeedback(feedback: { role: "status" | "alert"; text: string }): void;
 }): ReactNode {
+  const completedDrawerId = useId();
+  const [expandedTaskId, setExpandedTaskId] = useState<string>();
+  const completedOpen = expandedTaskId === detail.task.id;
   const [pending, setPending] = useState(false);
   const [creatingChild, setCreatingChild] = useState(false);
   const [creatingDependency, setCreatingDependency] = useState(false);
@@ -52,6 +56,8 @@ export function TaskRelationshipsPanel({
     [detail.relationshipTasks],
   );
   const entries = relationshipEntries(detail, relatedById);
+  const unfinished = entries.filter((entry) => entry.unresolved);
+  const completed = entries.filter((entry) => !entry.unresolved);
   const addDependency = async (task: BrowserRelationshipTask, resumeAgentId: string): Promise<void> => {
     if (pending) return;
     setPending(true);
@@ -104,77 +110,104 @@ export function TaskRelationshipsPanel({
     }
   };
 
+  const renderGroups = (groupEntries: RelationshipEntry[], scope: string): ReactNode => (
+    <div className="relationship-groups">
+      {(["Parent tasks", "Child tasks", "Depends on", "Waiting tasks"] as const).map((group) => {
+        const grouped = groupEntries.filter((entry) => entry.group === group);
+        return grouped.length === 0 ? null : (
+          <section key={group} aria-labelledby={`relationship-${scope}-${group.replaceAll(" ", "-").toLowerCase()}`}>
+            <h3 id={`relationship-${scope}-${group.replaceAll(" ", "-").toLowerCase()}`}>{group}</h3>
+            <ul className="relationship-list">
+              {grouped.map((entry) => (
+                <li key={entry.relationship.id} className="relationship-row">
+                  <div>
+                    <span className="relationship-title">
+                      <a
+                        href={`/tasks/${encodeURIComponent(entry.related.id)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >{entry.related.title}</a>
+                    </span>
+                    <span className="relationship-context">
+                      {entry.related.id} · {entry.related.boardName} / {entry.related.column.name}
+                    </span>
+                    {entry.currentTaskIsWaiting ? <span className="signal waiting">Waiting on</span> : null}
+                    {entry.related.column.id === "completion" ? <span className="signal">Completed</span> : null}
+                    {entry.related.archived ? <span className="signal">Archived</span> : null}
+                    <span className="relationship-context">
+                      Resume agent · {detail.collaborators.find(({ id }) => id === entry.relationship.resumeAgentId)?.name
+                        ?? entry.relationship.resumeAgentId
+                        ?? "Needs assignment"}
+                    </span>
+                    {entry.currentTaskIsWaiting && !detail.task.archived ? (
+                      <select
+                        className="relationship-resume-select"
+                        aria-label={`Change resume agent for ${entry.related.title}`}
+                        title="Change resume agent"
+                        value={entry.relationship.resumeAgentId ?? ""}
+                        disabled={pending}
+                        onChange={(event) => void changeResumeAgent(entry, event.currentTarget.value)}
+                      >
+                        <option value="" disabled>Select an agent</option>
+                        {detail.collaborators.map((agent) => (
+                          <option key={agent.id} value={agent.id}>{agent.name}</option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </div>
+                  {detail.task.archived ? null : (
+                    <button
+                      type="button"
+                      className="relationship-remove"
+                      aria-label={`Remove ${entry.label.toLocaleLowerCase()} with ${entry.related.title}`}
+                      title={`Remove ${entry.label.toLocaleLowerCase()}`}
+                      onClick={() => setRemoving(entry)}
+                    >
+                      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                        <path d="M5 5l10 10M15 5L5 15" />
+                      </svg>
+                    </button>
+                  )}
+                  {detail.agentInspectableContent.relationshipIds.includes(entry.relationship.id)
+                    ? <AgentInspectableMarker />
+                    : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+
   return (
     <section className="detail-panel relationship-panel" aria-labelledby="relationships-heading">
       <h2 id="relationships-heading">Relationships</h2>
       {entries.length === 0 ? <p className="quiet">No task relationships.</p> : (
-        <div className="relationship-groups">
-          {(["Parent tasks", "Child tasks", "Depends on", "Waiting tasks"] as const).map((group) => {
-            const grouped = entries.filter((entry) => entry.group === group);
-            return grouped.length === 0 ? null : (
-              <section key={group} aria-labelledby={`relationship-${group.replaceAll(" ", "-").toLowerCase()}`}>
-                <h3 id={`relationship-${group.replaceAll(" ", "-").toLowerCase()}`}>{group}</h3>
-                <ul className="relationship-list">
-                  {grouped.map((entry) => (
-                    <li key={entry.relationship.id} className="relationship-row">
-                      <div>
-                        <span className="relationship-title">
-                          <a
-                            href={`/tasks/${encodeURIComponent(entry.related.id)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >{entry.related.title}</a>
-                        </span>
-                        <span className="relationship-context">
-                          {entry.related.id} · {entry.related.boardName} / {entry.related.column.name}
-                        </span>
-                        {entry.currentTaskIsWaiting ? <span className="signal waiting">Waiting on</span> : null}
-                        {entry.related.column.id === "completion" ? <span className="signal">Completed</span> : null}
-                        {entry.related.archived ? <span className="signal">Archived</span> : null}
-                        <span className="relationship-context">
-                          Resume agent · {detail.collaborators.find(({ id }) => id === entry.relationship.resumeAgentId)?.name
-                            ?? entry.relationship.resumeAgentId
-                            ?? "Needs assignment"}
-                        </span>
-                        {entry.currentTaskIsWaiting && !detail.task.archived ? (
-                          <select
-                            className="relationship-resume-select"
-                            aria-label={`Change resume agent for ${entry.related.title}`}
-                            title="Change resume agent"
-                            value={entry.relationship.resumeAgentId ?? ""}
-                            disabled={pending}
-                            onChange={(event) => void changeResumeAgent(entry, event.currentTarget.value)}
-                          >
-                            <option value="" disabled>Select an agent</option>
-                            {detail.collaborators.map((agent) => (
-                              <option key={agent.id} value={agent.id}>{agent.name}</option>
-                            ))}
-                          </select>
-                        ) : null}
-                      </div>
-                      {detail.task.archived ? null : (
-                        <button
-                          type="button"
-                          className="relationship-remove"
-                          aria-label={`Remove ${entry.label.toLocaleLowerCase()} with ${entry.related.title}`}
-                          title={`Remove ${entry.label.toLocaleLowerCase()}`}
-                          onClick={() => setRemoving(entry)}
-                        >
-                          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                            <path d="M5 5l10 10M15 5L5 15" />
-                          </svg>
-                        </button>
-                      )}
-                      {detail.agentInspectableContent.relationshipIds.includes(entry.relationship.id)
-                        ? <AgentInspectableMarker />
-                        : null}
-                    </li>
-                  ))}
-                </ul>
+        <>
+          {unfinished.length === 0 ? <p className="quiet">No unfinished relationships.</p> : renderGroups(unfinished, "unfinished")}
+          {completed.length > 0 ? (
+            <div className="completed-relationships">
+              <button
+                type="button"
+                className="completed-relationships-disclosure"
+                aria-expanded={completedOpen}
+                aria-controls={completedDrawerId}
+                onClick={() => setExpandedTaskId(completedOpen ? undefined : detail.task.id)}
+              >
+                <DisclosureIcon />
+                Completed relationships ({completed.length})
+              </button>
+              <section
+                id={completedDrawerId}
+                aria-label="Completed relationships"
+                hidden={!completedOpen}
+              >
+                {renderGroups(completed, "completed")}
               </section>
-            );
-          })}
-        </div>
+            </div>
+          ) : null}
+        </>
       )}
       {detail.task.archived ? null : (
         <div className="relationship-actions" role="group" aria-label="Create relationship">

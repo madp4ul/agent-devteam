@@ -22,7 +22,7 @@ function followUpMessage(): AgentConversationMessageView {
     id: "bottom-follow-up-message",
     conversationId: "browser-conversation",
     body: followUpBody,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     occurredAt: "2026-08-26T08:00:00.000Z",
     attachments: [],
   };

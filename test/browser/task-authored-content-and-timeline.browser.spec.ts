@@ -154,7 +154,7 @@ test("task Markdown local-file links share the owning workspace while web links 
     detail.task.activity.push({
       id: "workspace-link-conversation-message",
       type: "conversation.continued",
-      actor: { kind: "user", id: "local-user" },
+      actor: { kind: "user", id: "user" },
       occurredAt: "2026-08-15T12:00:00.000Z",
       details: {
         conversationId: "browser-conversation",
@@ -262,7 +262,7 @@ test("rendered Markdown code stays within every authored task surface", async ({
     detail.task.activity.push({
       id: "long-code-conversation-message",
       type: "conversation.continued",
-      actor: { kind: "user", id: "local-user" },
+      actor: { kind: "user", id: "user" },
       occurredAt: "2026-08-15T12:00:00.000Z",
       details: {
         conversationId: "browser-conversation",
@@ -343,7 +343,7 @@ test("Markdown tables stay semantic and locally scrollable across authored task 
     detail.task.activity.push({
       id: "table-conversation-message",
       type: "conversation.continued",
-      actor: { kind: "user", id: "local-user" },
+      actor: { kind: "user", id: "user" },
       occurredAt: "2026-08-15T12:00:00.000Z",
       details: {
         conversationId: "browser-conversation",
@@ -745,13 +745,13 @@ test("task timeline filters mixed grouped history and keeps the choice through l
       {
         id: "filter-inspectable-comment",
         body: "Inspectable standalone filter evidence.",
-        actor: { kind: "user", id: "local-user" },
+        actor: { kind: "user", id: "user" },
         occurredAt,
       },
       {
         id: "filter-user-only-comment",
         body: "User-only standalone filter evidence.",
-        actor: { kind: "user", id: "local-user" },
+        actor: { kind: "user", id: "user" },
         occurredAt,
       },
     );
@@ -786,7 +786,7 @@ test("task timeline filters mixed grouped history and keeps the choice through l
         {
           id: "filter-live-user-only",
           body: "Live user-only filter evidence.",
-          actor: { kind: "user", id: "local-user" },
+          actor: { kind: "user", id: "user" },
           occurredAt,
         },
       );
@@ -929,7 +929,7 @@ test("task timeline keeps the record below the sticky header stable when polling
           ? Array.from({ length: 12 }, (_, paragraph) =>
               `Polling resize ${id} paragraph ${paragraph + 1} adds height to history.`).join("\n\n")
           : `Stable polling history ${index}`,
-        actor: { kind: "user", id: "local-user" },
+        actor: { kind: "user", id: "user" },
         occurredAt: new Date(Date.UTC(2026, 8, 1, 12, index)).toISOString(),
       });
     }
@@ -938,7 +938,7 @@ test("task timeline keeps the record below the sticky header stable when polling
         detail.task.comments.push({
           id: `inserted-polling-comment-${index}`,
           body: `Inserted polling history ${index}`,
-          actor: { kind: "user", id: "local-user" },
+          actor: { kind: "user", id: "user" },
           occurredAt: new Date(Date.UTC(2027, 0, 1, 12, index)).toISOString(),
         });
       }
@@ -1019,7 +1019,7 @@ test("passive polling leaves an off-screen timeline alone and anchors nested his
       detail.task.comments.push({
         id: "off-screen-polling-history",
         body: "Off-screen polling history arrived.",
-        actor: { kind: "user", id: "local-user" },
+        actor: { kind: "user", id: "user" },
         occurredAt: "2027-01-02T12:00:00.000Z",
       });
     }
@@ -1027,7 +1027,7 @@ test("passive polling leaves an off-screen timeline alone and anchors nested his
       detail.task.comments.push({
         id: "nested-anchor-polling-history",
         body: "Nested-anchor polling history arrived.",
-        actor: { kind: "user", id: "local-user" },
+        actor: { kind: "user", id: "user" },
         occurredAt: "2027-01-02T12:01:00.000Z",
       });
     }
@@ -1035,7 +1035,7 @@ test("passive polling leaves an off-screen timeline alone and anchors nested his
       detail.task.comments.push({
         id: "navigation-race-polling-history",
         body: "Navigation-race polling history arrived.",
-        actor: { kind: "user", id: "local-user" },
+        actor: { kind: "user", id: "user" },
         occurredAt: "2027-01-02T12:02:00.000Z",
       });
     }

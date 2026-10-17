@@ -68,6 +68,9 @@ operational backup below.
 3. Preserve the repository clone, including its local `.git/config` binding and
    `.git/worktrees` administrative records, with the same backup generation.
    Ordinary Git commits or bundles do not contain this local deployment state.
+   Include agent-created nested evidence worktrees and their registrations too;
+   they can contain uncommitted implementation evidence. They are artifacts of
+   their recorded containing task, not additional framework task workspaces.
 4. Open the copied database read-only and run `PRAGMA integrity_check`; retain
    the backup only when it returns `ok`.
 

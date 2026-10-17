@@ -14,6 +14,7 @@ export async function validateTaskWorkspaceConsistency(
   projectRepositoryPath: string,
   taskWorkspaceRoot: string,
   records: Array<{ taskId: string; workspace: TaskWorkspaceView }>,
+  options: { allowNestedEvidenceWorktrees?: boolean } = {},
 ): Promise<ProcessDiagnostic[]> {
   const diagnostics: ProcessDiagnostic[] = [];
   const root = resolve(taskWorkspaceRoot);
@@ -76,6 +77,12 @@ export async function validateTaskWorkspaceConsistency(
     }
   }
   for (const path of registered.filter((path) => isWithin(root, path))) {
+    // Agents may register evidence worktrees within their task workspace.
+    // Only a recorded, correctly located task can own those nested paths;
+    // unknown containers and the task registrations themselves remain checked.
+    if (options.allowNestedEvidenceWorktrees !== false
+      && records.some((record) => samePath(record.workspace.path, join(root, record.taskId))
+      && isWithin(record.workspace.path, path))) continue;
     if (!recordByPath.has(normalizedPath(path))) {
       diagnostics.push(workspaceDiagnostic(
         root,

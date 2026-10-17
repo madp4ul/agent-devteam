@@ -24,6 +24,12 @@ without choosing the implementation yet.
 
 ## Decisions so far
 
+- [Remove the Legacy Human Identity](./issues/99-remove-legacy-local-user-identity.md)
+  — Browser writes, MCP attribution and agent guidance use `user`/`@user`.
+  **Resolved:** Released migration 0013 upgrades stored human attribution and
+  retained activation/retry snapshots while preserving record references and
+  authored evidence; actual browser-to-MCP and legacy restart regressions pass.
+
 - [Define the First Usable Workflow and Success Criteria](./issues/01-define-first-usable-workflow.md)
   — Use an architecture-led implementation workflow with independent design
   and verification agents, visible rework, cross-stage consultation, and
@@ -372,6 +378,14 @@ without choosing the implementation yet.
   mention activation on the destination task and plain-reference alternatives,
   with request/reference examples verified through MCP discovery; parsing and
   activation behavior remain unchanged.
+
+- [Collapse Completed Task Relationships by Default](./issues/98-collapse-completed-task-relationships.md)
+  — Keep unfinished relationships visible in task details and retain completed
+  relationships in a drawer that starts closed and can be opened and closed.
+  **Resolved:** Existing target-based satisfaction partitions all four directional
+  groups into unfinished rows and a counted, accessible completed drawer. Its
+  disclosure survives same-task refreshes, retains row actions and navigation,
+  and has browser coverage for live changes, empty states, and both themes.
 
 ## Maintainer refactoring research
 

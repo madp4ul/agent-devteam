@@ -93,6 +93,12 @@ grant filesystem access to the destination's workspace or agent lifecycle contro
 
 ## History and activation delivery
 
+Human actor and author metadata use `{ kind: "user", id: "user" }`. Address
+the human with `@user`, including replies to human comments. A comment's `id`
+identifies its unique record, not its author. Released state is upgraded through
+[migration 0013](adr/0031-canonicalize-human-attribution-in-released-state.md)
+before inspection and activation delivery.
+
 `targetWords` is an approximate amount to see, not a model-token guarantee. Count
 whitespace-separated readable record values, including author/time/event details,
 excluding JSON scaffolding and cursor strings. A positive target returns at least

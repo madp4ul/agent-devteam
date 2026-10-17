@@ -190,6 +190,10 @@ future continuation cannot be orphaned.
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
 state rather than silently replacing or adopting inconsistent data.
+Startup and offline relocation share an exclusive project-state operation guard.
+A live PID owns a retained guard only if its process started no later than guard
+acquisition; a later process proves PID reuse and permits ordinary stale-owner
+recovery. Missing process-start evidence keeps access blocked.
 
 Shared pin membership is stored on immutable comments; pin changes append
 audit events in the task command transaction without executing mentions or creating
@@ -391,6 +395,11 @@ decide how branches, commits, and handoffs are managed.
 Workspace identity spans the coordination database, filesystem directory, and
 Git worktree registration. These are validated together because disagreement
 between them can make an agent operate on the wrong work.
+Registrations nested inside a correctly located, database-recorded task
+workspace belong to that task's implementation artifacts, rather than defining
+additional framework task workspaces. Startup leaves them intact while still
+validating the owning task and rejecting unrecorded containers and registrations.
+See [ADR 0030](adr/0030-distinguish-nested-evidence-worktrees-from-task-workspaces.md).
 
 Host-side archival first matches the database workspace path to the task's
 framework-owned location and its primary-repository worktree registration.

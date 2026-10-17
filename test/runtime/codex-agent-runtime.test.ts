@@ -47,7 +47,7 @@ test("typed JSON preserves exact multiline mention, follow-up and relationship s
   const followUp = request("activation-follow-up", "T-0038");
   followUp.reason = { type: "user-follow-up", sourceEventId: "message" };
   followUp.sourceEvent = { id: "message", conversationId: "conversation", body: "Please re-check.",
-    actor: { kind: "user", id: "local-user" }, occurredAt: "2026-08-11T14:40:00.000Z" };
+    actor: { kind: "user", id: "user" }, occurredAt: "2026-08-11T14:40:00.000Z" };
   const follow = data(composeActivationPrompt(followUp))[1]!;
   assert.equal(follow.record.type, "conversation.continued");
   assert.equal(follow.record.body, "Please re-check.");
@@ -65,7 +65,7 @@ test("typed JSON preserves exact multiline mention, follow-up and relationship s
 test("creation sources preserve their original column independently of current task state", () => {
   const activation = request("activation-created", "T-0038");
   activation.reason = { type: "column-entry", sourceEventId: "task-created" };
-  activation.sourceEvent = { id: "task-created", type: "task.created", actor: { kind: "user", id: "local-user" },
+  activation.sourceEvent = { id: "task-created", type: "task.created", actor: { kind: "user", id: "user" },
     occurredAt: "2026-08-11T14:00:00.000Z", details: { boardId: "delivery", columnId: "architecture" } };
   activation.task.columnId = "review";
   const [task, source] = data(composeActivationPrompt(activation));
@@ -107,7 +107,7 @@ test("returning activation JSON omits unchanged task text and renders overlappin
   const activation = request("activation-next", "T-0038");
   activation.reason = { type: "agent-mention", sourceEventId: "comment-next" };
   activation.sourceEvent = { id: "comment-next", body: "@implementer handle the complete new request.",
-    actor: { kind: "user", id: "local-user" }, occurredAt: "2026-08-12T09:00:00.000Z" };
+    actor: { kind: "user", id: "user" }, occurredAt: "2026-08-12T09:00:00.000Z" };
   activation.activationContext = { kind: "resumed", comments: [activation.sourceEvent], activity: [], sourceDelivery: "current-context" };
   activation.attempt = { number: 1, precedingOutcome: null, thread: "resumed", continuationMessage: null };
   const prompt = composeActivationPrompt(activation);

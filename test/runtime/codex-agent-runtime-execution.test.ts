@@ -203,7 +203,8 @@ test("each activation receives automatic approval review and exact Git trust wit
   assert.match(prompt, /dependency/);
   assert.doesNotMatch(prompt, /# Attempt continuation/);
   assert.match(prompt, /@user creates user attention/);
-  assert.match(prompt, /"id": "local-user"/);
+  assert.match(prompt, /Human authors have kind "user" and ID "user"/);
+  assert.match(prompt, /"id": "user"/);
   assert.match(prompt, /"kind": "user"/);
 });
 

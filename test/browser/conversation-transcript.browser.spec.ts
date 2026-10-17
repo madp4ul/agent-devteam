@@ -76,7 +76,7 @@ test("conversation messages render Markdown and commands remain quiet but inspec
       id: "conversation-display-follow-up",
       conversationId: result.conversation.id,
       body: userMarkdown,
-      actor: { kind: "user", id: "local-user" },
+      actor: { kind: "user", id: "user" },
       occurredAt: "2026-08-09T12:00:00.000Z",
       attachments: [],
     };
@@ -244,7 +244,7 @@ test("conversation messages keep wide Markdown tables inside the dialog", async 
       comment: {
         id: "table-activation-comment",
         body: table,
-        actor: { kind: "user", id: "local-user" },
+        actor: { kind: "user", id: "user" },
         occurredAt: "2026-08-09T11:59:00.000Z",
       },
     };
@@ -252,7 +252,7 @@ test("conversation messages keep wide Markdown tables inside the dialog", async 
       id: "table-follow-up",
       conversationId: result.conversation.id,
       body: table,
-      actor: { kind: "user", id: "local-user" },
+      actor: { kind: "user", id: "user" },
       occurredAt: "2026-08-09T12:00:00.000Z",
       attachments: [],
     };

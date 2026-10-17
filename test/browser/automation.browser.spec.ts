@@ -140,7 +140,7 @@ test("actual definition removal, user remapping, and identity restoration stay r
     columnId: "implementation",
     title: "Recover changed process state",
     description: "The browser must keep removed state visible and recoverable.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "browser-create-before-definition-change",
   });
   expect(created.accepted).toBe(true);
@@ -568,7 +568,7 @@ boards:
     columnId: "implementation",
     title: "Dismiss before dispatch",
     description: "Prove the complete browser dismissal path while startup remains paused.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "browser-create-dismissible-activation",
   });
   expect(created.accepted).toBe(true);

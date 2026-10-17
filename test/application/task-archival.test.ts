@@ -47,7 +47,7 @@ test("archive removes a clean durable workspace and retains task history without
     columnId: "implementation",
     title: "Archive completed work",
     description: "Retain the coordination outcome without retaining detailed transcript content.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "create-archive-task",
   });
   assert.equal(created.accepted, true);
@@ -74,7 +74,7 @@ test("archive removes a clean durable workspace and retains task history without
     conversationId,
     body: "Retain the coordination event without retaining this detailed follow-up.",
     attachmentIds: [upload.upload.id],
-    actor: { kind: "user" as const, id: "local-user" },
+    actor: { kind: "user" as const, id: "user" },
     idempotencyKey: "continue-before-archive",
   };
   const continued = application.continueAgentConversation(followUpCommand);
@@ -100,7 +100,7 @@ test("archive removes a clean durable workspace and retains task history without
     sourceTaskId: created.task.id,
     targetTaskId: blockerId,
     resumeAgentId: "implementer",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-race-dependency",
   });
   assert.equal(relationship.accepted, true);
@@ -108,7 +108,7 @@ test("archive removes a clean durable workspace and retains task history without
   const removedRelationship = application.removeTaskRelationship({
     taskId: created.task.id,
     relationshipId: relationship.relationship.id,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "remove-archive-race-dependency",
   });
   assert.equal(removedRelationship.accepted, true);
@@ -118,20 +118,20 @@ test("archive removes a clean durable workspace and retains task history without
 
   const archivePromise = application.archiveTask({
     taskId: created.task.id,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-task",
   });
   assert.deepEqual(application.addTaskComment({
     taskId: created.task.id,
     body: "Do not enqueue work while cleanup is in progress.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "comment-during-archive",
   }), { accepted: false, reason: "archived-task" });
   const completedBlocker = application.moveTask({
     taskId: blockerId,
     destinationColumnId: "completion",
     expectedRevision: blocker.task.revision,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "complete-during-dependent-archive",
   });
   assert.equal(completedBlocker.accepted, true);
@@ -144,7 +144,7 @@ test("archive removes a clean durable workspace and retains task history without
   assert.ok(preservedHistory.history.nextCursor);
   assert.deepEqual(await application.archiveTask({
     taskId: created.task.id,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-task",
   }), archived);
   const boards = application.queryBoards();
@@ -192,7 +192,7 @@ test("archive removes a clean durable workspace and retains task history without
     taskId: created.task.id,
     conversationId,
     body: "Do not continue archived work.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "continue-after-archive",
   }), { accepted: false, reason: "task-archived" });
   assert.deepEqual(application.continueAgentConversation(followUpCommand), {
@@ -216,7 +216,7 @@ test("archive rejects a completed task that still waits on an unresolved relatio
     sourceTaskId: sourceId,
     targetTaskId: targetId,
     resumeAgentId: "implementer",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-waiting-relationship",
   });
   assert.equal(relationship.accepted, true);
@@ -227,13 +227,13 @@ test("archive rejects a completed task that still waits on an unresolved relatio
     taskId: sourceId,
     destinationColumnId: "completion",
     expectedRevision: source.task.revision,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "complete-waiting-source",
   });
   assert.equal(completed.accepted, true);
   assert.deepEqual(await application.archiveTask({
     taskId: sourceId,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "reject-waiting-archive",
   }), { accepted: false, reason: "waiting-relationships" });
 });
@@ -263,7 +263,7 @@ test("archive rejects busy tasks and requires explicit permission to discard a d
     columnId: "implementation",
     title: "Do not archive active work",
     description: "The active attempt must finish before archival is eligible.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "create-running-task",
   });
   assert.equal(created.accepted, true);
@@ -272,7 +272,7 @@ test("archive rejects busy tasks and requires explicit permission to discard a d
   await waitFor(() => application.queryActiveRuns().length === 1);
   assert.deepEqual(await application.archiveTask({
     taskId: created.task.id,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-running",
   }), { accepted: false, reason: "activation-work-pending" });
 
@@ -285,7 +285,7 @@ test("archive rejects busy tasks and requires explicit permission to discard a d
   await writeFile(join(detail.task.workspace.path, "untracked.txt"), "local work\n");
   assert.deepEqual(await application.archiveTask({
     taskId: created.task.id,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-dirty",
   }), { accepted: false, reason: "workspace-dirty" });
   assert.equal((await readFile(join(detail.task.workspace.path, "untracked.txt"), "utf8")), "local work\n");
@@ -296,7 +296,7 @@ test("archive rejects busy tasks and requires explicit permission to discard a d
   const discarded = await application.archiveTask({
     taskId: created.task.id,
     discardWorkspaceChanges: true,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-dirty-with-discard",
   });
   assert.equal(discarded.accepted, true);
@@ -335,7 +335,7 @@ test("archive rejects clean workspaces without a durable ref and worktree remova
   await run("git", ["-C", firstDetail.task.workspace.path, "commit", "-m", "Unreferenced result"]);
   assert.deepEqual(await application.archiveTask({
     taskId: first,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-unreferenced",
   }), { accepted: false, reason: "workspace-commit-not-durable" });
 
@@ -348,7 +348,7 @@ test("archive rejects clean workspaces without a durable ref and worktree remova
   await run("git", ["-C", fixture.repository, "worktree", "lock", secondDetail.task.workspace.path]);
   assert.deepEqual(await application.archiveTask({
     taskId: second,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-locked",
   }), { accepted: false, reason: "workspace-locked" });
   assert.equal((await stat(secondDetail.task.workspace.path)).isDirectory(), true);
@@ -377,13 +377,13 @@ test("bulk archive affects only eligible completed tasks and unarchive keeps his
 
   const bulk = await application.archiveCompletedTasks({
     boardId: "delivery",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-completed",
   });
   assert.deepEqual(bulk, { accepted: true, archivedTaskIds: [completedOne, completedTwo], rejected: [] });
   assert.deepEqual(await application.archiveCompletedTasks({
     boardId: "delivery",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-completed",
   }), bulk);
   const boards = application.queryBoards();
@@ -399,13 +399,13 @@ test("bulk archive affects only eligible completed tasks and unarchive keeps his
 
   const unarchived = application.unarchiveTask({
     taskId: completedOne,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "unarchive-one",
   });
   assert.equal(unarchived.accepted, true);
   assert.deepEqual(application.unarchiveTask({
     taskId: completedOne,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "unarchive-one",
   }), unarchived);
   if (unarchived.accepted) {
@@ -431,7 +431,7 @@ test("task command and archival activity remains identical after restart", async
   );
   const archived = await application.archiveTask({
     taskId,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "activity-journal-archive",
   });
   assert.equal(archived.accepted, true);
@@ -443,17 +443,17 @@ test("task command and archival activity remains identical after restart", async
     [
       {
         type: "task.created",
-        actor: { kind: "user", id: "local-user" },
+        actor: { kind: "user", id: "user" },
         details: { boardId: "delivery", columnId: "backlog" },
       },
       {
         type: "task.moved",
-        actor: { kind: "user", id: "local-user" },
-        details: { fromColumnId: "backlog", toColumnId: "completion", fromColumnName: "Backlog", toColumnName: "Completion", actorName: "local-user" },
+        actor: { kind: "user", id: "user" },
+        details: { fromColumnId: "backlog", toColumnId: "completion", fromColumnName: "Backlog", toColumnName: "Completion", actorName: "user" },
       },
       {
         type: "task.archived",
-        actor: { kind: "user", id: "local-user" },
+        actor: { kind: "user", id: "user" },
         details: {},
       },
     ],
@@ -505,7 +505,7 @@ test("an activation after unarchive provisions from the current process default 
     title: "Reprovision after archive",
     description: "Use the current process default after unarchive.",
     startingRef: "custom-start",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "reprovision-child",
   });
   assert.equal(child.accepted, true);
@@ -516,20 +516,20 @@ test("an activation after unarchive provisions from the current process default 
   await run("git", ["-C", requests[0]!.workspace.path, "switch", "-c", "durable/reprovision"]);
   const archived = await application.archiveTask({
     taskId: child.task.id,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "archive-reprovision",
   });
   assert.equal(archived.accepted, true);
   const unarchived = application.unarchiveTask({
     taskId: child.task.id,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "unarchive-reprovision",
   });
   assert.equal(unarchived.accepted, true);
   const comment = application.addTaskComment({
     taskId: child.task.id,
     body: "@implementer inspect the unarchived task.",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "activate-unarchived",
   });
   assert.equal(comment.accepted, true);
@@ -566,7 +566,7 @@ test("bulk archive revalidates Completion after each awaited workspace cleanup",
     taskId: firstId,
     destinationColumnId: "completion",
     expectedRevision: firstDetail.task.revision,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "complete-bulk-race-first",
   });
   assert.equal(movedFirst.accepted, true);
@@ -577,14 +577,14 @@ test("bulk archive revalidates Completion after each awaited workspace cleanup",
 
   const bulkPromise = application.archiveCompletedTasks({
     boardId: "delivery",
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "bulk-race",
   });
   const movedSecond = application.moveTask({
     taskId: secondId,
     destinationColumnId: "implementation",
     expectedRevision: second.task.revision,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "move-during-bulk",
   });
   assert.equal(movedSecond.accepted, true);
@@ -634,12 +634,12 @@ test("startup recovers archival claims around the Git removal boundary", async (
   const database = new DatabaseSync(fixture.databasePath);
   database.prepare(
     `UPDATE tasks
-     SET archival_pending = 1, archival_actor_id = 'local-user', archival_idempotency_key = ?
+     SET archival_pending = 1, archival_actor_id = 'user', archival_idempotency_key = ?
      WHERE id = ?`,
   ).run("interrupted-intact", intactId);
   database.prepare(
     `UPDATE tasks
-     SET archival_pending = 1, archival_actor_id = 'local-user', archival_idempotency_key = ?
+     SET archival_pending = 1, archival_actor_id = 'user', archival_idempotency_key = ?
      WHERE id = ?`,
   ).run("interrupted-removed", removedId);
   database.close();
@@ -659,7 +659,7 @@ test("startup recovers archival claims around the Git removal boundary", async (
   }
   const retry = await application.archiveTask({
     taskId: intactId,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: "retry-after-interrupted-archive",
   });
   assert.equal(retry.accepted, true);
@@ -741,7 +741,7 @@ function createTaskInColumn(
     columnId: startingColumnId,
     title,
     description: `${title} safely.`,
-    actor: { kind: "user", id: "local-user" },
+    actor: { kind: "user", id: "user" },
     idempotencyKey: key,
   });
   assert.equal(result.accepted, true);
@@ -751,7 +751,7 @@ function createTaskInColumn(
       taskId: result.task.id,
       destinationColumnId: "completion",
       expectedRevision: result.task.revision,
-      actor: { kind: "user", id: "local-user" },
+      actor: { kind: "user", id: "user" },
       idempotencyKey: `${key}-complete`,
     });
     assert.equal(completed.accepted, true);
