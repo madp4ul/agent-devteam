@@ -29,6 +29,9 @@ export function errorMessage(error: unknown): string {
     if (body.reason === "workspace-locked") {
       return "Archival stopped because the task workspace is locked. Unlock it in Git and retry; the task and workspace were left unchanged.";
     }
+    if (body.reason === "workspace-nested-worktrees") {
+      return "Archival stopped because this task contains additional Git worktrees. Move or remove those nested worktrees before retrying. Their files and registrations were preserved.";
+    }
     if (body.reason === "workspace-removal-failed") {
       return "Git could not remove the registered task workspace, so the task was not archived. Inspect the workspace and registration before retrying.";
     }

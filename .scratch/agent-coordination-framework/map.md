@@ -24,6 +24,13 @@ without choosing the implementation yet.
 
 ## Decisions so far
 
+- [Show Startup Verification Progress](./issues/100-show-startup-verification-progress.md)
+  — **Resolved:** Console phases, real copying bytes/backup pages and known
+  remaining-step counts supplement independent elapsed/activity reporting.
+  Full integrity verification retains its native indivisible operation and all
+  safety gates; no percentage or ETA is invented. Final suite: 426 passed,
+  6 skipped; both review axes clear. See the ticket's explicit granularity limit.
+
 - [Remove the Legacy Human Identity](./issues/99-remove-legacy-local-user-identity.md)
   — Browser writes, MCP attribution and agent guidance use `user`/`@user`.
   **Resolved:** Released migration 0013 upgrades stored human attribution and

@@ -7,6 +7,19 @@ common directory contains the matching worktree registrations. Back up or
 restore only while the coordination application and all task agents are
 stopped.
 
+The root can also contain `archival-remainders/`. These are files preserved when
+Git unregistered a task workspace but failed to finish deleting its contents.
+Each retained directory has a sibling JSON identifying the task, original path,
+retained path, and preservation time. They are recovery material, not active task
+workspaces. Include them in the full-root backup and review their contents before
+any explicit manual cleanup.
+
+Archival refuses tasks containing other registered Git worktrees, including
+ignored evidence directories. Confirming discard of ordinary workspace changes
+does not authorize deleting those separate worktrees. Move or remove them
+explicitly before retrying archival. Startup never prunes stale registrations
+automatically.
+
 ## Schema lifecycle
 
 Released coordination databases identify their schema through the ordered

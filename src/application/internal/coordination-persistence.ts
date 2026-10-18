@@ -21,6 +21,7 @@ import type { AttemptTranscriptAccess } from "../runtime-contract.ts";
 import { AttemptEvidenceModule } from "./attempt-evidence-module.ts";
 import { ActivationSchedulingModule } from "./activation-scheduling-module.ts";
 import { StallRecoveryModule } from "./stall-recovery-module.ts";
+import { reportStartupProgress, type StartupProgressObserver } from "../startup-contract.ts";
 
 export interface CoordinationPersistence {
   process: ProcessStateStore;
@@ -42,8 +43,13 @@ export async function openCoordinationPersistence(
   path: string,
   transcriptAccess?: AttemptTranscriptAccess,
   now: () => Date = () => new Date(),
+  startupProgress?: StartupProgressObserver,
 ): Promise<CoordinationPersistence> {
-  const database = await CoordinationDatabase.open(path);
+  const database = await CoordinationDatabase.open(path, (update) => reportStartupProgress(startupProgress, {
+    ...update,
+    ...(update.remainingSteps === undefined ? {} : { remainingSteps: update.remainingSteps + 1 }),
+  }));
+  reportStartupProgress(startupProgress, { phase: "Checking retained attachments", remainingSteps: 0 });
   return composeCoordinationPersistence(database, path, transcriptAccess, now);
 }
 
@@ -53,8 +59,19 @@ export async function openCoordinationPersistenceForMigrationTest(
   databaseOptions: CoordinationDatabaseOpenOptions,
   transcriptAccess?: AttemptTranscriptAccess,
   now: () => Date = () => new Date(),
+  startupProgress?: StartupProgressObserver,
 ): Promise<CoordinationPersistence> {
-  const database = await CoordinationDatabase.openForMigrationTest(path, databaseOptions);
+  const database = await CoordinationDatabase.openForMigrationTest(path, {
+    ...databaseOptions,
+    startupProgress: (update) => {
+      reportStartupProgress(databaseOptions.startupProgress, update);
+      reportStartupProgress(startupProgress, {
+        ...update,
+        ...(update.remainingSteps === undefined ? {} : { remainingSteps: update.remainingSteps + 1 }),
+      });
+    },
+  });
+  reportStartupProgress(startupProgress, { phase: "Checking retained attachments", remainingSteps: 0 });
   return composeCoordinationPersistence(database, path, transcriptAccess, now);
 }
 

@@ -4,6 +4,7 @@ import {
   openCoordinationPersistenceForMigrationTest,
   type CoordinationPersistence,
 } from "./internal/coordination-persistence.ts";
+import { reportStartupProgress, type StartupProgressObserver } from "./startup-contract.ts";
 import {
   CoordinationDatabaseStartupError,
   type CoordinationDatabaseOpenOptions,
@@ -181,8 +182,8 @@ export class CoordinationApplication {
   ): Promise<CoordinationApplication> {
     return CoordinationApplication.startWithPersistence(
       options,
-      (path, transcriptAccess, now) =>
-        openCoordinationPersistenceForMigrationTest(path, databaseOptions, transcriptAccess, now),
+      (path, transcriptAccess, now, progress) =>
+        openCoordinationPersistenceForMigrationTest(path, databaseOptions, transcriptAccess, now, progress),
     );
   }
 
@@ -192,13 +193,29 @@ export class CoordinationApplication {
       path: string,
       transcriptAccess?: AttemptTranscriptAccess,
       now?: () => Date,
+      progress?: StartupProgressObserver,
     ) => Promise<CoordinationPersistence>,
   ): Promise<CoordinationApplication> {
+    reportStartupProgress(options.startupProgress, { phase: "Validating process definition" });
     const validation = await loadProcessDefinition(options.processDefinitionPath);
+    const remainingPhases = validation.valid ? [
+      "Recovering interrupted archival",
+      ...(options.runtimeDispatch === undefined ? [] : ["Checking workspace consistency"]),
+      "Recovering interrupted attempts and applying process",
+      "Starting web server",
+    ] : ["Starting web server"];
+    const progress = (phase: string): void => {
+      const index = remainingPhases.indexOf(phase);
+      reportStartupProgress(options.startupProgress, { phase, remainingSteps: remainingPhases.length - index - 1 });
+    };
     let persistence: CoordinationPersistence;
     try {
       persistence = await openPersistence(options.databasePath, options.transcriptAccess,
-        options.automationClock === undefined ? undefined : () => options.automationClock!.now());
+        options.automationClock === undefined ? undefined : () => options.automationClock!.now(),
+        (update) => reportStartupProgress(options.startupProgress, {
+          ...update,
+          ...(update.remainingSteps === undefined ? {} : { remainingSteps: update.remainingSteps + remainingPhases.length }),
+        }));
     } catch (error) {
       return CoordinationApplication.configurationError([
         databaseStartupDiagnostic(options.databasePath, error),
@@ -242,6 +259,7 @@ export class CoordinationApplication {
           options.runtimeDispatch.projectRepositoryPath,
           options.runtimeDispatch.taskWorkspaceRoot,
         );
+    progress("Recovering interrupted archival");
     for (const claim of persistence.taskArchive.readInterruptedClaims()) {
       const workspace = activationScheduling.readTaskWorkspace(claim.taskId);
       if (workspace === undefined) {
@@ -249,7 +267,7 @@ export class CoordinationApplication {
         continue;
       }
       if (workspaceManager === undefined) continue;
-      const recovery = await workspaceManager.inspectInterruptedArchival(workspace);
+      const recovery = await workspaceManager.inspectInterruptedArchival(claim.taskId, workspace);
       if (recovery === "intact") {
         persistence.taskArchive.releaseInterruptedClaim(claim.taskId);
       } else if (recovery === "removed") {
@@ -257,6 +275,7 @@ export class CoordinationApplication {
       }
     }
     if (options.runtimeDispatch !== undefined) {
+      progress("Checking workspace consistency");
       const diagnostics = await validateTaskWorkspaceConsistency(
         options.runtimeDispatch.projectRepositoryPath,
         options.runtimeDispatch.taskWorkspaceRoot,
@@ -284,6 +303,7 @@ export class CoordinationApplication {
         );
       }
     }
+    progress("Recovering interrupted attempts and applying process");
     activeAttempts.recoverInterruptedAttempts(options.automationClock?.now() ?? new Date());
     const processImpact = process.applyDefinition(definition, instructionContents, version);
     const boards = process.readBoards();
@@ -1069,7 +1089,7 @@ export class CoordinationApplication {
       );
       if (!removal.removed) {
         const result = { accepted: false as const, reason: removal.reason };
-        this.#persistence.taskArchive.cancelClaim(command, result);
+        if (!removal.recoveryPending) this.#persistence.taskArchive.cancelClaim(command, result);
         return result;
       }
     }

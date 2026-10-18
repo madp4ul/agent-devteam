@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 
 import { coordinationMigrations } from "./migrations/registry.ts";
 import { readExpectedCoordinationSchema, verifyCoordinationSchema } from "./coordination-schema-snapshot.ts";
+import { reportStartupProgress, type StartupProgressObserver } from "../startup-contract.ts";
 
 export interface CoordinationMigration {
   readonly id: string;
@@ -14,6 +15,7 @@ export interface CoordinationMigration {
 }
 
 export interface CoordinationDatabaseOpenOptions {
+  startupProgress?: StartupProgressObserver;
   /** Test seam for exercising future chains without publishing fictitious migrations. */
   migrations?: readonly CoordinationMigration[];
   /** Test seams for deterministic backup paths and backup-failure injection. */
@@ -61,8 +63,8 @@ export class CoordinationDatabase {
     this.connection = connection;
   }
 
-  static async open(path: string): Promise<CoordinationDatabase> {
-    return CoordinationDatabase.openWithOptions(path, {});
+  static async open(path: string, startupProgress?: StartupProgressObserver): Promise<CoordinationDatabase> {
+    return CoordinationDatabase.openWithOptions(path, startupProgress === undefined ? {} : { startupProgress });
   }
 
   /** @internal Test harness for future-chain and failure-injection coverage. */
@@ -80,17 +82,27 @@ export class CoordinationDatabase {
     const migrations = options.migrations ?? coordinationMigrations;
     assertMigrationRegistry(migrations);
     const existed = path !== ":memory:" && existsSync(path);
-    const applied = existed ? inspectExistingMigrationHistory(path, migrations) : [];
+    const applied = existed ? inspectExistingMigrationHistory(path, migrations, options.startupProgress) : [];
+    const pending = migrations.slice(applied.length);
+    const schemaAndHealthVerificationSteps = 3; // Schema, integrity, foreign keys.
+    const verifiedBackupSteps = 4; // Copy, integrity, foreign keys, migration history.
+    let remainingSteps = schemaAndHealthVerificationSteps + pending.length
+      + (existed && pending.length > 0 ? verifiedBackupSteps : 0);
+    const progress = (phase: string): void => {
+      reportStartupProgress(options.startupProgress, { phase, remainingSteps: remainingSteps-- });
+    };
+    progress("Opening coordination database");
     const connection = new DatabaseSync(path);
     let recoveryBackupPath: string | undefined;
     try {
       connection.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000");
-      const pending = migrations.slice(applied.length);
       if (pending.length === 0) {
         verifyCurrentDatabase(
           connection,
           options.expectedSchemaIsComplete ?? ((database) => currentSchemaIsComplete(database, options.expectedSchema)),
           path,
+          undefined,
+          progress,
         );
         return new CoordinationDatabase(connection);
       }
@@ -98,8 +110,17 @@ export class CoordinationDatabase {
       if (existed) {
         recoveryBackupPath = (options.backupPath ?? createMigrationBackupPath)(path);
         try {
-          await (options.createBackup ?? createOnlineBackup)(connection, recoveryBackupPath);
-          verifyRecoveryBackup(recoveryBackupPath, applied);
+          progress("Creating pre-upgrade recovery backup");
+          if (options.createBackup !== undefined) {
+            await options.createBackup(connection, recoveryBackupPath);
+          } else {
+            await createOnlineBackup(connection, recoveryBackupPath, (detail) => {
+              reportStartupProgress(options.startupProgress, {
+                phase: "Creating pre-upgrade recovery backup", remainingSteps: remainingSteps + 1, detail,
+              });
+            });
+          }
+          verifyRecoveryBackup(recoveryBackupPath, applied, progress);
         } catch (error) {
           rmSync(recoveryBackupPath, { force: true });
           recoveryBackupPath = undefined;
@@ -121,6 +142,7 @@ export class CoordinationDatabase {
         pending,
         options.expectedSchemaIsComplete ?? ((database) => currentSchemaIsComplete(database, options.expectedSchema)),
         recoveryBackupPath,
+        progress,
       );
       return new CoordinationDatabase(connection);
     } catch (error) {
@@ -180,6 +202,7 @@ function applyPendingMigrations(
   pending: readonly CoordinationMigration[],
   expectedSchemaIsComplete: (database: DatabaseSync) => boolean,
   recoveryBackupPath?: string,
+  progress?: (phase: string) => void,
 ): void {
   const foreignKeysDisabled = pending.some(({ foreignKeys }) => foreignKeys === "disabled");
   if (foreignKeysDisabled) database.exec("PRAGMA foreign_keys = OFF");
@@ -188,13 +211,14 @@ function applyPendingMigrations(
   try {
     for (const [offset, migration] of pending.entries()) {
       migrationId = migration.id;
+      progress?.(`Applying migration ${migration.id}`);
       migration.apply(database);
       database.prepare(
         "INSERT INTO coordination_migrations (position, migration_id) VALUES (?, ?)",
       ).run(appliedCount + offset + 1, migration.id);
     }
     migrationId = undefined;
-    verifyCurrentDatabase(database, expectedSchemaIsComplete, databasePath, recoveryBackupPath);
+    verifyCurrentDatabase(database, expectedSchemaIsComplete, databasePath, recoveryBackupPath, progress);
     database.exec("COMMIT");
     if (foreignKeysDisabled) database.exec("PRAGMA foreign_keys = ON");
   } catch (error) {
@@ -217,12 +241,14 @@ function verifyCurrentDatabase(
   expectedSchemaIsComplete: (database: DatabaseSync) => boolean,
   databasePath: string,
   recoveryBackupPath?: string,
+  progress?: (phase: string) => void,
 ): void {
   try {
+    progress?.("Checking database schema");
     if (!expectedSchemaIsComplete(database)) {
       throw new Error("The database does not contain the complete expected current schema.");
     }
-    verifySqliteHealth(database);
+    verifySqliteHealth(database, progress, "database");
   } catch (error) {
     throw startupError(
       "verification-failure",
@@ -235,26 +261,36 @@ function verifyCurrentDatabase(
   }
 }
 
-function verifySqliteHealth(database: DatabaseSync): void {
+function verifySqliteHealth(database: DatabaseSync, progress?: (phase: string) => void, subject = "database"): void {
+  progress?.(`Checking ${subject} integrity`);
   const integrity = database.prepare("PRAGMA integrity_check").all() as Array<{ integrity_check: string }>;
   if (integrity.length !== 1 || integrity[0]?.integrity_check !== "ok") {
     throw new Error(`SQLite integrity_check failed: ${integrity.map(Object.values).flat().join(", ")}`);
   }
+  progress?.(`Checking ${subject} foreign keys`);
   const foreignKeyViolations = database.prepare("PRAGMA foreign_key_check").all();
   if (foreignKeyViolations.length > 0) {
     throw new Error(`SQLite foreign_key_check found ${foreignKeyViolations.length} violation(s).`);
   }
 }
 
-async function createOnlineBackup(source: DatabaseSync, destination: string): Promise<void> {
-  await backup(source, destination);
+async function createOnlineBackup(source: DatabaseSync, destination: string, progress: (detail: string) => void): Promise<void> {
+  let lastReport = -Infinity;
+  await backup(source, destination, {
+    progress: ({ remainingPages, totalPages }) => {
+      if (remainingPages !== 0 && performance.now() - lastReport < 1000) return;
+      lastReport = performance.now();
+      progress(`Copied ${totalPages - remainingPages} / ${totalPages} database pages`);
+    },
+  });
 }
 
-function verifyRecoveryBackup(path: string, expectedHistory: readonly string[]): void {
+function verifyRecoveryBackup(path: string, expectedHistory: readonly string[], progress?: (phase: string) => void): void {
   const verification = new DatabaseSync(path, { readOnly: true });
   try {
     verification.exec("PRAGMA foreign_keys = ON; PRAGMA query_only = ON");
-    verifySqliteHealth(verification);
+    verifySqliteHealth(verification, progress, "recovery backup");
+    progress?.("Checking recovery backup migration history");
     const actualHistory = readAppliedMigrations(verification);
     if (
       actualHistory.length !== expectedHistory.length ||
@@ -275,17 +311,20 @@ function createMigrationBackupPath(databasePath: string): string {
 function inspectExistingMigrationHistory(
   path: string,
   migrations: readonly CoordinationMigration[],
+  progress?: StartupProgressObserver,
 ): string[] {
   const inspectionDirectory = mkdtempSync(join(tmpdir(), "coordination-schema-inspection-"));
   const inspectionPath = join(inspectionDirectory, "coordination.sqlite3");
   let inspection: DatabaseSync | undefined;
   try {
-    copyFileSync(path, inspectionPath);
+    reportStartupProgress(progress, { phase: "Copying database for migration inspection" });
+    copyInspectionFile(path, inspectionPath, progress);
     for (const suffix of ["-wal", "-shm", "-journal"]) {
-      if (existsSync(`${path}${suffix}`)) copyFileSync(`${path}${suffix}`, `${inspectionPath}${suffix}`);
+      if (existsSync(`${path}${suffix}`)) copyInspectionFile(`${path}${suffix}`, `${inspectionPath}${suffix}`, progress);
     }
     // A hot rollback journal must be recovered before SQLite can read the
     // schema. Recovery writes only this disposable copy, never retained state.
+    reportStartupProgress(progress, { phase: "Inspecting migration history" });
     inspection = new DatabaseSync(inspectionPath);
     inspection.exec("PRAGMA busy_timeout = 5000; PRAGMA query_only = ON");
     const ledger = inspection.prepare(
@@ -317,6 +356,34 @@ function inspectExistingMigrationHistory(
     inspection?.close();
     rmSync(inspectionDirectory, { recursive: true, force: true });
   }
+}
+
+/** Chunk only the disposable inspection copy; retained files remain read-only. */
+function copyInspectionFile(source: string, destination: string, progress?: StartupProgressObserver): void {
+  const input = openSync(source, "r");
+  try {
+    const { size, mode } = fstatSync(input);
+    const output = openSync(destination, "w", mode);
+    try {
+      const buffer = Buffer.allocUnsafe(4 * 1024 * 1024);
+      let copied = 0;
+      let lastReport = performance.now();
+      for (;;) {
+        const length = readSync(input, buffer);
+        if (length === 0) break;
+        let written = 0;
+        while (written < length) written += writeSync(output, buffer, written, length - written);
+        copied += length;
+        if (copied === size || performance.now() - lastReport >= 1000) {
+          lastReport = performance.now();
+          reportStartupProgress(progress, {
+            phase: "Copying database for migration inspection",
+            detail: `${basename(source)}: copied ${copied} / ${size} bytes`,
+          });
+        }
+      }
+    } finally { closeSync(output); }
+  } finally { closeSync(input); }
 }
 
 function assertMigrationRegistry(migrations: readonly CoordinationMigration[]): void {

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import { mkdir, readdir, stat } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { lstat, mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import type { ProcessDiagnostic } from "../process-contract.ts";
 import type { RuntimeStartupBoundary } from "../runtime-contract.ts";
@@ -292,9 +293,11 @@ export class GitTaskWorkspaceManager {
         | "workspace-commit-not-durable"
         | "workspace-registration-invalid"
         | "workspace-ownership-untrusted"
+        | "workspace-nested-worktrees"
         | "workspace-locked"
         | "workspace-removal-failed"
         | "workspace-cleanup-failed";
+      recoveryPending?: true;
     }
   > {
     try {
@@ -310,6 +313,10 @@ export class GitTaskWorkspaceManager {
       };
     }
     try {
+      const registrations = await readRegisteredWorktrees(this.projectRepositoryPath, this.#runGit);
+      if (registrations.some((path) => isWithin(workspace.path, path))) {
+        return { removed: false, reason: "workspace-nested-worktrees" };
+      }
       const environment = gitSafeDirectoryEnvironment(workspace.path);
       const status = await this.#runGit(
         ["-C", workspace.path, "status", "--porcelain", "--untracked-files=all"],
@@ -342,6 +349,15 @@ export class GitTaskWorkspaceManager {
       ]);
       return { removed: true };
     } catch (error) {
+      // Git may unregister a worktree before reporting a filesystem removal
+      // failure. Do not cancel its durable claim while that boundary is uncertain.
+      let recovery: "intact" | "removed" | "inconsistent";
+      try {
+        recovery = await this.inspectInterruptedArchival(taskId, workspace);
+      } catch {
+        recovery = "inconsistent";
+      }
+      if (recovery === "removed") return { removed: true };
       return {
         removed: false,
         reason: isLockedWorktree(error)
@@ -349,20 +365,50 @@ export class GitTaskWorkspaceManager {
           : isDubiousOwnership(error)
             ? "workspace-ownership-untrusted"
             : "workspace-removal-failed",
+        ...(recovery === "inconsistent" ? { recoveryPending: true as const } : {}),
       };
     }
   }
 
   async inspectInterruptedArchival(
+    taskId: string,
     workspace: TaskWorkspaceView,
   ): Promise<"intact" | "removed" | "inconsistent"> {
-    const directoryExists = await stat(workspace.path)
-      .then((entry) => entry.isDirectory())
-      .catch((error: NodeJS.ErrnoException) => error.code === "ENOENT" ? false : Promise.reject(error));
-    const registered = (await readRegisteredWorktrees(this.projectRepositoryPath))
-      .some((path) => samePath(path, workspace.path));
+    const expectedPath = this.pathFor(taskId);
+    if (!samePath(workspace.path, expectedPath) || !samePath(dirname(expectedPath), this.taskWorkspaceRoot)) {
+      return "inconsistent";
+    }
+    const directory = await lstat(workspace.path)
+      .catch((error: NodeJS.ErrnoException) => error.code === "ENOENT" ? undefined : Promise.reject(error));
+    if (directory !== undefined && (!directory.isDirectory() || directory.isSymbolicLink())) return "inconsistent";
+    const directoryExists = directory !== undefined;
+    const registrations = await readRegisteredWorktrees(this.projectRepositoryPath, this.#runGit);
+    const registered = registrations.some((path) => samePath(path, workspace.path));
     if (directoryExists && registered) return "intact";
+    if (registrations.some((path) => isWithin(workspace.path, path))) return "inconsistent";
     if (!directoryExists && !registered) return "removed";
+    if (directoryExists && !registered) {
+      const gitPointer = await lstat(join(workspace.path, ".git"))
+        .catch((error: NodeJS.ErrnoException) => error.code === "ENOENT" ? undefined : Promise.reject(error));
+      if (gitPointer !== undefined) return "inconsistent";
+      try {
+        const recoveryRoot = join(dirname(resolve(this.taskWorkspaceRoot)), "archival-remainders");
+        await mkdir(recoveryRoot, { recursive: true });
+        const recoveryDirectory = await lstat(recoveryRoot);
+        if (!recoveryDirectory.isDirectory() || recoveryDirectory.isSymbolicLink()) return "inconsistent";
+        const retainedPath = join(recoveryRoot, `${taskId}-${randomUUID()}`);
+        await writeFile(`${retainedPath}.json`, `${JSON.stringify({
+          taskId,
+          originalPath: workspace.path,
+          retainedPath,
+          occurredAt: new Date().toISOString(),
+        }, null, 2)}\n`, { flag: "wx" });
+        await rename(workspace.path, retainedPath);
+        return "removed";
+      } catch {
+        return "inconsistent";
+      }
+    }
     return "inconsistent";
   }
 }
@@ -384,8 +430,8 @@ function isWithin(root: string, candidate: string): boolean {
   return path !== "" && !path.startsWith("..") && !isAbsolute(path);
 }
 
-async function readRegisteredWorktrees(projectRepositoryPath: string): Promise<string[]> {
-  const output = await runGit([
+async function readRegisteredWorktrees(projectRepositoryPath: string, runGitCommand = runGit): Promise<string[]> {
+  const output = await runGitCommand([
     "-C", projectRepositoryPath, "worktree", "list", "--porcelain",
   ]);
   return [...output.matchAll(/^worktree (.+)$/gm)].map((match) => resolve(match[1] ?? ""));

@@ -5,6 +5,7 @@ import type { AutomationClock, ActivationReasonView } from "./automation-contrac
 import type { AgentConversationMessageView } from "./conversation-contract.ts";
 import type { ProcessBoardView, ProcessDiagnostic } from "./process-contract.ts";
 import type { TaskActivityView, TaskCommentView, TaskView, TaskWorkspaceView } from "./task-contract.ts";
+import type { StartupProgressObserver } from "./startup-contract.ts";
 
 /** Agent-runtime dispatch, lifecycle, transcript, and attempt facts. */
 export interface StartApplicationOptions {
@@ -14,6 +15,7 @@ export interface StartApplicationOptions {
   transcriptAccess?: AttemptTranscriptAccess;
   runtimeDiagnostic?(diagnostic: RuntimeStartupDiagnostic): void;
   automationClock?: AutomationClock;
+  startupProgress?: StartupProgressObserver;
 }
 
 export interface RuntimeDispatchOptions {

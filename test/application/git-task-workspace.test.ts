@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
@@ -10,6 +10,85 @@ import type { TaskWorkspaceView } from "../../src/application/task-contract.ts";
 import { GitTaskWorkspaceManager, validateTaskWorkspaceConsistency } from "../../src/application/internal/git-task-workspace.ts";
 
 const run = promisify(execFile);
+
+test("archival refuses nested evidence worktrees even when ignored and discard is confirmed", async () => {
+  const fixture = await createFixture("archive-nested-evidence");
+  await writeFile(join(fixture.repository, ".gitignore"), "artifacts/\n");
+  await git(fixture.repository, "add", ".gitignore");
+  await git(fixture.repository, "commit", "-m", "Ignore evidence output");
+  const workspace = await provisionWorkspace(fixture, "T-0108");
+  const nested = join(workspace.path, "artifacts", "composed");
+  await git(fixture.repository, "worktree", "add", "--detach", nested, fixture.commit);
+  await writeFile(join(nested, "retained-evidence.txt"), "uncommitted evidence\n");
+  const manager = new GitTaskWorkspaceManager(fixture.repository, fixture.workspaceRoot);
+
+  assert.deepEqual(await manager.removeForArchival("T-0108", workspace, true), {
+    removed: false, reason: "workspace-nested-worktrees",
+  });
+  assert.equal(await readFile(join(nested, "retained-evidence.txt"), "utf8"), "uncommitted evidence\n");
+  assert.deepEqual(await validateTaskWorkspaceConsistency(fixture.repository, fixture.workspaceRoot, [
+    { taskId: "T-0108", workspace },
+  ]), []);
+  // An older host may already have removed the parent and stranded its child.
+  await git(fixture.repository, "worktree", "remove", "--force", workspace.path);
+  assert.equal(await manager.inspectInterruptedArchival("T-0108", workspace), "inconsistent");
+});
+
+test("partial Git removal preserves remaining files outside active workspaces before completing archival", async () => {
+  const fixture = await createFixture("partial-removal");
+  const workspace = await provisionDurableWorkspace(fixture, "T-0008");
+  const manager = new GitTaskWorkspaceManager(fixture.repository, fixture.workspaceRoot, async (arguments_, environment) => {
+    const result = await run("git", arguments_, { env: environment });
+    if (arguments_.includes("remove")) {
+      // Git on Windows can unregister the worktree before failing to delete
+      // files held open by a built application. Reproduce that boundary.
+      await mkdir(workspace.path);
+      await writeFile(join(workspace.path, "retained-evidence.txt"), "remaining file\n");
+      throw new Error("simulated partial Git removal");
+    }
+    return result.stdout;
+  });
+
+  assert.deepEqual(await manager.removeForArchival("T-0008", workspace), { removed: true });
+  await assert.rejects(stat(workspace.path));
+  const recoveryRoot = join(dirname(fixture.workspaceRoot), "archival-remainders");
+  const preserved = (await readdir(recoveryRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory());
+  assert.equal(preserved.length, 1);
+  assert.equal(await readFile(join(recoveryRoot, preserved[0]!.name, "retained-evidence.txt"), "utf8"), "remaining file\n");
+  assert.deepEqual(await validateTaskWorkspaceConsistency(fixture.repository, fixture.workspaceRoot, []), []);
+});
+
+test("partial removal that cannot preserve remaining files keeps its archival claim pending", async () => {
+  const fixture = await createFixture("partial-removal-blocked");
+  const workspace = await provisionDurableWorkspace(fixture, "T-0008");
+  await writeFile(join(dirname(fixture.workspaceRoot), "archival-remainders"), "blocked recovery destination\n");
+  const manager = new GitTaskWorkspaceManager(fixture.repository, fixture.workspaceRoot, async (arguments_, environment) => {
+    const result = await run("git", arguments_, { env: environment });
+    if (arguments_.includes("remove")) {
+      await mkdir(workspace.path);
+      await writeFile(join(workspace.path, "retained-evidence.txt"), "remaining file\n");
+      throw new Error("simulated partial Git removal");
+    }
+    return result.stdout;
+  });
+
+  assert.deepEqual(await manager.removeForArchival("T-0008", workspace), {
+    removed: false, reason: "workspace-removal-failed", recoveryPending: true,
+  });
+  assert.equal(await readFile(join(workspace.path, "retained-evidence.txt"), "utf8"), "remaining file\n");
+});
+
+test("archival recovery rejects redirected paths and remnants with a Git pointer", async () => {
+  const fixture = await createFixture("partial-removal-identity");
+  const workspace = await provisionDurableWorkspace(fixture, "T-0008");
+  const manager = new GitTaskWorkspaceManager(fixture.repository, fixture.workspaceRoot);
+  assert.equal(await manager.inspectInterruptedArchival("another-task", workspace), "inconsistent");
+  await git(fixture.repository, "worktree", "remove", workspace.path);
+  await mkdir(workspace.path);
+  await writeFile(join(workspace.path, ".git"), "unexpected Git identity\n");
+  assert.equal(await manager.inspectInterruptedArchival("T-0008", workspace), "inconsistent");
+  assert.equal(await readFile(join(workspace.path, ".git"), "utf8"), "unexpected Git identity\n");
+});
 
 test("startup preserves agent-created evidence worktrees nested inside a recorded task workspace", async () => {
   const fixture = await createFixture("nested-evidence");

@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { promisify } from "node:util";
 import test from "node:test";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import { GitTaskWorkspaceManager } from "../../src/application/internal/git-task-workspace.ts";
 import type {
   AgentRuntime,
   AgentRunRequest,
@@ -594,6 +595,58 @@ test("bulk archive revalidates Completion after each awaited workspace cleanup",
     rejected: [{ taskId: secondId, reason: "not-completed" }],
   });
   await application.waitForAutomationIdle();
+});
+
+test("failed partial removal keeps the durable claim and restart preserves remnants before archival", async (t) => {
+  const fixture = await createFixture("archive-partial-removal-restart");
+  const options = {
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repository,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: { async run() { return { status: "completed" as const, summary: "Finished." }; } },
+    },
+  };
+  let application = await CoordinationApplication.start(options);
+  t.after(() => application.close());
+  const taskId = createTask(application, "Recover partial removal", "partial-removal");
+  await application.resumeAutomation();
+  await application.waitForAutomationIdle();
+  application.pauseAutomation();
+  const inspected = application.queryTaskInspectionForUser(taskId);
+  assert.ok(inspected.available && inspected.task.workspace !== null);
+  if (!inspected.available || inspected.task.workspace === null) return;
+  const workspacePath = inspected.task.workspace.path;
+  const removal = t.mock.method(GitTaskWorkspaceManager.prototype, "removeForArchival", async () => {
+    await run("git", ["-C", fixture.repository, "worktree", "remove", workspacePath]);
+    await mkdir(workspacePath);
+    await writeFile(join(workspacePath, "remaining-evidence.txt"), "keep after restart\n");
+    return { removed: false as const, reason: "workspace-removal-failed" as const, recoveryPending: true as const };
+  });
+  const command = { taskId, actor: { kind: "user" as const, id: "user" }, idempotencyKey: "archive-partial-removal" };
+  assert.deepEqual(await application.archiveTask(command), { accepted: false, reason: "workspace-removal-failed" });
+  application.close();
+  removal.mock.restore();
+  const database = new DatabaseSync(fixture.databasePath, { readOnly: true });
+  assert.equal((database.prepare("SELECT archival_pending FROM tasks WHERE id = ?").get(taskId) as { archival_pending: number }).archival_pending, 1);
+  database.close();
+
+  const recoveryRoot = join(dirname(fixture.workspaceRoot), "archival-remainders");
+  await writeFile(recoveryRoot, "temporarily blocked preservation\n");
+  application = await CoordinationApplication.start(options);
+  assert.equal(application.queryStartup().mode, "configuration-error");
+  application.close();
+  assert.equal(await readFile(join(workspacePath, "remaining-evidence.txt"), "utf8"), "keep after restart\n");
+  await rm(recoveryRoot);
+  application = await CoordinationApplication.start(options);
+  assert.equal(application.queryStartup().mode, "paused");
+  const recovered = application.queryTaskInspectionForUser(taskId);
+  assert.ok(recovered.available && recovered.task.archived && recovered.task.workspace === null);
+  assert.equal((await application.archiveTask(command)).accepted, true);
+  const retained = (await readdir(recoveryRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory());
+  assert.equal(retained.length, 1);
+  assert.equal(await readFile(join(recoveryRoot, retained[0]!.name, "remaining-evidence.txt"), "utf8"), "keep after restart\n");
 });
 
 test("startup recovers archival claims around the Git removal boundary", async (t) => {

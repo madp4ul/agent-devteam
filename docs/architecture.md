@@ -256,6 +256,18 @@ registry-created state without repeating that snapshot gate, so a missing or
 outdated artifact can still be reported. [ADR 0018](adr/0018-make-released-migrations-the-coordination-schema-authority.md)
 records this boundary.
 
+The CLI observes startup phases without owning any verification or readiness
+decision. A short-lived reporting worker writes phase, elapsed-time and activity
+messages directly to the terminal descriptor, independently of the main thread's
+synchronous SQLite calls. Inspection copying exposes transferred bytes and native
+migration backup exposes page checkpoints. The applicable remaining-step count is
+known only after migration inspection; it is a plan, not a time estimate. Full
+SQLite integrity verification remains one database-wide operation because partial
+table checks omit cross-table page allocation checks. During that operation the
+worker reports activity and elapsed time, not measured completion. Reporting ends
+when startup is ready, blocked or failed; HTTP serving still begins only after
+application startup has returned.
+
 ### Automation and agent runtime
 
 Automation turns committed activation records into agent runs. It preserves the
@@ -412,7 +424,18 @@ Archival keeps workspace inspection separate from removal. Dirty state and a
 non-durable commit remain user-correctable safety outcomes; invalid
 registration, rejected ownership trust, a worktree lock, unexpected inspection
 failure, and actual removal failure remain distinct host outcomes. The task is
-marked archived only after Git reports successful worktree removal.
+marked archived only after its Git registration and active workspace path are
+gone. Registered nested worktrees block archival even when discarding ordinary
+workspace changes was confirmed. They must be moved or removed explicitly.
+
+Git can unregister a worktree before failing to delete all its files. The
+existing durable archival claim owns recovery across that boundary. A correctly
+located remainder with no Git pointer or nested registration is preserved under
+`archival-remainders/` in the bound state root, with a sibling JSON recording its
+task and original path, before archival completes. Failed preservation or
+uncertain identity retains the claim and blocks inconsistent startup; it does
+not turn unknown directories into tasks or delete their contents.
+See [ADR 0032](adr/0032-preserve-archival-remainders-and-block-nested-worktree-removal.md).
 
 ## State ownership
 
