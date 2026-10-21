@@ -55,3 +55,19 @@ charge. Queued waiting can be dismissed through the existing command.
   stall-recovery slots; ADR 0023's separate three-recovery policy is unchanged.
 - Automatic purchasing, model switching and process-configurable retry policies
   remain outside this decision.
+
+## Native reconnect progress clarification (2026-10-21)
+
+Codex 0.160.0 emits `Reconnecting... N/M (...)` as top-level `error`
+events while the active turn is still recoverable. T-0156 demonstrated that
+ending the SDK iterator on the 2/5 notice kills the native child before its
+WebSocket-to-HTTPS fallback, creating an endless framework retry episode.
+An ephemeral fork exhausted native WebSocket retries and then completed over
+HTTPS; a fresh-session control also completed.
+
+The runtime adapter retains recognized reconnect progress as diagnostics and
+continues consuming that same stream. Other error envelopes and explicit
+`turn.failed` remain failures; EOF without `turn.completed` remains incomplete.
+Only settled terminal outcomes enter the core's recovery policy above. Do not
+replace or retire conversation history merely because native transport is
+recovering. A captured native trace and adapter tests lock down this boundary.

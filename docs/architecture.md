@@ -275,6 +275,11 @@ order of activations for each task, prevents overlapping runs on one task, and
 allows independent tasks to run concurrently. Automation always starts paused
 and proceeds only after the user resumes it.
 
+The Codex adapter keeps native reconnect progress inside the active run, retaining
+its diagnostics while allowing Codex to finish retries and HTTPS transport
+fallback. It reports completion or terminal failure to the core; a reconnect
+notice alone never settles the attempt or closes the native stream.
+
 Transient runtime recovery is owned by settlement and scheduling in the core.
 Released migration 0012 stores mutable outage episodes and marks provisional
 probes. Deterministic classification prefers explicit runtime codes/deadlines;

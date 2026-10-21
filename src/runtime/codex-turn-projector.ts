@@ -119,6 +119,14 @@ export async function projectCodexTurn(
           if (typeof event.message !== "string") {
             return failed("Codex emitted a malformed error event.");
           }
+          // Codex emits recovery progress as top-level errors before retrying and
+          // falling back from WebSockets to HTTPS. Closing this iterator here
+          // kills the SDK's child process before native recovery can finish.
+          if (/^Reconnecting\.\.\. [1-9]\d*\/[1-9]\d* \(.+\)$/u.test(event.message)) {
+            transcript.push({ kind: "diagnostic", text: event.message });
+            publish();
+            break;
+          }
           return failed(event.message, undefined, event);
         default:
           return failed(`Codex emitted an unsupported event type: ${boundedLabel(event.type)}.`);

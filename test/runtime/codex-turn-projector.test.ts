@@ -240,3 +240,47 @@ test("fresh projections isolate attempts that share one thread identity", async 
   assert.equal(second.terminal.summary, "Second attempt.");
   assert.notDeepEqual(first.transcript, second.transcript);
 });
+
+test("reconnect diagnostics do not terminate a turn that subsequently recovers", async () => {
+  const diagnostic = "Reconnecting... 2/5 (stream disconnected before completion: websocket closed by server before response.completed)";
+  let consumedCompletion = false;
+  async function* recovering(): AsyncGenerator<ThreadEvent> {
+    yield { type: "thread.started", thread_id: "thread-reconnect" };
+    yield { type: "turn.started" };
+    yield { type: "error", message: diagnostic };
+    yield { type: "item.completed", item: { id: "answer", type: "agent_message", text: "Recovered." } };
+    consumedCompletion = true;
+    yield { type: "turn.completed", usage };
+  }
+  const result = await projectCodexTurn(recovering(), { taskId: "T-0156", attemptId: "reconnect" }, { started() {}, publish() {} });
+  assert.equal(result.terminal.kind, "completed");
+  assert.equal(result.terminal.summary, "Recovered.");
+  assert.equal(consumedCompletion, true);
+  assert.deepEqual(result.transcript[0], { kind: "diagnostic", text: diagnostic });
+  assert.equal(result.usage?.inputTokens, 120);
+});
+
+test("replays native Codex reconnect exhaustion, HTTPS fallback and successful completion", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const replay = await readFile(new URL("./fixtures/codex-reconnect-recovery.jsonl", import.meta.url), "utf8");
+  const result = await projectCodexTurn(events(...replay.trim().split(/\r?\n/u).map((line) => JSON.parse(line))),
+    { taskId: "T-0156", attemptId: "native-replay" }, { started() {}, publish() {} });
+  assert.equal(result.terminal.kind, "completed");
+  assert.equal(result.terminal.summary, "DIAGNOSTIC_OK");
+  assert.equal(result.transcript.filter((item) => item.kind === "diagnostic").length, 5);
+  assert.equal(result.usage?.inputTokens, 6194212);
+});
+
+test("reconnect progress cannot hide terminal failure or incomplete streams", async () => {
+  const reconnect = { type: "error", message: "Reconnecting... 5/5 (stream disconnected before completion: websocket closed by server before response.completed)" };
+  const failure = { type: "turn.failed", error: { message: "Reconnect attempts exhausted", code: "reconnect_exhausted" } };
+  for (const tail of [[], [failure], [{ type: "error", message: "Unexpected fatal protocol error" }]]) {
+    const result = await projectCodexTurn(events({ type: "thread.started", thread_id: "thread-failed-reconnect" }, reconnect, ...tail),
+      { taskId: "T-0156", attemptId: "reconnect-failure" }, { started() {}, publish() {} });
+    assert.equal(result.terminal.kind, "failed");
+    assert.deepEqual(result.transcript[0], { kind: "diagnostic", text: reconnect.message });
+    if (tail.length === 0) assert.match(result.terminal.summary, /ended before turn.completed/u);
+    else assert.match(result.terminal.summary, new RegExp(tail[0] === failure ? "Reconnect attempts exhausted" : "Unexpected fatal protocol error", "u"));
+    if (tail[0] === failure && result.terminal.kind === "failed") assert.equal(result.terminal.failure?.code, "reconnect_exhausted");
+  }
+});

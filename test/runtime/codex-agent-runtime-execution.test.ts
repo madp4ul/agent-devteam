@@ -1066,3 +1066,41 @@ test("a rejected local evidence read cannot change a completed run", async () =>
   assert.equal(outcome.status, "completed");
   assert.equal(await runtime.readContextWindowUsage(completed.attemptId), null);
 });
+
+test("a resumed run survives reconnect notices without replacing its thread or releasing early", async () => {
+  const diagnostic = "Reconnecting... 2/5 (stream disconnected before completion: websocket closed by server before response.completed)";
+  let completed = false;
+  let released = false;
+  let resumes = 0;
+  const started: string[] = [];
+  const runtime = createRuntime({
+    mcpServer: {
+      command: "node", args: () => ["coordination-mcp.ts"],
+      release: () => { assert.equal(completed, true); released = true; },
+    },
+    createClient: () => ({
+      startThread: () => { throw new Error("Reconnect progress must not replace the thread"); },
+      resumeThread: (id) => {
+        resumes++;
+        assert.equal(id, "thread-reconnecting");
+        return { runStreamed: async () => ({ events: (async function* () {
+          yield { type: "thread.started" as const, thread_id: id };
+          yield { type: "error" as const, message: diagnostic };
+          assert.equal(released, false);
+          yield { type: "item.completed" as const, item: { id: "answer", type: "agent_message" as const, text: "Recovered." } };
+          completed = true;
+          yield { type: "turn.completed" as const, usage: { input_tokens: 120, cached_input_tokens: 80, cache_write_input_tokens: 0, output_tokens: 5, reasoning_output_tokens: 0 } };
+        })() }) };
+      },
+    }),
+  });
+  const resumed = request("activation-reconnect", "T-0156");
+  resumed.resumeThreadId = "thread-reconnecting";
+  const outcome = await runtime.run(resumed, { started: (id) => { assert.ok(id); started.push(id); } });
+  assert.deepEqual(outcome, { status: "completed", summary: "Recovered.", threadId: "thread-reconnecting" });
+  assert.deepEqual(started, ["thread-reconnecting"]);
+  assert.equal(resumes, 1);
+  assert.equal(released, true);
+  assert.deepEqual((await runtime.read(resumed.attemptId))?.[0], { kind: "diagnostic", text: diagnostic });
+  assert.equal((await runtime.readUsage(resumed.attemptId))?.outputTokens, 5);
+});
