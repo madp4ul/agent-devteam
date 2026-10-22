@@ -22,6 +22,13 @@ without choosing the implementation yet.
 - Planning produces decisions only; implementation starts after this map is
   complete and its results have been turned into a specification.
 
+## Open bugs
+
+- [101 — Keep task dependencies out of Agent Activity execution blockers](./issues/101-separate-dependencies-from-execution-blockers.md)
+  — **Open, unblocked:** Confirmed presentation bug lists unresolved relationships
+  as execution holds and hides the process pause. Reproduction and acceptance
+  criteria are recorded in the ticket.
+
 ## Decisions so far
 
 - [Show Startup Verification Progress](./issues/100-show-startup-verification-progress.md)

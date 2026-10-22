@@ -87,6 +87,7 @@ export function registerCurrentTaskRoutes(
       taskId: params.taskId === "current" ? scope.taskId : params.taskId,
       ...(body.title === undefined ? {} : { title: stringField(body, "title") }),
       ...(body.description === undefined ? {} : { description: stringField(body, "description") }),
+      ...(body.startingRef === undefined ? {} : { startingRef: stringField(body, "startingRef") }),
       expectedRevision: numberField(body, "expectedRevision"),
       idempotencyKey: stringField(body, "idempotencyKey"), callerTaskId: scope.taskId,
       actor: { kind: "agent", id: scope.agentId },

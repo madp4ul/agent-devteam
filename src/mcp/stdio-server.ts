@@ -145,10 +145,11 @@ server.registerTool(
 server.registerTool(
   "task.edit",
   {
-    description: "Edit supplied title/description on current or a concrete task ID. Omitted fields stay unchanged; supply at least one field. Revision conflicts return compact current state.",
+    description: "Edit supplied title, description or startingRef on current or a concrete task ID. startingRef can change only before workspace preparation is claimed and before a workspace exists; inspect workspaceStatus first. Omitted fields stay unchanged; supply at least one field. A ref correction does not retry a failed activation; user Retry/Resume remains required. Revision conflicts return compact current state.",
     inputSchema: {
       taskId: z.string().min(1), expectedRevision: z.number().int().min(1),
       title: z.string().min(1).optional(), description: z.string().min(1).optional(), idempotencyKey: z.string().min(1),
+      startingRef: z.string().min(1).optional(),
     },
   },
   async ({ taskId, ...body }) => callAgentApi("PATCH", `/agent-api/tasks/${encodeURIComponent(taskId)}`, body),

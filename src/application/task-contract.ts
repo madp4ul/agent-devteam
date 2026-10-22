@@ -111,6 +111,11 @@ export interface TaskOverviewsQuery {
 }
 
 export interface TaskInspectionView {
+  workspaceStatus: {
+    state: "unprovisioned" | "preparing" | "provisioned";
+    startingRef: string;
+    startingRefEditable: boolean;
+  };
   history: TaskHistoryPage;
   pinnedComments: TaskCommentView[];
   id: string;
@@ -334,6 +339,7 @@ export interface EditTaskCommand {
   taskId: string;
   title?: string;
   description?: string;
+  startingRef?: string;
   expectedRevision: number;
   actor: Actor;
   attemptId?: string;
@@ -409,7 +415,7 @@ export type ArchiveCompletedTasksResult =
 export type BoardMutationResult =
   | { accepted: true; task: TaskView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { accepted: false; reason: "not-found" | "invalid-destination" | "completion-is-not-starting-column" | "invalid-starting-ref" | "archived-task" | "unmapped-task-user-only" | "empty-title" | "empty-description" | "resume-agent-not-found" | "no-changes" | "idempotency-conflict" }
+  | { accepted: false; reason: "not-found" | "invalid-destination" | "completion-is-not-starting-column" | "invalid-starting-ref" | "workspace-preparing" | "workspace-already-provisioned" | "archived-task" | "unmapped-task-user-only" | "empty-title" | "empty-description" | "resume-agent-not-found" | "no-changes" | "idempotency-conflict" }
   | { accepted: false; reason: "revision-conflict"; currentTask: TaskView };
 
 export type MoveTaskResult =

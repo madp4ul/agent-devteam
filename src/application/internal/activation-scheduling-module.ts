@@ -292,7 +292,10 @@ export class ActivationSchedulingModule {
       this.#database.prepare(
         `INSERT INTO activation_startup_failures
           (activation_id, occurred_at, boundary, diagnostic, resolved_at)
-         VALUES (?, ?, ?, ?, NULL)`,
+         VALUES (?, ?, ?, ?, NULL)
+         ON CONFLICT (activation_id) DO UPDATE SET
+           occurred_at = excluded.occurred_at, boundary = excluded.boundary,
+           diagnostic = excluded.diagnostic, resolved_at = NULL`,
       ).run(claim.activation.id, occurredAt, boundary, diagnostic);
       this.#attentionRecorder.record(
         "failed-run",

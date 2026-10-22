@@ -122,3 +122,11 @@ folder. Changes remain unstaged; committing remains the user's next action.
 0 failed (approximately 139 seconds). The final change also passed
 `pnpm typecheck` and `git diff --check`. Both independent review axes reported
 zero findings. Ready for user review and commit; Git staging is unchanged.
+
+### Deferred startup follow-up
+
+On 2026-10-21 the user requested a documented follow-up to avoid full database
+inspection copying on provably safe ordinary startup. See
+[Safe clean-startup fast path](../../database-startup-fast-path/issues/01-safe-clean-startup.md).
+Implementation is explicitly deferred while the framework is running; the
+follow-up preserves sidecar recovery and incompatible-history refusal guarantees.

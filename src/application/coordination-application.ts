@@ -143,6 +143,7 @@ export class CoordinationApplication {
   readonly #discovery: TaskDiscovery;
   readonly #workspaceManager: GitTaskWorkspaceManager | undefined;
   readonly #processContext: AutomationProcessContext | undefined;
+  readonly #defaultStartingRef: string;
   readonly #pendingInterruptCommands = new Map<
     string,
     Extract<InterruptTaskResult, { accepted: true }>
@@ -155,6 +156,7 @@ export class CoordinationApplication {
     discovery: TaskDiscovery,
     workspaceManager?: GitTaskWorkspaceManager,
     processContext?: AutomationProcessContext,
+    defaultStartingRef = "",
   ) {
     this.#persistence = persistence;
     this.#startup = startup;
@@ -162,6 +164,7 @@ export class CoordinationApplication {
     this.#discovery = discovery;
     this.#workspaceManager = workspaceManager;
     this.#processContext = processContext;
+    this.#defaultStartingRef = defaultStartingRef;
   }
 
   static async validateProcessDefinition(path: string): Promise<ProcessValidationResult> {
@@ -357,9 +360,10 @@ export class CoordinationApplication {
           ? {}
           : { transcriptAccess: options.transcriptAccess }),
       }),
-      new TaskDiscovery(process, taskProjections, activationScheduling, startup, collaborators),
+      new TaskDiscovery(process, taskProjections, activationScheduling, startup, collaborators, definition.defaultTaskWorkspaceStartingRef),
       workspaceManager,
       processContext,
+      definition.defaultTaskWorkspaceStartingRef,
     );
   }
 
@@ -957,7 +961,7 @@ export class CoordinationApplication {
 
   editTask(command: EditTaskCommand): BoardMutationResult {
     const gated = this.configurationErrorRejection();
-    return gated ?? this.#persistence.taskCommands.editTask(command);
+    return gated ?? this.#persistence.taskCommands.editTask(command, this.#defaultStartingRef);
   }
 
   moveTask(command: MoveTaskCommand): MoveTaskResult {

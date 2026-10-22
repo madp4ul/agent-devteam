@@ -516,6 +516,18 @@ export class TaskProjectionStore {
     return row?.starting_ref;
   }
 
+  readTaskWorkspaceState(taskId: string): "unprovisioned" | "preparing" | "provisioned" {
+    if (this.#database.prepare("SELECT 1 FROM task_workspaces WHERE task_id = ?").get(taskId) !== undefined) {
+      return "provisioned";
+    }
+    const preparing = this.#database.prepare(
+      `SELECT 1 FROM activation_dispatch_claims claim
+       JOIN activations activation ON activation.id = claim.activation_id
+       WHERE activation.task_id = ?`,
+    ).get(taskId);
+    return preparing === undefined ? "unprovisioned" : "preparing";
+  }
+
   readAttemptTranscriptReference(attemptId: string): { threadId: string | null } | undefined {
     return this.#database
       .prepare("SELECT thread_id AS threadId FROM attempts WHERE id = ?")

@@ -405,9 +405,18 @@ attempt settles; no client filename selects a framework path.
 ### Git task workspaces
 
 Each task receives one isolated Git worktree, initially detached at the
-process-defined starting reference and reused across all of that task's runs.
+process-defined starting reference or a task override and reused across all of that task's runs.
 The framework provisions and verifies the workspace; the process and its agents
 decide how branches, commits, and handoffs are managed.
+
+The task command transaction allows an optional starting-ref correction only
+before a dispatch claim or recorded workspace exists. Scheduling claims the
+task before asynchronous Git preparation, so correction and preparation cannot
+race. Inspection projects that lifecycle and the effective configured ref;
+ordinary task content edits remain independent. Ref correction preserves
+failure attention and explicit user retry authority. Isolated workspaces remain
+a prerequisite for runtime execution. See
+[ADR 0033](adr/0033-correct-task-starting-refs-before-workspace-preparation.md).
 
 Workspace identity spans the coordination database, filesystem directory, and
 Git worktree registration. These are validated together because disagreement

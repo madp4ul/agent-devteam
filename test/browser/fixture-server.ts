@@ -279,6 +279,9 @@ if (startupFailure.accepted || startupFailure.reason !== "runtime-start-failed")
 const server = await startWebServer(application, {
   host: "127.0.0.1",
   port: 4174,
+  ...(process.env.COORDINATION_BROWSER_TEST_ASSET_DIRECTORY === undefined ? {} : {
+    assetDirectory: process.env.COORDINATION_BROWSER_TEST_ASSET_DIRECTORY,
+  }),
   openWorkspace: async () => undefined,
   openWorkspaceInVisualStudioCode: async () => undefined,
 });

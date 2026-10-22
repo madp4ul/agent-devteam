@@ -22,8 +22,9 @@ export interface CreateChildTaskRequest extends CreateTaskRequest {
 }
 
 export interface EditTaskRequest extends IdempotentBrowserRequest {
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
+  startingRef?: string;
   expectedRevision: number;
 }
 

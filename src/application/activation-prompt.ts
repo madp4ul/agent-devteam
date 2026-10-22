@@ -17,6 +17,8 @@ Supplied history is a recent page ordered oldest-first. Counts identify omission
 
 Pinned comments mark shared guidance relevant to current or future work. Inspection returns all pinned comments; returning activations supply net changes without repeating unchanged pinned comments. When a comment no longer helps current or future work, you can unpin it to remove emphasis without retracting the comment. Pinning or unpinning comments does not activate agents. task.inspect retrieves current state, pinned comments, participants, and recent history; attempt.context.inspect retrieves this attempt's operating instructions and identity.
 
+Task inspection reports workspaceStatus with the configured starting ref, provisioning state, and whether that ref is editable. You can correct a task's starting ref through task.edit only before workspace preparation is claimed and before a workspace exists. Omitted edit fields stay unchanged. A correction comment does not change the ref, and editing the ref does not retry a failed activation; request user Retry/Resume when recovery is needed. Agents run only after the framework provisions their isolated task workspace.
+
 Only the user can archive or unarchive tasks. Archived tasks are read-only. Coordination access does not change Codex filesystem/command permissions. attempt.permission_block.report records a denied required action needing user intervention.`;
 
 const RETURNING_FRAMING = "This is a new activation in the existing conversation. The following JSON is task state and historical data captured at dispatch. Counts/cursors identify omissions. The activation section identifies this turn's request.";

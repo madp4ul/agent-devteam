@@ -111,8 +111,9 @@ export function registerTaskRoutes(
     const body = await readJsonBody<EditTaskRequest>(request);
     const result = application.editTask({
       taskId: params.taskId,
-      title: stringField(body, "title"),
-      description: stringField(body, "description"),
+      ...(body.title === undefined ? {} : { title: stringField(body, "title") }),
+      ...(body.description === undefined ? {} : { description: stringField(body, "description") }),
+      ...(body.startingRef === undefined ? {} : { startingRef: stringField(body, "startingRef") }),
       expectedRevision: numberField(body, "expectedRevision"),
       idempotencyKey: stringField(body, "idempotencyKey"),
       actor: userActor,

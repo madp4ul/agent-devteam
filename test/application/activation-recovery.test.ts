@@ -184,6 +184,57 @@ test("a pre-attempt workspace failure is durable, correlated, and visible after 
   );
 });
 
+test("retrying an unresolved starting ref settles as a fresh actionable startup failure", async (t) => {
+  const fixture = await createActivationFixture("repeat-startup-failure", "mistyped-commit");
+  const runtime = new CompletingAgentRuntime();
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath,
+    databasePath: fixture.databasePath,
+    runtimeDispatch: {
+      projectRepositoryPath: fixture.repositoryPath,
+      taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: runtime,
+    },
+  });
+  t.after(() => application.close());
+  const created = application.createTask({
+    boardId: "delivery", columnId: "implementation", title: "Correct a typo",
+    description: "Repeated startup failures remain recoverable.",
+    actor: { kind: "user", id: "paul" }, idempotencyKey: "repeat-startup",
+  });
+  assert.ok(created.accepted);
+  const first = await application.resumeAutomation();
+  assert.equal(first.accepted, false);
+  for (let retry = 1; retry <= 2; retry += 1) {
+    const inspection = application.queryTaskInspection(created.task.id);
+    assert.ok(inspection.available);
+    const attentionReasonId = inspection.task.unresolvedAttention[0]!.id;
+    assert.equal(application.retryFailedActivation({
+      attentionReasonId, actor: { kind: "user", id: "paul" }, idempotencyKey: `retry-startup-${retry}`,
+    }).accepted, true);
+    // The preceding startup failure paused automation; retry queues the same activation.
+    const retried = await application.resumeAutomation();
+    assert.equal(retried.accepted, false);
+    if (!retried.accepted && retried.reason === "runtime-start-failed") {
+      assert.match(retried.diagnostic ?? "", /Could not resolve task workspace starting ref mistyped-commit/);
+    }
+    const failed = application.queryTaskInspection(created.task.id);
+    assert.ok(failed.available);
+    assert.equal(failed.task.run.status, "failed");
+    assert.equal(failed.task.unresolvedAttention.length, 1);
+    assert.notEqual(failed.task.unresolvedAttention[0]!.id, attentionReasonId);
+    const task = application.queryTask(created.task.id);
+    assert.ok(task.available);
+    assert.equal(task.task.activations[0]?.startupFailure?.resolvedAt, null);
+    assert.deepEqual(task.task.activations[0]?.attempts, []);
+    assert.deepEqual(application.queryActiveRuns(), []);
+    const detail = application.queryUserTaskDetail(created.task.id);
+    assert.ok(detail.available);
+    assert.equal(detail.timeline.records.filter((record) => record.kind === "startup-failure").length, 1);
+  }
+  assert.equal(runtime.requests.length, 0);
+});
+
 test("startup refuses populated pre-release coordination state when it is incomplete", async (t) => {
   const fixture = await createActivationFixture("dispatch-claim-initialization");
   const initialApplication = await CoordinationApplication.start({

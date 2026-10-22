@@ -611,7 +611,8 @@ function ActivityCard({ activity, context, nested = false, expanded, onExpanded,
       </div>
       {activity.type === "automation.resumed" && activity.details.resolution !== "dismissed" ? (
         <ResumeInstructions activity={activity} />
-      ) : pinChange ? <div className="pin-activity-reference">
+      ) : activity.type === "task.edited" ? <TaskEditDetails activity={activity} />
+      : pinChange ? <div className="pin-activity-reference">
         {pinnedComment === undefined ? <p>Comment {activity.details.commentId ?? "unavailable"}</p> : (
           <TextPreview id={`activity-${activity.id}`} text={pinnedComment.body}
             expanded={expanded} onExpanded={onExpanded} renderedLineLimit={2}
@@ -714,6 +715,30 @@ function TriggerLink({
   return <span>Triggered by {reasonLabel(record.activation.reason.type)}</span>;
 }
 
+function TaskEditDetails({ activity }: { activity: TaskActivityView }): ReactNode {
+  const details = activity.details;
+  const changed = details.changedFields?.split(",");
+  const labels = [
+    changed?.includes("title") ? "title" : "",
+    changed?.includes("description") ? "description" : "",
+    changed?.includes("startingRef") ? "starting ref" : "",
+  ].filter(Boolean);
+  const fields = labels.length < 2 ? labels[0] :
+    `${labels.slice(0, -1).join(", ")}${labels.length > 2 ? ", and " : " and "}${labels.at(-1)}`;
+  const summary = changed === undefined ? "Task details updated." :
+    fields === undefined ? "No task fields changed." :
+    `${fields[0]!.toUpperCase()}${fields.slice(1)} updated.`;
+  return <div className="task-edit-details">
+    <p>{summary}</p>
+    {(changed?.includes("title") || (changed === undefined && details.title !== undefined)) && details.title !== undefined ? (
+      <p>Title: {details.previousTitle ?? "Not recorded"} → {details.title}</p>
+    ) : null}
+    {(changed?.includes("startingRef") || changed === undefined) && details.startingRef !== undefined ? (
+      <p>Starting ref: {details.previousStartingRef ?? "Not recorded"} → {details.startingRef}</p>
+    ) : null}
+  </div>;
+}
+
 function SourceLink({ sourceId, label, onSource }: {
   sourceId: string;
   label: string;
@@ -794,7 +819,7 @@ function activityDescription(activity: TaskActivityView, columns: TimelineColumn
     return `${columnName(activity.details.fromColumnId, columns)} → ${columnName(activity.details.toColumnId, columns)}`;
   }
   if (activity.type === "task.created") return `Created in ${columnName(activity.details.columnId, columns)}.`;
-  if (activity.type === "task.edited") return "Title or description updated.";
+  if (activity.type === "task.edited") return "Task details updated.";
   if (activity.type === "relationship.resume-agent-changed") {
     return `Resume responsibility changed from ${nameForAgent(activity.details.previousResumeAgentId || "unassigned", agents)} to ${nameForAgent(activity.details.resumeAgentId ?? "unassigned", agents)}.`;
   }

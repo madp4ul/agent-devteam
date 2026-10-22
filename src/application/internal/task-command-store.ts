@@ -132,10 +132,11 @@ export class TaskCommandStore {
     });
   }
 
-  editTask(command: EditTaskCommand): BoardMutationResult {
+  editTask(command: EditTaskCommand, defaultStartingRef: string): BoardMutationResult {
     const origin = this.agentCommandOrigin(command);
     const title = command.title?.trim();
     const description = command.description?.trim();
+    const startingRef = command.startingRef?.trim();
     return this.#idempotentCommands.execute<BoardMutationResult>({
       kind: "edit-task",
       scope: [origin?.id ?? command.taskId],
@@ -153,7 +154,7 @@ export class TaskCommandStore {
       if (currentTask.revision !== command.expectedRevision) {
         return { accepted: false, reason: "revision-conflict", currentTask };
       }
-      if (title === undefined && description === undefined) {
+      if (title === undefined && description === undefined && startingRef === undefined) {
         return { accepted: false, reason: "no-changes" };
       }
       if (title === "") {
@@ -161,6 +162,18 @@ export class TaskCommandStore {
       }
       if (description === "") {
         return { accepted: false, reason: "empty-description" };
+      }
+      if (startingRef === "") return { accepted: false, reason: "invalid-starting-ref" };
+      let previousStartingRef: string | undefined;
+      if (startingRef !== undefined) {
+        const state = this.#projections.readTaskWorkspaceState(command.taskId);
+        if (state === "preparing") return { accepted: false, reason: "workspace-preparing" };
+        if (state === "provisioned") return { accepted: false, reason: "workspace-already-provisioned" };
+        previousStartingRef = this.#projections.readTaskStartingRef(command.taskId) ?? defaultStartingRef;
+        this.#database.prepare(
+          `INSERT INTO task_starting_refs (task_id, starting_ref) VALUES (?, ?)
+           ON CONFLICT(task_id) DO UPDATE SET starting_ref = excluded.starting_ref`,
+        ).run(command.taskId, startingRef);
       }
       this.#database
         .prepare(
@@ -173,13 +186,22 @@ export class TaskCommandStore {
         command.taskId,
         "task.edited",
         command.actor,
-        this.agentActivityProvenance(command, origin),
+        {
+          ...this.agentActivityProvenance(command, origin),
+          changedFields: [
+            title !== undefined && title !== currentTask.title ? "title" : "",
+            description !== undefined && description !== currentTask.description ? "description" : "",
+            startingRef !== undefined && startingRef !== previousStartingRef ? "startingRef" : "",
+          ].filter(Boolean).join(","),
+          ...(title === undefined || title === currentTask.title ? {} : { previousTitle: currentTask.title, title }),
+          ...(startingRef === undefined ? {} : { startingRef, ...(previousStartingRef === undefined ? {} : { previousStartingRef }) }),
+        },
       );
       const task = this.#projections.readTask(command.taskId);
       if (task === undefined) throw new Error("Edited task could not be read back");
       return { accepted: true, task };
     }, (result) => result.accepted, {
-      request: JSON.stringify({ taskId: command.taskId, title, description, expectedRevision: command.expectedRevision }),
+      request: JSON.stringify({ taskId: command.taskId, title, description, startingRef, expectedRevision: command.expectedRevision }),
       onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
     });
   }

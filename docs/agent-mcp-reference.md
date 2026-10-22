@@ -31,7 +31,7 @@ checking a now-advanced task revision. `self` resolves to the caller's stable ag
 | `task.comment.pin` | `taskId`, `commentId`, `idempotencyKey` | Mark shared current guidance on a mutable task. Text remains immutable; no mentions or activations execute. Matching state is inert. | `{ accepted: true, taskId, commentId, pinned: true, changed }` |
 | `task.comment.unpin` | `taskId`, `commentId`, `idempotencyKey` | Remove shared current guidance on a mutable task. Text remains immutable; no mentions or activations execute. Matching state is inert. | `{ accepted: true, taskId, commentId, pinned: false, changed }` |
 | `task.create` | `boardId`, `columnId`, `title`, `description`, `idempotencyKey` | Create independent work in an explicit board and column, with ordinary watcher activation. | `{ accepted: true, task: { id, title, boardId, columnId, revision } }` |
-| `task.edit` | `taskId`, `expectedRevision`, optional `title`/`description`, `idempotencyKey` | Edit supplied title/description on current or a concrete task ID. Omitted fields stay unchanged; supply at least one field. Revision conflicts return compact current state. | `{ accepted: true, task: { id, title, boardId, columnId, revision } }` |
+| `task.edit` | `taskId`, `expectedRevision`, optional `title`/`description`/`startingRef`, `idempotencyKey` | Edit supplied fields on current or a concrete task ID. Omitted fields stay unchanged; supply at least one field. startingRef is editable only before workspace preparation and provisioning; inspect workspaceStatus first. Ref corrections do not retry failed activations. Revision conflicts return compact current state. | `{ accepted: true, task: { id, title, boardId, columnId, revision } }` |
 | `task.move` | `taskId`, `destinationColumnId`, `expectedRevision`, `idempotencyKey` | Move current or a concrete task ID within its board with ordinary watcher effects. A same-column move is an inert success. Requires the task's revision. | `{ accepted: true, revision, transition: { taskId, fromColumnId, toColumnId } }`; an inert result also includes `outcome: "already-in-column"`. |
 | `task.child.create` | `taskId`, `boardId`, `columnId`, `title`, `description`, `resumeAgent`, optional `startingRef`, `idempotencyKey` | Atomically create new child work and an outgoing parent-child relationship from current or a concrete task ID. resumeAgent is self or an applied agent ID; completion later queues that owner. | `{ accepted: true, task: { id, title, boardId, columnId, revision } }` |
 | `task.child.add` | `taskId`, `childTaskId`, `resumeAgent`, `idempotencyKey` | Attach an existing child to current or a concrete parent task ID without creating a task. resumeAgent is self or an applied agent ID; removal wakes nobody. | `{ accepted: true, relationship }` |
@@ -50,6 +50,26 @@ checking a now-advanced task revision. `self` resolves to the caller's stable ag
   current activation, suspension state, participants, and on-demand capability flags.
   Inspected relationships additionally include `sourceTaskTitle`/`targetTaskTitle`
   without loading either endpoint's discussion.
+- `TaskInspection.workspaceStatus`: `{ state: "unprovisioned" | "preparing" | "provisioned",
+  startingRef, startingRefEditable }`. The ref is the task's explicit override or
+  the currently applied process default; provisioned tasks retain the ref used
+  to create their workspace. Archived/archiving tasks are not editable.
+  A dispatch claim makes the ref immutable before asynchronous Git preparation
+  starts. Ordinary title/description edits remain available during preparation
+  and after provisioning. Ref edits reject blank values with
+  `invalid-starting-ref`, active preparation with `workspace-preparing`, and an
+  existing workspace with `workspace-already-provisioned`. A correction is
+  audited with existing caller provenance and advances the task revision. It
+  neither resolves startup attention nor authorizes execution: the user still
+  chooses Retry and, when automation is paused, Resume. Comments never change
+  workspace configuration.
+- New `task.edited` activity records identify actual value changes in the
+  comma-separated `changedFields` (`title`, `description`, `startingRef`).
+  Changed titles retain `previousTitle`/`title`; ref edits retain
+  `previousStartingRef`/`startingRef`, including the inherited process default
+  when no override existed. Description bodies are not copied into edit activity.
+  Older records may lack these details; their missing values are not inferred
+  from the task's current state.
 - `HistoryRecord`: `{ id, type, at, author: { kind, id, originTask? }, body?, details? }`.
   Comment UUIDs and multiline bodies remain intact. `body` belongs to a comment;
   event `details` are compact, including attempt outcome/summary. Routine

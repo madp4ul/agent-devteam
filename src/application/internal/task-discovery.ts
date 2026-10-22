@@ -32,6 +32,7 @@ export class TaskDiscovery {
   readonly #activationScheduling: ActivationSchedulingModule;
   readonly #startup: StartupView;
   readonly #collaborators: CollaboratorView[] | undefined;
+  readonly #defaultStartingRef: string;
 
   constructor(
     processStore: ProcessStateStore,
@@ -39,12 +40,14 @@ export class TaskDiscovery {
     activationScheduling: ActivationSchedulingModule,
     startup: StartupView,
     collaborators?: CollaboratorView[],
+    defaultStartingRef = "",
   ) {
     this.#processStore = processStore;
     this.#taskProjections = taskProjections;
     this.#activationScheduling = activationScheduling;
     this.#startup = startup;
     this.#collaborators = collaborators;
+    this.#defaultStartingRef = defaultStartingRef;
   }
 
   queryBoardSummaries(): BoardSummariesQueryResult {
@@ -254,6 +257,8 @@ export class TaskDiscovery {
         activation.status !== "completed" && activation.status !== "dismissed",
     );
     const automationSuspended = overview.automationSuspended;
+    const workspaceState = this.#taskProjections.readTaskWorkspaceState(task.id);
+    const workspace = this.#activationScheduling.readTaskWorkspace(task.id);
     const relatedTitles = new Map(this.#taskProjections.readTaskReferences(
       [...new Set(task.relationships.flatMap(({ sourceTaskId, targetTaskId }) => [sourceTaskId, targetTaskId]))],
     ).map(({ id, title }) => [id, title]));
@@ -264,6 +269,12 @@ export class TaskDiscovery {
         boardId: task.boardId,
         column: { id: column.id, name: column.name },
         revision: task.revision,
+        workspaceStatus: {
+          state: workspaceState,
+          startingRef: workspace?.startingRef ?? this.#taskProjections.readTaskStartingRef(task.id) ?? this.#defaultStartingRef,
+          startingRefEditable: workspaceState === "unprovisioned" && !task.archived
+            && !this.#taskProjections.isTaskArchivalPending(task.id),
+        },
         ...(task.archived ? { archived: true as const } : {}),
         ...(includeWorkspace ? { comments: task.comments } : {
           history: (this.#taskProjections.history.query({ taskId: task.id }) as Extract<TaskHistoryQueryResult, { available: true }>).history,
@@ -292,7 +303,7 @@ export class TaskDiscovery {
               },
         automationSuspended,
         ...(includeWorkspace
-          ? { workspace: this.#activationScheduling.readTaskWorkspace(task.id) ?? null }
+          ? { workspace: workspace ?? null }
           : {}),
         onDemand: { activity: true, attachments: true },
     } as TaskInspectionView | UserTaskInspectionView;
