@@ -1334,5 +1334,213 @@
     "identity": ".scratch/framework-improvements-2026-09/issues/25-dock-add-comment-on-initial-load.md",
     "implementation": true,
     "type": "task"
+  },
+  {
+    "commit": "d9a94564e4fdc7ee23847178b32b16e9c885d170",
+    "date": "2026-10-02",
+    "path": ".scratch/framework-improvements-2026-09/issues/26-display-interruption-resume-instructions.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/26-display-interruption-resume-instructions.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "3fff1e570d5c9fdd2b8c4cfdde33e1254a15e4cc",
+    "date": "2026-10-02",
+    "path": ".scratch/framework-improvements-2026-09/issues/22-show-task-description-hidden-line-counts.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/22-show-task-description-hidden-line-counts.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "923dcefe4c104dadc25c7bb87f453ddd25ffee07",
+    "date": "2026-10-04",
+    "path": ".scratch/framework-improvements-2026-09/issues/27-recover-stalled-work-without-user-attention.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/27-recover-stalled-work-without-user-attention.md",
+    "implementation": false,
+    "type": "grilling"
+  },
+  {
+    "commit": "923dcefe4c104dadc25c7bb87f453ddd25ffee07",
+    "date": "2026-10-04",
+    "path": ".scratch/stall-recovery/issues/01-reject-circular-task-relationships.md",
+    "identity": ".scratch/stall-recovery/issues/01-reject-circular-task-relationships.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "923dcefe4c104dadc25c7bb87f453ddd25ffee07",
+    "date": "2026-10-04",
+    "path": ".scratch/stall-recovery/issues/02-deliver-bounded-stall-recovery.md",
+    "identity": ".scratch/stall-recovery/issues/02-deliver-bounded-stall-recovery.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "923dcefe4c104dadc25c7bb87f453ddd25ffee07",
+    "date": "2026-10-04",
+    "path": ".scratch/stall-recovery/issues/03-verify-recovery-lifecycle-and-reconcile-docs.md",
+    "identity": ".scratch/stall-recovery/issues/03-verify-recovery-lifecycle-and-reconcile-docs.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "67eb2c84864a0c943927091ae4db980c24f78dca",
+    "date": "2026-10-04",
+    "path": ".scratch/agent-reviewer-allowances/issues/01-verify-additive-reviewer-policy-runtime.md",
+    "identity": ".scratch/agent-reviewer-allowances/issues/01-verify-additive-reviewer-policy-runtime.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "67eb2c84864a0c943927091ae4db980c24f78dca",
+    "date": "2026-10-04",
+    "path": ".scratch/agent-reviewer-allowances/issues/02-agree-per-agent-allowance-authority-and-lifecycle.md",
+    "identity": ".scratch/agent-reviewer-allowances/issues/02-agree-per-agent-allowance-authority-and-lifecycle.md",
+    "implementation": false,
+    "type": "grilling"
+  },
+  {
+    "commit": "aa823fc0a8de2daf1170e42b85a13e67b34cab86",
+    "date": "2026-10-04",
+    "path": ".scratch/framework-improvements-2026-09/issues/04-reduce-routine-permission-interruptions.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/04-reduce-routine-permission-interruptions.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "33519e0d2b8c6f31f83dc09ba638a2981559f12f",
+    "date": "2026-10-04",
+    "path": ".scratch/framework-improvements-2026-09/issues/12-audit-agent-instructions-with-user.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/12-audit-agent-instructions-with-user.md",
+    "implementation": false,
+    "type": "grilling"
+  },
+  {
+    "commit": "f02d65c3a7182e8eb488b31399918d860f03b452",
+    "date": "2026-10-05",
+    "path": ".scratch/computer-use-and-project-allowances/issues/01-computer-use-app-approval-recovery.md",
+    "identity": ".scratch/computer-use-and-project-allowances/issues/01-computer-use-app-approval-recovery.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "f02d65c3a7182e8eb488b31399918d860f03b452",
+    "date": "2026-10-05",
+    "path": ".scratch/computer-use-and-project-allowances/issues/02-launch-time-project-allowances.md",
+    "identity": ".scratch/computer-use-and-project-allowances/issues/02-launch-time-project-allowances.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b38af93eca0bacd12fca25ee69d654a814f4bdfd",
+    "date": "2026-10-13",
+    "path": ".scratch/agent-coordination-framework/issues/97-remind-agents-about-activation-mentions-at-comment-tool.md",
+    "identity": ".scratch/agent-coordination-framework/issues/97-remind-agents-about-activation-mentions-at-comment-tool.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b38af93eca0bacd12fca25ee69d654a814f4bdfd",
+    "date": "2026-10-13",
+    "path": ".scratch/heavy-usage/issues/01-page-agent-conversations.md",
+    "identity": ".scratch/heavy-usage/issues/01-page-agent-conversations.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b38af93eca0bacd12fca25ee69d654a814f4bdfd",
+    "date": "2026-10-13",
+    "path": ".scratch/heavy-usage/issues/02-page-task-timelines-and-lazy-map.md",
+    "identity": ".scratch/heavy-usage/issues/02-page-task-timelines-and-lazy-map.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b38af93eca0bacd12fca25ee69d654a814f4bdfd",
+    "date": "2026-10-13",
+    "path": ".scratch/heavy-usage/issues/03-recover-transient-runtime-failures.md",
+    "identity": ".scratch/heavy-usage/issues/03-recover-transient-runtime-failures.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b38af93eca0bacd12fca25ee69d654a814f4bdfd",
+    "date": "2026-10-13",
+    "path": ".scratch/heavy-usage/issues/04-retain-loaded-timeline-and-fix-scroll-navigation.md",
+    "identity": ".scratch/heavy-usage/issues/04-retain-loaded-timeline-and-fix-scroll-navigation.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "137e093ca26319c0c8736e666522da7961451993",
+    "date": "2026-10-13",
+    "path": ".scratch/heavy-usage/issues/05-inspect-hot-rollback-journals-before-migration.md",
+    "identity": ".scratch/heavy-usage/issues/05-inspect-hot-rollback-journals-before-migration.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "479307baa91bd1915e4466f3df883c23d3e5d9db",
+    "date": "2026-10-17",
+    "path": ".scratch/agent-coordination-framework/issues/98-collapse-completed-task-relationships.md",
+    "identity": ".scratch/agent-coordination-framework/issues/98-collapse-completed-task-relationships.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "479307baa91bd1915e4466f3df883c23d3e5d9db",
+    "date": "2026-10-17",
+    "path": ".scratch/agent-coordination-framework/issues/99-remove-legacy-local-user-identity.md",
+    "identity": ".scratch/agent-coordination-framework/issues/99-remove-legacy-local-user-identity.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "6c928b12c58b5f631acbfa560ebcb99f23bb6c95",
+    "date": "2026-10-18",
+    "path": ".scratch/agent-coordination-framework/issues/100-show-startup-verification-progress.md",
+    "identity": ".scratch/agent-coordination-framework/issues/100-show-startup-verification-progress.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "9460e285388398696d3072fd0dd69f6775c9a46b",
+    "date": "2026-10-21",
+    "path": ".scratch/codex-reconnect-diagnostics/issues/01-reconnect-continuation.md",
+    "identity": ".scratch/codex-reconnect-diagnostics/issues/01-reconnect-continuation.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "cbb28d881de95271b607844301940366187edae0",
+    "date": "2026-10-22",
+    "path": ".scratch/task-edit-history/issues/01-specific-edit-history.md",
+    "identity": ".scratch/task-edit-history/issues/01-specific-edit-history.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "cbb28d881de95271b607844301940366187edae0",
+    "date": "2026-10-22",
+    "path": ".scratch/task-starting-ref-recovery/issues/01-repeat-startup-failure.md",
+    "identity": ".scratch/task-starting-ref-recovery/issues/01-repeat-startup-failure.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "cbb28d881de95271b607844301940366187edae0",
+    "date": "2026-10-22",
+    "path": ".scratch/task-starting-ref-recovery/issues/02-correct-starting-ref.md",
+    "identity": ".scratch/task-starting-ref-recovery/issues/02-correct-starting-ref.md",
+    "implementation": true,
+    "type": "implementation-field"
+  },
+  {
+    "commit": "62eaa7e7da8bc35fa62362acea07554ba0d6e70e",
+    "date": "2026-10-25",
+    "path": ".scratch/computer-use-unsupported/issues/01-clarify-framework-limitation.md",
+    "identity": ".scratch/computer-use-unsupported/issues/01-clarify-framework-limitation.md",
+    "implementation": true,
+    "type": "task"
   }
 ]

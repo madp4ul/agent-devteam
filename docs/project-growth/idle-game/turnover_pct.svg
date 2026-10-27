@@ -1,0 +1,345 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" role="img" aria-labelledby="title desc">
+<title id="title">Existing-code turnover per completed work unit</title><desc id="desc">Resolution intervals; repeated edits count repeatedly; inspect points for commit evidence</desc>
+<style>text{font-family:Arial,sans-serif;fill:#cbd5e1;font-size:14px}.grid{stroke:#334155;stroke-width:1}.line{fill:none;stroke-width:2.5;stroke-linejoin:round}</style>
+<rect width="1100" height="520" rx="12" fill="#101827"/>
+<text x="30" y="32" style="font-size:22px;fill:#f1f5f9">Existing-code turnover per completed work unit</text>
+<text x="30" y="56">Resolution intervals; repeated edits count repeatedly; inspect points for commit evidence</text>
+<path class="grid" d="M100,435.00h965"/>
+<text x="88" y="440.00" text-anchor="end">0</text>
+<path class="grid" d="M100,367.00h965"/>
+<text x="88" y="372.00" text-anchor="end">5</text>
+<path class="grid" d="M100,299.00h965"/>
+<text x="88" y="304.00" text-anchor="end">11</text>
+<path class="grid" d="M100,231.00h965"/>
+<text x="88" y="236.00" text-anchor="end">16</text>
+<path class="grid" d="M100,163.00h965"/>
+<text x="88" y="168.00" text-anchor="end">21</text>
+<path class="grid" d="M100,95.00h965"/>
+<text x="88" y="100.00" text-anchor="end">26</text>
+<path class="grid" d="M100.00,95v340"/>
+<text x="100.00" y="460" text-anchor="middle">0</text>
+<path class="grid" d="M260.83,95v340"/>
+<text x="260.83" y="460" text-anchor="middle">25</text>
+<path class="grid" d="M421.67,95v340"/>
+<text x="421.67" y="460" text-anchor="middle">51</text>
+<path class="grid" d="M582.50,95v340"/>
+<text x="582.50" y="460" text-anchor="middle">76</text>
+<path class="grid" d="M743.33,95v340"/>
+<text x="743.33" y="460" text-anchor="middle">101</text>
+<path class="grid" d="M904.17,95v340"/>
+<text x="904.17" y="460" text-anchor="middle">127</text>
+<path class="grid" d="M1065.00,95v340"/>
+<text x="1065.00" y="460" text-anchor="middle">152</text>
+<polyline class="line" stroke="#60a5fa" points="106.35,167.86 112.70,162.80 119.05,243.01 125.39,369.84 131.74,365.54 138.09,272.08 144.44,435.00 150.79,429.83 157.14,424.41 163.49,435.00 169.84,426.39 176.18,404.88 182.53,432.94 188.88,433.36 195.23,433.37 201.58,426.21 207.93,418.29 214.28,435.00 220.62,433.01 226.97,420.26 233.32,433.59 239.67,431.11 246.02,432.90 252.37,434.74 258.72,433.31 265.07,432.66 271.41,433.48 277.76,432.04 284.11,430.97 290.46,434.92 296.81,433.11 303.16,435.00 309.51,426.75 315.86,435.00 322.20,435.00 328.55,345.74 334.90,431.75 341.25,435.00 347.60,435.00 353.95,432.25 360.30,430.30 366.64,429.52 372.99,431.15 379.34,422.46 385.69,434.93 392.04,430.40 398.39,428.01 404.74,420.85 411.09,426.92 417.43,435.00 423.78,429.88 430.13,421.16 436.48,434.66 442.83,431.67 449.18,433.78 455.53,430.77 461.88,435.00 468.22,435.00 474.57,435.00 480.92,435.00 487.27,435.00 493.62,434.73 499.97,433.87 506.32,430.82 512.66,433.94 519.01,428.78 525.36,432.31 531.71,428.59 538.06,435.00 544.41,424.12 550.76,432.88 557.11,434.46 563.45,431.28 569.80,429.60 576.15,433.22 582.50,435.00 588.85,435.00 595.20,434.73 601.55,435.00 607.89,434.62 614.24,435.00 620.59,434.19 626.94,428.04 633.29,434.62 639.64,401.13 645.99,428.96 652.34,430.52 658.68,433.94 665.03,435.00 671.38,435.00 677.73,426.65 684.08,435.00 690.43,435.00 696.78,433.84 703.12,434.32 709.47,433.75 715.82,433.54 722.17,430.95 728.52,432.78 734.87,430.16 741.22,435.00 747.57,434.49 753.91,432.95 760.26,432.15 766.61,427.17 772.96,432.78 779.31,424.92 785.66,428.46 792.01,435.00 798.36,434.21 804.70,430.45 811.05,432.87 817.40,429.77 823.75,431.64 830.10,433.52 836.45,435.00 842.80,434.56 849.14,431.76 855.49,434.90 861.84,433.77 868.19,434.51 874.54,433.53 880.89,429.59 887.24,433.84 893.59,434.56 899.93,435.00 906.28,434.14 912.63,433.04 918.98,432.91 925.33,433.29 931.68,432.92 938.03,430.02 944.38,434.77 950.72,434.01 957.07,434.72 963.42,434.95 969.77,433.81 976.12,434.32 982.47,433.59 988.82,434.77 995.16,433.92 1001.51,433.83 1007.86,432.64 1014.21,433.57 1020.56,433.98 1026.91,434.56 1033.26,435.00 1039.61,434.78 1045.95,434.60 1052.30,434.12 1058.65,433.94 1065.00,434.65"/>
+<circle cx="106.35" cy="167.86" r="2.5" fill="#60a5fa"><title>45394e6 to c2ee3b0 | 1 merge(s) | Verify workbench native input with app-owned harness and evidence | 20.66</title></circle>
+<circle cx="112.70" cy="162.80" r="2.5" fill="#60a5fa"><title>c2ee3b0 to 110ecd9 | 1 merge(s) | Link discrete purchase markers to observations and compact Workbench numbers | 21.05</title></circle>
+<circle cx="119.05" cy="243.01" r="2.5" fill="#60a5fa"><title>110ecd9 to b9b35af | 1 merge(s) | Stage reviewed normal foundation with workbench markers and formatter checks | 14.85</title></circle>
+<circle cx="125.39" cy="369.84" r="2.5" fill="#60a5fa"><title>b9b35af to 39dc91a | 1 merge(s) | Add paused desktop navigation, camera settings and owned click gestures | 5.04</title></circle>
+<circle cx="131.74" cy="365.54" r="2.5" fill="#60a5fa"><title>39dc91a to 7cd50f9 | 1 merge(s) | Add bounded captured cursor deposit controls and exact accounting checks | 5.37</title></circle>
+<circle cx="138.09" cy="272.08" r="2.5" fill="#60a5fa"><title>7cd50f9 to b54855f | 1 merge(s) | Reconcile terrain handoff with confirmed shared reset contract | 12.60</title></circle>
+<circle cx="144.44" cy="435.00" r="2.5" fill="#60a5fa"><title>b54855f to 1ea2998 | 1 merge(s) | Merge commit &#x27;5f99b1f1bcef34f1f4546c708a3b6ab0c205d3db&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="150.79" cy="429.83" r="2.5" fill="#60a5fa"><title>1ea2998 to 6dd6b08 | 1 merge(s) | Merge commit &#x27;21a81a6dd333e6984a2e090b05de805af098b14d&#x27; into integration/T-0002-idle-game | 0.40</title></circle>
+<circle cx="157.14" cy="424.41" r="2.5" fill="#60a5fa"><title>6dd6b08 to 1090fcf | 1 merge(s) | Record native T-0086 UI evidence and acceptance verification | 0.82</title></circle>
+<circle cx="163.49" cy="435.00" r="2.5" fill="#60a5fa"><title>1090fcf to 2fdc86f | 1 merge(s) | Merge commit &#x27;f8ab11f381db8afdb169153c3ff670aa399a7619&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="169.84" cy="426.39" r="2.5" fill="#60a5fa"><title>2fdc86f to f74c11c | 1 merge(s) | Merge commit &#x27;14396c77ce5422f3921855821b66eab319e6de08&#x27; into integration/T-0002-idle-game | 0.67</title></circle>
+<circle cx="176.18" cy="404.88" r="2.5" fill="#60a5fa"><title>f74c11c to b679513 | 1 merge(s) | Reject malformed COPY version discriminators through domain validation | 2.33</title></circle>
+<circle cx="182.53" cy="432.94" r="2.5" fill="#60a5fa"><title>b679513 to 8b0b07f | 1 merge(s) | Clarify natural terrain interpolation names | 0.16</title></circle>
+<circle cx="188.88" cy="433.36" r="2.5" fill="#60a5fa"><title>8b0b07f to b74e06c | 1 merge(s) | Merge commit &#x27;b265d28d7ec0e6277f53cc635c81342fc3e37d7a&#x27; into integration/T-0002-idle-game | 0.13</title></circle>
+<circle cx="195.23" cy="433.37" r="2.5" fill="#60a5fa"><title>b74e06c to 5959887 | 1 merge(s) | Merge commit &#x27;a6df8c58fc9cab5a62421fedff333ab7c1a8fd23&#x27; into integration/T-0002-idle-game | 0.13</title></circle>
+<circle cx="201.58" cy="426.21" r="2.5" fill="#60a5fa"><title>5959887 to 272eb6e | 1 merge(s) | Merge commit &#x27;0373ab5751eeffe05f0ab76ab548eaff9fbf2936&#x27; into integration/T-0002-idle-game | 0.68</title></circle>
+<circle cx="207.93" cy="418.29" r="2.5" fill="#60a5fa"><title>272eb6e to 71debf5 | 1 merge(s) | Merge commit &#x27;5a0877d9d523500cddeb55a6c7f208378b6fb612&#x27; into integration/T-0002-idle-game | 1.29</title></circle>
+<circle cx="214.28" cy="435.00" r="2.5" fill="#60a5fa"><title>71debf5 to 11b3dba | 1 merge(s) | Merge commit &#x27;5f23857004d3758845acc6177f4fa4e5b3c1ea30&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="220.62" cy="433.01" r="2.5" fill="#60a5fa"><title>11b3dba to 21796e9 | 1 merge(s) | Install varied forest and object art with rooted scenery and detailed ridge | 0.15</title></circle>
+<circle cx="226.97" cy="420.26" r="2.5" fill="#60a5fa"><title>21796e9 to 6001bf9 | 1 merge(s) | docs: record one-click context verification and review handoff | 1.14</title></circle>
+<circle cx="233.32" cy="433.59" r="2.5" fill="#60a5fa"><title>6001bf9 to 9f1a24f | 1 merge(s) | Merge commit &#x27;3560a5db2f7cc642e06bf9fc8eb80e94caaef1d6&#x27; into integration/T-0002-idle-game | 0.11</title></circle>
+<circle cx="239.67" cy="431.11" r="2.5" fill="#60a5fa"><title>9f1a24f to 8eab821 | 1 merge(s) | Merge commit &#x27;32f03ec5bf885bf6a25641215d31ff3e7fcdadc8&#x27; into integration/T-0002-idle-game | 0.30</title></circle>
+<circle cx="246.02" cy="432.90" r="2.5" fill="#60a5fa"><title>8eab821 to d254ad8 | 1 merge(s) | Merge remote-tracking branch &#x27;origin/main&#x27; into feature/T-0112-neighbor-roof-pieces | 0.16</title></circle>
+<circle cx="252.37" cy="434.74" r="2.5" fill="#60a5fa"><title>d254ad8 to ed95ed5 | 1 merge(s) | Merge commit &#x27;621e7b292c383754e65edb0ffdb3046adbb34717&#x27; into integration/T-0002-idle-game | 0.02</title></circle>
+<circle cx="258.72" cy="433.31" r="2.5" fill="#60a5fa"><title>ed95ed5 to 9f9f54c | 1 merge(s) | Merge commit &#x27;be1aa932ea29dc9799cd3635ce637c8b23d439fb&#x27; into integration/T-0002-idle-game | 0.13</title></circle>
+<circle cx="265.07" cy="432.66" r="2.5" fill="#60a5fa"><title>9f9f54c to 125ee09 | 1 merge(s) | Merge branch &#x27;publication/T-0002-empirical-feedback&#x27; into integration/T-0002-idle-game | 0.18</title></circle>
+<circle cx="271.41" cy="433.48" r="2.5" fill="#60a5fa"><title>125ee09 to d14ef74 | 1 merge(s) | Merge branch &#x27;publication/T-0002-empirical-feedback&#x27; into integration/T-0002-idle-game | 0.12</title></circle>
+<circle cx="277.76" cy="432.04" r="2.5" fill="#60a5fa"><title>d14ef74 to 1debcd1 | 1 merge(s) | Merge branch &#x27;publication/T-0002-empirical-feedback&#x27; into integration/T-0002-idle-game | 0.23</title></circle>
+<circle cx="284.11" cy="430.97" r="2.5" fill="#60a5fa"><title>1debcd1 to 4826539 | 1 merge(s) | Merge commit &#x27;2924f7620189b0a8dfd2ce06d00e13b896cc06fb&#x27; into integration/T-0002-idle-game | 0.31</title></circle>
+<circle cx="290.46" cy="434.92" r="2.5" fill="#60a5fa"><title>4826539 to c730823 | 1 merge(s) | Merge branch &#x27;publication/T-0002-empirical-feedback&#x27; into integration/T-0002-idle-game | 0.01</title></circle>
+<circle cx="296.81" cy="433.11" r="2.5" fill="#60a5fa"><title>c730823 to bb8980e | 1 merge(s) | Merge branch &#x27;publication/T-0002-empirical-feedback&#x27; into integration/T-0002-idle-game | 0.15</title></circle>
+<circle cx="303.16" cy="435.00" r="2.5" fill="#60a5fa"><title>bb8980e to 69868f4 | 1 merge(s) | Merge commit &#x27;c4c938ff2ce909d76d5ffe95906a5e0cc2e6df8a&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="309.51" cy="426.75" r="2.5" fill="#60a5fa"><title>69868f4 to db4e6ca | 1 merge(s) | Merge commit &#x27;0ec1fe948261efcecd9c32b414a49c5921dc6a61&#x27; into integration/T-0002-idle-game | 0.64</title></circle>
+<circle cx="315.86" cy="435.00" r="2.5" fill="#60a5fa"><title>db4e6ca to 85999c9 | 1 merge(s) | Merge commit &#x27;63f7c8f687225ab1dfbb2e9df929e1106b99139e&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="322.20" cy="435.00" r="2.5" fill="#60a5fa"><title>85999c9 to 3e070f8 | 1 merge(s) | Merge commit &#x27;7837de331049536355e0cff9606c308b6e275aa0&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="328.55" cy="345.74" r="2.5" fill="#60a5fa"><title>3e070f8 to b969529 | 1 merge(s) | docs: retain regular box pending review of geometry experiment | 6.90</title></circle>
+<circle cx="334.90" cy="431.75" r="2.5" fill="#60a5fa"><title>b969529 to a5ad370 | 1 merge(s) | Integrate reviewed T125 Hall price and prestige UI | 0.25</title></circle>
+<circle cx="341.25" cy="435.00" r="2.5" fill="#60a5fa"><title>a5ad370 to 5d12885 | 1 merge(s) | Integrate reviewed T127 geometry experiment and retained regular box decision | 0.00</title></circle>
+<circle cx="347.60" cy="435.00" r="2.5" fill="#60a5fa"><title>5d12885 to 590a0a0 | 1 merge(s) | Clarify T127 retained evidence byte normalization | 0.00</title></circle>
+<circle cx="353.95" cy="432.25" r="2.5" fill="#60a5fa"><title>590a0a0 to 572a0c7 | 1 merge(s) | Integrate reviewed T129 building scale art | 0.21</title></circle>
+<circle cx="360.30" cy="430.30" r="2.5" fill="#60a5fa"><title>572a0c7 to 2f2cb3c | 1 merge(s) | Integrate reviewed T126 shared progression corrections | 0.36</title></circle>
+<circle cx="366.64" cy="429.52" r="2.5" fill="#60a5fa"><title>2f2cb3c to 42f05f6 | 1 merge(s) | Integrate reviewed T124 useful progression and actual measurement | 0.42</title></circle>
+<circle cx="372.99" cy="431.15" r="2.5" fill="#60a5fa"><title>42f05f6 to 485441e | 1 merge(s) | Integrate reviewed T123 saturated tool continuity | 0.30</title></circle>
+<circle cx="379.34" cy="422.46" r="2.5" fill="#60a5fa"><title>485441e to 2d790b6 | 1 merge(s) | docs: release current review feedback and record cleaner crash | 0.97</title></circle>
+<circle cx="385.69" cy="434.93" r="2.5" fill="#60a5fa"><title>2d790b6 to 0c0c04f | 1 merge(s) | Record integrated cleaner hotfix verification and native evidence | 0.01</title></circle>
+<circle cx="392.04" cy="430.40" r="2.5" fill="#60a5fa"><title>0c0c04f to e1b65ec | 1 merge(s) | Record combined tree palette and cleaner verification | 0.36</title></circle>
+<circle cx="398.39" cy="428.01" r="2.5" fill="#60a5fa"><title>e1b65ec to 7c796c0 | 1 merge(s) | docs: annotate review images and capture building workshop decisions | 0.54</title></circle>
+<circle cx="404.74" cy="420.85" r="2.5" fill="#60a5fa"><title>7c796c0 to 1bbd52c | 1 merge(s) | docs: retain burial observatory and researcher recipe decisions | 1.09</title></circle>
+<circle cx="411.09" cy="426.92" r="2.5" fill="#60a5fa"><title>1bbd52c to 8726661 | 1 merge(s) | Repair T137 design punctuation encoding | 0.63</title></circle>
+<circle cx="417.43" cy="435.00" r="2.5" fill="#60a5fa"><title>8726661 to 4d40d55 | 1 merge(s) | Record landscape editor integration and exact browser source provenance | 0.00</title></circle>
+<circle cx="423.78" cy="429.88" r="2.5" fill="#60a5fa"><title>4d40d55 to 644da18 | 1 merge(s) | Stage reviewed T138 prestige planning for combined r8 integration | 0.40</title></circle>
+<circle cx="430.13" cy="421.16" r="2.5" fill="#60a5fa"><title>644da18 to 19d673f | 1 merge(s) | Stage reviewed T137 palette navigation and stock-first placement | 1.07</title></circle>
+<circle cx="436.48" cy="434.66" r="2.5" fill="#60a5fa"><title>19d673f to 8ea9754 | 1 merge(s) | Stage reviewed T136 canonical economy and capacity rules | 0.03</title></circle>
+<circle cx="442.83" cy="431.67" r="2.5" fill="#60a5fa"><title>8ea9754 to 4830a7d | 1 merge(s) | Preserve source encoding after recovery merge resolution | 0.26</title></circle>
+<circle cx="449.18" cy="433.78" r="2.5" fill="#60a5fa"><title>4830a7d to b25ec45 | 1 merge(s) | Stage reviewed T140 cleanup presentation and scale audit | 0.09</title></circle>
+<circle cx="455.53" cy="430.77" r="2.5" fill="#60a5fa"><title>b25ec45 to a03599e | 1 merge(s) | Combine reviewed T139 upward supported pads into r8 | 0.33</title></circle>
+<circle cx="461.88" cy="435.00" r="2.5" fill="#60a5fa"><title>a03599e to 025b6b0 | 1 merge(s) | Combine reviewed prestige support prerequisite fixtures | 0.00</title></circle>
+<circle cx="468.22" cy="435.00" r="2.5" fill="#60a5fa"><title>025b6b0 to d0fc7f9 | 1 merge(s) | Incorporate published review notification workflow | 0.00</title></circle>
+<circle cx="474.57" cy="435.00" r="2.5" fill="#60a5fa"><title>d0fc7f9 to 2af9f14 | 1 merge(s) | Keep regression and native receipts distinct in candidate manifest | 0.00</title></circle>
+<circle cx="480.92" cy="435.00" r="2.5" fill="#60a5fa"><title>2af9f14 to 028d663 | 1 merge(s) | Combine approved native startup pause verification | 0.00</title></circle>
+<circle cx="487.27" cy="435.00" r="2.5" fill="#60a5fa"><title>028d663 to 8f2735d | 1 merge(s) | Finalize local r8 candidate evidence after approved harness verification | 0.00</title></circle>
+<circle cx="493.62" cy="434.73" r="2.5" fill="#60a5fa"><title>8f2735d to 4be8a95 | 1 merge(s) | docs: retain user terrain candidate and guide-first review preference | 0.02</title></circle>
+<circle cx="499.97" cy="433.87" r="2.5" fill="#60a5fa"><title>4be8a95 to 31ffe47 | 1 merge(s) | Record landscape routes village and cave intent from extended workshop export | 0.09</title></circle>
+<circle cx="506.32" cy="430.82" r="2.5" fill="#60a5fa"><title>31ffe47 to b112b07 | 1 merge(s) | Stage reviewed T143 uncapped tool economy locally | 0.32</title></circle>
+<circle cx="512.66" cy="433.94" r="2.5" fill="#60a5fa"><title>b112b07 to b45aff1 | 1 merge(s) | Coordinate local next checkpoint production topology and material seams | 0.08</title></circle>
+<circle cx="519.01" cy="428.78" r="2.5" fill="#60a5fa"><title>b45aff1 to d1b44e2 | 1 merge(s) | Retain exact host and prospective production accounting agreements | 0.48</title></circle>
+<circle cx="525.36" cy="432.31" r="2.5" fill="#60a5fa"><title>d1b44e2 to e69cf1a | 1 merge(s) | Share scoped native collectible and atomic host lifecycle guidance | 0.21</title></circle>
+<circle cx="531.71" cy="428.59" r="2.5" fill="#60a5fa"><title>e69cf1a to 5e91609 | 1 merge(s) | Integrate reviewed T147 recipe core locally | 0.50</title></circle>
+<circle cx="538.06" cy="435.00" r="2.5" fill="#60a5fa"><title>5e91609 to 221bc78 | 1 merge(s) | Share actual checkpoint schema receipts for final identity audit | 0.00</title></circle>
+<circle cx="544.41" cy="424.12" r="2.5" fill="#60a5fa"><title>221bc78 to 0c8b5db | 1 merge(s) | Stage reviewed T150 common host and Workshop locally | 0.84</title></circle>
+<circle cx="550.76" cy="432.88" r="2.5" fill="#60a5fa"><title>0c8b5db to b49d3d5 | 1 merge(s) | Stage reviewed T154 structural support with reviewed Workshop | 0.16</title></circle>
+<circle cx="557.11" cy="434.46" r="2.5" fill="#60a5fa"><title>b49d3d5 to 7f232a2 | 1 merge(s) | Stage reviewed T152 Reactor with common production locally | 0.04</title></circle>
+<circle cx="563.45" cy="431.28" r="2.5" fill="#60a5fa"><title>7f232a2 to e6f4ab9 | 1 merge(s) | Restore complete additive evidence dispatch preambles | 0.29</title></circle>
+<circle cx="569.80" cy="429.60" r="2.5" fill="#60a5fa"><title>e6f4ab9 to f57162b | 1 merge(s) | Stage final reviewed T148 terrain and composed scenery locally | 0.42</title></circle>
+<circle cx="576.15" cy="433.22" r="2.5" fill="#60a5fa"><title>f57162b to 7f085cc | 1 merge(s) | Stage reviewed T151 Observatory on final terrain locally | 0.14</title></circle>
+<circle cx="582.50" cy="435.00" r="2.5" fill="#60a5fa"><title>7f085cc to 13242a6 | 1 merge(s) | Include T149 final terrain composition acknowledgement | 0.00</title></circle>
+<circle cx="588.85" cy="435.00" r="2.5" fill="#60a5fa"><title>13242a6 to 2105aef | 1 merge(s) | Integrate reviewed Observatory terrain fixture correction | 0.00</title></circle>
+<circle cx="595.20" cy="434.73" r="2.5" fill="#60a5fa"><title>2105aef to 7d401c5 | 1 merge(s) | Retain reviewed Observatory recovery rule in final schema guidance | 0.02</title></circle>
+<circle cx="601.55" cy="435.00" r="2.5" fill="#60a5fa"><title>7d401c5 to 9c623f7 | 1 merge(s) | Integrate reviewed authored-terrain placement regression fixture | 0.00</title></circle>
+<circle cx="607.89" cy="434.62" r="2.5" fill="#60a5fa"><title>9c623f7 to 21a478b | 1 merge(s) | Record final r9 identity verification and outstanding startup checkpoint | 0.03</title></circle>
+<circle cx="614.24" cy="435.00" r="2.5" fill="#60a5fa"><title>21a478b to 816cad5 | 1 merge(s) | docs: bind exact recipe roof and topology proposals | 0.00</title></circle>
+<circle cx="620.59" cy="434.19" r="2.5" fill="#60a5fa"><title>816cad5 to cf2309e | 1 merge(s) | Merge reviewed T162 human idle and blower depth | 0.06</title></circle>
+<circle cx="626.94" cy="428.04" r="2.5" fill="#60a5fa"><title>cf2309e to fe8f7bf | 1 merge(s) | Merge reviewed T157 palette and common panels | 0.54</title></circle>
+<circle cx="633.29" cy="434.62" r="2.5" fill="#60a5fa"><title>fe8f7bf to 5a89d8d | 1 merge(s) | Merge reviewed T163 preserving both evidence dispatches | 0.03</title></circle>
+<circle cx="639.64" cy="401.13" r="2.5" fill="#60a5fa"><title>5a89d8d to 59fce95 | 1 merge(s) | Merge reviewed T161 fixed Observatory and Replication feedback | 2.62</title></circle>
+<circle cx="645.99" cy="428.96" r="2.5" fill="#60a5fa"><title>59fce95 to 2a6fe9f | 1 merge(s) | Merge reviewed T164 branched cave and Hall objectives | 0.47</title></circle>
+<circle cx="652.34" cy="430.52" r="2.5" fill="#60a5fa"><title>2a6fe9f to 8e8866b | 1 merge(s) | Merge reviewed T158 preserving cave and recipe checks | 0.35</title></circle>
+<circle cx="658.68" cy="433.94" r="2.5" fill="#60a5fa"><title>8e8866b to ba11a86 | 1 merge(s) | Merge reviewed T160 retaining all check routes | 0.08</title></circle>
+<circle cx="665.03" cy="435.00" r="2.5" fill="#60a5fa"><title>ba11a86 to 69ce7b0 | 1 merge(s) | Merge reviewed Observatory cave fixture correction | 0.00</title></circle>
+<circle cx="671.38" cy="435.00" r="2.5" fill="#60a5fa"><title>69ce7b0 to c6b02ed | 1 merge(s) | Merge reviewed five-shape cave fixture correction | 0.00</title></circle>
+<circle cx="677.73" cy="426.65" r="2.5" fill="#60a5fa"><title>c6b02ed to 82f0fdf | 1 merge(s) | Preserve Museum holdings capture and fixture metadata after merge | 0.65</title></circle>
+<circle cx="684.08" cy="435.00" r="2.5" fill="#60a5fa"><title>82f0fdf to c2f0ec0 | 1 merge(s) | Merge reviewed legal service fixture supplement | 0.00</title></circle>
+<circle cx="690.43" cy="435.00" r="2.5" fill="#60a5fa"><title>c2f0ec0 to 1eb83ad | 1 merge(s) | docs: consolidate integration pins into maintained status | 0.00</title></circle>
+<circle cx="696.78" cy="433.84" r="2.5" fill="#60a5fa"><title>1eb83ad to 21a6f23 | 1 merge(s) | Incorporate scoped Product current index and archived guidance | 0.09</title></circle>
+<circle cx="703.12" cy="434.32" r="2.5" fill="#60a5fa"><title>21a6f23 to 30fdf53 | 1 merge(s) | Record all owner read receipts and exact pending join contracts | 0.05</title></circle>
+<circle cx="709.47" cy="433.75" r="2.5" fill="#60a5fa"><title>30fdf53 to 21930de | 1 merge(s) | Record verified foreground integration and local T168 completion | 0.10</title></circle>
+<circle cx="715.82" cy="433.54" r="2.5" fill="#60a5fa"><title>21930de to b8dd7aa | 1 merge(s) | Record verified input-mode integration and local T169 completion | 0.11</title></circle>
+<circle cx="722.17" cy="430.95" r="2.5" fill="#60a5fa"><title>b8dd7aa to cd2a1ae | 1 merge(s) | Record joined T170 output and recipe verification | 0.31</title></circle>
+<circle cx="728.52" cy="432.78" r="2.5" fill="#60a5fa"><title>cd2a1ae to 3687975 | 1 merge(s) | Record joined T171 strategy and finite-cap verification | 0.17</title></circle>
+<circle cx="734.87" cy="430.16" r="2.5" fill="#60a5fa"><title>3687975 to f6a779a | 1 merge(s) | Record joined T167 environment views and preserved cave verification | 0.37</title></circle>
+<circle cx="741.22" cy="435.00" r="2.5" fill="#60a5fa"><title>f6a779a to 150f715 | 1 merge(s) | Record verified task starting-ref correction awaiting user retry | 0.00</title></circle>
+<circle cx="747.57" cy="434.49" r="2.5" fill="#60a5fa"><title>150f715 to 3b1bafd | 1 merge(s) | Record actual outlet-owner read receipt and source-specific seam findings | 0.04</title></circle>
+<circle cx="753.91" cy="432.95" r="2.5" fill="#60a5fa"><title>3b1bafd to 757ff5d | 1 merge(s) | Retain staged T177 verification and required shared UI geometry joins | 0.16</title></circle>
+<circle cx="760.26" cy="432.15" r="2.5" fill="#60a5fa"><title>757ff5d to fa353e8 | 1 merge(s) | Record reviewed chute handoff and required corrected technology join | 0.22</title></circle>
+<circle cx="766.61" cy="427.17" r="2.5" fill="#60a5fa"><title>fa353e8 to 90e4203 | 1 merge(s) | Merge reviewed T174 selected geometry capacity and progression corrections | 0.61</title></circle>
+<circle cx="772.96" cy="432.78" r="2.5" fill="#60a5fa"><title>90e4203 to 2e4989c | 1 merge(s) | Verify reviewed geometry and chute integration with full recovery and native evidence | 0.17</title></circle>
+<circle cx="779.31" cy="424.92" r="2.5" fill="#60a5fa"><title>2e4989c to 2c5fb78 | 1 merge(s) | Verify final contextual UI and close Museum Observatory integration conditions | 0.78</title></circle>
+<circle cx="785.66" cy="428.46" r="2.5" fill="#60a5fa"><title>2c5fb78 to 5ffb941 | 1 merge(s) | Verify reviewed woodland integration and exact common plate equality | 0.51</title></circle>
+<circle cx="792.01" cy="435.00" r="2.5" fill="#60a5fa"><title>5ffb941 to 5890004 | 1 merge(s) | Record final identity child and exact verified base | 0.00</title></circle>
+<circle cx="798.36" cy="434.21" r="2.5" fill="#60a5fa"><title>5890004 to 172762a | 1 merge(s) | Record six active-owner contract deliveries and integration callbacks | 0.06</title></circle>
+<circle cx="804.70" cy="430.45" r="2.5" fill="#60a5fa"><title>172762a to 0e93d04 | 1 merge(s) | Record T184 staged integration checks and required Observatory join | 0.35</title></circle>
+<circle cx="811.05" cy="432.87" r="2.5" fill="#60a5fa"><title>0e93d04 to ece9138 | 1 merge(s) | Integrate reviewed T183 completed output lifecycle | 0.16</title></circle>
+<circle cx="817.40" cy="429.77" r="2.5" fill="#60a5fa"><title>ece9138 to 76c981d | 1 merge(s) | Integrate reviewed T182 coherent facades and discharge artwork | 0.40</title></circle>
+<circle cx="823.75" cy="431.64" r="2.5" fill="#60a5fa"><title>76c981d to daa5a8a | 1 merge(s) | Incorporate every-checkpoint maintainability rule and actual pending receipt | 0.26</title></circle>
+<circle cx="830.10" cy="433.52" r="2.5" fill="#60a5fa"><title>daa5a8a to a62f06a | 1 merge(s) | Record completed maintainability assessment and triggered upkeep disposition | 0.11</title></circle>
+<circle cx="836.45" cy="435.00" r="2.5" fill="#60a5fa"><title>a62f06a to ac32de0 | 1 merge(s) | Record completed final maintainability delta and source-bound disposition | 0.00</title></circle>
+<circle cx="842.80" cy="434.56" r="2.5" fill="#60a5fa"><title>ac32de0 to d462e4f | 1 merge(s) | Record authorized native first slice and T192 allocation within T194 | 0.03</title></circle>
+<circle cx="849.14" cy="431.76" r="2.5" fill="#60a5fa"><title>d462e4f to 8be7e0f | 1 merge(s) | Keep corrected-package validation status explicit about remaining safeguard | 0.25</title></circle>
+<circle cx="855.49" cy="434.90" r="2.5" fill="#60a5fa"><title>8be7e0f to 373da7e | 1 merge(s) | Record T197 executing-owner source receipt and verification limits | 0.01</title></circle>
+<circle cx="861.84" cy="433.77" r="2.5" fill="#60a5fa"><title>373da7e to 1c7e36a | 1 merge(s) | Verify joined T196 runtime states and retain ordinary-scale native evidence | 0.09</title></circle>
+<circle cx="868.19" cy="434.51" r="2.5" fill="#60a5fa"><title>1c7e36a to b93748f | 1 merge(s) | Integrate reviewed woodland continuity and foliage repair | 0.04</title></circle>
+<circle cx="874.54" cy="433.53" r="2.5" fill="#60a5fa"><title>b93748f to 7aaec5b | 1 merge(s) | Record completed r14 interval assessment and owned T204 release trigger | 0.11</title></circle>
+<circle cx="880.89" cy="429.59" r="2.5" fill="#60a5fa"><title>7aaec5b to 2018ac4 | 1 merge(s) | Integrate reviewed T199 research Reactor Prestige and readiness semantics | 0.42</title></circle>
+<circle cx="887.24" cy="433.84" r="2.5" fill="#60a5fa"><title>2018ac4 to 759fded | 1 merge(s) | Clarify completed semantics and retain rejected Hull mount assessment | 0.09</title></circle>
+<circle cx="893.59" cy="434.56" r="2.5" fill="#60a5fa"><title>759fded to 1f66433 | 1 merge(s) | Verify actual r14 identity join and retain raw-save validation boundary | 0.03</title></circle>
+<circle cx="899.93" cy="435.00" r="2.5" fill="#60a5fa"><title>1f66433 to d15d2a2 | 1 merge(s) | Record T212 designer read receipt separately from implementation review | 0.00</title></circle>
+<circle cx="906.28" cy="434.14" r="2.5" fill="#60a5fa"><title>d15d2a2 to e9b1d80 | 1 merge(s) | Verify actual T212 Observatory join and retain first r15 evidence limits | 0.07</title></circle>
+<circle cx="912.63" cy="433.04" r="2.5" fill="#60a5fa"><title>e9b1d80 to 39dee70 | 1 merge(s) | Record T211 joined staffing checks and pending coupled validation | 0.15</title></circle>
+<circle cx="918.98" cy="432.91" r="2.5" fill="#60a5fa"><title>39dee70 to df5375f | 1 merge(s) | Retain completed substantial r15 joined assessment and dispositions | 0.16</title></circle>
+<circle cx="925.33" cy="433.29" r="2.5" fill="#60a5fa"><title>df5375f to 3bd160a | 1 merge(s) | Refresh current r15 integration index after T208 and T210 | 0.13</title></circle>
+<circle cx="931.68" cy="432.92" r="2.5" fill="#60a5fa"><title>3bd160a to 22d7030 | 1 merge(s) | Record T209 joined outlet verification and pending final paired seam | 0.16</title></circle>
+<circle cx="938.03" cy="430.02" r="2.5" fill="#60a5fa"><title>22d7030 to 6415606 | 1 merge(s) | Record final r15 identity child and current integration obligations | 0.38</title></circle>
+<circle cx="944.38" cy="434.77" r="2.5" fill="#60a5fa"><title>6415606 to fcb60ab | 1 merge(s) | Record actual joined r15 schema23 identity verification | 0.02</title></circle>
+<circle cx="950.72" cy="434.01" r="2.5" fill="#60a5fa"><title>fcb60ab to ca00c00 | 1 merge(s) | Record T218 executing receipt and explicit level-polish disposition | 0.08</title></circle>
+<circle cx="957.07" cy="434.72" r="2.5" fill="#60a5fa"><title>ca00c00 to 9543595 | 1 merge(s) | Verify actual T220 join and retain marker-coupled completion obligation | 0.02</title></circle>
+<circle cx="963.42" cy="434.95" r="2.5" fill="#60a5fa"><title>9543595 to bcbd7c5 | 1 merge(s) | Verify joined T217 marker input and fulfill T220 coupled checks | 0.00</title></circle>
+<circle cx="969.77" cy="433.81" r="2.5" fill="#60a5fa"><title>bcbd7c5 to 5b7a8cd | 1 merge(s) | Integrate reviewed T218 paired apertures staffing and decoration | 0.09</title></circle>
+<circle cx="976.12" cy="434.32" r="2.5" fill="#60a5fa"><title>5b7a8cd to 7258a1d | 1 merge(s) | Record all executing source receipts and Product substantial-assessment disposition | 0.05</title></circle>
+<circle cx="982.47" cy="433.59" r="2.5" fill="#60a5fa"><title>7258a1d to cbd2280 | 1 merge(s) | Record five completed roots and released r16 identity child | 0.11</title></circle>
+<circle cx="988.82" cy="434.77" r="2.5" fill="#60a5fa"><title>cbd2280 to 90dc8b2 | 1 merge(s) | Record executing source receipts and qualified performance evidence | 0.02</title></circle>
+<circle cx="995.16" cy="433.92" r="2.5" fill="#60a5fa"><title>90dc8b2 to fe1ab66 | 1 merge(s) | Merge reviewed T223 natural landscape and cave contours | 0.08</title></circle>
+<circle cx="1001.51" cy="433.83" r="2.5" fill="#60a5fa"><title>fe1ab66 to 50c19a6 | 1 merge(s) | Normalize assessment document ending | 0.09</title></circle>
+<circle cx="1007.86" cy="432.64" r="2.5" fill="#60a5fa"><title>50c19a6 to 0e54f4e | 1 merge(s) | Merge reviewed T224 host-textured moving hardware and whole cutaway fade | 0.18</title></circle>
+<circle cx="1014.21" cy="433.57" r="2.5" fill="#60a5fa"><title>0e54f4e to 832f397 | 1 merge(s) | Incorporate Product substantial joined assessment dispositions without ancestry | 0.11</title></circle>
+<circle cx="1020.56" cy="433.98" r="2.5" fill="#60a5fa"><title>832f397 to f5136e6 | 1 merge(s) | Clarify ordinary and close native evidence scope | 0.08</title></circle>
+<circle cx="1026.91" cy="434.56" r="2.5" fill="#60a5fa"><title>f5136e6 to 8b45d71 | 1 merge(s) | Coordinate bounded ordinary r18 evidence work and retain executing receipts | 0.03</title></circle>
+<circle cx="1033.26" cy="435.00" r="2.5" fill="#60a5fa"><title>8b45d71 to 98de5ce | 1 merge(s) | Schedule acknowledged r18 navigation measurement window without premature start | 0.00</title></circle>
+<circle cx="1039.61" cy="434.78" r="2.5" fill="#60a5fa"><title>98de5ce to c87eca0 | 1 merge(s) | Record T232 source join with verification deferred until quiet release | 0.02</title></circle>
+<circle cx="1045.95" cy="434.60" r="2.5" fill="#60a5fa"><title>c87eca0 to 570efe5 | 1 merge(s) | Integrate reviewed T229 opaque-contour terrain contact correction | 0.03</title></circle>
+<circle cx="1052.30" cy="434.12" r="2.5" fill="#60a5fa"><title>570efe5 to aab4648 | 1 merge(s) | Record acknowledged navigation START and serialized-task coverage correction | 0.07</title></circle>
+<circle cx="1058.65" cy="433.94" r="2.5" fill="#60a5fa"><title>aab4648 to 59771ec | 1 merge(s) | Preserve exact assessment bytes in lossless archive | 0.08</title></circle>
+<circle cx="1065.00" cy="434.65" r="2.5" fill="#60a5fa"><title>59771ec to 907b8aa | 1 merge(s) | Retain completed named navigation assessment and limits | 0.03</title></circle>
+<path stroke="#60a5fa" stroke-width="3" d="M100,78h25"/>
+<text x="133" y="83">Production</text>
+<polyline class="line" stroke="#fbbf24" points="106.35,384.74 112.70,191.52 119.05,114.25 125.39,355.55 131.74,383.08 138.09,389.49 144.44,435.00 150.79,434.80 157.14,430.07 163.49,435.00 169.84,434.82 176.18,379.00 182.53,430.54 188.88,433.48 195.23,433.17 201.58,432.25 207.93,432.62 214.28,434.57 220.62,434.28 226.97,427.05 233.32,432.32 239.67,435.00 246.02,430.29 252.37,435.00 258.72,435.00 265.07,432.85 271.41,434.79 277.76,434.89 284.11,434.79 290.46,434.28 296.81,433.48 303.16,435.00 309.51,434.90 315.86,435.00 322.20,435.00 328.55,331.12 334.90,433.55 341.25,435.00 347.60,435.00 353.95,435.00 360.30,431.28 366.64,434.25 372.99,434.81 379.34,433.64 385.69,435.00 392.04,425.73 398.39,423.30 404.74,433.50 411.09,434.12 417.43,435.00 423.78,415.69 430.13,403.68 436.48,434.65 442.83,394.20 449.18,434.83 455.53,430.41 461.88,435.00 468.22,435.00 474.57,434.42 480.92,434.67 487.27,434.84 493.62,435.00 499.97,435.00 506.32,434.67 512.66,435.00 519.01,435.00 525.36,433.74 531.71,433.39 538.06,434.92 544.41,434.62 550.76,435.00 557.11,434.72 563.45,434.51 569.80,434.33 576.15,434.94 582.50,435.00 588.85,434.63 595.20,434.81 601.55,434.94 607.89,434.88 614.24,434.88 620.59,434.57 626.94,434.63 633.29,434.94 639.64,430.66 645.99,433.26 652.34,433.21 658.68,432.93 665.03,434.71 671.38,434.94 677.73,431.23 684.08,434.71 690.43,434.31 696.78,435.00 703.12,403.29 709.47,428.16 715.82,434.94 722.17,433.98 728.52,434.66 734.87,435.00 741.22,434.67 747.57,434.28 753.91,433.35 760.26,432.81 766.61,414.80 772.96,433.22 779.31,432.75 785.66,435.00 792.01,435.00 798.36,434.21 804.70,431.94 811.05,433.21 817.40,408.58 823.75,434.90 830.10,434.54 836.45,435.00 842.80,434.49 849.14,434.85 855.49,434.80 861.84,434.75 868.19,435.00 874.54,435.00 880.89,434.14 887.24,434.26 893.59,434.61 899.93,435.00 906.28,434.95 912.63,434.85 918.98,435.00 925.33,435.00 931.68,434.90 938.03,430.14 944.38,434.62 950.72,434.86 957.07,434.86 963.42,434.95 969.77,434.58 976.12,434.77 982.47,434.91 988.82,434.49 995.16,434.40 1001.51,435.00 1007.86,435.00 1014.21,434.91 1020.56,434.77 1026.91,434.33 1033.26,434.82 1039.61,434.42 1045.95,434.96 1052.30,435.00 1058.65,435.00 1065.00,435.00"/>
+<circle cx="106.35" cy="384.74" r="2.5" fill="#fbbf24"><title>45394e6 to c2ee3b0 | 1 merge(s) | Verify workbench native input with app-owned harness and evidence | 3.89</title></circle>
+<circle cx="112.70" cy="191.52" r="2.5" fill="#fbbf24"><title>c2ee3b0 to 110ecd9 | 1 merge(s) | Link discrete purchase markers to observations and compact Workbench numbers | 18.83</title></circle>
+<circle cx="119.05" cy="114.25" r="2.5" fill="#fbbf24"><title>110ecd9 to b9b35af | 1 merge(s) | Stage reviewed normal foundation with workbench markers and formatter checks | 24.81</title></circle>
+<circle cx="125.39" cy="355.55" r="2.5" fill="#fbbf24"><title>b9b35af to 39dc91a | 1 merge(s) | Add paused desktop navigation, camera settings and owned click gestures | 6.15</title></circle>
+<circle cx="131.74" cy="383.08" r="2.5" fill="#fbbf24"><title>39dc91a to 7cd50f9 | 1 merge(s) | Add bounded captured cursor deposit controls and exact accounting checks | 4.02</title></circle>
+<circle cx="138.09" cy="389.49" r="2.5" fill="#fbbf24"><title>7cd50f9 to b54855f | 1 merge(s) | Reconcile terrain handoff with confirmed shared reset contract | 3.52</title></circle>
+<circle cx="144.44" cy="435.00" r="2.5" fill="#fbbf24"><title>b54855f to 1ea2998 | 1 merge(s) | Merge commit &#x27;5f99b1f1bcef34f1f4546c708a3b6ab0c205d3db&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="150.79" cy="434.80" r="2.5" fill="#fbbf24"><title>1ea2998 to 6dd6b08 | 1 merge(s) | Merge commit &#x27;21a81a6dd333e6984a2e090b05de805af098b14d&#x27; into integration/T-0002-idle-game | 0.02</title></circle>
+<circle cx="157.14" cy="430.07" r="2.5" fill="#fbbf24"><title>6dd6b08 to 1090fcf | 1 merge(s) | Record native T-0086 UI evidence and acceptance verification | 0.38</title></circle>
+<circle cx="163.49" cy="435.00" r="2.5" fill="#fbbf24"><title>1090fcf to 2fdc86f | 1 merge(s) | Merge commit &#x27;f8ab11f381db8afdb169153c3ff670aa399a7619&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="169.84" cy="434.82" r="2.5" fill="#fbbf24"><title>2fdc86f to f74c11c | 1 merge(s) | Merge commit &#x27;14396c77ce5422f3921855821b66eab319e6de08&#x27; into integration/T-0002-idle-game | 0.01</title></circle>
+<circle cx="176.18" cy="379.00" r="2.5" fill="#fbbf24"><title>f74c11c to b679513 | 1 merge(s) | Reject malformed COPY version discriminators through domain validation | 4.33</title></circle>
+<circle cx="182.53" cy="430.54" r="2.5" fill="#fbbf24"><title>b679513 to 8b0b07f | 1 merge(s) | Clarify natural terrain interpolation names | 0.34</title></circle>
+<circle cx="188.88" cy="433.48" r="2.5" fill="#fbbf24"><title>8b0b07f to b74e06c | 1 merge(s) | Merge commit &#x27;b265d28d7ec0e6277f53cc635c81342fc3e37d7a&#x27; into integration/T-0002-idle-game | 0.12</title></circle>
+<circle cx="195.23" cy="433.17" r="2.5" fill="#fbbf24"><title>b74e06c to 5959887 | 1 merge(s) | Merge commit &#x27;a6df8c58fc9cab5a62421fedff333ab7c1a8fd23&#x27; into integration/T-0002-idle-game | 0.14</title></circle>
+<circle cx="201.58" cy="432.25" r="2.5" fill="#fbbf24"><title>5959887 to 272eb6e | 1 merge(s) | Merge commit &#x27;0373ab5751eeffe05f0ab76ab548eaff9fbf2936&#x27; into integration/T-0002-idle-game | 0.21</title></circle>
+<circle cx="207.93" cy="432.62" r="2.5" fill="#fbbf24"><title>272eb6e to 71debf5 | 1 merge(s) | Merge commit &#x27;5a0877d9d523500cddeb55a6c7f208378b6fb612&#x27; into integration/T-0002-idle-game | 0.18</title></circle>
+<circle cx="214.28" cy="434.57" r="2.5" fill="#fbbf24"><title>71debf5 to 11b3dba | 1 merge(s) | Merge commit &#x27;5f23857004d3758845acc6177f4fa4e5b3c1ea30&#x27; into integration/T-0002-idle-game | 0.03</title></circle>
+<circle cx="220.62" cy="434.28" r="2.5" fill="#fbbf24"><title>11b3dba to 21796e9 | 1 merge(s) | Install varied forest and object art with rooted scenery and detailed ridge | 0.06</title></circle>
+<circle cx="226.97" cy="427.05" r="2.5" fill="#fbbf24"><title>21796e9 to 6001bf9 | 1 merge(s) | docs: record one-click context verification and review handoff | 0.61</title></circle>
+<circle cx="233.32" cy="432.32" r="2.5" fill="#fbbf24"><title>6001bf9 to 9f1a24f | 1 merge(s) | Merge commit &#x27;3560a5db2f7cc642e06bf9fc8eb80e94caaef1d6&#x27; into integration/T-0002-idle-game | 0.21</title></circle>
+<circle cx="239.67" cy="435.00" r="2.5" fill="#fbbf24"><title>9f1a24f to 8eab821 | 1 merge(s) | Merge commit &#x27;32f03ec5bf885bf6a25641215d31ff3e7fcdadc8&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="246.02" cy="430.29" r="2.5" fill="#fbbf24"><title>8eab821 to d254ad8 | 1 merge(s) | Merge remote-tracking branch &#x27;origin/main&#x27; into feature/T-0112-neighbor-roof-pieces | 0.36</title></circle>
+<circle cx="252.37" cy="435.00" r="2.5" fill="#fbbf24"><title>d254ad8 to ed95ed5 | 1 merge(s) | Merge commit &#x27;621e7b292c383754e65edb0ffdb3046adbb34717&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="258.72" cy="435.00" r="2.5" fill="#fbbf24"><title>ed95ed5 to 9f9f54c | 1 merge(s) | Merge commit &#x27;be1aa932ea29dc9799cd3635ce637c8b23d439fb&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="265.07" cy="432.85" r="2.5" fill="#fbbf24"><title>9f9f54c to 125ee09 | 1 merge(s) | Merge branch &#x27;publication/T-0002-empirical-feedback&#x27; into integration/T-0002-idle-game | 0.17</title></circle>
+<circle cx="271.41" cy="434.79" r="2.5" fill="#fbbf24"><title>125ee09 to d14ef74 | 1 merge(s) | Merge branch &#x27;publication/T-0002-empirical-feedback&#x27; into integration/T-0002-idle-game | 0.02</title></circle>
+<circle cx="277.76" cy="434.89" r="2.5" fill="#fbbf24"><title>d14ef74 to 1debcd1 | 1 merge(s) | Merge branch &#x27;publication/T-0002-empirical-feedback&#x27; into integration/T-0002-idle-game | 0.01</title></circle>
+<circle cx="284.11" cy="434.79" r="2.5" fill="#fbbf24"><title>1debcd1 to 4826539 | 1 merge(s) | Merge commit &#x27;2924f7620189b0a8dfd2ce06d00e13b896cc06fb&#x27; into integration/T-0002-idle-game | 0.02</title></circle>
+<circle cx="290.46" cy="434.28" r="2.5" fill="#fbbf24"><title>4826539 to c730823 | 1 merge(s) | Merge branch &#x27;publication/T-0002-empirical-feedback&#x27; into integration/T-0002-idle-game | 0.06</title></circle>
+<circle cx="296.81" cy="433.48" r="2.5" fill="#fbbf24"><title>c730823 to bb8980e | 1 merge(s) | Merge branch &#x27;publication/T-0002-empirical-feedback&#x27; into integration/T-0002-idle-game | 0.12</title></circle>
+<circle cx="303.16" cy="435.00" r="2.5" fill="#fbbf24"><title>bb8980e to 69868f4 | 1 merge(s) | Merge commit &#x27;c4c938ff2ce909d76d5ffe95906a5e0cc2e6df8a&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="309.51" cy="434.90" r="2.5" fill="#fbbf24"><title>69868f4 to db4e6ca | 1 merge(s) | Merge commit &#x27;0ec1fe948261efcecd9c32b414a49c5921dc6a61&#x27; into integration/T-0002-idle-game | 0.01</title></circle>
+<circle cx="315.86" cy="435.00" r="2.5" fill="#fbbf24"><title>db4e6ca to 85999c9 | 1 merge(s) | Merge commit &#x27;63f7c8f687225ab1dfbb2e9df929e1106b99139e&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="322.20" cy="435.00" r="2.5" fill="#fbbf24"><title>85999c9 to 3e070f8 | 1 merge(s) | Merge commit &#x27;7837de331049536355e0cff9606c308b6e275aa0&#x27; into integration/T-0002-idle-game | 0.00</title></circle>
+<circle cx="328.55" cy="331.12" r="2.5" fill="#fbbf24"><title>3e070f8 to b969529 | 1 merge(s) | docs: retain regular box pending review of geometry experiment | 8.03</title></circle>
+<circle cx="334.90" cy="433.55" r="2.5" fill="#fbbf24"><title>b969529 to a5ad370 | 1 merge(s) | Integrate reviewed T125 Hall price and prestige UI | 0.11</title></circle>
+<circle cx="341.25" cy="435.00" r="2.5" fill="#fbbf24"><title>a5ad370 to 5d12885 | 1 merge(s) | Integrate reviewed T127 geometry experiment and retained regular box decision | 0.00</title></circle>
+<circle cx="347.60" cy="435.00" r="2.5" fill="#fbbf24"><title>5d12885 to 590a0a0 | 1 merge(s) | Clarify T127 retained evidence byte normalization | 0.00</title></circle>
+<circle cx="353.95" cy="435.00" r="2.5" fill="#fbbf24"><title>590a0a0 to 572a0c7 | 1 merge(s) | Integrate reviewed T129 building scale art | 0.00</title></circle>
+<circle cx="360.30" cy="431.28" r="2.5" fill="#fbbf24"><title>572a0c7 to 2f2cb3c | 1 merge(s) | Integrate reviewed T126 shared progression corrections | 0.29</title></circle>
+<circle cx="366.64" cy="434.25" r="2.5" fill="#fbbf24"><title>2f2cb3c to 42f05f6 | 1 merge(s) | Integrate reviewed T124 useful progression and actual measurement | 0.06</title></circle>
+<circle cx="372.99" cy="434.81" r="2.5" fill="#fbbf24"><title>42f05f6 to 485441e | 1 merge(s) | Integrate reviewed T123 saturated tool continuity | 0.01</title></circle>
+<circle cx="379.34" cy="433.64" r="2.5" fill="#fbbf24"><title>485441e to 2d790b6 | 1 merge(s) | docs: release current review feedback and record cleaner crash | 0.11</title></circle>
+<circle cx="385.69" cy="435.00" r="2.5" fill="#fbbf24"><title>2d790b6 to 0c0c04f | 1 merge(s) | Record integrated cleaner hotfix verification and native evidence | 0.00</title></circle>
+<circle cx="392.04" cy="425.73" r="2.5" fill="#fbbf24"><title>0c0c04f to e1b65ec | 1 merge(s) | Record combined tree palette and cleaner verification | 0.72</title></circle>
+<circle cx="398.39" cy="423.30" r="2.5" fill="#fbbf24"><title>e1b65ec to 7c796c0 | 1 merge(s) | docs: annotate review images and capture building workshop decisions | 0.91</title></circle>
+<circle cx="404.74" cy="433.50" r="2.5" fill="#fbbf24"><title>7c796c0 to 1bbd52c | 1 merge(s) | docs: retain burial observatory and researcher recipe decisions | 0.12</title></circle>
+<circle cx="411.09" cy="434.12" r="2.5" fill="#fbbf24"><title>1bbd52c to 8726661 | 1 merge(s) | Repair T137 design punctuation encoding | 0.07</title></circle>
+<circle cx="417.43" cy="435.00" r="2.5" fill="#fbbf24"><title>8726661 to 4d40d55 | 1 merge(s) | Record landscape editor integration and exact browser source provenance | 0.00</title></circle>
+<circle cx="423.78" cy="415.69" r="2.5" fill="#fbbf24"><title>4d40d55 to 644da18 | 1 merge(s) | Stage reviewed T138 prestige planning for combined r8 integration | 1.49</title></circle>
+<circle cx="430.13" cy="403.68" r="2.5" fill="#fbbf24"><title>644da18 to 19d673f | 1 merge(s) | Stage reviewed T137 palette navigation and stock-first placement | 2.42</title></circle>
+<circle cx="436.48" cy="434.65" r="2.5" fill="#fbbf24"><title>19d673f to 8ea9754 | 1 merge(s) | Stage reviewed T136 canonical economy and capacity rules | 0.03</title></circle>
+<circle cx="442.83" cy="394.20" r="2.5" fill="#fbbf24"><title>8ea9754 to 4830a7d | 1 merge(s) | Preserve source encoding after recovery merge resolution | 3.16</title></circle>
+<circle cx="449.18" cy="434.83" r="2.5" fill="#fbbf24"><title>4830a7d to b25ec45 | 1 merge(s) | Stage reviewed T140 cleanup presentation and scale audit | 0.01</title></circle>
+<circle cx="455.53" cy="430.41" r="2.5" fill="#fbbf24"><title>b25ec45 to a03599e | 1 merge(s) | Combine reviewed T139 upward supported pads into r8 | 0.35</title></circle>
+<circle cx="461.88" cy="435.00" r="2.5" fill="#fbbf24"><title>a03599e to 025b6b0 | 1 merge(s) | Combine reviewed prestige support prerequisite fixtures | 0.00</title></circle>
+<circle cx="468.22" cy="435.00" r="2.5" fill="#fbbf24"><title>025b6b0 to d0fc7f9 | 1 merge(s) | Incorporate published review notification workflow | 0.00</title></circle>
+<circle cx="474.57" cy="434.42" r="2.5" fill="#fbbf24"><title>d0fc7f9 to 2af9f14 | 1 merge(s) | Keep regression and native receipts distinct in candidate manifest | 0.04</title></circle>
+<circle cx="480.92" cy="434.67" r="2.5" fill="#fbbf24"><title>2af9f14 to 028d663 | 1 merge(s) | Combine approved native startup pause verification | 0.03</title></circle>
+<circle cx="487.27" cy="434.84" r="2.5" fill="#fbbf24"><title>028d663 to 8f2735d | 1 merge(s) | Finalize local r8 candidate evidence after approved harness verification | 0.01</title></circle>
+<circle cx="493.62" cy="435.00" r="2.5" fill="#fbbf24"><title>8f2735d to 4be8a95 | 1 merge(s) | docs: retain user terrain candidate and guide-first review preference | 0.00</title></circle>
+<circle cx="499.97" cy="435.00" r="2.5" fill="#fbbf24"><title>4be8a95 to 31ffe47 | 1 merge(s) | Record landscape routes village and cave intent from extended workshop export | 0.00</title></circle>
+<circle cx="506.32" cy="434.67" r="2.5" fill="#fbbf24"><title>31ffe47 to b112b07 | 1 merge(s) | Stage reviewed T143 uncapped tool economy locally | 0.03</title></circle>
+<circle cx="512.66" cy="435.00" r="2.5" fill="#fbbf24"><title>b112b07 to b45aff1 | 1 merge(s) | Coordinate local next checkpoint production topology and material seams | 0.00</title></circle>
+<circle cx="519.01" cy="435.00" r="2.5" fill="#fbbf24"><title>b45aff1 to d1b44e2 | 1 merge(s) | Retain exact host and prospective production accounting agreements | 0.00</title></circle>
+<circle cx="525.36" cy="433.74" r="2.5" fill="#fbbf24"><title>d1b44e2 to e69cf1a | 1 merge(s) | Share scoped native collectible and atomic host lifecycle guidance | 0.10</title></circle>
+<circle cx="531.71" cy="433.39" r="2.5" fill="#fbbf24"><title>e69cf1a to 5e91609 | 1 merge(s) | Integrate reviewed T147 recipe core locally | 0.12</title></circle>
+<circle cx="538.06" cy="434.92" r="2.5" fill="#fbbf24"><title>5e91609 to 221bc78 | 1 merge(s) | Share actual checkpoint schema receipts for final identity audit | 0.01</title></circle>
+<circle cx="544.41" cy="434.62" r="2.5" fill="#fbbf24"><title>221bc78 to 0c8b5db | 1 merge(s) | Stage reviewed T150 common host and Workshop locally | 0.03</title></circle>
+<circle cx="550.76" cy="435.00" r="2.5" fill="#fbbf24"><title>0c8b5db to b49d3d5 | 1 merge(s) | Stage reviewed T154 structural support with reviewed Workshop | 0.00</title></circle>
+<circle cx="557.11" cy="434.72" r="2.5" fill="#fbbf24"><title>b49d3d5 to 7f232a2 | 1 merge(s) | Stage reviewed T152 Reactor with common production locally | 0.02</title></circle>
+<circle cx="563.45" cy="434.51" r="2.5" fill="#fbbf24"><title>7f232a2 to e6f4ab9 | 1 merge(s) | Restore complete additive evidence dispatch preambles | 0.04</title></circle>
+<circle cx="569.80" cy="434.33" r="2.5" fill="#fbbf24"><title>e6f4ab9 to f57162b | 1 merge(s) | Stage final reviewed T148 terrain and composed scenery locally | 0.05</title></circle>
+<circle cx="576.15" cy="434.94" r="2.5" fill="#fbbf24"><title>f57162b to 7f085cc | 1 merge(s) | Stage reviewed T151 Observatory on final terrain locally | 0.00</title></circle>
+<circle cx="582.50" cy="435.00" r="2.5" fill="#fbbf24"><title>7f085cc to 13242a6 | 1 merge(s) | Include T149 final terrain composition acknowledgement | 0.00</title></circle>
+<circle cx="588.85" cy="434.63" r="2.5" fill="#fbbf24"><title>13242a6 to 2105aef | 1 merge(s) | Integrate reviewed Observatory terrain fixture correction | 0.03</title></circle>
+<circle cx="595.20" cy="434.81" r="2.5" fill="#fbbf24"><title>2105aef to 7d401c5 | 1 merge(s) | Retain reviewed Observatory recovery rule in final schema guidance | 0.01</title></circle>
+<circle cx="601.55" cy="434.94" r="2.5" fill="#fbbf24"><title>7d401c5 to 9c623f7 | 1 merge(s) | Integrate reviewed authored-terrain placement regression fixture | 0.00</title></circle>
+<circle cx="607.89" cy="434.88" r="2.5" fill="#fbbf24"><title>9c623f7 to 21a478b | 1 merge(s) | Record final r9 identity verification and outstanding startup checkpoint | 0.01</title></circle>
+<circle cx="614.24" cy="434.88" r="2.5" fill="#fbbf24"><title>21a478b to 816cad5 | 1 merge(s) | docs: bind exact recipe roof and topology proposals | 0.01</title></circle>
+<circle cx="620.59" cy="434.57" r="2.5" fill="#fbbf24"><title>816cad5 to cf2309e | 1 merge(s) | Merge reviewed T162 human idle and blower depth | 0.03</title></circle>
+<circle cx="626.94" cy="434.63" r="2.5" fill="#fbbf24"><title>cf2309e to fe8f7bf | 1 merge(s) | Merge reviewed T157 palette and common panels | 0.03</title></circle>
+<circle cx="633.29" cy="434.94" r="2.5" fill="#fbbf24"><title>fe8f7bf to 5a89d8d | 1 merge(s) | Merge reviewed T163 preserving both evidence dispatches | 0.00</title></circle>
+<circle cx="639.64" cy="430.66" r="2.5" fill="#fbbf24"><title>5a89d8d to 59fce95 | 1 merge(s) | Merge reviewed T161 fixed Observatory and Replication feedback | 0.34</title></circle>
+<circle cx="645.99" cy="433.26" r="2.5" fill="#fbbf24"><title>59fce95 to 2a6fe9f | 1 merge(s) | Merge reviewed T164 branched cave and Hall objectives | 0.13</title></circle>
+<circle cx="652.34" cy="433.21" r="2.5" fill="#fbbf24"><title>2a6fe9f to 8e8866b | 1 merge(s) | Merge reviewed T158 preserving cave and recipe checks | 0.14</title></circle>
+<circle cx="658.68" cy="432.93" r="2.5" fill="#fbbf24"><title>8e8866b to ba11a86 | 1 merge(s) | Merge reviewed T160 retaining all check routes | 0.16</title></circle>
+<circle cx="665.03" cy="434.71" r="2.5" fill="#fbbf24"><title>ba11a86 to 69ce7b0 | 1 merge(s) | Merge reviewed Observatory cave fixture correction | 0.02</title></circle>
+<circle cx="671.38" cy="434.94" r="2.5" fill="#fbbf24"><title>69ce7b0 to c6b02ed | 1 merge(s) | Merge reviewed five-shape cave fixture correction | 0.00</title></circle>
+<circle cx="677.73" cy="431.23" r="2.5" fill="#fbbf24"><title>c6b02ed to 82f0fdf | 1 merge(s) | Preserve Museum holdings capture and fixture metadata after merge | 0.29</title></circle>
+<circle cx="684.08" cy="434.71" r="2.5" fill="#fbbf24"><title>82f0fdf to c2f0ec0 | 1 merge(s) | Merge reviewed legal service fixture supplement | 0.02</title></circle>
+<circle cx="690.43" cy="434.31" r="2.5" fill="#fbbf24"><title>c2f0ec0 to 1eb83ad | 1 merge(s) | docs: consolidate integration pins into maintained status | 0.05</title></circle>
+<circle cx="696.78" cy="435.00" r="2.5" fill="#fbbf24"><title>1eb83ad to 21a6f23 | 1 merge(s) | Incorporate scoped Product current index and archived guidance | 0.00</title></circle>
+<circle cx="703.12" cy="403.29" r="2.5" fill="#fbbf24"><title>21a6f23 to 30fdf53 | 1 merge(s) | Record all owner read receipts and exact pending join contracts | 2.45</title></circle>
+<circle cx="709.47" cy="428.16" r="2.5" fill="#fbbf24"><title>30fdf53 to 21930de | 1 merge(s) | Record verified foreground integration and local T168 completion | 0.53</title></circle>
+<circle cx="715.82" cy="434.94" r="2.5" fill="#fbbf24"><title>21930de to b8dd7aa | 1 merge(s) | Record verified input-mode integration and local T169 completion | 0.00</title></circle>
+<circle cx="722.17" cy="433.98" r="2.5" fill="#fbbf24"><title>b8dd7aa to cd2a1ae | 1 merge(s) | Record joined T170 output and recipe verification | 0.08</title></circle>
+<circle cx="728.52" cy="434.66" r="2.5" fill="#fbbf24"><title>cd2a1ae to 3687975 | 1 merge(s) | Record joined T171 strategy and finite-cap verification | 0.03</title></circle>
+<circle cx="734.87" cy="435.00" r="2.5" fill="#fbbf24"><title>3687975 to f6a779a | 1 merge(s) | Record joined T167 environment views and preserved cave verification | 0.00</title></circle>
+<circle cx="741.22" cy="434.67" r="2.5" fill="#fbbf24"><title>f6a779a to 150f715 | 1 merge(s) | Record verified task starting-ref correction awaiting user retry | 0.03</title></circle>
+<circle cx="747.57" cy="434.28" r="2.5" fill="#fbbf24"><title>150f715 to 3b1bafd | 1 merge(s) | Record actual outlet-owner read receipt and source-specific seam findings | 0.06</title></circle>
+<circle cx="753.91" cy="433.35" r="2.5" fill="#fbbf24"><title>3b1bafd to 757ff5d | 1 merge(s) | Retain staged T177 verification and required shared UI geometry joins | 0.13</title></circle>
+<circle cx="760.26" cy="432.81" r="2.5" fill="#fbbf24"><title>757ff5d to fa353e8 | 1 merge(s) | Record reviewed chute handoff and required corrected technology join | 0.17</title></circle>
+<circle cx="766.61" cy="414.80" r="2.5" fill="#fbbf24"><title>fa353e8 to 90e4203 | 1 merge(s) | Merge reviewed T174 selected geometry capacity and progression corrections | 1.56</title></circle>
+<circle cx="772.96" cy="433.22" r="2.5" fill="#fbbf24"><title>90e4203 to 2e4989c | 1 merge(s) | Verify reviewed geometry and chute integration with full recovery and native evidence | 0.14</title></circle>
+<circle cx="779.31" cy="432.75" r="2.5" fill="#fbbf24"><title>2e4989c to 2c5fb78 | 1 merge(s) | Verify final contextual UI and close Museum Observatory integration conditions | 0.17</title></circle>
+<circle cx="785.66" cy="435.00" r="2.5" fill="#fbbf24"><title>2c5fb78 to 5ffb941 | 1 merge(s) | Verify reviewed woodland integration and exact common plate equality | 0.00</title></circle>
+<circle cx="792.01" cy="435.00" r="2.5" fill="#fbbf24"><title>5ffb941 to 5890004 | 1 merge(s) | Record final identity child and exact verified base | 0.00</title></circle>
+<circle cx="798.36" cy="434.21" r="2.5" fill="#fbbf24"><title>5890004 to 172762a | 1 merge(s) | Record six active-owner contract deliveries and integration callbacks | 0.06</title></circle>
+<circle cx="804.70" cy="431.94" r="2.5" fill="#fbbf24"><title>172762a to 0e93d04 | 1 merge(s) | Record T184 staged integration checks and required Observatory join | 0.24</title></circle>
+<circle cx="811.05" cy="433.21" r="2.5" fill="#fbbf24"><title>0e93d04 to ece9138 | 1 merge(s) | Integrate reviewed T183 completed output lifecycle | 0.14</title></circle>
+<circle cx="817.40" cy="408.58" r="2.5" fill="#fbbf24"><title>ece9138 to 76c981d | 1 merge(s) | Integrate reviewed T182 coherent facades and discharge artwork | 2.04</title></circle>
+<circle cx="823.75" cy="434.90" r="2.5" fill="#fbbf24"><title>76c981d to daa5a8a | 1 merge(s) | Incorporate every-checkpoint maintainability rule and actual pending receipt | 0.01</title></circle>
+<circle cx="830.10" cy="434.54" r="2.5" fill="#fbbf24"><title>daa5a8a to a62f06a | 1 merge(s) | Record completed maintainability assessment and triggered upkeep disposition | 0.04</title></circle>
+<circle cx="836.45" cy="435.00" r="2.5" fill="#fbbf24"><title>a62f06a to ac32de0 | 1 merge(s) | Record completed final maintainability delta and source-bound disposition | 0.00</title></circle>
+<circle cx="842.80" cy="434.49" r="2.5" fill="#fbbf24"><title>ac32de0 to d462e4f | 1 merge(s) | Record authorized native first slice and T192 allocation within T194 | 0.04</title></circle>
+<circle cx="849.14" cy="434.85" r="2.5" fill="#fbbf24"><title>d462e4f to 8be7e0f | 1 merge(s) | Keep corrected-package validation status explicit about remaining safeguard | 0.01</title></circle>
+<circle cx="855.49" cy="434.80" r="2.5" fill="#fbbf24"><title>8be7e0f to 373da7e | 1 merge(s) | Record T197 executing-owner source receipt and verification limits | 0.02</title></circle>
+<circle cx="861.84" cy="434.75" r="2.5" fill="#fbbf24"><title>373da7e to 1c7e36a | 1 merge(s) | Verify joined T196 runtime states and retain ordinary-scale native evidence | 0.02</title></circle>
+<circle cx="868.19" cy="435.00" r="2.5" fill="#fbbf24"><title>1c7e36a to b93748f | 1 merge(s) | Integrate reviewed woodland continuity and foliage repair | 0.00</title></circle>
+<circle cx="874.54" cy="435.00" r="2.5" fill="#fbbf24"><title>b93748f to 7aaec5b | 1 merge(s) | Record completed r14 interval assessment and owned T204 release trigger | 0.00</title></circle>
+<circle cx="880.89" cy="434.14" r="2.5" fill="#fbbf24"><title>7aaec5b to 2018ac4 | 1 merge(s) | Integrate reviewed T199 research Reactor Prestige and readiness semantics | 0.07</title></circle>
+<circle cx="887.24" cy="434.26" r="2.5" fill="#fbbf24"><title>2018ac4 to 759fded | 1 merge(s) | Clarify completed semantics and retain rejected Hull mount assessment | 0.06</title></circle>
+<circle cx="893.59" cy="434.61" r="2.5" fill="#fbbf24"><title>759fded to 1f66433 | 1 merge(s) | Verify actual r14 identity join and retain raw-save validation boundary | 0.03</title></circle>
+<circle cx="899.93" cy="435.00" r="2.5" fill="#fbbf24"><title>1f66433 to d15d2a2 | 1 merge(s) | Record T212 designer read receipt separately from implementation review | 0.00</title></circle>
+<circle cx="906.28" cy="434.95" r="2.5" fill="#fbbf24"><title>d15d2a2 to e9b1d80 | 1 merge(s) | Verify actual T212 Observatory join and retain first r15 evidence limits | 0.00</title></circle>
+<circle cx="912.63" cy="434.85" r="2.5" fill="#fbbf24"><title>e9b1d80 to 39dee70 | 1 merge(s) | Record T211 joined staffing checks and pending coupled validation | 0.01</title></circle>
+<circle cx="918.98" cy="435.00" r="2.5" fill="#fbbf24"><title>39dee70 to df5375f | 1 merge(s) | Retain completed substantial r15 joined assessment and dispositions | 0.00</title></circle>
+<circle cx="925.33" cy="435.00" r="2.5" fill="#fbbf24"><title>df5375f to 3bd160a | 1 merge(s) | Refresh current r15 integration index after T208 and T210 | 0.00</title></circle>
+<circle cx="931.68" cy="434.90" r="2.5" fill="#fbbf24"><title>3bd160a to 22d7030 | 1 merge(s) | Record T209 joined outlet verification and pending final paired seam | 0.01</title></circle>
+<circle cx="938.03" cy="430.14" r="2.5" fill="#fbbf24"><title>22d7030 to 6415606 | 1 merge(s) | Record final r15 identity child and current integration obligations | 0.38</title></circle>
+<circle cx="944.38" cy="434.62" r="2.5" fill="#fbbf24"><title>6415606 to fcb60ab | 1 merge(s) | Record actual joined r15 schema23 identity verification | 0.03</title></circle>
+<circle cx="950.72" cy="434.86" r="2.5" fill="#fbbf24"><title>fcb60ab to ca00c00 | 1 merge(s) | Record T218 executing receipt and explicit level-polish disposition | 0.01</title></circle>
+<circle cx="957.07" cy="434.86" r="2.5" fill="#fbbf24"><title>ca00c00 to 9543595 | 1 merge(s) | Verify actual T220 join and retain marker-coupled completion obligation | 0.01</title></circle>
+<circle cx="963.42" cy="434.95" r="2.5" fill="#fbbf24"><title>9543595 to bcbd7c5 | 1 merge(s) | Verify joined T217 marker input and fulfill T220 coupled checks | 0.00</title></circle>
+<circle cx="969.77" cy="434.58" r="2.5" fill="#fbbf24"><title>bcbd7c5 to 5b7a8cd | 1 merge(s) | Integrate reviewed T218 paired apertures staffing and decoration | 0.03</title></circle>
+<circle cx="976.12" cy="434.77" r="2.5" fill="#fbbf24"><title>5b7a8cd to 7258a1d | 1 merge(s) | Record all executing source receipts and Product substantial-assessment disposition | 0.02</title></circle>
+<circle cx="982.47" cy="434.91" r="2.5" fill="#fbbf24"><title>7258a1d to cbd2280 | 1 merge(s) | Record five completed roots and released r16 identity child | 0.01</title></circle>
+<circle cx="988.82" cy="434.49" r="2.5" fill="#fbbf24"><title>cbd2280 to 90dc8b2 | 1 merge(s) | Record executing source receipts and qualified performance evidence | 0.04</title></circle>
+<circle cx="995.16" cy="434.40" r="2.5" fill="#fbbf24"><title>90dc8b2 to fe1ab66 | 1 merge(s) | Merge reviewed T223 natural landscape and cave contours | 0.05</title></circle>
+<circle cx="1001.51" cy="435.00" r="2.5" fill="#fbbf24"><title>fe1ab66 to 50c19a6 | 1 merge(s) | Normalize assessment document ending | 0.00</title></circle>
+<circle cx="1007.86" cy="435.00" r="2.5" fill="#fbbf24"><title>50c19a6 to 0e54f4e | 1 merge(s) | Merge reviewed T224 host-textured moving hardware and whole cutaway fade | 0.00</title></circle>
+<circle cx="1014.21" cy="434.91" r="2.5" fill="#fbbf24"><title>0e54f4e to 832f397 | 1 merge(s) | Incorporate Product substantial joined assessment dispositions without ancestry | 0.01</title></circle>
+<circle cx="1020.56" cy="434.77" r="2.5" fill="#fbbf24"><title>832f397 to f5136e6 | 1 merge(s) | Clarify ordinary and close native evidence scope | 0.02</title></circle>
+<circle cx="1026.91" cy="434.33" r="2.5" fill="#fbbf24"><title>f5136e6 to 8b45d71 | 1 merge(s) | Coordinate bounded ordinary r18 evidence work and retain executing receipts | 0.05</title></circle>
+<circle cx="1033.26" cy="434.82" r="2.5" fill="#fbbf24"><title>8b45d71 to 98de5ce | 1 merge(s) | Schedule acknowledged r18 navigation measurement window without premature start | 0.01</title></circle>
+<circle cx="1039.61" cy="434.42" r="2.5" fill="#fbbf24"><title>98de5ce to c87eca0 | 1 merge(s) | Record T232 source join with verification deferred until quiet release | 0.04</title></circle>
+<circle cx="1045.95" cy="434.96" r="2.5" fill="#fbbf24"><title>c87eca0 to 570efe5 | 1 merge(s) | Integrate reviewed T229 opaque-contour terrain contact correction | 0.00</title></circle>
+<circle cx="1052.30" cy="435.00" r="2.5" fill="#fbbf24"><title>570efe5 to aab4648 | 1 merge(s) | Record acknowledged navigation START and serialized-task coverage correction | 0.00</title></circle>
+<circle cx="1058.65" cy="435.00" r="2.5" fill="#fbbf24"><title>aab4648 to 59771ec | 1 merge(s) | Preserve exact assessment bytes in lossless archive | 0.00</title></circle>
+<circle cx="1065.00" cy="435.00" r="2.5" fill="#fbbf24"><title>59771ec to 907b8aa | 1 merge(s) | Retain completed named navigation assessment and limits | 0.00</title></circle>
+<path stroke="#fbbf24" stroke-width="3" d="M360,78h25"/>
+<text x="393" y="83">Tests and test support</text>
+<text x="582.5" y="496" text-anchor="middle">Cumulative delivery merges (synchronization and publication excluded)</text>
+<text transform="translate(24,265.0) rotate(-90)" text-anchor="middle">Removed lines / starting code size / merge (%)</text>
+</svg>

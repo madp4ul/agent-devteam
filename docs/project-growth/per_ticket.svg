@@ -1,0 +1,295 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" role="img" aria-labelledby="title desc">
+<title id="title">Code churn per completed work unit</title><desc id="desc">Resolution intervals; repeated edits count repeatedly; inspect points for commit evidence</desc>
+<style>text{font-family:Arial,sans-serif;fill:#cbd5e1;font-size:14px}.grid{stroke:#334155;stroke-width:1}.line{fill:none;stroke-width:2.5;stroke-linejoin:round}</style>
+<rect width="1100" height="520" rx="12" fill="#101827"/>
+<text x="30" y="32" style="font-size:22px;fill:#f1f5f9">Code churn per completed work unit</text>
+<text x="30" y="56">Resolution intervals; repeated edits count repeatedly; inspect points for commit evidence</text>
+<path class="grid" d="M100,435.00h965"/>
+<text x="88" y="440.00" text-anchor="end">0</text>
+<path class="grid" d="M100,367.00h965"/>
+<text x="88" y="372.00" text-anchor="end">619</text>
+<path class="grid" d="M100,299.00h965"/>
+<text x="88" y="304.00" text-anchor="end">1,239</text>
+<path class="grid" d="M100,231.00h965"/>
+<text x="88" y="236.00" text-anchor="end">1,858</text>
+<path class="grid" d="M100,163.00h965"/>
+<text x="88" y="168.00" text-anchor="end">2,477</text>
+<path class="grid" d="M100,95.00h965"/>
+<text x="88" y="100.00" text-anchor="end">3,096</text>
+<path class="grid" d="M100.00,95v340"/>
+<text x="100.00" y="460" text-anchor="middle">0</text>
+<path class="grid" d="M260.83,95v340"/>
+<text x="260.83" y="460" text-anchor="middle">28</text>
+<path class="grid" d="M421.67,95v340"/>
+<text x="421.67" y="460" text-anchor="middle">55</text>
+<path class="grid" d="M582.50,95v340"/>
+<text x="582.50" y="460" text-anchor="middle">82</text>
+<path class="grid" d="M743.33,95v340"/>
+<text x="743.33" y="460" text-anchor="middle">110</text>
+<path class="grid" d="M904.17,95v340"/>
+<text x="904.17" y="460" text-anchor="middle">138</text>
+<path class="grid" d="M1065.00,95v340"/>
+<text x="1065.00" y="460" text-anchor="middle">165</text>
+<polyline class="line" stroke="#60a5fa" points="105.85,296.75 111.70,357.03 117.55,339.47 123.39,153.78 129.24,214.06 135.09,396.79 140.94,346.71 146.79,281.92 152.64,411.61 158.48,434.45 164.33,371.42 170.18,401.51 176.03,319.92 181.88,370.87 187.73,348.80 193.58,329.14 199.42,428.30 205.27,383.28 211.12,385.37 216.97,433.90 222.82,353.52 228.67,308.50 234.52,398.43 240.36,416.88 246.21,351.54 252.06,324.97 257.91,292.36 263.76,333.32 269.61,432.14 275.45,398.54 281.30,433.57 287.15,435.00 293.00,424.90 298.85,405.57 304.70,403.05 310.55,430.83 316.39,426.00 322.24,433.13 328.09,397.12 333.94,360.77 339.79,376.91 351.48,430.22 363.18,433.41 369.03,336.39 374.88,366.48 380.73,411.61 386.58,365.49 392.42,434.12 398.27,400.96 415.82,416.73 427.52,419.30 433.36,421.38 439.21,384.93 445.06,434.12 450.91,417.65 456.76,411.06 462.61,388.22 491.85,412.20 509.39,362.42 521.09,435.00 526.94,389.98 532.79,392.50 538.64,396.24 550.33,411.12 556.18,358.46 562.03,380.86 567.88,420.18 573.73,412.49 579.58,426.87 602.97,392.89 608.82,428.96 614.67,382.29 620.52,435.00 626.36,249.64 632.21,422.48 643.91,435.00 649.76,414.36 673.15,411.42 679.00,417.21 684.85,405.35 690.70,372.30 708.24,435.00 714.09,404.80 719.94,425.78 725.79,208.13 731.64,355.83 737.48,405.79 743.33,343.42 749.18,398.32 755.03,366.59 760.88,406.67 766.73,429.73 772.58,348.14 784.27,403.48 801.82,430.28 807.67,435.00 813.52,369.22 819.36,428.30 825.21,431.27 831.06,405.13 836.91,420.83 842.76,434.67 848.61,423.69 854.45,428.85 860.30,434.34 866.15,357.47 872.00,420.40 877.85,393.71 883.70,431.60 889.55,305.09 895.39,400.74 901.24,382.95 924.64,402.08 930.48,425.56 942.18,428.63 948.03,425.45 953.88,433.46 971.42,416.63 977.27,381.63 983.12,423.58 1012.36,389.96 1018.21,434.34 1029.91,417.54 1035.76,368.67 1041.61,434.12 1059.15,430.64 1065.00,434.78"/>
+<circle cx="105.85" cy="296.75" r="2.5" fill="#60a5fa"><title>f5e1f3f to e5d98ff | 1 ticket(s) | setup instructions | 1,259.00</title></circle>
+<circle cx="111.70" cy="357.03" r="2.5" fill="#60a5fa"><title>e5d98ff to 2633fc6 | 1 ticket(s) | adr 3 | 710.00</title></circle>
+<circle cx="117.55" cy="339.47" r="2.5" fill="#60a5fa"><title>2633fc6 to ce3cb58 | 1 ticket(s) | ticket 17 | 870.00</title></circle>
+<circle cx="123.39" cy="153.78" r="2.5" fill="#60a5fa"><title>ce3cb58 to 1af72df | 1 ticket(s) | add refactoring ticket | 2,561.00</title></circle>
+<circle cx="129.24" cy="214.06" r="2.5" fill="#60a5fa"><title>1af72df to a61642a | 1 ticket(s) | Document bugs | 2,012.00</title></circle>
+<circle cx="135.09" cy="396.79" r="2.5" fill="#60a5fa"><title>a61642a to 427788e | 1 ticket(s) | refinement | 348.00</title></circle>
+<circle cx="140.94" cy="346.71" r="2.5" fill="#60a5fa"><title>427788e to 3b6c7b7 | 1 ticket(s) | resolve 20 | 804.00</title></circle>
+<circle cx="146.79" cy="281.92" r="2.5" fill="#60a5fa"><title>3b6c7b7 to e15f9fb | 1 ticket(s) | more issues | 1,394.00</title></circle>
+<circle cx="152.64" cy="411.61" r="2.5" fill="#60a5fa"><title>e15f9fb to b45e4b8 | 1 ticket(s) | resolve 36 | 213.00</title></circle>
+<circle cx="158.48" cy="434.45" r="2.5" fill="#60a5fa"><title>b45e4b8 to 7ad944e | 1 ticket(s) | resolve 15 | 5.00</title></circle>
+<circle cx="164.33" cy="371.42" r="2.5" fill="#60a5fa"><title>7ad944e to 033a105 | 1 ticket(s) | resolve 21 | 579.00</title></circle>
+<circle cx="170.18" cy="401.51" r="2.5" fill="#60a5fa"><title>033a105 to c2b4b94 | 1 ticket(s) | resolve 22 | 305.00</title></circle>
+<circle cx="176.03" cy="319.92" r="2.5" fill="#60a5fa"><title>c2b4b94 to dbfd041 | 1 ticket(s) | resolve 41 | 1,048.00</title></circle>
+<circle cx="181.88" cy="370.87" r="2.5" fill="#60a5fa"><title>dbfd041 to 20f575f | 1 ticket(s) | resolve 23 | 584.00</title></circle>
+<circle cx="187.73" cy="348.80" r="2.5" fill="#60a5fa"><title>20f575f to 71fdff4 | 1 ticket(s) | resolve 24 | 785.00</title></circle>
+<circle cx="193.58" cy="329.14" r="2.5" fill="#60a5fa"><title>71fdff4 to fa1a640 | 1 ticket(s) | resolve 25 | 964.00</title></circle>
+<circle cx="199.42" cy="428.30" r="2.5" fill="#60a5fa"><title>fa1a640 to 616d99d | 1 ticket(s) | Create 45 | 61.00</title></circle>
+<circle cx="205.27" cy="383.28" r="2.5" fill="#60a5fa"><title>616d99d to beee068 | 1 ticket(s) | resolve 26 | 471.00</title></circle>
+<circle cx="211.12" cy="385.37" r="2.5" fill="#60a5fa"><title>beee068 to d38bb34 | 1 ticket(s) | resolve 31 - vs code | 452.00</title></circle>
+<circle cx="216.97" cy="433.90" r="2.5" fill="#60a5fa"><title>d38bb34 to f048168 | 1 ticket(s) | resolve 44 | 10.00</title></circle>
+<circle cx="222.82" cy="353.52" r="2.5" fill="#60a5fa"><title>f048168 to 3d57c87 | 1 ticket(s) | RESOLVE 45 | 742.00</title></circle>
+<circle cx="228.67" cy="308.50" r="2.5" fill="#60a5fa"><title>3d57c87 to 577d400 | 1 ticket(s) | issue 27 first messy implementation | 1,152.00</title></circle>
+<circle cx="234.52" cy="398.43" r="2.5" fill="#60a5fa"><title>577d400 to fe6693e | 1 ticket(s) | new issues | 333.00</title></circle>
+<circle cx="240.36" cy="416.88" r="2.5" fill="#60a5fa"><title>fe6693e to 4144727 | 1 ticket(s) | grill 33 | 165.00</title></circle>
+<circle cx="246.21" cy="351.54" r="2.5" fill="#60a5fa"><title>4144727 to 07515c3 | 1 ticket(s) | refinement | 760.00</title></circle>
+<circle cx="252.06" cy="324.97" r="2.5" fill="#60a5fa"><title>07515c3 to e547cd2 | 1 ticket(s) | grill 37 | 1,002.00</title></circle>
+<circle cx="257.91" cy="292.36" r="2.5" fill="#60a5fa"><title>e547cd2 to 13b20ac | 1 ticket(s) | finakize 37 | 1,299.00</title></circle>
+<circle cx="263.76" cy="333.32" r="2.5" fill="#60a5fa"><title>13b20ac to ad2ba76 | 1 ticket(s) | finalize 48 2 | 926.00</title></circle>
+<circle cx="269.61" cy="432.14" r="2.5" fill="#60a5fa"><title>ad2ba76 to 3997dca | 1 ticket(s) | refinement | 26.00</title></circle>
+<circle cx="275.45" cy="398.54" r="2.5" fill="#60a5fa"><title>3997dca to 59b5d5e | 1 ticket(s) | resolve 38 | 332.00</title></circle>
+<circle cx="281.30" cy="433.57" r="2.5" fill="#60a5fa"><title>59b5d5e to ac78063 | 1 ticket(s) | resolve 52 | 13.00</title></circle>
+<circle cx="287.15" cy="435.00" r="2.5" fill="#60a5fa"><title>ac78063 to 79b8f67 | 1 ticket(s) | resolve 28 | 0.00</title></circle>
+<circle cx="293.00" cy="424.90" r="2.5" fill="#60a5fa"><title>79b8f67 to 51545bf | 1 ticket(s) | resolve 51 54 | 92.00</title></circle>
+<circle cx="298.85" cy="405.57" r="2.5" fill="#60a5fa"><title>51545bf to a152aea | 1 ticket(s) | try harden against accidental user mention | 268.00</title></circle>
+<circle cx="304.70" cy="403.05" r="2.5" fill="#60a5fa"><title>a152aea to 8ca28d9 | 1 ticket(s) | resolve 55 | 291.00</title></circle>
+<circle cx="310.55" cy="430.83" r="2.5" fill="#60a5fa"><title>8ca28d9 to b361d56 | 1 ticket(s) | resolve 56 | 38.00</title></circle>
+<circle cx="316.39" cy="426.00" r="2.5" fill="#60a5fa"><title>b361d56 to a637f03 | 1 ticket(s) | resolve 39 | 82.00</title></circle>
+<circle cx="322.24" cy="433.13" r="2.5" fill="#60a5fa"><title>a637f03 to 0e47e61 | 1 ticket(s) | resolve 40 | 17.00</title></circle>
+<circle cx="328.09" cy="397.12" r="2.5" fill="#60a5fa"><title>0e47e61 to d88b1c5 | 1 ticket(s) | conversation issues | 345.00</title></circle>
+<circle cx="333.94" cy="360.77" r="2.5" fill="#60a5fa"><title>d88b1c5 to 3f5b881 | 1 ticket(s) | resolve 34 | 676.00</title></circle>
+<circle cx="339.79" cy="376.91" r="2.5" fill="#60a5fa"><title>3f5b881 to 3269fcd | 1 ticket(s) | create 57 | 529.00</title></circle>
+<circle cx="351.48" cy="430.22" r="2.5" fill="#60a5fa"><title>3269fcd to b4bf5bb | 2 ticket(s) | resolve 60 64 | 43.50</title></circle>
+<circle cx="363.18" cy="433.41" r="2.5" fill="#60a5fa"><title>b4bf5bb to 094042a | 2 ticket(s) | refine 59 | 14.50</title></circle>
+<circle cx="369.03" cy="336.39" r="2.5" fill="#60a5fa"><title>094042a to 35412e6 | 1 ticket(s) | resolve 59 | 898.00</title></circle>
+<circle cx="374.88" cy="366.48" r="2.5" fill="#60a5fa"><title>35412e6 to f7f3231 | 1 ticket(s) | resolve conv 1 | 624.00</title></circle>
+<circle cx="380.73" cy="411.61" r="2.5" fill="#60a5fa"><title>f7f3231 to 5772036 | 1 ticket(s) | resolve conv 2 | 213.00</title></circle>
+<circle cx="386.58" cy="365.49" r="2.5" fill="#60a5fa"><title>5772036 to ddf3074 | 1 ticket(s) | resolve conv 3 improvements | 633.00</title></circle>
+<circle cx="392.42" cy="434.12" r="2.5" fill="#60a5fa"><title>ddf3074 to d4d8712 | 1 ticket(s) | resolve conv 4 | 8.00</title></circle>
+<circle cx="398.27" cy="400.96" r="2.5" fill="#60a5fa"><title>d4d8712 to dcb5d47 | 1 ticket(s) | maintenance 2 | 310.00</title></circle>
+<circle cx="415.82" cy="416.73" r="2.5" fill="#60a5fa"><title>dcb5d47 to a85bb76 | 3 ticket(s) | maintenance 3 | 166.33</title></circle>
+<circle cx="427.52" cy="419.30" r="2.5" fill="#60a5fa"><title>a85bb76 to bf4b74f | 2 ticket(s) | resolve 5 | 143.00</title></circle>
+<circle cx="433.36" cy="421.38" r="2.5" fill="#60a5fa"><title>bf4b74f to c3dccb1 | 1 ticket(s) | resolve 6 | 124.00</title></circle>
+<circle cx="439.21" cy="384.93" r="2.5" fill="#60a5fa"><title>c3dccb1 to 588c05d | 1 ticket(s) | resolve 8 | 456.00</title></circle>
+<circle cx="445.06" cy="434.12" r="2.5" fill="#60a5fa"><title>588c05d to c5da964 | 1 ticket(s) | resolve conv 7 | 8.00</title></circle>
+<circle cx="450.91" cy="417.65" r="2.5" fill="#60a5fa"><title>c5da964 to f556770 | 1 ticket(s) | resolve 67 | 158.00</title></circle>
+<circle cx="456.76" cy="411.06" r="2.5" fill="#60a5fa"><title>f556770 to bb79590 | 1 ticket(s) | resolve 66 | 218.00</title></circle>
+<circle cx="462.61" cy="388.22" r="2.5" fill="#60a5fa"><title>bb79590 to 037d0bf | 1 ticket(s) | resolve 57 | 426.00</title></circle>
+<circle cx="491.85" cy="412.20" r="2.5" fill="#60a5fa"><title>037d0bf to a171ffb | 5 ticket(s) | resolve 8-12 maintainability | 207.60</title></circle>
+<circle cx="509.39" cy="362.42" r="2.5" fill="#60a5fa"><title>a171ffb to 4b73b5b | 3 ticket(s) | resolve maintenace 13-15 | 661.00</title></circle>
+<circle cx="521.09" cy="435.00" r="2.5" fill="#60a5fa"><title>4b73b5b to fc3504c | 2 ticket(s) | new tasks | 0.00</title></circle>
+<circle cx="526.94" cy="389.98" r="2.5" fill="#60a5fa"><title>fc3504c to 0f0ee69 | 1 ticket(s) | resolve continue conversations  1 | 410.00</title></circle>
+<circle cx="532.79" cy="392.50" r="2.5" fill="#60a5fa"><title>0f0ee69 to c12a13a | 1 ticket(s) | resolve 69 | 387.00</title></circle>
+<circle cx="538.64" cy="396.24" r="2.5" fill="#60a5fa"><title>c12a13a to 0bea795 | 1 ticket(s) | resolve maintenance 18 | 353.00</title></circle>
+<circle cx="550.33" cy="411.12" r="2.5" fill="#60a5fa"><title>0bea795 to be466bb | 2 ticket(s) | resolve conv 2 improvements | 217.50</title></circle>
+<circle cx="556.18" cy="358.46" r="2.5" fill="#60a5fa"><title>be466bb to 9597a02 | 1 ticket(s) | resolve display 2 | 697.00</title></circle>
+<circle cx="562.03" cy="380.86" r="2.5" fill="#60a5fa"><title>9597a02 to 81ec477 | 1 ticket(s) | resolve 3 | 493.00</title></circle>
+<circle cx="567.88" cy="420.18" r="2.5" fill="#60a5fa"><title>81ec477 to 74ba638 | 1 ticket(s) | resolve 4 proper | 135.00</title></circle>
+<circle cx="573.73" cy="412.49" r="2.5" fill="#60a5fa"><title>74ba638 to f597cf0 | 1 ticket(s) | resolve 72 | 205.00</title></circle>
+<circle cx="579.58" cy="426.87" r="2.5" fill="#60a5fa"><title>f597cf0 to 2fc20ae | 1 ticket(s) | resolve 65 | 74.00</title></circle>
+<circle cx="602.97" cy="392.89" r="2.5" fill="#60a5fa"><title>2fc20ae to b6f5ba7 | 4 ticket(s) | maintenance 1-4 | 383.50</title></circle>
+<circle cx="608.82" cy="428.96" r="2.5" fill="#60a5fa"><title>b6f5ba7 to b82b38a | 1 ticket(s) | resolve maintenance improvement | 55.00</title></circle>
+<circle cx="614.67" cy="382.29" r="2.5" fill="#60a5fa"><title>b82b38a to fbe902d | 1 ticket(s) | resolve 70 better | 480.00</title></circle>
+<circle cx="620.52" cy="435.00" r="2.5" fill="#60a5fa"><title>fbe902d to 9b4e6b2 | 1 ticket(s) | refinement | 0.00</title></circle>
+<circle cx="626.36" cy="249.64" r="2.5" fill="#60a5fa"><title>9b4e6b2 to 6af327d | 1 ticket(s) | resolve 68 | 1,688.00</title></circle>
+<circle cx="632.21" cy="422.48" r="2.5" fill="#60a5fa"><title>6af327d to fe6fe19 | 1 ticket(s) | add 75 | 114.00</title></circle>
+<circle cx="643.91" cy="435.00" r="2.5" fill="#60a5fa"><title>fe6fe19 to bf1768d | 2 ticket(s) | resolve some tickets | 0.00</title></circle>
+<circle cx="649.76" cy="414.36" r="2.5" fill="#60a5fa"><title>bf1768d to 0ef478f | 1 ticket(s) | resolve 74 75 | 188.00</title></circle>
+<circle cx="673.15" cy="411.42" r="2.5" fill="#60a5fa"><title>0ef478f to 6d38e40 | 4 ticket(s) | resolve maintenance round 3 | 214.75</title></circle>
+<circle cx="679.00" cy="417.21" r="2.5" fill="#60a5fa"><title>6d38e40 to d393100 | 1 ticket(s) | complete 76 testd | 162.00</title></circle>
+<circle cx="684.85" cy="405.35" r="2.5" fill="#60a5fa"><title>d393100 to 4197ccc | 1 ticket(s) | resolve 81 | 270.00</title></circle>
+<circle cx="690.70" cy="372.30" r="2.5" fill="#60a5fa"><title>4197ccc to 64891a3 | 1 ticket(s) | resolve 82 | 571.00</title></circle>
+<circle cx="708.24" cy="435.00" r="2.5" fill="#60a5fa"><title>64891a3 to 65988e3 | 3 ticket(s) | resolve not maintained tickets | 0.00</title></circle>
+<circle cx="714.09" cy="404.80" r="2.5" fill="#60a5fa"><title>65988e3 to 81488cc | 1 ticket(s) | resolve 78 | 275.00</title></circle>
+<circle cx="719.94" cy="425.78" r="2.5" fill="#60a5fa"><title>81488cc to d9bcfdb | 1 ticket(s) | research | 84.00</title></circle>
+<circle cx="725.79" cy="208.13" r="2.5" fill="#60a5fa"><title>d9bcfdb to ef7e86e | 1 ticket(s) | new maintenance tickets | 2,066.00</title></circle>
+<circle cx="731.64" cy="355.83" r="2.5" fill="#60a5fa"><title>ef7e86e to f5199b0 | 1 ticket(s) | create maintenance tickets | 721.00</title></circle>
+<circle cx="737.48" cy="405.79" r="2.5" fill="#60a5fa"><title>f5199b0 to 9e106d1 | 1 ticket(s) | resolve 91 | 266.00</title></circle>
+<circle cx="743.33" cy="343.42" r="2.5" fill="#60a5fa"><title>9e106d1 to f2d9a89 | 1 ticket(s) | resolve 92 | 834.00</title></circle>
+<circle cx="749.18" cy="398.32" r="2.5" fill="#60a5fa"><title>f2d9a89 to e856974 | 1 ticket(s) | add migrations | 334.00</title></circle>
+<circle cx="755.03" cy="366.59" r="2.5" fill="#60a5fa"><title>e856974 to 14aebe3 | 1 ticket(s) | resolve 94 | 623.00</title></circle>
+<circle cx="760.88" cy="406.67" r="2.5" fill="#60a5fa"><title>14aebe3 to f6b1172 | 1 ticket(s) | resolve 95 | 258.00</title></circle>
+<circle cx="766.73" cy="429.73" r="2.5" fill="#60a5fa"><title>f6b1172 to 07ec501 | 1 ticket(s) | resolve 96 | 48.00</title></circle>
+<circle cx="772.58" cy="348.14" r="2.5" fill="#60a5fa"><title>07ec501 to 366e4d2 | 1 ticket(s) | resolve migrations 1 | 791.00</title></circle>
+<circle cx="784.27" cy="403.48" r="2.5" fill="#60a5fa"><title>366e4d2 to 3a43c39 | 2 ticket(s) | resolve migrations 2 | 287.00</title></circle>
+<circle cx="801.82" cy="430.28" r="2.5" fill="#60a5fa"><title>3a43c39 to dfa79da | 3 ticket(s) | resolve verification 1-3 | 43.00</title></circle>
+<circle cx="807.67" cy="435.00" r="2.5" fill="#60a5fa"><title>dfa79da to d907c52 | 1 ticket(s) | resolve more maintenance | 0.00</title></circle>
+<circle cx="813.52" cy="369.22" r="2.5" fill="#60a5fa"><title>d907c52 to 4590b2e | 1 ticket(s) | new tickets | 599.00</title></circle>
+<circle cx="819.36" cy="428.30" r="2.5" fill="#60a5fa"><title>4590b2e to dfb8e3f | 1 ticket(s) | resolve new tickets 03 | 61.00</title></circle>
+<circle cx="825.21" cy="431.27" r="2.5" fill="#60a5fa"><title>dfb8e3f to 1844d64 | 1 ticket(s) | resolve 02 | 34.00</title></circle>
+<circle cx="831.06" cy="405.13" r="2.5" fill="#60a5fa"><title>1844d64 to 3ed6240 | 1 ticket(s) | resolve 05 | 272.00</title></circle>
+<circle cx="836.91" cy="420.83" r="2.5" fill="#60a5fa"><title>3ed6240 to d9e63fd | 1 ticket(s) | nnew tickets | 129.00</title></circle>
+<circle cx="842.76" cy="434.67" r="2.5" fill="#60a5fa"><title>d9e63fd to 22d3dec | 1 ticket(s) | resolve 08 | 3.00</title></circle>
+<circle cx="848.61" cy="423.69" r="2.5" fill="#60a5fa"><title>22d3dec to 1523bca | 1 ticket(s) | resolve 11 | 103.00</title></circle>
+<circle cx="854.45" cy="428.85" r="2.5" fill="#60a5fa"><title>1523bca to dc2bad8 | 1 ticket(s) | resolve 13 | 56.00</title></circle>
+<circle cx="860.30" cy="434.34" r="2.5" fill="#60a5fa"><title>dc2bad8 to ccf2429 | 1 ticket(s) | resolve 14 | 6.00</title></circle>
+<circle cx="866.15" cy="357.47" r="2.5" fill="#60a5fa"><title>ccf2429 to 0f51156 | 1 ticket(s) | resolve 16 2 | 706.00</title></circle>
+<circle cx="872.00" cy="420.40" r="2.5" fill="#60a5fa"><title>0f51156 to ba71ca3 | 1 ticket(s) | resolve 19 | 133.00</title></circle>
+<circle cx="877.85" cy="393.71" r="2.5" fill="#60a5fa"><title>ba71ca3 to d5cfb15 | 1 ticket(s) | resolve 20 | 376.00</title></circle>
+<circle cx="883.70" cy="431.60" r="2.5" fill="#60a5fa"><title>d5cfb15 to 8029e33 | 1 ticket(s) | refinement | 31.00</title></circle>
+<circle cx="889.55" cy="305.09" r="2.5" fill="#60a5fa"><title>8029e33 to 8c4d031 | 1 ticket(s) | refine agent instructions | 1,183.00</title></circle>
+<circle cx="895.39" cy="400.74" r="2.5" fill="#60a5fa"><title>8c4d031 to dbeb48b | 1 ticket(s) | resolve 01 | 312.00</title></circle>
+<circle cx="901.24" cy="382.95" r="2.5" fill="#60a5fa"><title>dbeb48b to fd5b3dd | 1 ticket(s) | resolve 2 | 474.00</title></circle>
+<circle cx="924.64" cy="402.08" r="2.5" fill="#60a5fa"><title>fd5b3dd to 6ee0b0b | 4 ticket(s) | resolve 9-10, complete mcp tool rework | 299.75</title></circle>
+<circle cx="930.48" cy="425.56" r="2.5" fill="#60a5fa"><title>6ee0b0b to c54f043 | 1 ticket(s) | resolve 07 | 86.00</title></circle>
+<circle cx="942.18" cy="428.63" r="2.5" fill="#60a5fa"><title>c54f043 to 023c071 | 2 ticket(s) | resolve 23 25 | 58.00</title></circle>
+<circle cx="948.03" cy="425.45" r="2.5" fill="#60a5fa"><title>023c071 to d9a9456 | 1 ticket(s) | resolve 26 | 87.00</title></circle>
+<circle cx="953.88" cy="433.46" r="2.5" fill="#60a5fa"><title>d9a9456 to bc7360e | 1 ticket(s) | project growth | 14.00</title></circle>
+<circle cx="971.42" cy="416.63" r="2.5" fill="#60a5fa"><title>bc7360e to 67eb2c8 | 3 ticket(s) | research allowance improvements | 167.33</title></circle>
+<circle cx="977.27" cy="381.63" r="2.5" fill="#60a5fa"><title>67eb2c8 to dd3bf80 | 1 ticket(s) | add process defining guidance | 486.00</title></circle>
+<circle cx="983.12" cy="423.58" r="2.5" fill="#60a5fa"><title>dd3bf80 to f02d65c | 1 ticket(s) | resolve permission investigation + fixes | 104.00</title></circle>
+<circle cx="1012.36" cy="389.96" r="2.5" fill="#60a5fa"><title>f02d65c to b38af93 | 5 ticket(s) | resolve ui loadttimes and some failure recovery | 410.20</title></circle>
+<circle cx="1018.21" cy="434.34" r="2.5" fill="#60a5fa"><title>b38af93 to 137e093 | 1 ticket(s) | resolve migration issue | 6.00</title></circle>
+<circle cx="1029.91" cy="417.54" r="2.5" fill="#60a5fa"><title>137e093 to 479307b | 2 ticket(s) | resolve 98 99 | 159.00</title></circle>
+<circle cx="1035.76" cy="368.67" r="2.5" fill="#60a5fa"><title>479307b to 6c928b1 | 1 ticket(s) | resolve 100 | 604.00</title></circle>
+<circle cx="1041.61" cy="434.12" r="2.5" fill="#60a5fa"><title>6c928b1 to 9460e28 | 1 ticket(s) | resolve reconnect failure | 8.00</title></circle>
+<circle cx="1059.15" cy="430.64" r="2.5" fill="#60a5fa"><title>9460e28 to cbb28d8 | 3 ticket(s) | resolve reconnect continuation | 39.67</title></circle>
+<circle cx="1065.00" cy="434.78" r="2.5" fill="#60a5fa"><title>cbb28d8 to 62eaa7e | 1 ticket(s) | resolve computer use | 2.00</title></circle>
+<path stroke="#60a5fa" stroke-width="3" d="M100,78h25"/>
+<text x="133" y="83">Production</text>
+<polyline class="line" stroke="#fbbf24" points="105.85,346.71 111.70,370.87 117.55,322.12 123.39,368.35 129.24,362.96 135.09,369.99 140.94,372.96 146.79,430.50 152.64,411.06 158.48,431.82 164.33,399.42 170.18,371.53 176.03,435.00 181.88,364.06 187.73,360.55 193.58,369.44 199.42,422.81 205.27,360.11 211.12,403.37 216.97,429.73 222.82,416.55 228.67,295.43 234.52,417.10 240.36,414.69 246.21,395.69 252.06,397.99 257.91,397.88 263.76,389.10 269.61,416.55 275.45,394.59 281.30,388.33 287.15,402.61 293.00,408.10 298.85,407.77 304.70,415.78 310.55,425.01 316.39,424.68 322.24,410.07 328.09,414.79 333.94,345.61 339.79,384.60 351.48,423.80 363.18,429.40 369.03,361.76 374.88,409.74 380.73,407.88 386.58,374.06 392.42,415.34 398.27,403.59 415.82,430.17 427.52,428.14 433.36,435.00 439.21,431.71 445.06,430.50 450.91,411.17 456.76,422.92 462.61,414.79 491.85,435.00 509.39,184.27 521.09,114.25 526.94,380.86 532.79,401.29 538.64,435.00 550.33,415.73 556.18,368.89 562.03,376.25 567.88,397.88 573.73,396.46 579.58,416.77 602.97,285.66 608.82,427.09 614.67,393.27 620.52,435.00 626.36,324.53 632.21,428.96 643.91,435.00 649.76,427.53 673.15,378.31 679.00,413.81 684.85,398.98 690.70,357.69 708.24,435.00 714.09,423.36 719.94,414.03 725.79,394.48 731.64,435.00 737.48,435.00 743.33,414.79 749.18,435.00 755.03,402.06 760.88,406.45 766.73,390.97 772.58,413.37 784.27,410.29 801.82,422.23 807.67,408.43 813.52,434.78 819.36,414.90 825.21,424.02 831.06,412.82 836.91,416.99 842.76,426.43 848.61,423.36 854.45,405.68 860.30,406.45 866.15,380.86 872.00,416.44 877.85,398.87 883.70,410.73 889.55,313.99 895.39,392.17 901.24,382.51 924.64,407.30 930.48,425.34 942.18,418.31 948.03,421.49 953.88,424.24 971.42,409.89 977.27,393.05 983.12,388.88 1012.36,400.28 1018.21,428.41 1029.91,403.70 1035.76,403.26 1041.61,426.43 1059.15,423.47 1065.00,435.00"/>
+<circle cx="105.85" cy="346.71" r="2.5" fill="#fbbf24"><title>f5e1f3f to e5d98ff | 1 ticket(s) | setup instructions | 804.00</title></circle>
+<circle cx="111.70" cy="370.87" r="2.5" fill="#fbbf24"><title>e5d98ff to 2633fc6 | 1 ticket(s) | adr 3 | 584.00</title></circle>
+<circle cx="117.55" cy="322.12" r="2.5" fill="#fbbf24"><title>2633fc6 to ce3cb58 | 1 ticket(s) | ticket 17 | 1,028.00</title></circle>
+<circle cx="123.39" cy="368.35" r="2.5" fill="#fbbf24"><title>ce3cb58 to 1af72df | 1 ticket(s) | add refactoring ticket | 607.00</title></circle>
+<circle cx="129.24" cy="362.96" r="2.5" fill="#fbbf24"><title>1af72df to a61642a | 1 ticket(s) | Document bugs | 656.00</title></circle>
+<circle cx="135.09" cy="369.99" r="2.5" fill="#fbbf24"><title>a61642a to 427788e | 1 ticket(s) | refinement | 592.00</title></circle>
+<circle cx="140.94" cy="372.96" r="2.5" fill="#fbbf24"><title>427788e to 3b6c7b7 | 1 ticket(s) | resolve 20 | 565.00</title></circle>
+<circle cx="146.79" cy="430.50" r="2.5" fill="#fbbf24"><title>3b6c7b7 to e15f9fb | 1 ticket(s) | more issues | 41.00</title></circle>
+<circle cx="152.64" cy="411.06" r="2.5" fill="#fbbf24"><title>e15f9fb to b45e4b8 | 1 ticket(s) | resolve 36 | 218.00</title></circle>
+<circle cx="158.48" cy="431.82" r="2.5" fill="#fbbf24"><title>b45e4b8 to 7ad944e | 1 ticket(s) | resolve 15 | 29.00</title></circle>
+<circle cx="164.33" cy="399.42" r="2.5" fill="#fbbf24"><title>7ad944e to 033a105 | 1 ticket(s) | resolve 21 | 324.00</title></circle>
+<circle cx="170.18" cy="371.53" r="2.5" fill="#fbbf24"><title>033a105 to c2b4b94 | 1 ticket(s) | resolve 22 | 578.00</title></circle>
+<circle cx="176.03" cy="435.00" r="2.5" fill="#fbbf24"><title>c2b4b94 to dbfd041 | 1 ticket(s) | resolve 41 | 0.00</title></circle>
+<circle cx="181.88" cy="364.06" r="2.5" fill="#fbbf24"><title>dbfd041 to 20f575f | 1 ticket(s) | resolve 23 | 646.00</title></circle>
+<circle cx="187.73" cy="360.55" r="2.5" fill="#fbbf24"><title>20f575f to 71fdff4 | 1 ticket(s) | resolve 24 | 678.00</title></circle>
+<circle cx="193.58" cy="369.44" r="2.5" fill="#fbbf24"><title>71fdff4 to fa1a640 | 1 ticket(s) | resolve 25 | 597.00</title></circle>
+<circle cx="199.42" cy="422.81" r="2.5" fill="#fbbf24"><title>fa1a640 to 616d99d | 1 ticket(s) | Create 45 | 111.00</title></circle>
+<circle cx="205.27" cy="360.11" r="2.5" fill="#fbbf24"><title>616d99d to beee068 | 1 ticket(s) | resolve 26 | 682.00</title></circle>
+<circle cx="211.12" cy="403.37" r="2.5" fill="#fbbf24"><title>beee068 to d38bb34 | 1 ticket(s) | resolve 31 - vs code | 288.00</title></circle>
+<circle cx="216.97" cy="429.73" r="2.5" fill="#fbbf24"><title>d38bb34 to f048168 | 1 ticket(s) | resolve 44 | 48.00</title></circle>
+<circle cx="222.82" cy="416.55" r="2.5" fill="#fbbf24"><title>f048168 to 3d57c87 | 1 ticket(s) | RESOLVE 45 | 168.00</title></circle>
+<circle cx="228.67" cy="295.43" r="2.5" fill="#fbbf24"><title>3d57c87 to 577d400 | 1 ticket(s) | issue 27 first messy implementation | 1,271.00</title></circle>
+<circle cx="234.52" cy="417.10" r="2.5" fill="#fbbf24"><title>577d400 to fe6693e | 1 ticket(s) | new issues | 163.00</title></circle>
+<circle cx="240.36" cy="414.69" r="2.5" fill="#fbbf24"><title>fe6693e to 4144727 | 1 ticket(s) | grill 33 | 185.00</title></circle>
+<circle cx="246.21" cy="395.69" r="2.5" fill="#fbbf24"><title>4144727 to 07515c3 | 1 ticket(s) | refinement | 358.00</title></circle>
+<circle cx="252.06" cy="397.99" r="2.5" fill="#fbbf24"><title>07515c3 to e547cd2 | 1 ticket(s) | grill 37 | 337.00</title></circle>
+<circle cx="257.91" cy="397.88" r="2.5" fill="#fbbf24"><title>e547cd2 to 13b20ac | 1 ticket(s) | finakize 37 | 338.00</title></circle>
+<circle cx="263.76" cy="389.10" r="2.5" fill="#fbbf24"><title>13b20ac to ad2ba76 | 1 ticket(s) | finalize 48 2 | 418.00</title></circle>
+<circle cx="269.61" cy="416.55" r="2.5" fill="#fbbf24"><title>ad2ba76 to 3997dca | 1 ticket(s) | refinement | 168.00</title></circle>
+<circle cx="275.45" cy="394.59" r="2.5" fill="#fbbf24"><title>3997dca to 59b5d5e | 1 ticket(s) | resolve 38 | 368.00</title></circle>
+<circle cx="281.30" cy="388.33" r="2.5" fill="#fbbf24"><title>59b5d5e to ac78063 | 1 ticket(s) | resolve 52 | 425.00</title></circle>
+<circle cx="287.15" cy="402.61" r="2.5" fill="#fbbf24"><title>ac78063 to 79b8f67 | 1 ticket(s) | resolve 28 | 295.00</title></circle>
+<circle cx="293.00" cy="408.10" r="2.5" fill="#fbbf24"><title>79b8f67 to 51545bf | 1 ticket(s) | resolve 51 54 | 245.00</title></circle>
+<circle cx="298.85" cy="407.77" r="2.5" fill="#fbbf24"><title>51545bf to a152aea | 1 ticket(s) | try harden against accidental user mention | 248.00</title></circle>
+<circle cx="304.70" cy="415.78" r="2.5" fill="#fbbf24"><title>a152aea to 8ca28d9 | 1 ticket(s) | resolve 55 | 175.00</title></circle>
+<circle cx="310.55" cy="425.01" r="2.5" fill="#fbbf24"><title>8ca28d9 to b361d56 | 1 ticket(s) | resolve 56 | 91.00</title></circle>
+<circle cx="316.39" cy="424.68" r="2.5" fill="#fbbf24"><title>b361d56 to a637f03 | 1 ticket(s) | resolve 39 | 94.00</title></circle>
+<circle cx="322.24" cy="410.07" r="2.5" fill="#fbbf24"><title>a637f03 to 0e47e61 | 1 ticket(s) | resolve 40 | 227.00</title></circle>
+<circle cx="328.09" cy="414.79" r="2.5" fill="#fbbf24"><title>0e47e61 to d88b1c5 | 1 ticket(s) | conversation issues | 184.00</title></circle>
+<circle cx="333.94" cy="345.61" r="2.5" fill="#fbbf24"><title>d88b1c5 to 3f5b881 | 1 ticket(s) | resolve 34 | 814.00</title></circle>
+<circle cx="339.79" cy="384.60" r="2.5" fill="#fbbf24"><title>3f5b881 to 3269fcd | 1 ticket(s) | create 57 | 459.00</title></circle>
+<circle cx="351.48" cy="423.80" r="2.5" fill="#fbbf24"><title>3269fcd to b4bf5bb | 2 ticket(s) | resolve 60 64 | 102.00</title></circle>
+<circle cx="363.18" cy="429.40" r="2.5" fill="#fbbf24"><title>b4bf5bb to 094042a | 2 ticket(s) | refine 59 | 51.00</title></circle>
+<circle cx="369.03" cy="361.76" r="2.5" fill="#fbbf24"><title>094042a to 35412e6 | 1 ticket(s) | resolve 59 | 667.00</title></circle>
+<circle cx="374.88" cy="409.74" r="2.5" fill="#fbbf24"><title>35412e6 to f7f3231 | 1 ticket(s) | resolve conv 1 | 230.00</title></circle>
+<circle cx="380.73" cy="407.88" r="2.5" fill="#fbbf24"><title>f7f3231 to 5772036 | 1 ticket(s) | resolve conv 2 | 247.00</title></circle>
+<circle cx="386.58" cy="374.06" r="2.5" fill="#fbbf24"><title>5772036 to ddf3074 | 1 ticket(s) | resolve conv 3 improvements | 555.00</title></circle>
+<circle cx="392.42" cy="415.34" r="2.5" fill="#fbbf24"><title>ddf3074 to d4d8712 | 1 ticket(s) | resolve conv 4 | 179.00</title></circle>
+<circle cx="398.27" cy="403.59" r="2.5" fill="#fbbf24"><title>d4d8712 to dcb5d47 | 1 ticket(s) | maintenance 2 | 286.00</title></circle>
+<circle cx="415.82" cy="430.17" r="2.5" fill="#fbbf24"><title>dcb5d47 to a85bb76 | 3 ticket(s) | maintenance 3 | 44.00</title></circle>
+<circle cx="427.52" cy="428.14" r="2.5" fill="#fbbf24"><title>a85bb76 to bf4b74f | 2 ticket(s) | resolve 5 | 62.50</title></circle>
+<circle cx="433.36" cy="435.00" r="2.5" fill="#fbbf24"><title>bf4b74f to c3dccb1 | 1 ticket(s) | resolve 6 | 0.00</title></circle>
+<circle cx="439.21" cy="431.71" r="2.5" fill="#fbbf24"><title>c3dccb1 to 588c05d | 1 ticket(s) | resolve 8 | 30.00</title></circle>
+<circle cx="445.06" cy="430.50" r="2.5" fill="#fbbf24"><title>588c05d to c5da964 | 1 ticket(s) | resolve conv 7 | 41.00</title></circle>
+<circle cx="450.91" cy="411.17" r="2.5" fill="#fbbf24"><title>c5da964 to f556770 | 1 ticket(s) | resolve 67 | 217.00</title></circle>
+<circle cx="456.76" cy="422.92" r="2.5" fill="#fbbf24"><title>f556770 to bb79590 | 1 ticket(s) | resolve 66 | 110.00</title></circle>
+<circle cx="462.61" cy="414.79" r="2.5" fill="#fbbf24"><title>bb79590 to 037d0bf | 1 ticket(s) | resolve 57 | 184.00</title></circle>
+<circle cx="491.85" cy="435.00" r="2.5" fill="#fbbf24"><title>037d0bf to a171ffb | 5 ticket(s) | resolve 8-12 maintainability | 0.00</title></circle>
+<circle cx="509.39" cy="184.27" r="2.5" fill="#fbbf24"><title>a171ffb to 4b73b5b | 3 ticket(s) | resolve maintenace 13-15 | 2,283.33</title></circle>
+<circle cx="521.09" cy="114.25" r="2.5" fill="#fbbf24"><title>4b73b5b to fc3504c | 2 ticket(s) | new tasks | 2,921.00</title></circle>
+<circle cx="526.94" cy="380.86" r="2.5" fill="#fbbf24"><title>fc3504c to 0f0ee69 | 1 ticket(s) | resolve continue conversations  1 | 493.00</title></circle>
+<circle cx="532.79" cy="401.29" r="2.5" fill="#fbbf24"><title>0f0ee69 to c12a13a | 1 ticket(s) | resolve 69 | 307.00</title></circle>
+<circle cx="538.64" cy="435.00" r="2.5" fill="#fbbf24"><title>c12a13a to 0bea795 | 1 ticket(s) | resolve maintenance 18 | 0.00</title></circle>
+<circle cx="550.33" cy="415.73" r="2.5" fill="#fbbf24"><title>0bea795 to be466bb | 2 ticket(s) | resolve conv 2 improvements | 175.50</title></circle>
+<circle cx="556.18" cy="368.89" r="2.5" fill="#fbbf24"><title>be466bb to 9597a02 | 1 ticket(s) | resolve display 2 | 602.00</title></circle>
+<circle cx="562.03" cy="376.25" r="2.5" fill="#fbbf24"><title>9597a02 to 81ec477 | 1 ticket(s) | resolve 3 | 535.00</title></circle>
+<circle cx="567.88" cy="397.88" r="2.5" fill="#fbbf24"><title>81ec477 to 74ba638 | 1 ticket(s) | resolve 4 proper | 338.00</title></circle>
+<circle cx="573.73" cy="396.46" r="2.5" fill="#fbbf24"><title>74ba638 to f597cf0 | 1 ticket(s) | resolve 72 | 351.00</title></circle>
+<circle cx="579.58" cy="416.77" r="2.5" fill="#fbbf24"><title>f597cf0 to 2fc20ae | 1 ticket(s) | resolve 65 | 166.00</title></circle>
+<circle cx="602.97" cy="285.66" r="2.5" fill="#fbbf24"><title>2fc20ae to b6f5ba7 | 4 ticket(s) | maintenance 1-4 | 1,360.00</title></circle>
+<circle cx="608.82" cy="427.09" r="2.5" fill="#fbbf24"><title>b6f5ba7 to b82b38a | 1 ticket(s) | resolve maintenance improvement | 72.00</title></circle>
+<circle cx="614.67" cy="393.27" r="2.5" fill="#fbbf24"><title>b82b38a to fbe902d | 1 ticket(s) | resolve 70 better | 380.00</title></circle>
+<circle cx="620.52" cy="435.00" r="2.5" fill="#fbbf24"><title>fbe902d to 9b4e6b2 | 1 ticket(s) | refinement | 0.00</title></circle>
+<circle cx="626.36" cy="324.53" r="2.5" fill="#fbbf24"><title>9b4e6b2 to 6af327d | 1 ticket(s) | resolve 68 | 1,006.00</title></circle>
+<circle cx="632.21" cy="428.96" r="2.5" fill="#fbbf24"><title>6af327d to fe6fe19 | 1 ticket(s) | add 75 | 55.00</title></circle>
+<circle cx="643.91" cy="435.00" r="2.5" fill="#fbbf24"><title>fe6fe19 to bf1768d | 2 ticket(s) | resolve some tickets | 0.00</title></circle>
+<circle cx="649.76" cy="427.53" r="2.5" fill="#fbbf24"><title>bf1768d to 0ef478f | 1 ticket(s) | resolve 74 75 | 68.00</title></circle>
+<circle cx="673.15" cy="378.31" r="2.5" fill="#fbbf24"><title>0ef478f to 6d38e40 | 4 ticket(s) | resolve maintenance round 3 | 516.25</title></circle>
+<circle cx="679.00" cy="413.81" r="2.5" fill="#fbbf24"><title>6d38e40 to d393100 | 1 ticket(s) | complete 76 testd | 193.00</title></circle>
+<circle cx="684.85" cy="398.98" r="2.5" fill="#fbbf24"><title>d393100 to 4197ccc | 1 ticket(s) | resolve 81 | 328.00</title></circle>
+<circle cx="690.70" cy="357.69" r="2.5" fill="#fbbf24"><title>4197ccc to 64891a3 | 1 ticket(s) | resolve 82 | 704.00</title></circle>
+<circle cx="708.24" cy="435.00" r="2.5" fill="#fbbf24"><title>64891a3 to 65988e3 | 3 ticket(s) | resolve not maintained tickets | 0.00</title></circle>
+<circle cx="714.09" cy="423.36" r="2.5" fill="#fbbf24"><title>65988e3 to 81488cc | 1 ticket(s) | resolve 78 | 106.00</title></circle>
+<circle cx="719.94" cy="414.03" r="2.5" fill="#fbbf24"><title>81488cc to d9bcfdb | 1 ticket(s) | research | 191.00</title></circle>
+<circle cx="725.79" cy="394.48" r="2.5" fill="#fbbf24"><title>d9bcfdb to ef7e86e | 1 ticket(s) | new maintenance tickets | 369.00</title></circle>
+<circle cx="731.64" cy="435.00" r="2.5" fill="#fbbf24"><title>ef7e86e to f5199b0 | 1 ticket(s) | create maintenance tickets | 0.00</title></circle>
+<circle cx="737.48" cy="435.00" r="2.5" fill="#fbbf24"><title>f5199b0 to 9e106d1 | 1 ticket(s) | resolve 91 | 0.00</title></circle>
+<circle cx="743.33" cy="414.79" r="2.5" fill="#fbbf24"><title>9e106d1 to f2d9a89 | 1 ticket(s) | resolve 92 | 184.00</title></circle>
+<circle cx="749.18" cy="435.00" r="2.5" fill="#fbbf24"><title>f2d9a89 to e856974 | 1 ticket(s) | add migrations | 0.00</title></circle>
+<circle cx="755.03" cy="402.06" r="2.5" fill="#fbbf24"><title>e856974 to 14aebe3 | 1 ticket(s) | resolve 94 | 300.00</title></circle>
+<circle cx="760.88" cy="406.45" r="2.5" fill="#fbbf24"><title>14aebe3 to f6b1172 | 1 ticket(s) | resolve 95 | 260.00</title></circle>
+<circle cx="766.73" cy="390.97" r="2.5" fill="#fbbf24"><title>f6b1172 to 07ec501 | 1 ticket(s) | resolve 96 | 401.00</title></circle>
+<circle cx="772.58" cy="413.37" r="2.5" fill="#fbbf24"><title>07ec501 to 366e4d2 | 1 ticket(s) | resolve migrations 1 | 197.00</title></circle>
+<circle cx="784.27" cy="410.29" r="2.5" fill="#fbbf24"><title>366e4d2 to 3a43c39 | 2 ticket(s) | resolve migrations 2 | 225.00</title></circle>
+<circle cx="801.82" cy="422.23" r="2.5" fill="#fbbf24"><title>3a43c39 to dfa79da | 3 ticket(s) | resolve verification 1-3 | 116.33</title></circle>
+<circle cx="807.67" cy="408.43" r="2.5" fill="#fbbf24"><title>dfa79da to d907c52 | 1 ticket(s) | resolve more maintenance | 242.00</title></circle>
+<circle cx="813.52" cy="434.78" r="2.5" fill="#fbbf24"><title>d907c52 to 4590b2e | 1 ticket(s) | new tickets | 2.00</title></circle>
+<circle cx="819.36" cy="414.90" r="2.5" fill="#fbbf24"><title>4590b2e to dfb8e3f | 1 ticket(s) | resolve new tickets 03 | 183.00</title></circle>
+<circle cx="825.21" cy="424.02" r="2.5" fill="#fbbf24"><title>dfb8e3f to 1844d64 | 1 ticket(s) | resolve 02 | 100.00</title></circle>
+<circle cx="831.06" cy="412.82" r="2.5" fill="#fbbf24"><title>1844d64 to 3ed6240 | 1 ticket(s) | resolve 05 | 202.00</title></circle>
+<circle cx="836.91" cy="416.99" r="2.5" fill="#fbbf24"><title>3ed6240 to d9e63fd | 1 ticket(s) | nnew tickets | 164.00</title></circle>
+<circle cx="842.76" cy="426.43" r="2.5" fill="#fbbf24"><title>d9e63fd to 22d3dec | 1 ticket(s) | resolve 08 | 78.00</title></circle>
+<circle cx="848.61" cy="423.36" r="2.5" fill="#fbbf24"><title>22d3dec to 1523bca | 1 ticket(s) | resolve 11 | 106.00</title></circle>
+<circle cx="854.45" cy="405.68" r="2.5" fill="#fbbf24"><title>1523bca to dc2bad8 | 1 ticket(s) | resolve 13 | 267.00</title></circle>
+<circle cx="860.30" cy="406.45" r="2.5" fill="#fbbf24"><title>dc2bad8 to ccf2429 | 1 ticket(s) | resolve 14 | 260.00</title></circle>
+<circle cx="866.15" cy="380.86" r="2.5" fill="#fbbf24"><title>ccf2429 to 0f51156 | 1 ticket(s) | resolve 16 2 | 493.00</title></circle>
+<circle cx="872.00" cy="416.44" r="2.5" fill="#fbbf24"><title>0f51156 to ba71ca3 | 1 ticket(s) | resolve 19 | 169.00</title></circle>
+<circle cx="877.85" cy="398.87" r="2.5" fill="#fbbf24"><title>ba71ca3 to d5cfb15 | 1 ticket(s) | resolve 20 | 329.00</title></circle>
+<circle cx="883.70" cy="410.73" r="2.5" fill="#fbbf24"><title>d5cfb15 to 8029e33 | 1 ticket(s) | refinement | 221.00</title></circle>
+<circle cx="889.55" cy="313.99" r="2.5" fill="#fbbf24"><title>8029e33 to 8c4d031 | 1 ticket(s) | refine agent instructions | 1,102.00</title></circle>
+<circle cx="895.39" cy="392.17" r="2.5" fill="#fbbf24"><title>8c4d031 to dbeb48b | 1 ticket(s) | resolve 01 | 390.00</title></circle>
+<circle cx="901.24" cy="382.51" r="2.5" fill="#fbbf24"><title>dbeb48b to fd5b3dd | 1 ticket(s) | resolve 2 | 478.00</title></circle>
+<circle cx="924.64" cy="407.30" r="2.5" fill="#fbbf24"><title>fd5b3dd to 6ee0b0b | 4 ticket(s) | resolve 9-10, complete mcp tool rework | 252.25</title></circle>
+<circle cx="930.48" cy="425.34" r="2.5" fill="#fbbf24"><title>6ee0b0b to c54f043 | 1 ticket(s) | resolve 07 | 88.00</title></circle>
+<circle cx="942.18" cy="418.31" r="2.5" fill="#fbbf24"><title>c54f043 to 023c071 | 2 ticket(s) | resolve 23 25 | 152.00</title></circle>
+<circle cx="948.03" cy="421.49" r="2.5" fill="#fbbf24"><title>023c071 to d9a9456 | 1 ticket(s) | resolve 26 | 123.00</title></circle>
+<circle cx="953.88" cy="424.24" r="2.5" fill="#fbbf24"><title>d9a9456 to bc7360e | 1 ticket(s) | project growth | 98.00</title></circle>
+<circle cx="971.42" cy="409.89" r="2.5" fill="#fbbf24"><title>bc7360e to 67eb2c8 | 3 ticket(s) | research allowance improvements | 228.67</title></circle>
+<circle cx="977.27" cy="393.05" r="2.5" fill="#fbbf24"><title>67eb2c8 to dd3bf80 | 1 ticket(s) | add process defining guidance | 382.00</title></circle>
+<circle cx="983.12" cy="388.88" r="2.5" fill="#fbbf24"><title>dd3bf80 to f02d65c | 1 ticket(s) | resolve permission investigation + fixes | 420.00</title></circle>
+<circle cx="1012.36" cy="400.28" r="2.5" fill="#fbbf24"><title>f02d65c to b38af93 | 5 ticket(s) | resolve ui loadttimes and some failure recovery | 316.20</title></circle>
+<circle cx="1018.21" cy="428.41" r="2.5" fill="#fbbf24"><title>b38af93 to 137e093 | 1 ticket(s) | resolve migration issue | 60.00</title></circle>
+<circle cx="1029.91" cy="403.70" r="2.5" fill="#fbbf24"><title>137e093 to 479307b | 2 ticket(s) | resolve 98 99 | 285.00</title></circle>
+<circle cx="1035.76" cy="403.26" r="2.5" fill="#fbbf24"><title>479307b to 6c928b1 | 1 ticket(s) | resolve 100 | 289.00</title></circle>
+<circle cx="1041.61" cy="426.43" r="2.5" fill="#fbbf24"><title>6c928b1 to 9460e28 | 1 ticket(s) | resolve reconnect failure | 78.00</title></circle>
+<circle cx="1059.15" cy="423.47" r="2.5" fill="#fbbf24"><title>9460e28 to cbb28d8 | 3 ticket(s) | resolve reconnect continuation | 105.00</title></circle>
+<circle cx="1065.00" cy="435.00" r="2.5" fill="#fbbf24"><title>cbb28d8 to 62eaa7e | 1 ticket(s) | resolve computer use | 0.00</title></circle>
+<path stroke="#fbbf24" stroke-width="3" d="M360,78h25"/>
+<text x="393" y="83">Tests and test support</text>
+<text x="582.5" y="496" text-anchor="middle">Cumulative resolved implementation tickets</text>
+<text transform="translate(24,265.0) rotate(-90)" text-anchor="middle">Added + removed nonblank lines / ticket</text>
+</svg>

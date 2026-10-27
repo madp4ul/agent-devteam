@@ -167,7 +167,7 @@ def maintenance_events(rows, resolutions):
     return events
 
 
-def svg_chart(filename, title, subtitle, series, ylabel, maintenance=None):
+def svg_chart(filename, title, subtitle, series, ylabel, maintenance=None, xlabel='Cumulative resolved implementation tickets'):
     """Dependency-free vector plot with explicit axes and inspectable tooltips."""
     width, height = 1100, 520
     left, right, top, bottom = 100, 35, 95, 85
@@ -222,12 +222,14 @@ def svg_chart(filename, title, subtitle, series, ylabel, maintenance=None):
             out.append('</g>')
         out += ['<path d="M620,73l5,5 -5,5 -5,-5z" fill="#fb7185"/>',
                 '<text x="636" y="83">Maintenance commit (both curves)</text>']
-    out += [f'<text x="{left+plot_w/2}" y="{height-24}" text-anchor="middle">Cumulative resolved implementation tickets</text>',
+    out += [f'<text x="{left+plot_w/2}" y="{height-24}" text-anchor="middle">{html.escape(xlabel)}</text>',
             f'<text transform="translate(24,{top+plot_h/2}) rotate(-90)" text-anchor="middle">{html.escape(ylabel)}</text>', '</svg>']
     (HERE / filename).write_text('\n'.join(out) + '\n', encoding='utf-8')
 
 
 def write_report(endpoint, rows, resolutions, anomalies):
+    from churn import extend_report
+    churn_section = extend_report(rows, git, category, HERE, svg_chart)
     maintenance = maintenance_events(rows, resolutions)
     (HERE / 'maintenance-events.json').write_text(json.dumps(maintenance, indent=2) + '\n', encoding='utf-8')
     with (HERE / 'history.csv').open('w', newline='', encoding='utf-8') as stream:
@@ -320,7 +322,7 @@ as many source lines as production; this ratio measures size, not test quality.
 The broad intervals below make it possible to compare early build-out with
 later development without assuming equal feature size.
 
-## Retained code per ticket
+{churn_section}
 
 ![Average retained production and test lines per resolved ticket](project-growth/average.svg)
 
@@ -419,6 +421,9 @@ change locality, reuse, regressions, and verification effort.
 
 ## Data and future updates
 
+See the [idle game comparison](project-growth-comparison.md) for matching size,
+churn and existing-code turnover charts, broader trend windows, and comparison limits.
+
 [Every commit and its measurements](project-growth/history.csv),
 [first resolution evidence](project-growth/resolutions.json), and
 [net-growth intervals](project-growth/increments.json) are retained locally.
@@ -433,7 +438,7 @@ python docs/project-growth/generate.py --ref HEAD
 
 Use `--ref <commit>` for a fixed endpoint. The script reads Git objects without
 checking out historical trees or modifying the index. It rebuilds this Markdown,
-the CSV/JSON evidence, and the three SVGs deterministically. No per-commit hook
+the CSV/JSON evidence, and the size, growth, churn and turnover SVGs deterministically. No per-commit hook
 or ongoing maintenance requirement is introduced. Existing historical
 measurements remain the same when extending the same first-parent history.
 '''

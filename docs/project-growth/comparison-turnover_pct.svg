@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" role="img" aria-labelledby="title desc">
+<title id="title">Existing-code turnover: framework and idle game</title><desc id="desc">Nonoverlapping windows of at least 20 work units; final window may be shorter</desc>
+<style>text{font-family:Arial,sans-serif;fill:#cbd5e1;font-size:14px}.grid{stroke:#334155;stroke-width:1}.line{fill:none;stroke-width:2.5;stroke-linejoin:round}</style>
+<rect width="1100" height="520" rx="12" fill="#101827"/>
+<text x="30" y="32" style="font-size:22px;fill:#f1f5f9">Existing-code turnover: framework and idle game</text>
+<text x="30" y="56">Nonoverlapping windows of at least 20 work units; final window may be shorter</text>
+<path class="grid" d="M100,435.00h965"/>
+<text x="88" y="440.00" text-anchor="end">0</text>
+<path class="grid" d="M100,367.00h965"/>
+<text x="88" y="372.00" text-anchor="end">1</text>
+<path class="grid" d="M100,299.00h965"/>
+<text x="88" y="304.00" text-anchor="end">2</text>
+<path class="grid" d="M100,231.00h965"/>
+<text x="88" y="236.00" text-anchor="end">3</text>
+<path class="grid" d="M100,163.00h965"/>
+<text x="88" y="168.00" text-anchor="end">4</text>
+<path class="grid" d="M100,95.00h965"/>
+<text x="88" y="100.00" text-anchor="end">5</text>
+<path class="grid" d="M100.00,95v340"/>
+<text x="100.00" y="460" text-anchor="middle">0</text>
+<path class="grid" d="M260.83,95v340"/>
+<text x="260.83" y="460" text-anchor="middle">28</text>
+<path class="grid" d="M421.67,95v340"/>
+<text x="421.67" y="460" text-anchor="middle">55</text>
+<path class="grid" d="M582.50,95v340"/>
+<text x="582.50" y="460" text-anchor="middle">82</text>
+<path class="grid" d="M743.33,95v340"/>
+<text x="743.33" y="460" text-anchor="middle">110</text>
+<path class="grid" d="M904.17,95v340"/>
+<text x="904.17" y="460" text-anchor="middle">138</text>
+<path class="grid" d="M1065.00,95v340"/>
+<text x="1065.00" y="460" text-anchor="middle">165</text>
+<polyline class="line" stroke="#60a5fa" points="216.97,137.37 333.94,365.29 450.91,405.39 567.88,388.37 684.85,400.93 801.82,383.53 924.64,413.01 1041.61,423.66 1065.00,433.87"/>
+<circle cx="216.97" cy="137.37" r="2.5" fill="#60a5fa"><title>Framework production | ending at 20 | 20 work units | 4.06</title></circle>
+<circle cx="333.94" cy="365.29" r="2.5" fill="#60a5fa"><title>Framework production | ending at 40 | 20 work units | 0.95</title></circle>
+<circle cx="450.91" cy="405.39" r="2.5" fill="#60a5fa"><title>Framework production | ending at 60 | 20 work units | 0.40</title></circle>
+<circle cx="567.88" cy="388.37" r="2.5" fill="#60a5fa"><title>Framework production | ending at 80 | 20 work units | 0.64</title></circle>
+<circle cx="684.85" cy="400.93" r="2.5" fill="#60a5fa"><title>Framework production | ending at 100 | 20 work units | 0.46</title></circle>
+<circle cx="801.82" cy="383.53" r="2.5" fill="#60a5fa"><title>Framework production | ending at 120 | 20 work units | 0.70</title></circle>
+<circle cx="924.64" cy="413.01" r="2.5" fill="#60a5fa"><title>Framework production | ending at 141 | 21 work units | 0.30</title></circle>
+<circle cx="1041.61" cy="423.66" r="2.5" fill="#60a5fa"><title>Framework production | ending at 161 | 20 work units | 0.15</title></circle>
+<circle cx="1065.00" cy="433.87" r="2.5" fill="#60a5fa"><title>Framework production | ending at 165 | 4 work units | 0.02</title></circle>
+<path stroke="#60a5fa" stroke-width="3" d="M100,78h25"/>
+<text x="133" y="83">Framework production</text>
+<polyline class="line" stroke="#fbbf24" points="216.97,407.45 333.94,426.20 450.91,427.79 567.88,302.02 684.85,373.97 801.82,433.73 924.64,426.74 1041.61,432.04 1065.00,435.00"/>
+<circle cx="216.97" cy="407.45" r="2.5" fill="#fbbf24"><title>Framework tests | ending at 20 | 20 work units | 0.38</title></circle>
+<circle cx="333.94" cy="426.20" r="2.5" fill="#fbbf24"><title>Framework tests | ending at 40 | 20 work units | 0.12</title></circle>
+<circle cx="450.91" cy="427.79" r="2.5" fill="#fbbf24"><title>Framework tests | ending at 60 | 20 work units | 0.10</title></circle>
+<circle cx="567.88" cy="302.02" r="2.5" fill="#fbbf24"><title>Framework tests | ending at 80 | 20 work units | 1.81</title></circle>
+<circle cx="684.85" cy="373.97" r="2.5" fill="#fbbf24"><title>Framework tests | ending at 100 | 20 work units | 0.83</title></circle>
+<circle cx="801.82" cy="433.73" r="2.5" fill="#fbbf24"><title>Framework tests | ending at 120 | 20 work units | 0.02</title></circle>
+<circle cx="924.64" cy="426.74" r="2.5" fill="#fbbf24"><title>Framework tests | ending at 141 | 21 work units | 0.11</title></circle>
+<circle cx="1041.61" cy="432.04" r="2.5" fill="#fbbf24"><title>Framework tests | ending at 161 | 20 work units | 0.04</title></circle>
+<circle cx="1065.00" cy="435.00" r="2.5" fill="#fbbf24"><title>Framework tests | ending at 165 | 4 work units | 0.00</title></circle>
+<path stroke="#fbbf24" stroke-width="3" d="M360,78h25"/>
+<text x="393" y="83">Framework tests</text>
+<polyline class="line" stroke="#c084fc" points="216.97,114.25 333.94,399.35 450.91,409.89 567.88,421.65 684.85,412.99 801.82,419.51 918.79,427.15 988.97,430.08"/>
+<circle cx="216.97" cy="114.25" r="2.5" fill="#c084fc"><title>Idle production | ending at 20 | 20 work units | 4.37</title></circle>
+<circle cx="333.94" cy="399.35" r="2.5" fill="#c084fc"><title>Idle production | ending at 40 | 20 work units | 0.49</title></circle>
+<circle cx="450.91" cy="409.89" r="2.5" fill="#c084fc"><title>Idle production | ending at 60 | 20 work units | 0.34</title></circle>
+<circle cx="567.88" cy="421.65" r="2.5" fill="#c084fc"><title>Idle production | ending at 80 | 20 work units | 0.18</title></circle>
+<circle cx="684.85" cy="412.99" r="2.5" fill="#c084fc"><title>Idle production | ending at 100 | 20 work units | 0.30</title></circle>
+<circle cx="801.82" cy="419.51" r="2.5" fill="#c084fc"><title>Idle production | ending at 120 | 20 work units | 0.21</title></circle>
+<circle cx="918.79" cy="427.15" r="2.5" fill="#c084fc"><title>Idle production | ending at 140 | 20 work units | 0.11</title></circle>
+<circle cx="988.97" cy="430.08" r="2.5" fill="#c084fc"><title>Idle production | ending at 152 | 12 work units | 0.07</title></circle>
+<path stroke="#c084fc" stroke-width="3" d="M620,78h25"/>
+<text x="653" y="83">Idle production</text>
+<polyline class="line" stroke="#34d399" points="216.97,186.91 333.94,401.61 450.91,399.04 567.88,433.28 684.85,419.12 801.82,417.17 918.79,432.42 988.97,433.87"/>
+<circle cx="216.97" cy="186.91" r="2.5" fill="#34d399"><title>Idle tests | ending at 20 | 20 work units | 3.38</title></circle>
+<circle cx="333.94" cy="401.61" r="2.5" fill="#34d399"><title>Idle tests | ending at 40 | 20 work units | 0.46</title></circle>
+<circle cx="450.91" cy="399.04" r="2.5" fill="#34d399"><title>Idle tests | ending at 60 | 20 work units | 0.49</title></circle>
+<circle cx="567.88" cy="433.28" r="2.5" fill="#34d399"><title>Idle tests | ending at 80 | 20 work units | 0.02</title></circle>
+<circle cx="684.85" cy="419.12" r="2.5" fill="#34d399"><title>Idle tests | ending at 100 | 20 work units | 0.22</title></circle>
+<circle cx="801.82" cy="417.17" r="2.5" fill="#34d399"><title>Idle tests | ending at 120 | 20 work units | 0.24</title></circle>
+<circle cx="918.79" cy="432.42" r="2.5" fill="#34d399"><title>Idle tests | ending at 140 | 20 work units | 0.04</title></circle>
+<circle cx="988.97" cy="433.87" r="2.5" fill="#34d399"><title>Idle tests | ending at 152 | 12 work units | 0.02</title></circle>
+<path stroke="#34d399" stroke-width="3" d="M880,78h25"/>
+<text x="913" y="83">Idle tests</text>
+<text x="582.5" y="496" text-anchor="middle">Completed-work proxy: framework resolved tickets; idle game delivery merges</text>
+<text transform="translate(24,265.0) rotate(-90)" text-anchor="middle">Removed lines / interval baseline / work unit (%)</text>
+</svg>

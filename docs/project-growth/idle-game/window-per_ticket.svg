@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" role="img" aria-labelledby="title desc">
+<title id="title">Code churn per completed work unit</title><desc id="desc">Resolution intervals; repeated edits count repeatedly; inspect points for commit evidence</desc>
+<style>text{font-family:Arial,sans-serif;fill:#cbd5e1;font-size:14px}.grid{stroke:#334155;stroke-width:1}.line{fill:none;stroke-width:2.5;stroke-linejoin:round}</style>
+<rect width="1100" height="520" rx="12" fill="#101827"/>
+<text x="30" y="32" style="font-size:22px;fill:#f1f5f9">Code churn per completed work unit</text>
+<text x="30" y="56">Resolution intervals; repeated edits count repeatedly; inspect points for commit evidence</text>
+<path class="grid" d="M100,435.00h965"/>
+<text x="88" y="440.00" text-anchor="end">0</text>
+<path class="grid" d="M100,367.00h965"/>
+<text x="88" y="372.00" text-anchor="end">228</text>
+<path class="grid" d="M100,299.00h965"/>
+<text x="88" y="304.00" text-anchor="end">456</text>
+<path class="grid" d="M100,231.00h965"/>
+<text x="88" y="236.00" text-anchor="end">683</text>
+<path class="grid" d="M100,163.00h965"/>
+<text x="88" y="168.00" text-anchor="end">911</text>
+<path class="grid" d="M100,95.00h965"/>
+<text x="88" y="100.00" text-anchor="end">1,139</text>
+<path class="grid" d="M100.00,95v340"/>
+<text x="100.00" y="460" text-anchor="middle">0</text>
+<path class="grid" d="M260.83,95v340"/>
+<text x="260.83" y="460" text-anchor="middle">25</text>
+<path class="grid" d="M421.67,95v340"/>
+<text x="421.67" y="460" text-anchor="middle">51</text>
+<path class="grid" d="M582.50,95v340"/>
+<text x="582.50" y="460" text-anchor="middle">76</text>
+<path class="grid" d="M743.33,95v340"/>
+<text x="743.33" y="460" text-anchor="middle">101</text>
+<path class="grid" d="M904.17,95v340"/>
+<text x="904.17" y="460" text-anchor="middle">127</text>
+<path class="grid" d="M1065.00,95v340"/>
+<text x="1065.00" y="460" text-anchor="middle">152</text>
+<polyline class="line" stroke="#60a5fa" points="226.97,114.25 353.95,336.58 480.92,374.77 607.89,344.85 734.87,371.75 861.84,385.51 988.82,384.05 1065.00,396.52"/>
+<circle cx="226.97" cy="114.25" r="2.5" fill="#60a5fa"><title>45394e6 to 6001bf9 | 20 merge(s) | docs: record one-click context verification and review handoff | 1,074.65</title></circle>
+<circle cx="353.95" cy="336.58" r="2.5" fill="#60a5fa"><title>6001bf9 to 572a0c7 | 20 merge(s) | Integrate reviewed T129 building scale art | 329.75</title></circle>
+<circle cx="480.92" cy="374.77" r="2.5" fill="#60a5fa"><title>572a0c7 to 028d663 | 20 merge(s) | Combine approved native startup pause verification | 201.80</title></circle>
+<circle cx="607.89" cy="344.85" r="2.5" fill="#60a5fa"><title>028d663 to 21a478b | 20 merge(s) | Record final r9 identity verification and outstanding startup checkpoint | 302.05</title></circle>
+<circle cx="734.87" cy="371.75" r="2.5" fill="#60a5fa"><title>21a478b to f6a779a | 20 merge(s) | Record joined T167 environment views and preserved cave verification | 211.90</title></circle>
+<circle cx="861.84" cy="385.51" r="2.5" fill="#60a5fa"><title>f6a779a to 1c7e36a | 20 merge(s) | Verify joined T196 runtime states and retain ordinary-scale native evidence | 165.80</title></circle>
+<circle cx="988.82" cy="384.05" r="2.5" fill="#60a5fa"><title>1c7e36a to 90dc8b2 | 20 merge(s) | Record executing source receipts and qualified performance evidence | 170.70</title></circle>
+<circle cx="1065.00" cy="396.52" r="2.5" fill="#60a5fa"><title>90dc8b2 to 907b8aa | 12 merge(s) | Retain completed named navigation assessment and limits | 128.92</title></circle>
+<path stroke="#60a5fa" stroke-width="3" d="M100,78h25"/>
+<text x="133" y="83">Production</text>
+<polyline class="line" stroke="#fbbf24" points="226.97,239.59 353.95,354.41 480.92,360.07 607.89,353.76 734.87,372.81 861.84,365.13 988.82,390.33 1065.00,398.98"/>
+<circle cx="226.97" cy="239.59" r="2.5" fill="#fbbf24"><title>45394e6 to 6001bf9 | 20 merge(s) | docs: record one-click context verification and review handoff | 654.70</title></circle>
+<circle cx="353.95" cy="354.41" r="2.5" fill="#fbbf24"><title>6001bf9 to 572a0c7 | 20 merge(s) | Integrate reviewed T129 building scale art | 270.00</title></circle>
+<circle cx="480.92" cy="360.07" r="2.5" fill="#fbbf24"><title>572a0c7 to 028d663 | 20 merge(s) | Combine approved native startup pause verification | 251.05</title></circle>
+<circle cx="607.89" cy="353.76" r="2.5" fill="#fbbf24"><title>028d663 to 21a478b | 20 merge(s) | Record final r9 identity verification and outstanding startup checkpoint | 272.20</title></circle>
+<circle cx="734.87" cy="372.81" r="2.5" fill="#fbbf24"><title>21a478b to f6a779a | 20 merge(s) | Record joined T167 environment views and preserved cave verification | 208.35</title></circle>
+<circle cx="861.84" cy="365.13" r="2.5" fill="#fbbf24"><title>f6a779a to 1c7e36a | 20 merge(s) | Verify joined T196 runtime states and retain ordinary-scale native evidence | 234.10</title></circle>
+<circle cx="988.82" cy="390.33" r="2.5" fill="#fbbf24"><title>1c7e36a to 90dc8b2 | 20 merge(s) | Record executing source receipts and qualified performance evidence | 149.65</title></circle>
+<circle cx="1065.00" cy="398.98" r="2.5" fill="#fbbf24"><title>90dc8b2 to 907b8aa | 12 merge(s) | Retain completed named navigation assessment and limits | 120.67</title></circle>
+<path stroke="#fbbf24" stroke-width="3" d="M360,78h25"/>
+<text x="393" y="83">Tests and test support</text>
+<text x="582.5" y="496" text-anchor="middle">Cumulative delivery merges (synchronization and publication excluded)</text>
+<text transform="translate(24,265.0) rotate(-90)" text-anchor="middle">Added + removed nonblank lines / merge</text>
+</svg>

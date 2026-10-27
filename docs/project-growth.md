@@ -1,7 +1,7 @@
 # Project growth snapshot
 
-Committed history through `023c071621914eafdf16228e9dd2a9d6ca18d15e` (2026-10-02). This report samples all
-201 commits on the first-parent history of that commit. Working-tree and
+Committed history through `62eaa7e7da8bc35fa62362acea07554ba0d6e70e` (2026-10-25). This report samples all
+218 commits on the first-parent history of that commit. Working-tree and
 staged changes are excluded. Charts are local SVGs embedded in Markdown; no
 server, external libraries, or network connection is needed.
 
@@ -22,24 +22,54 @@ lists every marked commit.
 
 | Metric at endpoint | Count |
 | --- | ---: |
-| Resolved implementation tickets, cumulative | 144 |
-| All resolved tickets, cumulative (including decisions/research) | 167 |
-| Tickets currently marked resolved at endpoint | 167 |
-| Production source lines | 24,913 |
-| Test and test-support source lines | 31,444 |
-| Production source files | 141 |
-| Test and test-support source files | 89 |
+| Resolved implementation tickets, cumulative | 165 |
+| All resolved tickets, cumulative (including decisions/research) | 193 |
+| Tickets currently marked resolved at endpoint | 193 |
+| Production source lines | 27,616 |
+| Test and test-support source lines | 35,512 |
+| Production source files | 161 |
+| Test and test-support source files | 117 |
 | Prototype source lines (excluded from main charts) | 2,289 |
-| Generated schema snapshot lines (excluded) | 359 |
+| Generated schema snapshot lines (excluded) | 673 |
 
-At this endpoint, the project retains 173.0
-production lines and 218.4 test lines per
-resolved implementation ticket. Tests contain 1.26 times
+At this endpoint, the project retains 167.4
+production lines and 215.2 test lines per
+resolved implementation ticket. Tests contain 1.29 times
 as many source lines as production; this ratio measures size, not test quality.
 The broad intervals below make it possible to compare early build-out with
 later development without assuming equal feature size.
 
+## Change volume and existing-code turnover
+
+![Production and test churn per resolved ticket](project-growth/per_ticket.svg)
+
+**Churn = added + removed nonblank lines.** Replacing 100 lines and adding
+30 more counts as 230 lines of churn, even though net growth is only 30.
+Renames within a category are detected; unchanged moved files do not create churn.
+Changes are summed across commits, including repeated edits, rather than reduced
+to a single endpoint diff. Per-commit additions and removals remain in history.csv
+for auditability, but the chart combines them.
+
+![Existing-code turnover per resolved ticket](project-growth/turnover_pct.svg)
+
+**Turnover = removed nonblank lines / code size at the interval start / new tickets.**
+It measures edits to existing code more directly than growth does: pure additions
+have zero turnover; replacing an entire codebase once is about 100% before dividing
+by ticket count. Repeated edits can exceed 100%; this is not a unique-line fraction.
+Deletion, replacement, formatting and reorganization all contribute. A zero-size
+baseline is omitted rather than treated as zero turnover.
+
+Both charts use the same end-of-resolution-plateau intervals as the net-growth
+chart below, including intervening commits. Several tickets completed together
+receive an interval average, **not individually attributable measurements**.
+Initial work before the last zero-ticket snapshot is excluded from these intervals
+and retained in the per-commit CSV. Tracker delays can shift apparent spikes.
+Lower churn or turnover can suggest more local changes, but ticket scope and
+deliberate refactoring matter; these metrics alone cannot establish design quality.
+The [interval evidence](project-growth/churn-intervals.json) preserves the boundaries.
+
 ## Retained code per ticket
+
 
 ![Average retained production and test lines per resolved ticket](project-growth/average.svg)
 
@@ -70,7 +100,8 @@ Broader intervals reduce the noise of individual tickets:
 | 80–100 | 20 | 105.2 | 156.5 |
 | 100–120 | 20 | 77.8 | 166.8 |
 | 120–141 | 21 | 129.5 | 209.1 |
-| 141–144 | 3 | 51.3 | 130.0 |
+| 141–161 | 20 | 138.5 | 207.2 |
+| 161–165 | 4 | 21.8 | 78.8 |
 
 Linear code-size growth would look roughly straight in the first chart and
 roughly flat in net growth per ticket. Sustained exponential growth would need
@@ -168,6 +199,9 @@ change locality, reuse, regressions, and verification effort.
 
 ## Data and future updates
 
+See the [idle game comparison](project-growth-comparison.md) for matching size,
+churn and existing-code turnover charts, broader trend windows, and comparison limits.
+
 [Every commit and its measurements](project-growth/history.csv),
 [first resolution evidence](project-growth/resolutions.json), and
 [net-growth intervals](project-growth/increments.json) are retained locally.
@@ -182,6 +216,6 @@ python docs/project-growth/generate.py --ref HEAD
 
 Use `--ref <commit>` for a fixed endpoint. The script reads Git objects without
 checking out historical trees or modifying the index. It rebuilds this Markdown,
-the CSV/JSON evidence, and the three SVGs deterministically. No per-commit hook
+the CSV/JSON evidence, and the size, growth, churn and turnover SVGs deterministically. No per-commit hook
 or ongoing maintenance requirement is introduced. Existing historical
 measurements remain the same when extending the same first-parent history.

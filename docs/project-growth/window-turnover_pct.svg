@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" role="img" aria-labelledby="title desc">
+<title id="title">Existing-code turnover per completed work unit</title><desc id="desc">Resolution intervals; repeated edits count repeatedly; inspect points for commit evidence</desc>
+<style>text{font-family:Arial,sans-serif;fill:#cbd5e1;font-size:14px}.grid{stroke:#334155;stroke-width:1}.line{fill:none;stroke-width:2.5;stroke-linejoin:round}</style>
+<rect width="1100" height="520" rx="12" fill="#101827"/>
+<text x="30" y="32" style="font-size:22px;fill:#f1f5f9">Existing-code turnover per completed work unit</text>
+<text x="30" y="56">Resolution intervals; repeated edits count repeatedly; inspect points for commit evidence</text>
+<path class="grid" d="M100,435.00h965"/>
+<text x="88" y="440.00" text-anchor="end">0</text>
+<path class="grid" d="M100,367.00h965"/>
+<text x="88" y="372.00" text-anchor="end">1</text>
+<path class="grid" d="M100,299.00h965"/>
+<text x="88" y="304.00" text-anchor="end">2</text>
+<path class="grid" d="M100,231.00h965"/>
+<text x="88" y="236.00" text-anchor="end">3</text>
+<path class="grid" d="M100,163.00h965"/>
+<text x="88" y="168.00" text-anchor="end">3</text>
+<path class="grid" d="M100,95.00h965"/>
+<text x="88" y="100.00" text-anchor="end">4</text>
+<path class="grid" d="M100.00,95v340"/>
+<text x="100.00" y="460" text-anchor="middle">0</text>
+<path class="grid" d="M260.83,95v340"/>
+<text x="260.83" y="460" text-anchor="middle">28</text>
+<path class="grid" d="M421.67,95v340"/>
+<text x="421.67" y="460" text-anchor="middle">55</text>
+<path class="grid" d="M582.50,95v340"/>
+<text x="582.50" y="460" text-anchor="middle">82</text>
+<path class="grid" d="M743.33,95v340"/>
+<text x="743.33" y="460" text-anchor="middle">110</text>
+<path class="grid" d="M904.17,95v340"/>
+<text x="904.17" y="460" text-anchor="middle">138</text>
+<path class="grid" d="M1065.00,95v340"/>
+<text x="1065.00" y="460" text-anchor="middle">165</text>
+<polyline class="line" stroke="#60a5fa" points="216.97,114.25 333.94,359.88 450.91,403.09 567.88,384.75 684.85,398.28 801.82,379.53 924.64,411.30 1041.61,422.78 1065.00,433.78"/>
+<circle cx="216.97" cy="114.25" r="2.5" fill="#60a5fa"><title>f5e1f3f to f048168 | 20 ticket(s) | resolve 44 | 4.06</title></circle>
+<circle cx="333.94" cy="359.88" r="2.5" fill="#60a5fa"><title>f048168 to 3f5b881 | 20 ticket(s) | resolve 34 | 0.95</title></circle>
+<circle cx="450.91" cy="403.09" r="2.5" fill="#60a5fa"><title>3f5b881 to f556770 | 20 ticket(s) | resolve 67 | 0.40</title></circle>
+<circle cx="567.88" cy="384.75" r="2.5" fill="#60a5fa"><title>f556770 to 74ba638 | 20 ticket(s) | resolve 4 proper | 0.64</title></circle>
+<circle cx="684.85" cy="398.28" r="2.5" fill="#60a5fa"><title>74ba638 to 4197ccc | 20 ticket(s) | resolve 81 | 0.46</title></circle>
+<circle cx="801.82" cy="379.53" r="2.5" fill="#60a5fa"><title>4197ccc to dfa79da | 20 ticket(s) | resolve verification 1-3 | 0.70</title></circle>
+<circle cx="924.64" cy="411.30" r="2.5" fill="#60a5fa"><title>dfa79da to 6ee0b0b | 21 ticket(s) | resolve 9-10, complete mcp tool rework | 0.30</title></circle>
+<circle cx="1041.61" cy="422.78" r="2.5" fill="#60a5fa"><title>6ee0b0b to 9460e28 | 20 ticket(s) | resolve reconnect failure | 0.15</title></circle>
+<circle cx="1065.00" cy="433.78" r="2.5" fill="#60a5fa"><title>9460e28 to 62eaa7e | 4 ticket(s) | resolve computer use | 0.02</title></circle>
+<path stroke="#60a5fa" stroke-width="3" d="M100,78h25"/>
+<text x="133" y="83">Production</text>
+<polyline class="line" stroke="#fbbf24" points="216.97,405.31 333.94,425.51 450.91,427.23 567.88,291.69 684.85,369.23 801.82,433.63 924.64,426.09 1041.61,431.81 1065.00,435.00"/>
+<circle cx="216.97" cy="405.31" r="2.5" fill="#fbbf24"><title>f5e1f3f to f048168 | 20 ticket(s) | resolve 44 | 0.38</title></circle>
+<circle cx="333.94" cy="425.51" r="2.5" fill="#fbbf24"><title>f048168 to 3f5b881 | 20 ticket(s) | resolve 34 | 0.12</title></circle>
+<circle cx="450.91" cy="427.23" r="2.5" fill="#fbbf24"><title>3f5b881 to f556770 | 20 ticket(s) | resolve 67 | 0.10</title></circle>
+<circle cx="567.88" cy="291.69" r="2.5" fill="#fbbf24"><title>f556770 to 74ba638 | 20 ticket(s) | resolve 4 proper | 1.81</title></circle>
+<circle cx="684.85" cy="369.23" r="2.5" fill="#fbbf24"><title>74ba638 to 4197ccc | 20 ticket(s) | resolve 81 | 0.83</title></circle>
+<circle cx="801.82" cy="433.63" r="2.5" fill="#fbbf24"><title>4197ccc to dfa79da | 20 ticket(s) | resolve verification 1-3 | 0.02</title></circle>
+<circle cx="924.64" cy="426.09" r="2.5" fill="#fbbf24"><title>dfa79da to 6ee0b0b | 21 ticket(s) | resolve 9-10, complete mcp tool rework | 0.11</title></circle>
+<circle cx="1041.61" cy="431.81" r="2.5" fill="#fbbf24"><title>6ee0b0b to 9460e28 | 20 ticket(s) | resolve reconnect failure | 0.04</title></circle>
+<circle cx="1065.00" cy="435.00" r="2.5" fill="#fbbf24"><title>9460e28 to 62eaa7e | 4 ticket(s) | resolve computer use | 0.00</title></circle>
+<path stroke="#fbbf24" stroke-width="3" d="M360,78h25"/>
+<text x="393" y="83">Tests and test support</text>
+<text x="582.5" y="496" text-anchor="middle">Cumulative resolved implementation tickets</text>
+<text transform="translate(24,265.0) rotate(-90)" text-anchor="middle">Removed lines / starting code size / ticket (%)</text>
+</svg>

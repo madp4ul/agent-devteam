@@ -1,0 +1,197 @@
+[
+  {
+    "commit": "028c30d8cee9f8a35aa57d3543528c9908c2eb89",
+    "subject": "Merge branch 'feature/T-0059-placed-cleanup-controls' into feature/T-0061-native-worker-controls",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "b816ce02b2cd024554c344b835db117791089684",
+    "subject": "Merge commit '69493ad3d5b8ea9cd70ce011cfa5ae128151984b' into feature/T-0067-surface-pits-cannon",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "21c5ede2cdec7ce848a690d4a73c065c64bc4998",
+    "subject": "Merge commit 'd9866b7' into feature/T-0067-surface-pits-cannon",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "575657ebb0efb4ba38ee0dd58d4c2dc40e4a1a63",
+    "subject": "Merge commit 'ae81661f6ece699e26187ab3f102e6c99098bb0d' into feature/T-0067-surface-pits-cannon",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "5e23622d2336bb88798e5402ce1c0751eb81fee9",
+    "subject": "Merge commit '61d9f18' into feature/T-0067-surface-pits-cannon",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "fa771bef5db4c6c0f8ba6cdff7271353501b36d9",
+    "subject": "Merge commit 'c9e6bb887504b32f72ac8257437e08c8e10406f5' into feature/T-0067-surface-pits-cannon",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "d1820808735d15eccc1cfc8d9ed99c33859b0d17",
+    "subject": "Merge branch 'integration/T-0002-idle-game' into feature/T-0070-cost-driven-interior",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "b45f749870a0b7d6b02e49a5cf7ca94905d137a5",
+    "subject": "Merge commit '9f50847225c280caa7e8dc21cfc8e2fe9d02e5d6' into feature/T-0071-packed-history-loaded-launcher",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "31c88d6efdf889023c5ba69ea782cf1199daecb4",
+    "subject": "Merge commit 'e11e7bd64bfa9809386a127375ad00f85835267b' into feature/T-0071-packed-history-loaded-launcher",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "ce6f42a08da74bf11fc07a18d3de07047c0387a6",
+    "subject": "Merge commit '10aee5a1f46eee779751d453d55b5d3d9e41397c' into feature/T-0071-packed-history-loaded-launcher",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "90d06e6ee4633b33acebed27a93f609391126ea2",
+    "subject": "Merge commit '32af3c4b9d1c71d8385a0ed0599878d64000f353' into feature/T-0071-packed-history-loaded-launcher",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "9da503beeaaf140fb9e13b750beb1ff153e1392b",
+    "subject": "Merge commit '981695a60b620a5212b582763f753b91dff68ba6' into feature/T-0071-packed-history-loaded-launcher",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "33666dfa8bc652a09c3bc1beb8f1c65cf1b90603",
+    "subject": "Merge commit 'ab3f739' into feature/T-0071-packed-history-loaded-launcher",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "c3c3ede94e423342ed47bcdf3fb4514aa4e707fb",
+    "subject": "Merge commit '82cf1c9700d615c9a62dd66f35915bccc9d31a65' into feature/T-0071-packed-history-loaded-launcher",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "3638067492e3d4a4fd2e04135173d21f0781ac49",
+    "subject": "Merge commit '77b623894a104e6bdd613eec21a778062e0d02c4' into feature/T-0071-packed-history-loaded-launcher",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "1ce3232f501efa096ed68a10bbde6ca3164b1442",
+    "subject": "Merge commit '19bedd0bc194e68d367bcd7d885430d9a36a9ed1' into feature/T-0071-packed-history-loaded-launcher",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "47cce429216a599b5ec9fd267b06093c3bf340a5",
+    "subject": "Merge commit '53a5c383164a977e35384b9e9a26fcd561d6221e' into feature/T-0071-packed-history-loaded-launcher",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "1b2b2cf76521d5d48a88622c4cbe122ba1a2bf37",
+    "subject": "Merge commit 'b05ea5b1756e7d38ccaeb928741d1483fc8985fe' into feature/T-0075-sparse-packing-boundary",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "358570f27442243f3d74055e04b4a98e967008de",
+    "subject": "Merge commit '110197f5b256c42a1d18d51199d20bbafdffb0b9' into feature/T-0077-zoom-gap-slope",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "9665cfe8ce14b10982af3c2d7e6852ff22620593",
+    "subject": "Merge remote-tracking branch 'origin/main' into docs/T-0079-landscape-shape",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "14e5989ab6b561ee1b0b040e517857a659f25d29",
+    "subject": "Merge commit '49402a163b1ef1c76571ef82275e733289b1de7c' into feature/T-0083-user-landscape",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "8f1ccc8bdf36e22009e8da51e9284bf4cf213af2",
+    "subject": "Merge commit 'cda8df73bb754c989d3d6cd07c65895a9dc1d1c2' into feature/T-0086-tech-readability-world-return",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "29527f252617ee08dd31cdb3fa5c7aa96135d639",
+    "subject": "Merge commit '920fa474e0945e1ce022ebe56585352db495de33' into feature/T-0086-tech-readability-world-return",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "3b79532d1b12d4196f28bdf987e7745996784305",
+    "subject": "Merge commit '73875c7' into feature/T-0088-unified-city-grid",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "2a22de013567a3bcdddd6bdc4baed97389af5d83",
+    "subject": "Merge commit 'ca06e1699d244a6a0b126fab114490271a15c6db' into feature/T-0088-unified-city-grid",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "7ea0fd3162c25dfcd4703335990cc8bd503d28df",
+    "subject": "Merge commit '2fff62637de6d2d440fbda19ab621eb120c2ce2a' into feature/T-0096-natural-terrain",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "8be08d118bf200121254fc9a72fb120e999a7c94",
+    "subject": "Merge commit '2985c832bc731a4b4776aaa3e5f47b5fa06e6f04' into feature/T-0107-one-click-building-context",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "7b1bc675622b927a84c2e5a0d852ad8b0e4a22ee",
+    "subject": "Merge commit '13732129d8594d1c6785b640d92483a255380b5d' into feature/T-0112-neighbor-roof-pieces",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "d254ad85fcc6ed1c81ff91c34df8d763491e0460",
+    "subject": "Merge remote-tracking branch 'origin/main' into feature/T-0112-neighbor-roof-pieces",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "a802358ce1c62fd781683d081e3b5d0c3a99cea3",
+    "subject": "Merge commit 'cc6030453ef12c1df4e82efe985ab134170434b8' into feature/T-0114-unlock-tree-viewport",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "598ef0bc0e2deb57bf1b92d9319fba00e53c3078",
+    "subject": "Merge commit '351807aaf013d1d730736f7eb11dcf03293ac6a6' into feature/T-0114-unlock-tree-viewport",
+    "reason": "branch synchronization"
+  },
+  {
+    "commit": "125ee09fbaeaa4ce8d68381e537a91e9eee4f374",
+    "subject": "Merge branch 'publication/T-0002-empirical-feedback' into integration/T-0002-idle-game",
+    "reason": "publication feedback"
+  },
+  {
+    "commit": "d14ef74209db0f7568e75486d97a7a8b8ff6c478",
+    "subject": "Merge branch 'publication/T-0002-empirical-feedback' into integration/T-0002-idle-game",
+    "reason": "publication feedback"
+  },
+  {
+    "commit": "1debcd1a790e4cdb899a65ae527ce5e4643597cc",
+    "subject": "Merge branch 'publication/T-0002-empirical-feedback' into integration/T-0002-idle-game",
+    "reason": "publication feedback"
+  },
+  {
+    "commit": "c730823244d8cfb4ecd1be13cb81bf9c3629ca9b",
+    "subject": "Merge branch 'publication/T-0002-empirical-feedback' into integration/T-0002-idle-game",
+    "reason": "publication feedback"
+  },
+  {
+    "commit": "865ec3454baa8f866f41c1acf0ffb9b1bae3e88b",
+    "subject": "Merge branch 'publication/T-0002-empirical-feedback' into integration/T-0002-idle-game",
+    "reason": "publication feedback"
+  },
+  {
+    "commit": "6e0f30059905375221e7b4347ec9d12d6e7cc59a",
+    "subject": "Merge branch 'publication/T-0002-empirical-feedback' into integration/T-0002-idle-game",
+    "reason": "publication feedback"
+  },
+  {
+    "commit": "bb8980eae882a480c27bc90dd4336b2d0d59a344",
+    "subject": "Merge branch 'publication/T-0002-empirical-feedback' into integration/T-0002-idle-game",
+    "reason": "publication feedback"
+  },
+  {
+    "commit": "e5ddb2c23c5cf6f2c3ab52bc18f97d50b651c51f",
+    "subject": "Merge commit '1a67de67dbf5255fd159d7df931da75a5ef32690' into feature/T-0122-current-rules-only",
+    "reason": "branch synchronization"
+  }
+]

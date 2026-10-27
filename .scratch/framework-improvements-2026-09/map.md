@@ -1,10 +1,11 @@
 # Framework improvement intake — September 2026
 
-This intake records twenty-eight user-reported issues dictated on 2026-09-20,
+This intake records twenty-nine user-reported issues dictated on 2026-09-20,
 2026-09-23, 2026-09-26, and 2026-09-30. Nine of the original ten were reported as existing
 GitHub issues; issue 08 and issues 11–21 were added during the conversations.
 Issues 22–28 were supplied as existing GitHub issues on 2026-09-30.
 GitHub URLs and numbers were not supplied, and the originals were not fetched.
+Issue 29 was added on 2026-10-27 following the Idle Game archival investigation.
 The user's account is the source except where an issue explicitly records
 separate investigation evidence.
 
@@ -45,6 +46,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [26](issues/26-display-interruption-resume-instructions.md) | Show resume events and supplied instructions in timeline and conversations | Implemented; user review |
 | [27](issues/27-recover-stalled-work-without-user-attention.md) | Wake an agent when watched work stalls without required user attention | Design resolved; three stall recovery delivery tickets published |
 | [28](issues/28-redesign-coordination-across-task-worktrees.md) | Reliably share and integrate parent/child work across task worktrees | Discuss source selection, task branches, synchronization, and integration |
+| [29](issues/29-confirm-nested-worktree-archival-and-list-bulk-failures.md) | Preview and confirm nested-worktree deletion; identify every bulk archival failure | Specify confirmation and cleanup using existing workspace controls |
 
 ## Workflow and relationships
 
@@ -216,6 +218,8 @@ and browser coverage of icon/button geometric centering.
 
 ## Comments
 
+- 2026-10-27: Added issue 29 for individual nested-worktree archival confirmation,
+  reusable Git previews and Open actions, and task-linked bulk rejection feedback.
 - 2026-09-30: Added issues 22–28 after the user approved the read-only intake
   draft and authorized file creation. All seven were described as GitHub issues;
   references were not supplied. Issue 24 remains an unverified investigation,
