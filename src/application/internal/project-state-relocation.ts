@@ -88,6 +88,7 @@ async function relocateWithExclusiveAccess(
   }
   const sourceWorkspaceRoot = join(source, "task-worktrees");
   const destinationWorkspaceRoot = join(destination, "task-worktrees");
+  await assertNoAuxiliaryWorktreesInRelocationRoots(repositoryPath, [canonicalSource, canonicalDestination]);
   if (journal !== undefined) {
     if (!samePath(journal.source, boundRoot) && !samePath(journal.destination, boundRoot)) {
       throw new Error(
@@ -306,6 +307,25 @@ function rewriteDatabasePaths(databasePath: string, fromRoot: string, toRoot: st
     }
   } finally {
     database.close();
+  }
+}
+
+async function assertNoAuxiliaryWorktreesInRelocationRoots(repositoryPath: string, roots: string[]): Promise<void> {
+  // Only task registrations are repaired during cutover. Copying another
+  // registered checkout would leave Git pointing at files later removed.
+  const registrations = await runProjectGit(repositoryPath, ["worktree", "list", "--porcelain"]);
+  for (const match of registrations.matchAll(/^worktree (.+)$/gm)) {
+    const path = await canonicalProspectivePath(resolve(match[1] ?? ""));
+    for (const root of roots) {
+      const taskRoot = join(root, "task-worktrees");
+      if ((samePath(root, path) || isWithin(root, path))
+        && !samePath(taskRoot, path) && !isWithin(taskRoot, path)) {
+        throw new Error(
+          `Project-state relocation cannot repair auxiliary Git worktree ${path}; ` +
+          "preserve it outside the source and destination state roots before retrying",
+        );
+      }
+    }
   }
 }
 

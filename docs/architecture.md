@@ -425,6 +425,10 @@ Registrations nested inside a correctly located, database-recorded task
 workspace belong to that task's implementation artifacts, rather than defining
 additional framework task workspaces. Startup leaves them intact while still
 validating the owning task and rejecting unrecorded containers and registrations.
+Auxiliary checkouts elsewhere in the state root can preserve short Windows paths.
+Relocation rejects these registrations in both its source and destination roots
+before cutover because it repairs only task registrations; it must not strand an
+auxiliary checkout when removing the old root.
 See [ADR 0030](adr/0030-distinguish-nested-evidence-worktrees-from-task-workspaces.md).
 
 Host-side archival first matches the database workspace path to the task's

@@ -118,6 +118,31 @@ test("relocate-state preserves and repairs a provisioned task workspace", async 
   }
 });
 
+test("relocate-state preserves auxiliary worktrees outside the task namespace by refusing preflight", async () => {
+  const fixture = await createInitializedOfflineFixture();
+  const auxiliary = join(fixture.originalStateRoot, "evidence", "baseline");
+  await git(fixture.repositoryPath, "worktree", "add", "--detach", auxiliary, "HEAD");
+  await writeFile(join(auxiliary, "retained-evidence.txt"), "uncommitted baseline evidence\n");
+  const databasePath = join(fixture.originalStateRoot, "coordination.sqlite3");
+  const databaseBefore = await readFile(databasePath);
+  const registrationsBefore = await git(fixture.repositoryPath, "worktree", "list", "--porcelain");
+  const destination = join(fixture.directory, "must-preserve-auxiliary");
+
+  await assert.rejects(
+    runCli(["relocate-state", destination, "--project", fixture.repositoryPath]),
+    (error: { stderr?: string }) => {
+      assert.match(error.stderr ?? "", /cannot repair auxiliary Git worktree/i);
+      assert.match(error.stderr ?? "", /failed during preflight/i);
+      return true;
+    },
+  );
+  assert.equal(await pathExists(destination), false);
+  assert.equal(await readFile(join(auxiliary, "retained-evidence.txt"), "utf8"), "uncommitted baseline evidence\n");
+  assert.deepEqual(await readFile(databasePath), databaseBefore);
+  assert.equal(await git(fixture.repositoryPath, "worktree", "list", "--porcelain"), registrationsBefore);
+  assert.equal((await git(fixture.repositoryPath, "config", "--local", "--get", "coordination.projectStateRoot")).trim(), fixture.originalStateRoot);
+});
+
 test("relocate-state refuses to run while the coordination application owns the project", async () => {
   const fixture = await createFixture();
   const host = spawnCli(["start", "--process", fixture.definitionPath, "--project", fixture.repositoryPath, "--port", "0"]);

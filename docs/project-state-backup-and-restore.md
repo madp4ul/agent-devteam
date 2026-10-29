@@ -108,6 +108,34 @@ This procedure has been exercised by the restart integration tests against an
 isolated Git repository, production SQLite store, registered detached
 worktree, interrupted attempt, and deliberate workspace inconsistency.
 
+## Auxiliary worktree placement
+
+The immediate children of `task-worktrees/` are reserved for database-recorded
+task workspaces. An agent-created comparison or baseline checkout placed there
+blocks the next startup, even when its files and Git registration are valid.
+Keep auxiliary worktrees inside their owning task workspace. If Windows path
+length limits make that impractical, arrange a short location outside
+`task-worktrees/` with the user and include it in the operational backup.
+
+A missing-record diagnostic does not by itself prove database loss. First
+inspect the database read-only and establish the directory's provenance from
+retained run commands and Git metadata. A confirmed auxiliary checkout is not
+a missing task and must not be given a fabricated database record.
+
+Recovery of a confirmed misplaced auxiliary checkout requires stopped hosts
+and agents, a verified backup of that checkout and the Git administrative
+records the move changes, and an explicit destination outside the reserved
+directory. Keep the database read-only: this operation does not reconstruct
+task records or restore coordination history. A targeted backup is sufficient
+for this metadata-only move; do not copy every unrelated task workspace.
+Preserve the checkout using Git's worktree move operation, verify its file
+identities, HEAD and index, then rerun the workspace consistency validator. Do not delete, prune,
+or silently adopt unknown directories. Relocation refuses auxiliary registrations
+elsewhere inside either state root as well as nested task artifacts: preserve
+those checkouts outside both relocation roots before using that command.
+If ownership cannot be established,
+use the coherent-backup restore procedure instead.
+
 ## Relocate
 
 Relocation is a separate offline operation, not a variant of restore. Stop the

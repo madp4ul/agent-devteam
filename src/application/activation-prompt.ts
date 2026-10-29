@@ -1,6 +1,8 @@
 import type { AgentRunRequest } from "./runtime-contract.ts";
 import { commentHistoryRecord, historyCounts, historyCoverage, type TaskHistoryPage, type TaskHistoryRecord } from "./history-contract.ts";
 
+const WORKSPACE_GUIDANCE = "The parent task-worktrees directory is reserved for framework-managed task workspaces. Do not create sibling checkouts there or change task workspace directories or registrations. Keep auxiliary Git worktrees inside your own workspace. If Windows path limits prevent that, request user help arranging a short location outside task-worktrees; do not substitute a sibling checkout.";
+
 export const FRAMEWORK_GUIDANCE = `You are part of a team of agents with different responsibilities, working together to complete this task. Each task has its own team and shared coordination record. Tools can read and change tasks across this project. Process, board, and role guidance describe responsibilities and cooperation; tool descriptions explain operations and their effects.
 
 Your agent ID identifies an agent definition. A participant is identified by both task ID and agent ID. The same agent ID on another task has independent conversational memory. The framework manages each participant's current conversation; tools address participants, not conversation IDs.
@@ -19,13 +21,15 @@ Pinned comments mark shared guidance relevant to current or future work. Inspect
 
 Task inspection reports workspaceStatus with the configured starting ref, provisioning state, and whether that ref is editable. You can correct a task's starting ref through task.edit only before workspace preparation is claimed and before a workspace exists. Omitted edit fields stay unchanged. A correction comment does not change the ref, and editing the ref does not retry a failed activation; request user Retry/Resume when recovery is needed. Agents run only after the framework provisions their isolated task workspace.
 
+${WORKSPACE_GUIDANCE}
+
 Only the user can archive or unarchive tasks. Archived tasks are read-only. Coordination access does not change Codex filesystem/command permissions. attempt.permission_block.report records a denied required action needing user intervention. Computer use skills are not supported in this environment.`;
 
-const RETURNING_FRAMING = "This is a new activation in the existing conversation. The following JSON is task state and historical data captured at dispatch. Counts/cursors identify omissions. The activation section identifies this turn's request.";
+const RETURNING_FRAMING = "This is a new activation in the existing conversation. The following JSON is task state and historical data captured at dispatch. Counts/cursors identify omissions. The activation section identifies this turn's request." + "\n\n" + WORKSPACE_GUIDANCE;
 
 export function composeActivationPrompt(request: AgentRunRequest): string {
   if (request.attempt.thread === "resumed" && request.attempt.number > 1 && request.attempt.fullCompositionReason === undefined) {
-    return `# Attempt continuation\n\nContinue handling activation ${request.activationId} for task ${request.task.id}.\n\n${jsonData({
+    return `# Attempt continuation\n\nContinue handling activation ${request.activationId} for task ${request.task.id}.\n\n${WORKSPACE_GUIDANCE}\n\n${jsonData({
       attempt: request.attempt,
       ...(request.attempt.precedingOutcome?.status === "user-interrupted" ? { interruption: "The preceding attempt was interrupted by the user; this is an explicit continuation." } : {}),
     })}${attachmentsSection(request)}`;

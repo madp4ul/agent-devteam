@@ -37,3 +37,18 @@ it currently repairs only framework task registrations during cutover.
 Regression coverage uses real nested Git registrations and retains dirty
 evidence while proving unowned registrations and missing task registrations
 still fail validation.
+
+## Short-path auxiliary checkouts and relocation
+
+The T-0236 baseline incident on 2026-10-29 established that Windows path limits
+can require an auxiliary checkout outside its task directory. A provenance-
+verified checkout can be preserved elsewhere in the bound state root without
+becoming a framework task. The full-root backup continues to include it.
+
+Relocation repairs only database-recorded task registrations. Its preflight
+therefore rejects registrations elsewhere inside either relocation root,
+including journal recovery, before copying or cutover. Otherwise the old root
+could be removed while Git still points at the auxiliary checkout there.
+The operator must preserve those checkouts outside both roots before relocation.
+The CLI regression retains dirty evidence, the database, binding and registration
+and proves refusal occurs before destination creation.
