@@ -22,7 +22,7 @@ export interface ProjectStateOperationGuard {
 
 export async function acquireProjectStateOperationGuard(
   projectRepositoryPath: string,
-  operation: "application start" | "state relocation",
+  operation: "application start" | "state relocation" | "state maintenance",
 ): Promise<ProjectStateOperationGuard> {
   const repositoryPath = resolve(projectRepositoryPath);
   const commonDirectory = await resolveProjectGitCommonDirectory(repositoryPath);
@@ -66,10 +66,10 @@ export async function acquireProjectStateOperationGuard(
           `Project state is in use by ${existing.operation} (process ${existing.pid}); stop the application and agents before continuing`,
         );
       }
-      if (operation === "state relocation" && await stateMayHaveSurvivingAgents(repositoryPath)) {
+      if (operation !== "application start" && await stateMayHaveSurvivingAgents(repositoryPath)) {
         throw new Error(
           `Project state records an agent attempt left running by stopped process ${existing.pid}; ` +
-          "restart the application with its normal coordination start command and shut it down cleanly before relocating",
+          "restart the application with its normal coordination start command and shut it down cleanly before continuing",
         );
       }
       const unchanged = await readFile(guardPath, "utf8").catch(() => undefined);

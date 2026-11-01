@@ -15,6 +15,7 @@ import type { ConversationProjectionModule } from "./conversation-projection-mod
 import type { AttemptTokenUsage } from "../runtime-contract.ts";
 import type { ProcessModelPricingDefinition } from "./process-definition.ts";
 import type { ArchivedConversationCostSnapshot } from "./archived-conversation-cost.ts";
+import { forgetTaskCommandResponses } from "./command-response-retention.ts";
 
 export class TaskArchiveStore {
   readonly #owner: CoordinationDatabase;
@@ -191,10 +192,7 @@ export class TaskArchiveStore {
           "DELETE FROM attempt_transcripts WHERE attempt_id IN (SELECT attempt.id FROM attempts attempt JOIN activations activation ON activation.id = attempt.activation_id WHERE activation.task_id = ?)",
         ).run(taskId);
         this.#database.prepare("DELETE FROM agent_conversation_messages WHERE task_id = ?").run(taskId);
-        this.#idempotentCommands.forgetScope({
-          kind: "continue-agent-conversation",
-          scope: [taskId],
-        });
+        forgetTaskCommandResponses(this.#database, new Set([taskId]));
         this.#database.prepare("DELETE FROM task_workspaces WHERE task_id = ?").run(taskId);
         this.#database.prepare("DELETE FROM task_starting_refs WHERE task_id = ?").run(taskId);
         const marked = this.#database.prepare(

@@ -43,14 +43,15 @@ test("archive removes a clean durable workspace and retains task history without
   });
   t.after(() => application.close());
 
-  const created = application.createTask({
+  const creationCommand = {
     boardId: "delivery",
     columnId: "implementation",
     title: "Archive completed work",
     description: "Retain the coordination outcome without retaining detailed transcript content.",
-    actor: { kind: "user", id: "user" },
+    actor: { kind: "user" as const, id: "user" },
     idempotencyKey: "create-archive-task",
-  });
+  };
+  const created = application.createTask(creationCommand);
   assert.equal(created.accepted, true);
   if (!created.accepted) return;
   await application.resumeAutomation();
@@ -113,6 +114,12 @@ test("archive removes a clean durable workspace and retains task history without
     idempotencyKey: "remove-archive-race-dependency",
   });
   assert.equal(removedRelationship.accepted, true);
+  assert.equal(application.addTaskComment({
+    taskId: created.task.id,
+    body: "Archived task response cache regression marker",
+    actor: { kind: "user", id: "user" },
+    idempotencyKey: "cached-comment-before-archive",
+  }).accepted, true);
   const blocker = application.queryTask(blockerId);
   assert.equal(blocker.available, true);
   if (!blocker.available) return;
@@ -139,6 +146,22 @@ test("archive removes a clean durable workspace and retains task history without
   const archived = await archivePromise;
 
   assert.equal(archived.accepted, true);
+  const cacheInspection = new DatabaseSync(fixture.databasePath, { readOnly: true });
+  try {
+    assert.equal(cacheInspection.prepare(
+      "SELECT 1 FROM command_responses WHERE idempotency_key = 'cached-comment-before-archive'",
+    ).get(), undefined);
+    assert.ok(cacheInspection.prepare(
+      "SELECT 1 FROM command_responses WHERE idempotency_key = 'complete-during-dependent-archive'",
+    ).get(), "Archival must preserve another task's cached result");
+    assert.ok(cacheInspection.prepare(
+      "SELECT 1 FROM command_responses WHERE idempotency_key = 'create-archive-task'",
+    ).get(), "Creation receipts must survive archival to prevent duplicate tasks");
+  } finally {
+    cacheInspection.close();
+  }
+  assert.deepEqual(application.createTask(creationCommand), created,
+    "A late creation retry must replay its original task instead of creating a duplicate");
   const preservedHistory = application.queryTaskHistory({ taskId: created.task.id, targetWords: 1 });
   assert.ok(preservedHistory.available);
   assert.equal(preservedHistory.history.records.length, 1);

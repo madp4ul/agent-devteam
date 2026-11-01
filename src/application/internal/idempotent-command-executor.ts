@@ -42,11 +42,6 @@ export type IdempotentCommandIdentity = (
     }
 ) & { idempotencyKey: string; caller?: readonly string[] };
 
-export interface IdempotentCommandScope {
-  kind: "continue-agent-conversation";
-  scope: readonly [taskId: string];
-}
-
 export class IdempotentCommandExecutor {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
@@ -94,17 +89,10 @@ export class IdempotentCommandExecutor {
       .prepare("INSERT INTO command_responses (command_type, idempotency_key, response_json, request_json) VALUES (?, ?, ?, ?)")
       .run(serializeCommandType(identity), identity.idempotencyKey, JSON.stringify(result), request ?? null);
   }
-
-  forgetScope(scope: IdempotentCommandScope): void {
-    const commandTypePrefix = `${serializeCommandType(scope)}:`;
-    this.#database.prepare(
-      "DELETE FROM command_responses WHERE substr(command_type, 1, length(?)) = ?",
-    ).run(commandTypePrefix, commandTypePrefix);
-  }
 }
 
 function serializeCommandType(
-  identity: IdempotentCommandIdentity | IdempotentCommandScope,
+  identity: IdempotentCommandIdentity,
 ): string {
   if ("caller" in identity && identity.caller !== undefined) {
     return JSON.stringify([identity.kind, identity.caller, identity.scope]);

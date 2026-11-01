@@ -9,8 +9,18 @@ Specification: [Heavy usage](spec.md)
 - [03 — Recover transient runtime failures](issues/03-recover-transient-runtime-failures.md): resolved.
 - [04 — Retain loaded timeline content and fix scroll navigation](issues/04-retain-loaded-timeline-and-fix-scroll-navigation.md): resolved.
 - [05 — Inspect hot rollback journals before migration](issues/05-inspect-hot-rollback-journals-before-migration.md): resolved.
+- [06 — Expire archived-task command-response caches](issues/06-expire-archived-task-command-response-caches.md): resolved.
 
 ## Decisions so far
+
+- [Ticket 06](issues/06-expire-archived-task-command-response-caches.md) records
+  atomic expiry of archived owners' mutation snapshots while preserving creation
+  and lifecycle receipts. Verified offline idle-game cleanup removed 6,761 cached
+  responses and reduced the live database from 12.14 GB to 8.78 GB, with a verified
+  backup retained. Active-task cache growth remains unchanged; deletion reuses
+  SQLite pages and explicit offline compaction shrinks the file. Verification:
+  45 focused tests, typechecks, integrity/foreign-key checks, unchanged authoritative
+  counts and recorded row identities. See [ADR 0034](../../docs/adr/0034-expire-task-owned-command-responses-at-archival.md).
 
 - [Ticket 05](issues/05-inspect-hot-rollback-journals-before-migration.md) fixes
   compatibility inspection of interrupted transactions: copy the rollback

@@ -29,6 +29,7 @@ test("a live owner retains exclusivity and only its matching guard can release i
   const retained = await readFile(guardPath, "utf8");
   try {
     await assert.rejects(acquireProjectStateOperationGuard(fixture.repositoryPath, "state relocation"), /Project state is in use/);
+    await assert.rejects(acquireProjectStateOperationGuard(fixture.repositoryPath, "state maintenance"), /Project state is in use/);
     assert.equal(await readFile(guardPath, "utf8"), retained);
     const replacement = JSON.stringify({ ...JSON.parse(retained), token: "replacement-owner" });
     await writeFile(guardPath, replacement);
@@ -38,4 +39,16 @@ test("a live owner retains exclusivity and only its matching guard can release i
     await writeFile(guardPath, retained);
     await guard.release();
   }
+});
+
+test("offline maintenance prevents application startup until its guard is released", async () => {
+  const fixture = await createCommittedTestRepository("maintenance-project-state-");
+  const guard = await acquireProjectStateOperationGuard(fixture.repositoryPath, "state maintenance");
+  try {
+    await assert.rejects(acquireProjectStateOperationGuard(fixture.repositoryPath, "application start"), /Project state is in use by state maintenance/);
+  } finally {
+    await guard.release();
+  }
+  const applicationGuard = await acquireProjectStateOperationGuard(fixture.repositoryPath, "application start");
+  await applicationGuard.release();
 });

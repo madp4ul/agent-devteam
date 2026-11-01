@@ -139,6 +139,15 @@ authoritative command, and archival preserves the lineage, its final aggregated
 cost snapshot, and the cumulative thread checkpoints needed for later cost
 continuation while removing detailed transcript, authored-message, and replay
 content.
+Archival also expires task-owned mutation response snapshots in that same
+transaction, matching both legacy keys and caller-scoped keys by their recorded
+owner. Cross-task commands belong to the caller's task. Creation and archive /
+unarchive receipts remain durable so late retries cannot duplicate tasks or
+repeat lifecycle changes; unscoped responses without a proven task owner remain
+retained. Active tasks keep their existing exact-response retry behavior. See
+[ADR 0034](adr/0034-expire-task-owned-command-responses-at-archival.md).
+Offline state maintenance shares the project-state operation guard with startup
+and relocation, preventing a host from opening the project during cleanup.
 Browser conversation history uses migration 0010's indexed item projection.
 Application queries select a bounded window before hydrating sources, including
 within one large attempt, and source links resolve windows directly. Codex live
