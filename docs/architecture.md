@@ -139,12 +139,19 @@ authoritative command, and archival preserves the lineage, its final aggregated
 cost snapshot, and the cumulative thread checkpoints needed for later cost
 continuation while removing detailed transcript, authored-message, and replay
 content.
-Archival also expires task-owned mutation response snapshots in that same
+Task mutations return and retain original compact task summaries, plus the
+command-specific comment, relationship or transition facts. Command workflows
+read scalar task state directly; content and history remain query projections.
+Historical snapshots replay through a frozen per-command conversion without
+current-state hydration; insufficient retained data blocks replay while keeping
+the retry key. Migration 0014 marks the incompatible storage contract in the
+released ledger. See [ADR 0035](adr/0035-retain-compact-historical-task-command-results.md).
+Archival also expires task-owned mutation responses in that same
 transaction, matching both legacy keys and caller-scoped keys by their recorded
 owner. Cross-task commands belong to the caller's task. Creation and archive /
 unarchive receipts remain durable so late retries cannot duplicate tasks or
 repeat lifecycle changes; unscoped responses without a proven task owner remain
-retained. Active tasks keep their existing exact-response retry behavior. See
+retained. Active tasks retain their original compact historical facts. See
 [ADR 0034](adr/0034-expire-task-owned-command-responses-at-archival.md).
 Offline state maintenance shares the project-state operation guard with startup
 and relocation, preventing a host from opening the project during cleanup.
@@ -430,6 +437,11 @@ a prerequisite for runtime execution. See
 Workspace identity spans the coordination database, filesystem directory, and
 Git worktree registration. These are validated together because disagreement
 between them can make an agent operate on the wrong work.
+Successful Git preparation is retained even when pause or changed eligibility
+prevents model dispatch. Retaining the workspace and releasing its provisional
+claim share one scheduler transaction, so paused restart can reuse the checkout
+without inventing an agent attempt. Startup still rejects unrecorded checkouts;
+see [ADR 0036](adr/0036-retain-prepared-workspaces-when-dispatch-is-paused.md).
 Registrations nested inside a correctly located, database-recorded task
 workspace belong to that task's implementation artifacts, rather than defining
 additional framework task workspaces. Startup leaves them intact while still

@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
@@ -52,7 +53,7 @@ test("restart records an interrupted attempt and retries its activation at the h
   });
   assert.equal(moved.accepted, true);
   if (!moved.accepted) return;
-  const queuedActivationId = moved.task.activations[1]?.id;
+  const queuedActivationId = readTask(first, moved.task.id).activations[1]?.id;
   assert.ok(queuedActivationId);
   const idle = first.createTask({
     boardId: "delivery",
@@ -468,7 +469,7 @@ async function startInterruptedHost(
     });
     assert.equal(created.accepted, true);
     if (!created.accepted) throw new Error("Expected task creation");
-    activationId = created.task.activations[0]!.id;
+    activationId = readTask(application, created.task.id).activations[0]!.id;
   } else {
     const task = application.queryTask("T-0001");
     assert.equal(task.available, true);

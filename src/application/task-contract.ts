@@ -214,6 +214,9 @@ export interface TaskView {
   activations: ActivationView[];
 }
 
+/** Historical task facts returned by commands; content and history belong to queries. */
+export type TaskCommandSummary = Pick<TaskView, "id" | "title" | "boardId" | "columnId" | "revision" | "archived">;
+
 export interface BoardColumnView extends ProcessColumnView {
   tasks: TaskView[];
 }
@@ -395,12 +398,12 @@ export interface ArchiveCompletedTasksCommand {
 }
 
 export type ArchiveTaskResult =
-  | { accepted: true; task: TaskView }
+  | { accepted: true; task: TaskCommandSummary }
   | { accepted: false; reason: "not-found" | "already-archived" | "archive-in-progress" | "not-completed" | "waiting-relationships" | "activation-work-pending" | "automation-suspended" | "workspace-dirty" | "workspace-commit-not-durable" | "workspace-registration-invalid" | "workspace-ownership-untrusted" | "workspace-nested-worktrees" | "workspace-locked" | "workspace-removal-failed" | "workspace-cleanup-failed" | "runtime-unavailable" }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
 export type UnarchiveTaskResult =
-  | { accepted: true; task: TaskView }
+  | { accepted: true; task: TaskCommandSummary }
   | { accepted: false; reason: "not-found" | "not-archived" }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
@@ -413,39 +416,39 @@ export type ArchiveCompletedTasksResult =
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
 export type BoardMutationResult =
-  | { accepted: true; task: TaskView }
+  | { accepted: true; task: TaskCommandSummary }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { accepted: false; reason: "not-found" | "invalid-destination" | "completion-is-not-starting-column" | "invalid-starting-ref" | "workspace-preparing" | "workspace-already-provisioned" | "archived-task" | "unmapped-task-user-only" | "empty-title" | "empty-description" | "resume-agent-not-found" | "no-changes" | "idempotency-conflict" }
-  | { accepted: false; reason: "revision-conflict"; currentTask: TaskView };
+  | { accepted: false; reason: "revision-conflict"; currentTask: TaskCommandSummary };
 
 export type MoveTaskResult =
-  | { accepted: true; task: TaskView; transition: { taskId: string; fromColumnId: string; toColumnId: string } }
+  | { accepted: true; task: TaskCommandSummary; transition: { taskId: string; fromColumnId: string; toColumnId: string } }
   | Exclude<BoardMutationResult, { accepted: true }>;
 
 export type InertMoveTaskResult = {
   accepted: true;
   outcome: "already-in-column";
-  task: TaskView;
+  task: TaskCommandSummary;
   transition: { taskId: string; fromColumnId: string; toColumnId: string };
 };
 
 export type TaskRelationshipMutationResult =
-  | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
+  | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskCommandSummary; targetTask: TaskCommandSummary }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { accepted: false; reason: "not-found" | "archived-task" | "self-relationship" | "duplicate-relationship" | "circular-relationship" | "resume-agent-not-found" | "idempotency-conflict" };
 
 export type EditTaskRelationshipResumeAgentResult =
-  | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
+  | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskCommandSummary; targetTask: TaskCommandSummary }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { accepted: false; reason: "not-found" | "archived-task" | "relationship-conflict" | "relationship-satisfied" | "resume-agent-not-found" | "idempotency-conflict" };
 
 export type RemoveTaskRelationshipResult =
-  | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskView; targetTask: TaskView }
+  | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskCommandSummary; targetTask: TaskCommandSummary }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { accepted: false; reason: "not-found" | "archived-task" | "relationship-conflict" | "idempotency-conflict" };
 
 export type AddTaskCommentResult =
-  | { accepted: true; task: TaskView; comment: TaskCommentView }
+  | { accepted: true; task: TaskCommandSummary; comment: TaskCommentView }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { accepted: false; reason: "not-found" | "archived-task" | "empty-comment" | "idempotency-conflict" };
 

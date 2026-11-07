@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -219,7 +220,7 @@ test("browser conversation continuation accepts and replays one authored follow-
   });
   assert.equal(created.accepted, true);
   if (!created.accepted) return;
-  const activation = created.task.activations[0];
+  const activation = readTask(application, created.task.id).activations[0];
   assert.ok(activation?.conversationId);
   const database = new DatabaseSync(fixture.databasePath);
   database.prepare("UPDATE activations SET status = 'completed' WHERE id = ?").run(activation.id);
@@ -294,7 +295,7 @@ test("browser conversation retirement validates, accepts, and replays the user r
   });
   assert.equal(created.accepted, true);
   if (!created.accepted) return;
-  const activation = created.task.activations[0];
+  const activation = readTask(application, created.task.id).activations[0];
   assert.ok(activation?.conversationId);
   const database = new DatabaseSync(fixture.databasePath);
   database.prepare("UPDATE activations SET status = 'completed' WHERE id = ?").run(activation.id);

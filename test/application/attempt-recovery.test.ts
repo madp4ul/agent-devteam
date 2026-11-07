@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -107,9 +108,9 @@ test("technical failure schedules the same head activation with capped exponenti
   });
   assert.equal(moved.accepted, true);
   if (!moved.accepted) return;
-  const firstActivationId = moved.task.activations[0]!.id;
-  const laterActivationId = moved.task.activations[1]!.id;
-  const conversationId = moved.task.activations[0]!.conversationId;
+  const firstActivationId = readTask(application, moved.task.id).activations[0]!.id;
+  const laterActivationId = readTask(application, moved.task.id).activations[1]!.id;
+  const conversationId = readTask(application, moved.task.id).activations[0]!.conversationId;
   assert.ok(conversationId);
 
   await application.resumeAutomation();
@@ -590,8 +591,8 @@ function createQueuedPair(application: CoordinationApplication): {
   if (!moved.accepted) throw new Error("Expected task movement");
   return {
     taskId: created.task.id,
-    firstActivationId: moved.task.activations[0]!.id,
-    laterActivationId: moved.task.activations[1]!.id,
+    firstActivationId: readTask(application, moved.task.id).activations[0]!.id,
+    laterActivationId: readTask(application, moved.task.id).activations[1]!.id,
   };
 }
 

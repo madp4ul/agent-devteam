@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -31,6 +32,49 @@ import {
   readGlobalSafeDirectories,
   startMentionedAgentMoveScenario,
 } from "../support/activation-fixture.ts";
+
+test("pausing after Git preparation retains the workspace without starting an attempt and permits restart", async () => {
+  const fixture = await createActivationFixture("pause-prepared-workspace", "main");
+  const runtime = new CompletingAgentRuntime();
+  const options = { processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
+    runtimeDispatch: { projectRepositoryPath: fixture.repositoryPath, taskWorkspaceRoot: fixture.workspaceRoot, agentRuntime: runtime } };
+  let application = await CoordinationApplication.start(options);
+  const originalProvision = GitTaskWorkspaceManager.prototype.provision;
+  let preparedPath: string | undefined;
+  GitTaskWorkspaceManager.prototype.provision = async function (...arguments_) {
+    const workspace = await originalProvision.apply(this, arguments_);
+    preparedPath = workspace.path;
+    application.pauseAutomation();
+    return workspace;
+  };
+  try {
+    const created = application.createTask({ boardId: "delivery", columnId: "implementation", title: "Pause during preparation",
+      description: "Retain owned Git state before releasing the claim", actor: { kind: "user", id: "user" }, idempotencyKey: "pause-prepared" });
+    assert.ok(created.accepted);
+    await application.resumeAutomation();
+    await application.waitForAutomationIdle();
+    assert.equal(runtime.requests.length, 0);
+    const paused = readTask(application, created.task.id);
+    assert.equal(paused.activations[0]!.status, "queued");
+    assert.deepEqual(paused.activations[0]!.attempts, []);
+    GitTaskWorkspaceManager.prototype.provision = originalProvision;
+    application.close();
+    application = await CoordinationApplication.start(options);
+    assert.equal(application.queryStartup().mode, "paused", JSON.stringify(application.queryStartup()));
+    const inspection = application.queryTaskInspectionForUser(created.task.id);
+    assert.ok(inspection.available);
+    assert.equal(inspection.task.workspace?.path, preparedPath);
+    assert.equal(inspection.task.workspaceStatus.state, "provisioned");
+    runtime.onCompletion = () => application.pauseAutomation();
+    assert.ok((await application.resumeAutomation()).accepted);
+    await application.waitForAutomationIdle();
+    assert.equal(runtime.requests.length, 1);
+    assert.equal(runtime.requests[0]!.workspace.path, preparedPath);
+  } finally {
+    GitTaskWorkspaceManager.prototype.provision = originalProvision;
+    application.close();
+  }
+});
 
 test("resuming runs the queued activation in a just-in-time detached task workspace", async (t) => {
   const fixture = await createActivationFixture(
@@ -96,8 +140,8 @@ test("resuming runs the queued activation in a just-in-time detached task worksp
     model: "gpt-5.6-sol",
     reasoningEffort: "medium",
   });
-  assert.deepEqual(request.reason, created.task.activations[0]?.reason);
-  assert.deepEqual(request.sourceEvent, created.task.activity[0]);
+  assert.deepEqual(request.reason, readTask(application, created.task.id).activations[0]?.reason);
+  assert.deepEqual(request.sourceEvent, readTask(application, created.task.id).activity[0]);
   assert.equal(request.task.id, created.task.id);
   assert.equal(request.task.columnId, "implementation");
   assert.equal(request.workspace.startingRef, "main");

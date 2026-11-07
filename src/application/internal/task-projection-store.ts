@@ -80,6 +80,16 @@ export class TaskProjectionStore {
     this.timeline = new TaskTimelinePages(this.#database, this);
   }
 
+  /** Scalar command projection: never loads comments, activity, relationships or runs. */
+  readCommandTask(taskId: string): import("../task-contract.ts").TaskCommandSummary | undefined {
+    const row = this.#database.prepare("SELECT id, title, board_id, column_id, revision, archived_at FROM tasks WHERE id = ?")
+      .get(taskId) as { id: string; title: string; board_id: string; column_id: string; revision: number; archived_at: string | null } | undefined;
+    return row === undefined ? undefined : {
+      id: row.id, title: row.title, boardId: row.board_id, columnId: row.column_id, revision: row.revision,
+      ...(row.archived_at === null ? {} : { archived: true as const }),
+    };
+  }
+
   readTask(taskId: string, mode: "full" | "agent-context" | "browser" = "full"): TaskView | undefined {
     const bounded = mode !== "full";
     const browser = mode === "browser";

@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -107,8 +108,8 @@ boards:
   if (!edited.accepted) return;
   assert.equal(edited.task.revision, 2);
   assert.equal(edited.task.title, editCommand.title);
-  assert.equal(edited.task.description, editCommand.description);
-  assert.equal(edited.task.activity.at(-1)?.type, "task.edited");
+  assert.equal(readTask(application, edited.task.id).description, editCommand.description);
+  assert.equal(readTask(application, edited.task.id).activity.at(-1)?.type, "task.edited");
   assert.deepEqual(application.editTask(editCommand), edited);
 
   const conflict = application.editTask({

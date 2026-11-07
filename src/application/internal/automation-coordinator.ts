@@ -336,7 +336,7 @@ export class AutomationCoordinator {
       throw new Error(failure.diagnostic, { cause: error });
     }
     if (this.#automation.state !== "running") {
-      this.#activationScheduling.releaseUnstartedClaim(claim);
+      this.#activationScheduling.releaseUnstartedClaim(claim, workspace);
       return { completion: Promise.resolve() };
     }
     const attempt = this.#activationScheduling.startPreparedAttempt(claim, workspace, this.#clock.now());

@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -271,7 +272,7 @@ test("user dismisses an interrupted head and releases later work in Completion",
   });
   assert.equal(mentioned.accepted, true);
   if (!mentioned.accepted) return;
-  const [interruptedActivation, laterActivation] = mentioned.task.activations;
+  const [interruptedActivation, laterActivation] = readTask(application, mentioned.task.id).activations;
   assert.ok(interruptedActivation);
   assert.ok(laterActivation);
   const prerequisite = application.createTask({
@@ -387,7 +388,7 @@ test("dismissing later queued work leaves the interrupted head suspended", async
   assert.equal(interruption.accepted, true);
   if (!interruption.accepted) return;
   await interruption.confirmed;
-  const laterActivationId = mentioned.task.activations[1]!.id;
+  const laterActivationId = readTask(application, mentioned.task.id).activations[1]!.id;
   const beforeDismissal = application.queryTask(created.task.id);
   assert.equal(beforeDismissal.available, true);
   if (beforeDismissal.available) {

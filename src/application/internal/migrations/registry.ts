@@ -12,6 +12,9 @@ import { taskTimelineMigration } from "./0011-task-timeline.ts";
 import { runtimeRecoveryMigration } from "./0012-runtime-recovery.ts";
 import { canonicalHumanIdentityMigration } from "./0013-canonical-human-identity.ts";
 
+import { compactCommandResultsMigration } from "./0014-compact-command-results.ts";
+import { compactHistoricalCommandResponsesMigration } from "./0015-compact-historical-command-responses.ts";
+
 export const coordinationMigrations = [
   initialReleasedMigration,
   boundTaskDetailLookupsMigration,
@@ -26,4 +29,6 @@ export const coordinationMigrations = [
   taskTimelineMigration,
   runtimeRecoveryMigration,
   canonicalHumanIdentityMigration,
+  compactCommandResultsMigration,
+  compactHistoricalCommandResponsesMigration,
 ] as const;

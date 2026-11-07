@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
@@ -68,7 +69,7 @@ test("one large attempt keeps bounded grouped disclosure and every movement navi
   t.after(() => app.close());
   const created = app.createTask({ boardId: "delivery", columnId: "implementation", title: "Grouped journey", description: "Compact map", actor: { kind: "user", id: "paul" }, idempotencyKey: "journey" });
   assert.ok(created.accepted);
-  const activation = created.task.activations[0]!;
+  const activation = readTask(app, created.task.id).activations[0]!;
   const seed = new DatabaseSync(fixture.databasePath);
   t.after(() => seed.close());
   seed.prepare("INSERT INTO attempts(id, activation_id, status, workspace_path, started_at) VALUES ('large-attempt', ?, 'running', 'fixture', '2027-01-01')").run(activation.id);
@@ -110,7 +111,7 @@ test("ten thousand settled activations leave current controls and costs independ
   t.after(() => app.close());
   const created = app.createTask({ boardId: "delivery", columnId: "implementation", title: "Many runs", description: "Bounded controls", actor: { kind: "user", id: "paul" }, idempotencyKey: "runs" });
   assert.ok(created.accepted);
-  const first = created.task.activations[0]!;
+  const first = readTask(app, created.task.id).activations[0]!;
   const seed = new DatabaseSync(fixture.databasePath);
   t.after(() => seed.close());
   seed.prepare("UPDATE activations SET status = 'completed' WHERE id = ?").run(first.id);

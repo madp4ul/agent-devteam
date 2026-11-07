@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -33,7 +34,7 @@ test("one comment activates each mentioned agent once in textual mention order",
   assert.equal(commented.task.columnId, "backlog");
   assert.equal(commented.task.revision, 1);
   assert.deepEqual(
-    commented.task.activations.map((activation) => ({
+    readTask(application, commented.task.id).activations.map((activation) => ({
       targetAgentId: activation.targetAgentId,
       reason: activation.reason,
     })),
@@ -73,7 +74,7 @@ test("a controlled consultation distinguishes prose from deliberate executable r
   });
   assert.equal(prose.accepted, true);
   if (!prose.accepted) return;
-  assert.deepEqual(prose.task.activations, []);
+  assert.deepEqual(readTask(application, prose.task.id).activations, []);
 
   const request = application.addTaskComment({
     taskId: created.task.id,
@@ -83,7 +84,7 @@ test("a controlled consultation distinguishes prose from deliberate executable r
   });
   assert.equal(request.accepted, true);
   if (!request.accepted) return;
-  assert.deepEqual(request.task.activations.map((activation) => activation.targetAgentId), ["reviewer"]);
+  assert.deepEqual(readTask(application, request.task.id).activations.map((activation) => activation.targetAgentId), ["reviewer"]);
 
   const satisfied = application.addTaskComment({
     taskId: created.task.id,
@@ -93,8 +94,8 @@ test("a controlled consultation distinguishes prose from deliberate executable r
   });
   assert.equal(satisfied.accepted, true);
   if (!satisfied.accepted) return;
-  assert.deepEqual(satisfied.task.activations.map((activation) => activation.targetAgentId), ["reviewer"]);
-  assert.equal(satisfied.task.comments.at(-1)?.body.includes("@reviewer"), false);
+  assert.deepEqual(readTask(application, satisfied.task.id).activations.map((activation) => activation.targetAgentId), ["reviewer"]);
+  assert.equal(readTask(application, satisfied.task.id).comments.at(-1)?.body.includes("@reviewer"), false);
 
   const revisionRequest = application.addTaskComment({
     taskId: created.task.id,
@@ -113,11 +114,11 @@ test("a controlled consultation distinguishes prose from deliberate executable r
   assert.equal(pendingStatus.accepted, true);
   if (!pendingStatus.accepted) return;
   assert.deepEqual(
-    pendingStatus.task.activations.map((activation) => activation.targetAgentId),
+    readTask(application, pendingStatus.task.id).activations.map((activation) => activation.targetAgentId),
     ["reviewer", "implementer"],
   );
   assert.equal(
-    pendingStatus.task.comments
+    readTask(application, pendingStatus.task.id).comments
       .filter((comment) => comment.actor.kind === "agent" && comment.actor.id === "reviewer")
       .some((comment) => comment.body.includes("@reviewer")),
     false,
@@ -148,7 +149,7 @@ test("email-like text, inline code, and unknown identities do not address partic
 
   assert.equal(commented.accepted, true);
   if (!commented.accepted) return;
-  assert.deepEqual(commented.task.activations.map((activation) => activation.targetAgentId), ["architect"]);
+  assert.deepEqual(readTask(application, commented.task.id).activations.map((activation) => activation.targetAgentId), ["architect"]);
 });
 
 test("a user mention creates one durable attention reason that only mark-addressed resolves", async (t) => {
@@ -172,7 +173,7 @@ test("a user mention creates one durable attention reason that only mark-address
   });
   assert.equal(commented.accepted, true);
   if (!commented.accepted) return;
-  assert.deepEqual(commented.task.activations, []);
+  assert.deepEqual(readTask(first, commented.task.id).activations, []);
   first.close();
 
   const restarted = await CoordinationApplication.start(fixture);
@@ -272,7 +273,7 @@ test("an agent ID beginning with user is an agent mention rather than a user men
   });
   assert.equal(commented.accepted, true);
   if (!commented.accepted) return;
-  assert.deepEqual(commented.task.activations.map((activation) => activation.targetAgentId), [
+  assert.deepEqual(readTask(application, commented.task.id).activations.map((activation) => activation.targetAgentId), [
     "user-reviewer",
   ]);
   const inspection = application.queryTaskInspection(created.task.id);
@@ -338,12 +339,12 @@ test("agent consultation can round-trip in watched and Completion columns withou
   if (!response.accepted || !completedRequest.accepted) return;
   assert.equal(response.task.columnId, "implementation");
   assert.deepEqual(
-    response.task.activations.map((activation) => activation.targetAgentId),
+    readTask(application, response.task.id).activations.map((activation) => activation.targetAgentId),
     ["implementer", "reviewer", "implementer"],
   );
   assert.equal(completedRequest.task.columnId, "completion");
   assert.deepEqual(
-    completedRequest.task.activations.map((activation) => activation.targetAgentId),
+    readTask(application, completedRequest.task.id).activations.map((activation) => activation.targetAgentId),
     ["architect"],
   );
 });
@@ -412,9 +413,9 @@ boards:
   });
   assert.equal(userComment.accepted, true);
   if (!userComment.accepted) return;
-  assert.equal(userComment.task.comments.at(-1)?.body, "@reviewer this request must remain visible but inert.");
+  assert.equal(readTask(restarted, userComment.task.id).comments.at(-1)?.body, "@reviewer this request must remain visible but inert.");
   assert.deepEqual(
-    userComment.task.activations.map((activation) => activation.targetAgentId),
+    readTask(restarted, userComment.task.id).activations.map((activation) => activation.targetAgentId),
     ["implementer"],
   );
 });

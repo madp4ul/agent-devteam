@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -554,7 +555,7 @@ boards:
     1,
   );
   assert.deepEqual(
-    moved.task.activity.map((event) => ({
+    readTask(application, moved.task.id).activity.map((event) => ({
       type: event.type,
       actor: event.actor,
     })),

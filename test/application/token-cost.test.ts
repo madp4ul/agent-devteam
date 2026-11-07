@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import test, { type TestContext } from "node:test";
@@ -60,7 +61,7 @@ async function startPricedConversationFixture(
   });
   assert.equal(created.accepted, true);
   if (!created.accepted) throw new Error("Expected the priced conversation task to be created.");
-  const conversationId = created.task.activations[0]?.conversationId;
+  const conversationId = readTask(application, created.task.id).activations[0]?.conversationId;
   assert.ok(conversationId);
   return { application, conversationId, created, fixture, runtime };
 }

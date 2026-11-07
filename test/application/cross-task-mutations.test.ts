@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
@@ -80,9 +81,9 @@ test("a running mentioned participant can mutate another board without claiming 
   const moved = application.moveTask({ ...caller, taskId: target.id, destinationColumnId: "implementation",
     expectedRevision: 2, idempotencyKey: "cross-watcher" });
   assert.ok(moved.accepted);
-  assert.equal(moved.task.activations.at(-1)?.reason.type, "column-entry");
-  assert.equal(moved.task.activations.at(-1)?.targetAgentId, "implementer");
-  const event = moved.task.activity.find((entry) => entry.type === "task.moved");
+  assert.equal(readTask(application, moved.task.id).activations.at(-1)?.reason.type, "column-entry");
+  assert.equal(readTask(application, moved.task.id).activations.at(-1)?.targetAgentId, "implementer");
+  const event = readTask(application, moved.task.id).activity.find((entry) => entry.type === "task.moved");
   assert.equal(event?.details.originTaskId, origin.id);
   assert.equal(event?.details.attemptId, request.attemptId);
   runtime.complete({ status: "completed", summary: "Consulted", threadId: "mutations-thread" });
@@ -132,10 +133,11 @@ test("cross-task relationship changes require the outgoing source and retain exa
   assert.deepEqual(application.removeTaskRelationship({ ...remove, taskId: target.id }), {
     accepted: false, reason: "relationship-conflict",
   });
+  const beforeRemoval = readTask(application, source.id);
   const removed = application.removeTaskRelationship(remove);
   assert.ok(removed.accepted);
   assert.deepEqual(application.removeTaskRelationship(remove), removed);
-  assert.equal(removed.sourceTask.activations.length, source.activations.length);
+  assert.equal(readTask(application, removed.sourceTask.id).activations.length, beforeRemoval.activations.length);
   assert.deepEqual(application.removeTaskRelationship({ ...remove, relationshipId: "other" }), {
     accepted: false, reason: "idempotency-conflict",
   });
@@ -162,7 +164,7 @@ test("a participant partially edits another task and retries its original intent
   const result = application.editTask(command);
   assert.ok(result.accepted);
   assert.equal(result.task.title, "Revised");
-  assert.equal(result.task.description, "Keep this description");
+  assert.equal(readTask(application, result.task.id).description, "Keep this description");
   assert.equal(result.task.revision, 2);
   assert.deepEqual(application.editTask({ ...command, title: "Revised" }), result);
   assert.deepEqual(application.editTask({ ...command, title: "Different" }), {
@@ -195,15 +197,16 @@ test("cross-task moves and creation retain caller-scoped intent and ordinary wat
     expectedRevision: 1, idempotencyKey: "move" };
   const moved = application.moveTask(command);
   assert.ok(moved.accepted);
-  assert.equal(moved.task.activations.at(-1)?.targetAgentId, "reviewer");
+  assert.equal(readTask(application, moved.task.id).activations.at(-1)?.targetAgentId, "reviewer");
   assert.deepEqual(application.moveTask(command), moved);
   assert.deepEqual(application.moveTask({ ...command, destinationColumnId: "completion" }), {
     accepted: false, reason: "idempotency-conflict",
   });
+  const beforeInert = readTask(application, moved.task.id);
   const inert = application.resolveInertTaskMove({ ...command, expectedRevision: 2, idempotencyKey: "inert" });
   assert.ok(inert?.accepted && "outcome" in inert);
   assert.equal(inert.task.revision, 2);
-  assert.equal(inert.task.activations.length, moved.task.activations.length);
+  assert.equal(readTask(application, inert.task.id).activations.length, beforeInert.activations.length);
   const creation = { ...caller, boardId: "delivery", columnId: "review", title: "Independent",
     description: "Independent work", idempotencyKey: "independent" };
   const created = application.createTask(creation);
@@ -216,7 +219,7 @@ test("cross-task moves and creation retain caller-scoped intent and ordinary wat
     resumeAgentId: "reviewer", idempotencyKey: "child" };
   const child = application.createChildTask(childCommand);
   assert.ok(child.accepted);
-  assert.equal(child.task.relationships[0]?.sourceTaskId, destination.id);
+  assert.equal(readTask(application, child.task.id).relationships[0]?.sourceTaskId, destination.id);
   assert.deepEqual(application.createChildTask(childCommand), child);
   assert.deepEqual(application.createChildTask({ ...childCommand, parentTaskId: origin.id }), {
     accepted: false, reason: "idempotency-conflict",

@@ -20,7 +20,9 @@ test("browser HTTP task editing accepts a ref-only correction and leaves omitted
   assert.equal(corrected.status, 200);
   const result = await corrected.json();
   assert.equal(result.task.title, "Keep title");
-  assert.equal(result.task.description, "Keep description");
+  const current = application.queryTask(created.task.id);
+  assert.ok(current.available);
+  assert.equal(current.task.description, "Keep description");
   assert.equal(result.task.revision, 2);
   const inspection = application.queryTaskInspection(created.task.id);
   assert.ok(inspection.available);

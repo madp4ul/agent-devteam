@@ -265,7 +265,8 @@ const startupFailed = application.createTask({
 });
 if (!startupFailed.accepted) throw new Error("Could not create startup-failed browser fixture");
 
-if (startupFailed.task.activations[0] === undefined) {
+const startupFailedContext = application.queryTask(startupFailed.task.id);
+if (!startupFailedContext.available || startupFailedContext.task.activations[0] === undefined) {
   throw new Error("Expected a startup-failure activation");
 }
 const unavailableRepositoryPath = join(directory, "temporarily-unavailable-project-repository");

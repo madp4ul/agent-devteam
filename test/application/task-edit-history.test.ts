@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
@@ -18,7 +19,7 @@ test("edit history records actual changed fields and compact before/after values
       ...(mask & 4 ? { startingRef: "corrected-base" } : {}),
     });
     assert.ok(edited.accepted);
-    const event = edited.task.activity.find((entry) => entry.type === "task.edited")!;
+    const event = readTask(app, edited.task.id).activity.find((entry) => entry.type === "task.edited")!;
     assert.deepEqual(event.details, {
       changedFields: [mask & 1 ? "title" : "", mask & 2 ? "description" : "", mask & 4 ? "startingRef" : ""].filter(Boolean).join(","),
       ...(mask & 1 ? { previousTitle: "Old title", title: "New title" } : {}),
@@ -39,9 +40,9 @@ test("edit history excludes unchanged supplied fields and preserves retry identi
     expectedRevision: 1, actor: { kind: "user" as const, id: "user" }, idempotencyKey: "edit" };
   const edited = app.editTask(command);
   assert.ok(edited.accepted);
-  assert.equal(edited.task.activity.at(-1)?.details.changedFields, "description");
+  assert.equal(readTask(app, edited.task.id).activity.at(-1)?.details.changedFields, "description");
   assert.deepEqual(app.editTask(command), edited);
   const unchanged = app.editTask({ ...command, description: "Updated description", expectedRevision: 2, idempotencyKey: "unchanged" });
   assert.ok(unchanged.accepted);
-  assert.equal(unchanged.task.activity.at(-1)?.details.changedFields, "");
+  assert.equal(readTask(app, unchanged.task.id).activity.at(-1)?.details.changedFields, "");
 });

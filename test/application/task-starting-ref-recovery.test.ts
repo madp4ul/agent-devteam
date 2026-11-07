@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -30,7 +31,7 @@ test("correcting an unprovisioned starting ref requires user retry and provision
   const edited = application.editTask(correction);
   assert.ok(edited.accepted);
   assert.equal(edited.task.revision, 2);
-  assert.equal(edited.task.description, "Recover without recreating work");
+  assert.equal(readTask(application, edited.task.id).description, "Recover without recreating work");
   assert.deepEqual(application.editTask(correction), edited);
   assert.deepEqual(application.editTask({ ...correction, startingRef: "main" }), { accepted: false, reason: "idempotency-conflict" });
   const corrected = application.queryTaskInspection(created.task.id);

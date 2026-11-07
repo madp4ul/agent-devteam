@@ -18,6 +18,7 @@ import type {
   AgentRunRequest,
   AgentRuntime,
 } from "../../src/application/runtime-contract.ts";
+import type { TaskView } from "../../src/application/task-contract.ts";
 import { AgentToolScopeRegistry } from "../../src/mcp/agent-tool-scope.ts";
 import {
   CodexAgentRuntime,
@@ -834,8 +835,10 @@ boards:
     },
     createClient: (options) => controlledMcpClient(options),
   });
+  const runtimeTaskContext = application.queryTask(runtimeTask.task.id);
+  assert.ok(runtimeTaskContext.available);
   const runtimeOutcome = await runtime.run(
-    assembledRequest(runtimeTask.task, directory),
+    assembledRequest(runtimeTaskContext.task, directory),
     { started() {} },
   );
   assert.deepEqual(runtimeOutcome, {
@@ -1160,7 +1163,7 @@ async function* codexEvents(...events: CodexEventLike[]): AsyncGenerator<CodexEv
 }
 
 function assembledRequest(
-  task: Extract<ReturnType<CoordinationApplication["createTask"]>, { accepted: true }>['task'],
+  task: TaskView,
   directory: string,
 ): AgentRunRequest {
   const sourceEvent = task.activity[0];

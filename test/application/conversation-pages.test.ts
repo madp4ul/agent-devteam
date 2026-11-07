@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
@@ -28,7 +29,7 @@ test("a ten thousand item attempt pages newest first without reading retained tr
   let transcriptReads = 0;
   runtime.read = async () => { transcriptReads++; throw new Error("Browser read must use indexed items"); };
   const started = performance.now();
-  const conversationId = created.task.activations[0]!.conversationId!;
+  const conversationId = readTask(application, created.task.id).activations[0]!.conversationId!;
   const latest = await application.queryAgentConversation(created.task.id, conversationId);
   assert.ok(latest.available);
   assert.equal(latest.conversation.history.length, 50);
@@ -58,7 +59,7 @@ test("a ten thousand item attempt pages newest first without reading retained tr
   assert.deepEqual(oversized, { available: false, reason: "invalid-page" });
   const other = application.createTask({ boardId: "delivery", columnId: "implementation", title: "Other", description: "Cursor scope", actor: { kind: "user", id: "paul" }, idempotencyKey: "other" });
   assert.ok(other.accepted);
-  assert.deepEqual(await application.queryAgentConversation(other.task.id, other.task.activations[0]!.conversationId!, { cursor: latest.conversation.page.olderCursor }), { available: false, reason: "invalid-page" });
+  assert.deepEqual(await application.queryAgentConversation(other.task.id, readTask(application, other.task.id).activations[0]!.conversationId!, { cursor: latest.conversation.page.olderCursor }), { available: false, reason: "invalid-page" });
   assert.deepEqual(await application.queryAgentConversation(other.task.id, conversationId), { available: false, reason: "not-found" });
   const end = await application.queryAgentConversation(created.task.id, conversationId, { activationId: request.activationId, pageSize: 150 });
   assert.ok(end.available);
@@ -75,11 +76,11 @@ test("backward pages keep their watermark while latest refresh updates live item
   assert.ok(created.accepted);
   await application.resumeAutomation();
   const request = await runtime.waitForRequest(1);
-  const emptyAttempt = await application.queryAgentConversation(created.task.id, created.task.activations[0]!.conversationId!, { attemptId: request.attemptId });
+  const emptyAttempt = await application.queryAgentConversation(created.task.id, readTask(application, created.task.id).activations[0]!.conversationId!, { attemptId: request.attemptId });
   assert.ok(emptyAttempt.available);
   assert.equal(emptyAttempt.conversation.history[0]?.kind, "activation");
   runtime.setTranscript(request.attemptId, [{ id: "command", kind: "command", command: "test", status: "running" }, { id: "answer", kind: "message", role: "agent", text: "Partial" }]);
-  const first = await application.queryAgentConversation(created.task.id, created.task.activations[0]!.conversationId!, { pageSize: 1 });
+  const first = await application.queryAgentConversation(created.task.id, readTask(application, created.task.id).activations[0]!.conversationId!, { pageSize: 1 });
   assert.ok(first.available);
   runtime.setTranscript(request.attemptId, [{ id: "command", kind: "command", command: "test", status: "completed", output: "Passed" }, { id: "answer", kind: "message", role: "agent", text: "Complete" }, { id: "new", kind: "message", role: "agent", text: "New evidence" }]);
   const older = await application.queryAgentConversation(created.task.id, first.conversation.id, { cursor: first.conversation.page!.olderCursor! });
@@ -106,7 +107,7 @@ test("equal timestamp activation pages hydrate only selected causes while full c
   t.after(() => application.close());
   const created = application.createTask({ boardId: "delivery", columnId: "implementation", title: "Many activations", description: "Equal timestamps", actor: { kind: "user", id: "paul" }, idempotencyKey: "many-activations" });
   assert.ok(created.accepted);
-  const first = created.task.activations[0]!;
+  const first = readTask(application, created.task.id).activations[0]!;
   const writer = new DatabaseSync(fixture.databasePath);
   const cause = writer.prepare(`INSERT INTO activations(id, task_id, target_agent_id, reason_type, source_event_id, status, created_at, definition_version, conversation_id)
     SELECT ?, task_id, target_agent_id, reason_type, source_event_id, 'completed', created_at, definition_version, conversation_id FROM activations WHERE id = ?`);

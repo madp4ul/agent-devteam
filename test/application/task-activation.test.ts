@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -142,12 +143,12 @@ test("moving into a watched column records an activation for the movement event"
   assert.equal(moved.accepted, true);
   if (!moved.accepted) return;
 
-  assert.equal(moved.task.activations.length, 1);
-  assert.deepEqual(moved.task.activations[0]?.reason, {
+  assert.equal(readTask(application, moved.task.id).activations.length, 1);
+  assert.deepEqual(readTask(application, moved.task.id).activations[0]?.reason, {
     type: "column-entry",
-    sourceEventId: moved.task.activity.find((event) => event.type === "task.moved")?.id,
+    sourceEventId: readTask(application, moved.task.id).activity.find((event) => event.type === "task.moved")?.id,
   });
-  assert.equal(moved.task.activations[0]?.targetAgentId, "implementer");
+  assert.equal(readTask(application, moved.task.id).activations[0]?.targetAgentId, "implementer");
 });
 
 test("a running mentioned agent can claim its watched column without a second activation", async (t) => {
@@ -155,6 +156,7 @@ test("a running mentioned agent can claim its watched column without a second ac
     await startMentionedAgentMoveScenario("mentioned-agent-claim");
   t.after(() => application.close());
   assert.equal(request.reason.type, "agent-mention");
+  const mentionReason = readTask(application, mentioned.task.id).activations[0]?.reason;
   const moved = application.moveTask({
     taskId: created.task.id,
     destinationColumnId: "implementation",
@@ -173,7 +175,7 @@ test("a running mentioned agent can claim its watched column without a second ac
   });
   assert.equal(moved.task.revision, 2);
   assert.deepEqual(
-    moved.task.activations.map((activation) => ({
+    readTask(application, moved.task.id).activations.map((activation) => ({
       id: activation.id,
       targetAgentId: activation.targetAgentId,
       status: activation.status,
@@ -183,14 +185,14 @@ test("a running mentioned agent can claim its watched column without a second ac
       id: request.activationId,
       targetAgentId: "implementer",
       status: "running",
-      reason: mentioned.task.activations[0]?.reason,
+      reason: mentionReason,
     }],
   );
   assert.deepEqual(
-    moved.task.activity.map((event) => event.type),
+    readTask(application, moved.task.id).activity.map((event) => event.type),
     ["task.created", "activation.created", "attempt.started", "task.moved"],
   );
-  assert.equal(moved.task.activity.at(-1)?.details.attemptId, request.attemptId);
+  assert.equal(readTask(application, moved.task.id).activity.at(-1)?.details.attemptId, request.attemptId);
 
   application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Claimed and completed the work." });
@@ -212,6 +214,7 @@ test("a running follow-up agent can claim its watched column without a second ac
     request: followUpRequest,
   } = await startFollowUpAgentMoveScenario("follow-up-agent-claim");
   t.after(() => application.close());
+  const creationReason = readTask(application, created.task.id).activations[0]?.reason;
 
   const moved = application.moveTask({
     taskId: created.task.id,
@@ -231,7 +234,7 @@ test("a running follow-up agent can claim its watched column without a second ac
   });
   assert.equal(moved.task.revision, 2);
   assert.deepEqual(
-    moved.task.activations.map((activation) => ({
+    readTask(application, moved.task.id).activations.map((activation) => ({
       id: activation.id,
       conversationId: activation.conversationId,
       targetAgentId: activation.targetAgentId,
@@ -245,7 +248,7 @@ test("a running follow-up agent can claim its watched column without a second ac
         conversationId,
         targetAgentId: "implementer",
         status: "completed",
-        reason: created.task.activations[0]?.reason,
+        reason: creationReason,
         attemptIds: [initialRequest.attemptId],
       },
       {
@@ -259,7 +262,7 @@ test("a running follow-up agent can claim its watched column without a second ac
     ],
   );
   assert.deepEqual(
-    moved.task.activity.map((event) => event.type),
+    readTask(application, moved.task.id).activity.map((event) => event.type),
     [
       "task.created",
       "activation.created",
@@ -270,7 +273,7 @@ test("a running follow-up agent can claim its watched column without a second ac
       "task.moved",
     ],
   );
-  assert.equal(moved.task.activity.at(-1)?.details.attemptId, followUpRequest.attemptId);
+  assert.equal(readTask(application, moved.task.id).activity.at(-1)?.details.attemptId, followUpRequest.attemptId);
 
   application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Claimed and completed the follow-up." });
@@ -294,7 +297,7 @@ test("a running follow-up agent moving into another agent's watched column still
   assert.equal(moved.accepted, true);
   if (!moved.accepted) return;
   assert.deepEqual(
-    moved.task.activations.map((activation) => ({
+    readTask(application, moved.task.id).activations.map((activation) => ({
       targetAgentId: activation.targetAgentId,
       status: activation.status,
       reasonType: activation.reason.type,
@@ -450,7 +453,7 @@ test("a same-agent column-entry run moving to another watched column still queue
   assert.equal(moved.accepted, true);
   if (!moved.accepted) return;
   assert.deepEqual(
-    moved.task.activations.map((activation) => ({
+    readTask(application, moved.task.id).activations.map((activation) => ({
       targetAgentId: activation.targetAgentId,
       status: activation.status,
       reasonType: activation.reason.type,
@@ -485,7 +488,7 @@ test("a mentioned agent moving into another agent's watched column still hands o
   assert.equal(moved.accepted, true);
   if (!moved.accepted) return;
   assert.deepEqual(
-    moved.task.activations.map((activation) => ({
+    readTask(application, moved.task.id).activations.map((activation) => ({
       targetAgentId: activation.targetAgentId,
       status: activation.status,
       reasonType: activation.reason.type,
@@ -544,7 +547,7 @@ test("tasks start in workflow columns and enter Completion only by moving", asyn
   assert.equal(moved.accepted, true);
   if (!moved.accepted) return;
 
-  assert.equal(moved.task.activations.length, 0);
+  assert.equal(readTask(application, moved.task.id).activations.length, 0);
   assert.equal(moved.task.columnId, "completion");
 });
 

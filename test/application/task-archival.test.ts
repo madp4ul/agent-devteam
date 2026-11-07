@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
@@ -223,7 +224,7 @@ test("archive removes a clean durable workspace and retains task history without
     accepted: false,
     reason: "task-archived",
   });
-  assert.equal(archived.accepted && archived.task.activity.at(-1)?.type, "task.archived");
+  assert.equal(archived.accepted && readTask(application, archived.task.id).activity.at(-1)?.type, "task.archived");
 });
 
 test("archive rejects a completed task that still waits on an unresolved relationship", async (t) => {
@@ -434,7 +435,7 @@ test("bulk archive affects only eligible completed tasks and unarchive keeps his
   }), unarchived);
   if (unarchived.accepted) {
     assert.notEqual(unarchived.task.archived, true);
-    assert.equal(unarchived.task.activity.at(-1)?.type, "task.unarchived");
+    assert.equal(readTask(application, unarchived.task.id).activity.at(-1)?.type, "task.unarchived");
   }
   const detail = application.queryTaskInspectionForUser(completedOne);
   assert.equal(detail.available, true);

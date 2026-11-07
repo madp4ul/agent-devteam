@@ -10,8 +10,52 @@ Specification: [Heavy usage](spec.md)
 - [04 — Retain loaded timeline content and fix scroll navigation](issues/04-retain-loaded-timeline-and-fix-scroll-navigation.md): resolved.
 - [05 — Inspect hot rollback journals before migration](issues/05-inspect-hot-rollback-journals-before-migration.md): resolved.
 - [06 — Expire archived-task command-response caches](issues/06-expire-archived-task-command-response-caches.md): resolved.
+- [07 — Independently assess active command-response storage](issues/07-assess-active-command-response-storage.md): resolved; follow-up issues recorded, implementation held.
+- [08 — Use compact durable command results](issues/08-use-compact-durable-command-results.md): resolved; full tests, browser checks and independent reviews pass; changes unstaged.
+- [09 — Convert historical command-response snapshots safely](issues/09-convert-historical-command-response-snapshots.md): resolved; verified migration and offline cleanup reduced idle-game storage from 11.03 GB to 609 MB; recovery backups retained.
+- [10 — Recover an unrecorded preparation worktree blocking startup](issues/10-recover-unrecorded-preparation-worktree.md): resolved; checkout preserved, pause/provision race fixed, real host restarted paused with zero consistency diagnostics.
+- [11 — Dispatch unrelated tasks while workspaces are preparing](issues/11-dispatch-independently-of-workspace-preparation.md): open; independent dispatch, bounded preparation and preserved pause/restart ownership.
+- [12 — Show workspace creation progress instead of an agent running](issues/12-show-workspace-preparation-progress.md): open; blocked by 11; truthful progress and queue explanations, including removal of relationships as activation blockers.
+- [13 — Allow automation to resume while existing agents are draining](issues/13-resume-automation-while-pausing.md): open; enabled Resume during pausing, with safe scheduler and completion-race handling.
+
+## Current frontier
+
+- Tickets 11 and 13 are open and unblocked. Ticket 12 follows ticket 11's
+  preparation lifecycle contract. All three were requested as issues only on
+  2026-11-07; implementation has not begun.
 
 ## Decisions so far
+
+- [Ticket 10](issues/10-recover-unrecorded-preparation-worktree.md) corrects the
+  restart-readiness handoff: T-0285 was already unrecorded in both pre-upgrade
+  backups. A real pause-after-Git-preparation regression reproduced the exact
+  startup block; prepared workspace ownership now survives claim release. The
+  existing orphan was fully backed up and preserved outside managed state with
+  unchanged database bytes and verified files/HEAD/index. Real startup/API now
+  report paused, no active runs and zero consistency diagnostics. Verification:
+  448 Node passes, six existing skips, typecheck, zero review findings. See ADR 0036.
+
+- Tickets 08/09 are complete after the user lifted the hold on 2026-11-02.
+  Compact receipts preserve original historical facts without full task snapshots;
+  the released migration safely backfills supported rows and preserves every retry
+  identity. The real idle-game database shrank from 11.03 GB to 609 MB; response
+  payload fell from 10.42 GB to 8.84 MB. Exact response and authoritative data
+  fingerprints, integrity and foreign keys verify; both recovery backups remain.
+  Verification: 447 Node passes (six existing skips), 22 browser passes, typecheck,
+  build and zero remaining Standards/Spec findings. All source changes are unstaged.
+
+- [Ticket 07](issues/07-assess-active-command-response-storage.md) independently
+  assesses the active-cache follow-up. It recommends a deliberate compact-result
+  contract, preserving original retry facts and request matching; current browser
+  consumers generally refresh rather than consume rich mutation snapshots.
+  Synthetic measurements reproduced by parent and assessor show roughly quadratic
+  full-snapshot growth and linear fixed-size receipt growth under bounded inputs.
+  [The specification](active-command-response-storage-spec.md) and tickets 08/09
+  are recorded following the user's approval to create issues only. The user
+  explicitly held implementation while the project runs; agents must await a
+  later instruction to start work, even if the project has stopped.
+  Exact-response compression remains the alternative if full old response objects
+  must be preserved. No production or retained project-state access occurred.
 
 - [Ticket 06](issues/06-expire-archived-task-command-response-caches.md) records
   atomic expiry of archived owners' mutation snapshots while preserving creation

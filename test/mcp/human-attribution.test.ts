@@ -36,10 +36,12 @@ test(`${storedData}: browser human comments retain unique IDs and canonical attr
   const created = await post("tasks", { boardId: "delivery", columnId: "implementation", title: "Human attribution", description: "Inspect attribution", idempotencyKey: "create" });
   const taskId = created.task.id;
   const commented = await post(`tasks/${taskId}/comments`, { body: "@user @implementer Please reply to me.", idempotencyKey: "comment" });
-  const comment = commented.task.comments[0];
+  const comment = commented.comment;
   assert.deepEqual(comment.actor, { kind: "user", id: "user" });
   assert.notEqual(comment.id, "user");
-  assert.deepEqual(commented.task.activations.map((activation: { targetAgentId: string; reason: { type: string } }) =>
+  const commentedState = application.queryTask(taskId);
+  assert.ok(commentedState.available);
+  assert.deepEqual(commentedState.task.activations.map((activation: { targetAgentId: string; reason: { type: string } }) =>
     [activation.targetAgentId, activation.reason.type]), [["implementer", "column-entry"], ["implementer", "agent-mention"]]);
   const inspected = application.queryTaskInspectionForUser(taskId);
   assert.ok(inspected.available);
@@ -69,13 +71,13 @@ test(`${storedData}: browser human comments retain unique IDs and canonical attr
       database.prepare("UPDATE command_responses SET command_type = ?, response_json = ? WHERE command_type = ? AND idempotency_key = ?")
         .run(JSON.stringify(identity), toLegacy(row.response_json), row.command_type, row.idempotency_key);
     }
-    database.exec("DELETE FROM coordination_migrations WHERE migration_id = '0013_canonical_human_identity'");
+    database.exec("DELETE FROM coordination_migrations WHERE position >= 13");
     database.close();
     application = await CoordinationApplication.start(options);
     server = await startWebServer(application, { host: "127.0.0.1", port: 0, agentToolScopes: scopes });
     const replay = await post(`tasks/${taskId}/comments`, { body: "@user @implementer Please reply to me.", idempotencyKey: "comment" });
-    assert.equal(replay.task.comments[0].id, comment.id, "upgrade preserves retry identity");
-    assert.deepEqual(replay.task.comments[0].actor, { kind: "user", id: "user" });
+    assert.equal(replay.comment.id, comment.id, "upgrade preserves retry identity");
+    assert.deepEqual(replay.comment.actor, { kind: "user", id: "user" });
   }
   await application.resumeAutomation();
   const request = await runtime.waitForRequest(1);

@@ -942,8 +942,7 @@ export class CoordinationApplication {
     const gated = this.configurationErrorRejection();
     const result = gated ?? this.#persistence.taskCommands.createTask(command);
     if (
-      result.accepted &&
-      result.task.activations.some((activation) => activation.status === "queued")
+      result.accepted
     ) {
       this.#automation.kick();
     }
@@ -953,7 +952,7 @@ export class CoordinationApplication {
   createChildTask(command: CreateChildTaskCommand): BoardMutationResult {
     const gated = this.configurationErrorRejection();
     const result = gated ?? this.#persistence.taskCommands.createChildTask(command);
-    if (result.accepted && result.task.activations.some((activation) => activation.status === "queued")) {
+    if (result.accepted) {
       this.#automation.kick();
     }
     return result;
@@ -989,7 +988,7 @@ export class CoordinationApplication {
       };
     }
     const result = this.#persistence.taskCommands.createTaskRelationship(command);
-    if (result.accepted && result.sourceTask.activations.some((activation) => activation.status === "queued")) {
+    if (result.accepted) {
       this.#automation.kick();
     }
     return result;
@@ -1019,8 +1018,7 @@ export class CoordinationApplication {
     }
     const result = this.#persistence.taskCommands.addTaskComment(command);
     if (
-      result.accepted &&
-      result.task.activations.some((activation) => activation.status === "queued")
+      result.accepted
     ) {
       this.#automation.kick();
     }

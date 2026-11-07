@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -114,7 +115,7 @@ boards:
     assert.equal(conflict.currentTask.columnId, "implementation");
     assert.equal(conflict.currentTask.title, "Coordinate this task");
     assert.deepEqual(
-      conflict.currentTask.activity.map(({ type }) => type),
+      readTask(firstApplication, conflict.currentTask.id).activity.map(({ type }) => type),
       ["task.created", "task.moved", "activation.created"],
     );
   } else {
@@ -122,7 +123,7 @@ boards:
     assert.equal(conflict.currentTask.columnId, "backlog");
     assert.equal(conflict.currentTask.title, "Overlapping edit");
     assert.deepEqual(
-      conflict.currentTask.activity.map(({ type }) => type),
+      readTask(firstApplication, conflict.currentTask.id).activity.map(({ type }) => type),
       ["task.created", "task.edited"],
     );
   }

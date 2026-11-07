@@ -156,11 +156,13 @@ boards:
       idempotencyKey: "cli-startup-log-move",
     }),
   });
-  const moved = await move.json() as {
-    accepted: true;
+  assert.equal(move.status, 200);
+  const detail = await (await fetch(`${baseUrl}/api/tasks/${created.task.id}`)).json() as {
+    available: true;
     task: { activations: Array<{ id: string }> };
   };
-  const activationId = moved.task.activations[0]?.id;
+  assert.equal(detail.available, true);
+  const activationId = detail.task.activations[0]?.id;
   assert.ok(activationId);
   const log = await logged;
   assert.match(log, new RegExp(`task=${escapeRegExp(created.task.id)}`));

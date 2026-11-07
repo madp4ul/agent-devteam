@@ -36,6 +36,14 @@ export interface StartedAttempt {
   number: number;
 }
 
+interface PreparedDispatchRow {
+  task_id: string;
+  target_agent_id: string;
+  definition_version: string;
+  workspace_path: string;
+  provisional_probe: number;
+}
+
 export class ActivationSchedulingModule {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
@@ -194,44 +202,18 @@ export class ActivationSchedulingModule {
 
   startPreparedAttempt(claim: ClaimedActivation, workspace: TaskWorkspaceView, now = new Date()): StartedAttempt | undefined {
     return this.#owner.transaction(() => {
+      const prepared = this.#readPreparedClaim(claim);
+      this.#retainPreparedWorkspace(prepared, workspace);
       if (claim.activation.reason.type === "stall-recovery" &&
           !this.#stallRecovery.dispatchIsNeeded(claim.activation.id, claim.task.id, claim.agent.id, now)) {
         this.#deleteClaimedProvisionalAttempt(claim);
         this.#stallRecovery.skipWithinTransaction(claim.activation.id, claim.task.id, now);
         return undefined;
       }
-      const prepared = this.#database.prepare(
-        `SELECT activation.task_id, activation.target_agent_id, activation.definition_version,
-                attempt.workspace_path, attempt.provisional_probe
-         FROM attempts attempt
-         JOIN activations activation ON activation.id = attempt.activation_id
-         JOIN activation_dispatch_claims dispatch_claim ON dispatch_claim.attempt_id = attempt.id
-         WHERE attempt.id = ? AND activation.id = ?
-           AND attempt.status = 'running' AND activation.status = 'running'`,
-      ).get(claim.attempt.id, claim.activation.id) as {
-        task_id: string;
-        target_agent_id: string;
-        definition_version: string;
-        workspace_path: string;
-        provisional_probe: number;
-      } | undefined;
-      if (prepared === undefined) throw new Error(`Attempt ${claim.attempt.id} is not prepared`);
-      if (prepared.workspace_path !== workspace.path) {
-        throw new Error(`Attempt ${claim.attempt.id} was prepared for a different workspace`);
-      }
       const eligible = this.#database.prepare(`SELECT 1 FROM activations a JOIN tasks task ON task.id = a.task_id
         JOIN mapped_tasks mapped ON mapped.id = task.id JOIN agents agent ON agent.id = a.target_agent_id AND agent.applied = 1
         WHERE a.id = ? AND a.stale = 0 AND task.automation_suspended = 0 AND a.status = 'running'`).get(claim.activation.id);
-      if (!eligible) { this.releaseUnstartedClaim(claim); return undefined; }
-      const registered = this.readTaskWorkspace(prepared.task_id);
-      if (registered === undefined) {
-        this.#database.prepare(
-          `INSERT INTO task_workspaces (task_id, path, starting_ref, commit_id)
-           VALUES (?, ?, ?, ?)`,
-        ).run(prepared.task_id, workspace.path, workspace.startingRef, workspace.commit);
-      } else if (!sameWorkspace(registered, workspace)) {
-        throw new Error(`Task ${prepared.task_id} has an inconsistent workspace registration`);
-      }
+      if (!eligible) { this.#releaseUnstartedClaimWithinTransaction(claim); return undefined; }
       const occurredAt = now.toISOString();
       if (claim.activation.reason.type === "stall-recovery") {
         this.#stallRecovery.recordDispatchWithinTransaction(claim.activation.id, claim.task.id);
@@ -262,16 +244,46 @@ export class ActivationSchedulingModule {
     });
   }
 
-  releaseUnstartedClaim(claim: ClaimedActivation): void {
+  releaseUnstartedClaim(claim: ClaimedActivation, workspace: TaskWorkspaceView): void {
     this.#owner.transaction(() => {
-      this.#deleteClaimedProvisionalAttempt(claim);
-      const released = this.#database.prepare(
-        `UPDATE activations
-         SET status = 'queued', continuation_message = ?, retry_due_at = (SELECT next_eligible_at FROM runtime_recovery_episodes WHERE activation_id = activations.id AND state = 'waiting')
-         WHERE id = ? AND status = 'running'`,
-      ).run(claim.continuationMessage, claim.activation.id);
-      if (released.changes !== 1) throw new Error(`Activation ${claim.activation.id} is not starting`);
+      this.#retainPreparedWorkspace(this.#readPreparedClaim(claim), workspace);
+      this.#releaseUnstartedClaimWithinTransaction(claim);
     });
+  }
+
+  #readPreparedClaim(claim: ClaimedActivation): PreparedDispatchRow {
+    const prepared = this.#database.prepare(
+      `SELECT activation.task_id, activation.target_agent_id, activation.definition_version,
+              attempt.workspace_path, attempt.provisional_probe
+       FROM attempts attempt
+       JOIN activations activation ON activation.id = attempt.activation_id
+       JOIN activation_dispatch_claims dispatch_claim ON dispatch_claim.attempt_id = attempt.id
+       WHERE attempt.id = ? AND activation.id = ?
+         AND attempt.status = 'running' AND activation.status = 'running'`,
+    ).get(claim.attempt.id, claim.activation.id) as PreparedDispatchRow | undefined;
+    if (prepared === undefined) throw new Error(`Attempt ${claim.attempt.id} is not prepared`);
+    return prepared;
+  }
+
+  #retainPreparedWorkspace(prepared: PreparedDispatchRow, workspace: TaskWorkspaceView): void {
+    if (prepared.workspace_path !== workspace.path) throw new Error(`Task ${prepared.task_id} was prepared for a different workspace`);
+    const registered = this.readTaskWorkspace(prepared.task_id);
+    if (registered === undefined) {
+      this.#database.prepare("INSERT INTO task_workspaces (task_id, path, starting_ref, commit_id) VALUES (?, ?, ?, ?)")
+        .run(prepared.task_id, workspace.path, workspace.startingRef, workspace.commit);
+    } else if (!sameWorkspace(registered, workspace)) {
+      throw new Error(`Task ${prepared.task_id} has an inconsistent workspace registration`);
+    }
+  }
+
+  #releaseUnstartedClaimWithinTransaction(claim: ClaimedActivation): void {
+    this.#deleteClaimedProvisionalAttempt(claim);
+    const released = this.#database.prepare(
+      `UPDATE activations
+       SET status = 'queued', continuation_message = ?, retry_due_at = (SELECT next_eligible_at FROM runtime_recovery_episodes WHERE activation_id = activations.id AND state = 'waiting')
+       WHERE id = ? AND status = 'running'`,
+    ).run(claim.continuationMessage, claim.activation.id);
+    if (released.changes !== 1) throw new Error(`Activation ${claim.activation.id} is not starting`);
   }
 
   failUnstartedClaim(

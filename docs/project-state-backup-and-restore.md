@@ -64,6 +64,57 @@ conversation attachment bytes, task worktrees, Git registrations, or repository
 binding metadata, so it is not a substitute for the complete project-state
 operational backup below.
 
+## Compact command-result upgrade and disk reclamation
+
+Migrations `0014_compact_command_results` and
+`0015_compact_historical_command_responses` introduce compact historical task
+command results. The first ledger boundary prevents older packages from reading
+the changed command-result contract. The second converts supported retained
+snapshots, one row at a time, using their own historical values. It does not
+reconstruct results from current tasks, change retry keys or normalized request
+strings, delete retry protection, or rewrite authoritative task/conversation data.
+Upgrades from before 0013 normalize human attribution and create existing retry
+aliases before conversion. Unknown, incomplete or malformed legacy records remain
+preserved; an unsupported replay reports a retained-result diagnostic rather than
+executing the command again.
+
+The normal released-upgrade path creates and verifies a fresh pre-migration
+database recovery backup before applying these migrations atomically. An earlier
+cleanup backup is not current recovery evidence once further project work has
+occurred. Preserve adequate free space for the original database, verified backup,
+SQLite transaction files and any compacted replacement.
+
+Logical response reduction frees reusable SQLite pages; it does not automatically
+shrink the file. Reclamation is an explicit offline operation, never part of an
+ordinary command or each archival:
+
+1. Stop the host and all task agents. Acquire the shared project-state operation
+   guard for `state maintenance`; refuse a live owner or surviving running attempt.
+2. Create a fresh database backup through SQLite's backup facility and independently
+   verify integrity, foreign keys and migration history. For database-only
+   conversion/compaction this is targeted recovery material; a complete project
+   restore still requires the recovery unit described above.
+3. Apply the supported released migrations through the database lifecycle. Do not
+   edit the ledger manually or run a conversion outside its transaction. Record
+   before/after cache payload, row/key/request identities and authoritative facts.
+4. After successful upgrade, run SQLite `VACUUM` while retaining exclusive project
+   ownership. Keep the verified recovery file. Do not interrupt the rewrite merely
+   because large-file I/O takes time; SQLite's rollback files are part of recovery.
+5. Verify integrity and foreign keys, original retry identities and compact
+   historical results, and unchanged authoritative content and recorded row
+   identities. Compare SQLite's internal `sqlite_sequence` by named counters;
+   its unreferenced internal row numbers can change during compaction.
+6. Record actual live-file savings separately from reusable free pages and retained
+   backup bytes. Rerun task-workspace consistency against the recorded database,
+   physical task directories and Git registrations: SQLite checks and unchanged
+   fingerprints cannot detect a pre-existing orphan checkout. Do not declare the
+   project restart-ready while those diagnostics remain. Release the guard only
+   after checks and connection close. Restart
+   normally; startup remains paused until the user resumes automation.
+
+Conversion or verification failure requires the existing upgrade recovery procedure,
+not deleting failed retry records. Backups are not deleted by this maintenance.
+
 ## Back up
 
 1. Read the authoritative root and Git common directory without changing them:

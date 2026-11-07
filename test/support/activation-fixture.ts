@@ -1,3 +1,4 @@
+import { readTask } from "./read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { copyFile, writeFile } from "node:fs/promises";
@@ -264,7 +265,7 @@ export async function startFollowUpAgentMoveScenario(
   application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Ready for the follow-up.", threadId: "claim-thread" });
   await application.waitForAutomationIdle();
-  const conversationId = created.task.activations[0]?.conversationId;
+  const conversationId = readTask(application, created.task.id).activations[0]?.conversationId;
   assert.ok(conversationId);
   const continued = application.continueAgentConversation({
     taskId: created.task.id,

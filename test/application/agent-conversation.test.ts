@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
@@ -61,9 +62,9 @@ test("conversation lineage stays isolated by both task and stable agent identity
   assert.equal(consulted.accepted, true);
   if (!consulted.accepted) return;
 
-  const firstImplementer = consulted.task.activations[0]?.conversationId;
-  const firstReviewer = consulted.task.activations[1]?.conversationId;
-  const secondImplementer = second.task.activations[0]?.conversationId;
+  const firstImplementer = readTask(application, consulted.task.id).activations[0]?.conversationId;
+  const firstReviewer = readTask(application, consulted.task.id).activations[1]?.conversationId;
+  const secondImplementer = readTask(application, second.task.id).activations[0]?.conversationId;
   assert.ok(firstImplementer);
   assert.ok(firstReviewer);
   assert.ok(secondImplementer);
@@ -258,8 +259,8 @@ test("ordinary activations reuse the task-and-agent conversation and deliver onl
   assert.equal(mentioned.accepted, true);
   if (!mentioned.accepted) return;
   assert.equal(
-    mentioned.task.activations[1]?.conversationId,
-    mentioned.task.activations[0]?.conversationId,
+    readTask(application, mentioned.task.id).activations[1]?.conversationId,
+    readTask(application, mentioned.task.id).activations[0]?.conversationId,
   );
 
   await application.resumeAutomation();
@@ -410,7 +411,7 @@ test("retiring a settled conversation preserves it and the next ordinary activat
   });
   assert.equal(created.accepted, true);
   if (!created.accepted) return;
-  const conversationId = created.task.activations[0]?.conversationId;
+  const conversationId = readTask(application, created.task.id).activations[0]?.conversationId;
   assert.ok(conversationId);
 
   assert.deepEqual(application.retireAgentConversation({
@@ -458,7 +459,7 @@ test("retiring a settled conversation preserves it and the next ordinary activat
   });
   assert.equal(mentioned.accepted, true);
   if (!mentioned.accepted) return;
-  const replacementId = mentioned.task.activations.at(-1)?.conversationId;
+  const replacementId = readTask(application, mentioned.task.id).activations.at(-1)?.conversationId;
   assert.ok(replacementId);
   assert.notEqual(replacementId, conversationId);
 
@@ -469,7 +470,7 @@ test("retiring a settled conversation preserves it and the next ordinary activat
   runtime.complete({ status: "completed", summary: "Historical explanation supplied.", threadId: "retired-thread" });
   const replacementRequest = await runtime.waitForRequest(3);
   assert.equal(replacementRequest.activationContext.kind, "initial");
-  assert.equal(replacementRequest.activationContext.description, created.task.description);
+  assert.equal(replacementRequest.activationContext.description, readTask(application, created.task.id).description);
   assert.equal(replacementRequest.activationContext.replacementReason, command.reason);
   assert.equal(replacementRequest.resumeThreadId, undefined);
   application.pauseAutomation();
@@ -508,7 +509,7 @@ test("retiring a settled conversation preserves it and the next ordinary activat
     idempotencyKey: "reuse-replacement-after-retired-follow-up",
   });
   assert.equal(stillCurrent.accepted, true);
-  if (stillCurrent.accepted) assert.equal(stillCurrent.task.activations.at(-1)?.conversationId, replacementId);
+  if (stillCurrent.accepted) assert.equal(readTask(application, stillCurrent.task.id).activations.at(-1)?.conversationId, replacementId);
 
   await application.resumeAutomation();
   const historicalRequest = await runtime.waitForRequest(4);
@@ -705,8 +706,8 @@ test("task conversation index stays compact, recent, distinguishable, and histor
   });
   assert.equal(secondComment.accepted, true);
   if (!secondComment.accepted) return;
-  const firstConversationId = secondComment.task.activations[0]?.conversationId;
-  const secondConversationId = secondComment.task.activations[1]?.conversationId;
+  const firstConversationId = readTask(application, secondComment.task.id).activations[0]?.conversationId;
+  const secondConversationId = readTask(application, secondComment.task.id).activations[1]?.conversationId;
   assert.ok(firstConversationId);
   assert.ok(secondConversationId);
   assert.equal(secondConversationId, firstConversationId);
@@ -1130,7 +1131,7 @@ test("conversation index status follows running work and unresolved attention", 
   });
   assert.equal(created.accepted, true);
   if (!created.accepted) return;
-  const conversationId = created.task.activations[0]?.conversationId;
+  const conversationId = readTask(application, created.task.id).activations[0]?.conversationId;
   assert.ok(conversationId);
 
   const idle = application.queryTaskConversationIndex(created.task.id);

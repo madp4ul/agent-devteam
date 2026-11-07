@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { readFile, mkdtemp, writeFile } from "node:fs/promises";
@@ -302,7 +303,7 @@ test("relating an already-completed target records ownership without synthesizin
   assert.equal(relationship.accepted, true);
   if (!relationship.accepted) return;
   assert.equal(relationship.relationship.resumeAgentId, "implementer");
-  assert.equal(relationship.sourceTask.activations.length, 0);
+  assert.equal(readTask(application, relationship.sourceTask.id).activations.length, 0);
   const inspection = application.queryTaskInspection(waiting.id);
   assert.equal(inspection.available, true);
   if (inspection.available) assert.deepEqual(inspection.task.waitingOn, { taskIds: [] });
@@ -399,9 +400,9 @@ test("child completion adds resume work after existing responsibility runs", asy
   });
   assert.equal(moved.accepted, true);
   if (!moved.accepted) return;
-  const queuedResponsibility = moved.task.activations[0];
+  const queuedResponsibility = readTask(application, moved.task.id).activations[0];
   assert.ok(queuedResponsibility);
-  const sourceMovement = moved.task.activity.findLast((event) => event.type === "task.moved");
+  const sourceMovement = readTask(application, moved.task.id).activity.findLast((event) => event.type === "task.moved");
   assert.equal(queuedResponsibility.reason.type, "column-entry");
   assert.equal(queuedResponsibility.reason.sourceEventId, sourceMovement?.id);
   const child = application.createChildTask({
@@ -634,9 +635,9 @@ test("a child can start from committed Git state without sharing its parent's wo
   assert.equal(runtime.ordinaryRequests[1]?.task.id, child.task.id);
   assert.equal(runtime.ordinaryRequests[1]?.workspace.startingRef, "feature-base");
   await assert.rejects(readFile(join(runtime.ordinaryRequests[1]!.workspace.path, "DIRTY.txt"), "utf8"));
-  assert.deepEqual(child.task.relationships, [
+  assert.deepEqual(readTask(application, child.task.id).relationships, [
     {
-      id: child.task.relationships[0]?.id,
+      id: readTask(application, child.task.id).relationships[0]?.id,
       type: "parent-child",
       sourceTaskId: parent.id,
       targetTaskId: child.task.id,
@@ -669,7 +670,7 @@ test("a child can start from committed Git state without sharing its parent's wo
       (event) => event.type === "relationship.satisfied",
     );
     assert.deepEqual(satisfaction?.details, {
-      relationshipId: child.task.relationships[0]?.id,
+      relationshipId: readTask(application, child.task.id).relationships[0]?.id,
       relationshipType: "parent-child",
       relationshipRole: "source",
       relatedTaskId: child.task.id,
@@ -707,7 +708,7 @@ test("an agent-created relationship retains attempt provenance for timeline grou
 
   assert.equal(linked.accepted, true);
   if (!linked.accepted) return;
-  const activity = linked.sourceTask.activity.findLast((event) => event.type === "relationship.created");
+  const activity = readTask(application, linked.sourceTask.id).activity.findLast((event) => event.type === "relationship.created");
   assert.equal(activity?.details.attemptId, request.attemptId);
   const child = application.createChildTask({
     parentTaskId: source.id,
@@ -777,8 +778,8 @@ test("child creation rejects Completion atomically and retains deliberate workfl
   if (!child.accepted) return;
   assert.equal(child.task.id, "T-0002");
   assert.equal(child.task.columnId, "implementation");
-  assert.equal(child.task.relationships.length, 1);
-  assert.equal(child.task.activity.filter((event) => event.type === "task.created").length, 1);
+  assert.equal(readTask(application, child.task.id).relationships.length, 1);
+  assert.equal(readTask(application, child.task.id).activity.filter((event) => event.type === "task.created").length, 1);
 });
 
 test("relationship satisfaction wakes idle automation after ordinary work completes", async (t) => {
@@ -877,17 +878,17 @@ test("removing an unresolved relationship preserves history without adding activ
   const removed = application.removeTaskRelationship(command);
   assert.equal(removed.accepted, true);
   if (!removed.accepted) return;
-  assert.deepEqual(removed.sourceTask.relationships, []);
-  assert.deepEqual(removed.targetTask.relationships, []);
-  assert.equal(removed.sourceTask.activations.length, 1);
-  assert.equal(removed.sourceTask.activations[0]?.reason.type, "column-entry");
-  const removal = removed.sourceTask.activity.findLast(
+  assert.deepEqual(readTask(application, removed.sourceTask.id).relationships, []);
+  assert.deepEqual(readTask(application, removed.targetTask.id).relationships, []);
+  assert.equal(readTask(application, removed.sourceTask.id).activations.length, 1);
+  assert.equal(readTask(application, removed.sourceTask.id).activations[0]?.reason.type, "column-entry");
+  const removal = readTask(application, removed.sourceTask.id).activity.findLast(
     (event) => event.type === "relationship.removed",
   );
   assert.ok(removal);
-  assert.notEqual(removed.sourceTask.activations[0]?.reason.sourceEventId, removal.id);
+  assert.notEqual(readTask(application, removed.sourceTask.id).activations[0]?.reason.sourceEventId, removal.id);
   assert.equal(
-    removed.targetTask.activity.filter((event) => event.type === "relationship.removed").length,
+    readTask(application, removed.targetTask.id).activity.filter((event) => event.type === "relationship.removed").length,
     1,
   );
   assert.equal(application.queryTask(dependent.id).available, true);
@@ -936,18 +937,18 @@ test("relationship removal never creates or cancels activation work", async (t) 
   });
   assert.equal(oneOfSeveral.accepted, true);
   if (!oneOfSeveral.accepted) return;
-  assert.equal(oneOfSeveral.sourceTask.activations.length, 1);
+  assert.equal(readTask(application, oneOfSeveral.sourceTask.id).activations.length, 1);
   assert.deepEqual(
-    oneOfSeveral.sourceTask.relationships.map((relationship) => relationship.id),
+    readTask(application, oneOfSeveral.sourceTask.id).relationships.map((relationship) => relationship.id),
     [secondLink.relationship.id],
   );
-  assert.deepEqual(oneOfSeveral.targetTask.relationships, []);
+  assert.deepEqual(readTask(application, oneOfSeveral.targetTask.id).relationships, []);
   assert.equal(
-    oneOfSeveral.sourceTask.activity.filter((event) => event.type === "relationship.removed").length,
+    readTask(application, oneOfSeveral.sourceTask.id).activity.filter((event) => event.type === "relationship.removed").length,
     1,
   );
   assert.equal(
-    oneOfSeveral.targetTask.activity.filter((event) => event.type === "relationship.removed").length,
+    readTask(application, oneOfSeveral.targetTask.id).activity.filter((event) => event.type === "relationship.removed").length,
     1,
   );
   assert.equal(application.queryTask(watched.id).available, true);
@@ -971,7 +972,7 @@ test("relationship removal never creates or cancels activation work", async (t) 
     idempotencyKey: "remove-unwatched-link-command",
   });
   assert.equal(unwatchedRemoval.accepted, true);
-  if (unwatchedRemoval.accepted) assert.equal(unwatchedRemoval.sourceTask.activations.length, 0);
+  if (unwatchedRemoval.accepted) assert.equal(readTask(application, unwatchedRemoval.sourceTask.id).activations.length, 0);
 
   const completed = application.moveTask({
     taskId: second.id,
@@ -993,7 +994,7 @@ test("relationship removal never creates or cancels activation work", async (t) 
   assert.equal(satisfiedRemoval.accepted, true);
   if (satisfiedRemoval.accepted) {
     assert.equal(
-      satisfiedRemoval.sourceTask.activations.length,
+      readTask(application, satisfiedRemoval.sourceTask.id).activations.length,
       beforeSatisfiedRemoval.task.activations.length,
     );
   }

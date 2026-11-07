@@ -203,7 +203,7 @@ export class TaskArchiveStore {
         ).run(occurredAt, taskId);
         if (marked.changes !== 1) throw new Error("Task archival claim was lost before completion");
         this.#activityJournal.append(taskId, "task.archived", actor, {}, occurredAt);
-        const task = this.#projections.readTask(taskId);
+        const task = this.#projections.readCommandTask(taskId);
         if (task === undefined) throw new Error("Archived task could not be read back");
         const result = { accepted: true as const, task };
         this.#idempotentCommands.retain({
@@ -237,7 +237,7 @@ export class TaskArchiveStore {
       const occurredAt = new Date().toISOString();
       this.#database.prepare("UPDATE tasks SET archived_at = NULL, revision = revision + 1 WHERE id = ?").run(taskId);
       this.#activityJournal.append(taskId, "task.unarchived", actor, {}, occurredAt);
-      const task = this.#projections.readTask(taskId);
+      const task = this.#projections.readCommandTask(taskId);
       if (task === undefined) throw new Error("Unarchived task could not be read back");
       return { accepted: true as const, task };
     });

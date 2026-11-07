@@ -8,7 +8,7 @@ import {
   stringField,
 } from "../http/request.ts";
 import { sendAgentQuery, sendJson } from "../http/response.ts";
-import type { BoardMutationResult, TaskView, TaskRelationshipMutationResult, RemoveTaskRelationshipResult, EditTaskRelationshipResumeAgentResult } from "../../application/task-contract.ts";
+import type { BoardMutationResult, TaskCommandSummary, TaskRelationshipMutationResult, RemoveTaskRelationshipResult, EditTaskRelationshipResumeAgentResult } from "../../application/task-contract.ts";
 import type { ServerResponse } from "node:http";
 import type { AgentCoordinationCapabilities } from "./capabilities.ts";
 import type { AgentRouteContext } from "./route-context.ts";
@@ -196,7 +196,7 @@ export function registerCurrentTaskRoutes(
   });
 }
 
-function compactTask(task: TaskView) {
+function compactTask(task: TaskCommandSummary) {
   return { id: task.id, title: task.title, boardId: task.boardId, columnId: task.columnId, revision: task.revision };
 }
 

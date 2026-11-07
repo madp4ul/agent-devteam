@@ -92,6 +92,8 @@ const productionMigrationIds = [
   "0011_task_timeline",
   "0012_runtime_recovery",
   "0013_canonical_human_identity",
+  "0014_compact_command_results",
+  "0015_compact_historical_command_responses",
 ];
 
 test("migration 0012 preserves released history, journal sequence and all derived index triggers", async () => {

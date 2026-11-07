@@ -24,7 +24,7 @@ import type {
   TaskAttentionView,
   TaskRelationshipView,
   TaskRelationshipMutationResult,
-  TaskView,
+  TaskCommandSummary,
 } from "../task-contract.ts";
 import { findParticipantMentions } from "../participant-mentions.ts";
 import type { CoordinationDatabase } from "./coordination-database.ts";
@@ -91,10 +91,10 @@ export class TaskCommandStore {
       caller: [command.actor.kind, command.actor.id, origin?.id ?? command.parentTaskId],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      if (this.#projections.readTask(command.parentTaskId) === undefined) {
+      if (this.#projections.readCommandTask(command.parentTaskId) === undefined) {
         return { accepted: false, reason: "not-found" };
       }
-      if (this.taskIsReadOnly(this.#projections.readTask(command.parentTaskId)!)) {
+      if (this.taskIsReadOnly(this.#projections.readCommandTask(command.parentTaskId)!)) {
         return { accepted: false, reason: "archived-task" };
       }
       if (command.actor.kind === "agent" && !this.#projections.isTaskInspectableByAgent(command.parentTaskId)) {
@@ -122,7 +122,7 @@ export class TaskCommandStore {
         command.actor,
         this.agentActivityProvenance(command, origin),
       );
-      const updated = this.#projections.readTask(task.id);
+      const updated = this.#projections.readCommandTask(task.id);
       if (updated === undefined) throw new Error("Created child task could not be read back");
       return { accepted: true, task: updated };
     }, (result) => result.accepted, {
@@ -143,7 +143,7 @@ export class TaskCommandStore {
       caller: [command.actor.kind, command.actor.id],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      const currentTask = this.#projections.readTask(command.taskId);
+      const currentTask = this.#projections.readCommandTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
       if (this.taskIsReadOnly(currentTask)) {
         return { accepted: false, reason: "archived-task" };
@@ -164,6 +164,7 @@ export class TaskCommandStore {
         return { accepted: false, reason: "empty-description" };
       }
       if (startingRef === "") return { accepted: false, reason: "invalid-starting-ref" };
+      const currentDescription = (this.#database.prepare("SELECT description FROM tasks WHERE id = ?").get(command.taskId) as { description: string }).description;
       let previousStartingRef: string | undefined;
       if (startingRef !== undefined) {
         const state = this.#projections.readTaskWorkspaceState(command.taskId);
@@ -181,7 +182,7 @@ export class TaskCommandStore {
            SET title = ?, description = ?, revision = revision + 1
            WHERE id = ?`,
         )
-        .run(title ?? currentTask.title, description ?? currentTask.description, command.taskId);
+        .run(title ?? currentTask.title, description ?? currentDescription, command.taskId);
       this.#activityJournal.append(
         command.taskId,
         "task.edited",
@@ -190,14 +191,14 @@ export class TaskCommandStore {
           ...this.agentActivityProvenance(command, origin),
           changedFields: [
             title !== undefined && title !== currentTask.title ? "title" : "",
-            description !== undefined && description !== currentTask.description ? "description" : "",
+            description !== undefined && description !== currentDescription ? "description" : "",
             startingRef !== undefined && startingRef !== previousStartingRef ? "startingRef" : "",
           ].filter(Boolean).join(","),
           ...(title === undefined || title === currentTask.title ? {} : { previousTitle: currentTask.title, title }),
           ...(startingRef === undefined ? {} : { startingRef, ...(previousStartingRef === undefined ? {} : { previousStartingRef }) }),
         },
       );
-      const task = this.#projections.readTask(command.taskId);
+      const task = this.#projections.readCommandTask(command.taskId);
       if (task === undefined) throw new Error("Edited task could not be read back");
       return { accepted: true, task };
     }, (result) => result.accepted, {
@@ -214,7 +215,7 @@ export class TaskCommandStore {
       caller: [command.actor.kind, command.actor.id],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      const currentTask = this.#projections.readTask(command.taskId);
+      const currentTask = this.#projections.readCommandTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
       if (this.taskIsReadOnly(currentTask)) {
         return { accepted: false, reason: "archived-task" };
@@ -304,7 +305,7 @@ export class TaskCommandStore {
           );
         }
       }
-      const task = this.#projections.readTask(command.taskId);
+      const task = this.#projections.readCommandTask(command.taskId);
       if (task === undefined) throw new Error("Moved task could not be read back");
       return {
         accepted: true,
@@ -329,7 +330,7 @@ export class TaskCommandStore {
       caller: [command.actor.kind, command.actor.id],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      const currentTask = this.#projections.readTask(command.taskId);
+      const currentTask = this.#projections.readCommandTask(command.taskId);
       if (
         currentTask === undefined ||
         this.taskIsReadOnly(currentTask) ||
@@ -364,8 +365,8 @@ export class TaskCommandStore {
       caller: [command.actor.kind, command.actor.id, origin?.id ?? command.sourceTaskId],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      const sourceTask = this.#projections.readTask(command.sourceTaskId);
-      const targetTask = this.#projections.readTask(command.targetTaskId);
+      const sourceTask = this.#projections.readCommandTask(command.sourceTaskId);
+      const targetTask = this.#projections.readCommandTask(command.targetTaskId);
       let result: TaskRelationshipMutationResult;
       if (sourceTask === undefined || targetTask === undefined) {
         result = { accepted: false, reason: "not-found" };
@@ -404,8 +405,8 @@ export class TaskCommandStore {
           result = {
             accepted: true,
             relationship,
-            sourceTask: this.#projections.readTask(command.sourceTaskId)!,
-            targetTask: this.#projections.readTask(command.targetTaskId)!,
+            sourceTask: this.#projections.readCommandTask(command.sourceTaskId)!,
+            targetTask: this.#projections.readCommandTask(command.targetTaskId)!,
           };
         }
       }
@@ -424,7 +425,7 @@ export class TaskCommandStore {
       caller: [command.actor.kind, command.actor.id, origin?.id ?? command.taskId],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      const currentTask = this.#projections.readTask(command.taskId);
+      const currentTask = this.#projections.readCommandTask(command.taskId);
       let result: RemoveTaskRelationshipResult;
       if (currentTask === undefined) {
         result = { accepted: false, reason: "not-found" };
@@ -454,7 +455,7 @@ export class TaskCommandStore {
           result = { accepted: false, reason: "relationship-conflict" };
         } else {
           if (command.actor.kind === "agent") {
-            const target = this.#projections.readTask(row.target_task_id)!;
+            const target = this.#projections.readCommandTask(row.target_task_id)!;
             if (this.taskIsReadOnly(target)) return { accepted: false, reason: "archived-task" };
             if (!this.#projections.isTaskInspectableByAgent(target.id)) return { accepted: false, reason: "not-found" };
           }
@@ -484,8 +485,8 @@ export class TaskCommandStore {
           result = {
             accepted: true,
             relationship,
-            sourceTask: this.#projections.readTask(row.source_task_id)!,
-            targetTask: this.#projections.readTask(row.target_task_id)!,
+            sourceTask: this.#projections.readCommandTask(row.source_task_id)!,
+            targetTask: this.#projections.readCommandTask(row.target_task_id)!,
           };
         }
       }
@@ -505,7 +506,7 @@ export class TaskCommandStore {
       caller: [command.actor.kind, command.actor.id, origin?.id ?? command.taskId],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      const currentTask = this.#projections.readTask(command.taskId);
+      const currentTask = this.#projections.readCommandTask(command.taskId);
       if (currentTask === undefined) return { accepted: false, reason: "not-found" };
       if (this.taskIsReadOnly(currentTask)) return { accepted: false, reason: "archived-task" };
       if (command.actor.kind === "agent" && !this.#projections.isTaskInspectableByAgent(command.taskId)) {
@@ -531,7 +532,7 @@ export class TaskCommandStore {
       } | undefined;
       if (row === undefined) return { accepted: false, reason: "relationship-conflict" };
       if (command.actor.kind === "agent") {
-        const target = this.#projections.readTask(row.target_task_id)!;
+        const target = this.#projections.readCommandTask(row.target_task_id)!;
         if (this.taskIsReadOnly(target)) return { accepted: false, reason: "archived-task" };
         if (!this.#projections.isTaskInspectableByAgent(target.id)) return { accepted: false, reason: "not-found" };
       }
@@ -571,8 +572,8 @@ export class TaskCommandStore {
       return {
         accepted: true,
         relationship,
-        sourceTask: this.#projections.readTask(row.source_task_id)!,
-        targetTask: this.#projections.readTask(row.target_task_id)!,
+        sourceTask: this.#projections.readCommandTask(row.source_task_id)!,
+        targetTask: this.#projections.readCommandTask(row.target_task_id)!,
       };
     }, (result) => result.accepted, {
       request: JSON.stringify({ taskId: command.taskId, relationshipId: command.relationshipId, resumeAgentId: command.resumeAgentId }),
@@ -588,7 +589,7 @@ export class TaskCommandStore {
       caller: [command.actor.kind, command.actor.id],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      const task = this.#projections.readTask(command.taskId);
+      const task = this.#projections.readCommandTask(command.taskId);
       if (task === undefined) return { accepted: false, reason: "not-found" };
       if (this.taskIsReadOnly(task)) {
         return { accepted: false, reason: "archived-task" };
@@ -639,7 +640,7 @@ export class TaskCommandStore {
         command.actor,
         comment.occurredAt,
       );
-      const updated = this.#projections.readTask(command.taskId);
+      const updated = this.#projections.readCommandTask(command.taskId);
       if (updated === undefined) throw new Error("Commented task could not be read back");
       return { accepted: true, task: updated, comment };
     }, (result) => result.accepted, {
@@ -655,7 +656,7 @@ export class TaskCommandStore {
       scope: [origin?.id ?? command.taskId], caller: [command.actor.kind, command.actor.id],
       idempotencyKey: command.idempotencyKey,
     }, () => {
-      const task = this.#projections.readTask(command.taskId);
+      const task = this.#projections.readCommandTask(command.taskId);
       if (task === undefined) return { accepted: false, reason: "not-found" };
       if (this.taskIsReadOnly(task)) return { accepted: false, reason: "archived-task" };
       if (command.actor.kind === "agent" && !this.#projections.isTaskInspectableByAgent(task.id)) {
@@ -715,7 +716,7 @@ export class TaskCommandStore {
       .get(agentId) !== undefined;
   }
 
-  private taskIsReadOnly(task: TaskView): boolean {
+  private taskIsReadOnly(task: TaskCommandSummary): boolean {
     return task.archived === true || this.#projections.isTaskArchivalPending(task.id);
   }
 
@@ -759,7 +760,7 @@ export class TaskCommandStore {
     command: CreateTaskCommand,
     activityDetails: Record<string, string>,
     startingRef?: string,
-  ): TaskView {
+  ): TaskCommandSummary {
     const sequence = this.#database.prepare("INSERT INTO task_numbers DEFAULT VALUES").run();
     const taskSequence = Number(sequence.lastInsertRowid);
     const taskId = `T-${String(taskSequence).padStart(4, "0")}`;
@@ -794,7 +795,7 @@ export class TaskCommandStore {
       command.actor,
     );
     this.createColumnEntryActivation(taskId, command.boardId, command.columnId, sourceEventId);
-    const task = this.#projections.readTask(taskId);
+    const task = this.#projections.readCommandTask(taskId);
     if (task === undefined) throw new Error("Created task could not be read back");
     return task;
   }

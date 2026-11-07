@@ -1,5 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import { convertHistoricalCommandResultV1, hasCompactTaskResult } from "./compact-command-result.ts";
+
 import type { CoordinationDatabase } from "./coordination-database.ts";
 
 type RetentionPolicy<Result> = (result: Result) => boolean;
@@ -81,7 +83,16 @@ export class IdempotentCommandExecutor {
       .get(serializeCommandType(identity), identity.idempotencyKey) as
         | { response_json: string }
         | undefined;
-    return row === undefined ? undefined : JSON.parse(row.response_json) as Result;
+    if (row === undefined) return undefined;
+    let result: unknown;
+    try { result = JSON.parse(row.response_json); }
+    catch (cause) {
+      throw new Error(`Invalid retained ${identity.kind} command JSON; retry protection is intact. Restore a compatible backup or repair the retained result before retrying.`, { cause });
+    }
+    if (!hasCompactTaskResult(identity.kind)) return result as Result;
+    const converted = convertHistoricalCommandResultV1(identity.kind, result);
+    if (!converted.supported) throw new Error(`${converted.reason}; retained retry protection is intact. Restore a compatible backup or repair the retained result before retrying.`);
+    return converted.result as Result;
   }
 
   retain(identity: IdempotentCommandIdentity, result: unknown, request?: string): void {

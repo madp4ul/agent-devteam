@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ test("HTTP pages bound a large attempt and validate limits, scopes and direct so
   t.after(() => application.close());
   const created = application.createTask({ boardId: "delivery", columnId: "implementation", title: "HTTP pages", description: "Large retained evidence", actor: { kind: "user", id: "paul" }, idempotencyKey: "http-pages" });
   assert.ok(created.accepted);
-  const activation = created.task.activations[0]!;
+  const activation = readTask(application, created.task.id).activations[0]!;
   const seed = new DatabaseSync(fixture.databasePath);
   seed.prepare("UPDATE activations SET status = 'completed' WHERE id = ?").run(activation.id);
   seed.prepare("INSERT INTO attempts(id, activation_id, status, workspace_path, started_at, completed_at, thread_id) VALUES ('http-attempt', ?, 'completed', 'fixture', '2026-01-01', '2026-01-02', 'http-thread')").run(activation.id);
@@ -47,7 +48,7 @@ test("HTTP pages bound a large attempt and validate limits, scopes and direct so
   assert.equal(target.conversation.history[0]?.kind, "activation");
   const other = application.createTask({ boardId: "delivery", columnId: "implementation", title: "Scope", description: "Isolated", actor: { kind: "user", id: "paul" }, idempotencyKey: "http-scope" });
   assert.ok(other.accepted);
-  const otherEndpoint = `${server.baseUrl}/api/tasks/${other.task.id}/conversations/${other.task.activations[0]!.conversationId}`;
+  const otherEndpoint = `${server.baseUrl}/api/tasks/${other.task.id}/conversations/${readTask(application, other.task.id).activations[0]!.conversationId}`;
   assert.equal((await fetch(`${otherEndpoint}?cursor=${encodeURIComponent(payload.conversation.page!.olderCursor!)}`)).status, 400);
   assert.equal((await fetch(`${otherEndpoint}?attemptId=http-attempt`)).status, 400);
 });

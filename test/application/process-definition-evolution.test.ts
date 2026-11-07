@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -33,7 +34,8 @@ test("removed process identities preserve live state as unmapped and stale", asy
   });
   assert.equal(created.accepted, true);
   if (!created.accepted) return;
-  const activationId = created.task.activations[0]?.id;
+  const originalTask = readTask(first, created.task.id);
+  const activationId = originalTask.activations[0]?.id;
   assert.ok(activationId);
   first.close();
 
@@ -67,7 +69,7 @@ test("removed process identities preserve live state as unmapped and stale", asy
   assert.equal(retained.available, true);
   if (retained.available) {
     assert.equal(retained.task.activations[0]?.stale, true);
-    assert.equal(retained.task.activity.length, created.task.activity.length);
+    assert.equal(retained.task.activity.length, originalTask.activity.length);
   }
   assert.deepEqual(restarted.queryTaskOverviews({
     boardId: "delivery",
@@ -80,7 +82,7 @@ test("removed process identities preserve live state as unmapped and stale", asy
     idempotencyKey: "comment-on-unmapped-task",
   });
   assert.equal(commented.accepted, true);
-  if (commented.accepted) assert.equal(commented.task.activations.length, 1);
+  if (commented.accepted) assert.equal(readTask(restarted, commented.task.id).activations.length, 1);
   restarted.close();
 
   const restartedAgain = await CoordinationApplication.start({
@@ -304,7 +306,7 @@ boards:
     ]);
     assert.equal(boards.boards[0]?.columns[0]?.tasks[0]?.id, created.task.id);
   }
-  const staleActivationId = created.task.activations[0]?.id;
+  const staleActivationId = readTask(changed, created.task.id).activations[0]?.id;
   assert.ok(staleActivationId);
   assert.deepEqual(changed.dismissStaleActivation({
     activationId: staleActivationId,
@@ -338,8 +340,8 @@ test("resolved startup impact is dismissed durably while later changes create on
   assert.equal(firstTask.accepted, true);
   assert.equal(secondTask.accepted, true);
   if (!firstTask.accepted || !secondTask.accepted) return;
-  const firstActivationId = firstTask.task.activations[0]?.id;
-  const secondActivationId = secondTask.task.activations[0]?.id;
+  const firstActivationId = readTask(first, firstTask.task.id).activations[0]?.id;
+  const secondActivationId = readTask(first, secondTask.task.id).activations[0]?.id;
   assert.ok(firstActivationId);
   assert.ok(secondActivationId);
   first.close();
@@ -441,7 +443,7 @@ test("restored identities remap without replay and require explicit process appr
   });
   assert.equal(created.accepted, true);
   if (!created.accepted) return;
-  const activationId = created.task.activations[0]?.id;
+  const activationId = readTask(first, created.task.id).activations[0]?.id;
   assert.ok(activationId);
   first.close();
 
@@ -498,6 +500,7 @@ test("Resume with current process rebases only compatible stale activations", as
   });
   assert.equal(created.accepted, true);
   if (!created.accepted) return;
+  const originalTask = readTask(first, created.task.id);
   first.close();
 
   await writeFile(join(fixture.directory, "implementer.md"), "Use the current instructions.\n");
@@ -529,13 +532,13 @@ test("Resume with current process rebases only compatible stale activations", as
   assert.equal(runtime.requests.length, 1);
   assert.equal(runtime.requests[0]?.agent.instructions, "Use the current instructions.\n");
   assert.equal(runtime.requests[0]?.reason.sourceEventId,
-    created.task.activations[0]?.reason.sourceEventId);
+    originalTask.activations[0]?.reason.sourceEventId);
   const task = changed.queryTask(created.task.id);
   assert.equal(task.available, true);
   if (task.available) {
     assert.equal(task.task.activations[0]?.stale, false);
     assert.equal(task.task.activations[0]?.reason.sourceEventId,
-      created.task.activations[0]?.reason.sourceEventId);
+      originalTask.activations[0]?.reason.sourceEventId);
   }
 });
 
@@ -682,7 +685,7 @@ test("only the user can recover an unmapped task into a defined column", async (
     idempotencyKey: "user-remaps-task",
   });
   assert.equal(recovered.accepted, true);
-  if (recovered.accepted) assert.equal(recovered.task.activations.length, 1);
+  if (recovered.accepted) assert.equal(readTask(changed, recovered.task.id).activations.length, 1);
 });
 
 test("failed and user-interrupted activations become stale after a semantic change", async (t) => {

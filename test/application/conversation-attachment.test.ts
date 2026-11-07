@@ -1,3 +1,4 @@
+import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { Readable } from "node:stream";
@@ -33,7 +34,7 @@ async function startSettledAttachmentConversation(t: TestContext, cleanup = true
   });
   assert.equal(created.accepted, true);
   if (!created.accepted) throw new Error("Expected the attachment conversation task to be created.");
-  const conversationId = created.task.activations[0]?.conversationId;
+  const conversationId = readTask(application, created.task.id).activations[0]?.conversationId;
   assert.ok(conversationId);
   await application.resumeAutomation();
   await runtime.waitForRequest(1);
@@ -203,7 +204,7 @@ test("conversation attachments are unavailable outside their owning conversation
   });
   assert.equal(otherTask.accepted, true);
   if (!otherTask.accepted) return;
-  const otherConversationId = otherTask.task.activations[0]?.conversationId;
+  const otherConversationId = readTask(application, otherTask.task.id).activations[0]?.conversationId;
   assert.ok(otherConversationId);
   assert.deepEqual(application.readConversationAttachment({
     taskId: otherTask.task.id,
@@ -279,7 +280,7 @@ test("archiving a task removes its immutable conversation attachments", async (t
   });
   assert.equal(created.accepted, true);
   if (!created.accepted) return;
-  const conversationId = created.task.activations[0]?.conversationId;
+  const conversationId = readTask(application, created.task.id).activations[0]?.conversationId;
   assert.ok(conversationId);
 
   await application.resumeAutomation();
