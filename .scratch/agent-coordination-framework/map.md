@@ -230,6 +230,11 @@ without choosing the implementation yet.
 
 ## Not yet specified
 
+- [102 — Collapse boards to interesting columns and retire Column layout](./issues/102-collapse-boards-to-interesting-columns.md)
+  — Add per-board collapse controls that retain columns with active, waiting,
+  unwatched/user, or attention-labelled tasks, showing every task in retained
+  columns; make Row layout the only supported presentation.
+
 - [Add Notification Settings and Refine the Top Bar](./issues/59-notify-agent-handoffs-to-user.md)
   — Move notification and appearance preferences into categorized settings,
   add per-column subscriptions, and clarify top-bar operational controls.
