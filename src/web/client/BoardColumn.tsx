@@ -5,13 +5,10 @@ import type { TaskOverviewView } from "../../application/browser-transport-contr
 import type { BrowserBoardState, BrowserColumnView } from "./api.ts";
 import { TaskCard } from "./TaskCard.tsx";
 
-export type BoardLayout = "row" | "column";
-
 export function BoardColumn({
   boardId,
   column,
   archivedTasks,
-  layout,
   filter,
   pendingTaskId,
   highlightedTaskId,
@@ -25,7 +22,6 @@ export function BoardColumn({
   boardId: string;
   column: BrowserColumnView;
   archivedTasks: TaskOverviewView[];
-  layout: BoardLayout;
   filter: string;
   pendingTaskId?: string | undefined;
   highlightedTaskId?: string | undefined;
@@ -74,7 +70,7 @@ export function BoardColumn({
             )}
           </div>
           <span className="task-count">{tasks.length}</span>
-          {layout === "row" && column.taskCreationAllowed ? (
+          {column.taskCreationAllowed ? (
             <button
               className="row-create"
               aria-label={`Create task in ${column.name}`}
@@ -97,13 +93,11 @@ export function BoardColumn({
         ) : null}
       </header>
       <ol
-        ref={layout === "row" ? onTaskStrip : undefined}
+        ref={onTaskStrip}
         className="task-list"
         data-testid="task-strip"
-        tabIndex={layout === "row" ? 0 : undefined}
-        onScroll={layout === "row"
-          ? (event) => onTaskStripScroll(event.currentTarget.scrollLeft)
-          : undefined}
+        tabIndex={0}
+        onScroll={(event) => onTaskStripScroll(event.currentTarget.scrollLeft)}
       >
         {tasks.map((task) => (
           <TaskCard
@@ -116,9 +110,6 @@ export function BoardColumn({
           />
         ))}
       </ol>
-      {layout === "column" && column.taskCreationAllowed ? <button className="create-column" onClick={onCreate}>
-        + Create task in {column.name}
-      </button> : null}
     </section>
   );
 }

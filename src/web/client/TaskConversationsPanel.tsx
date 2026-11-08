@@ -6,6 +6,8 @@ import { RelativeTime } from "./RelativeTime.tsx";
 import { CostEstimate } from "./CostEstimate.tsx";
 
 const conversationStatusPresentation = {
+  starting: { className: "status-preparing", label: "Starting agent" },
+  preparing: { className: "status-preparing", label: "Preparing workspace" },
   running: { className: "status-running", label: "Conversation running" },
   "needs-attention": { className: "status-attention", label: "Conversation needs attention" },
 } satisfies Record<Exclude<AgentConversationIndexEntry["status"], null>, {

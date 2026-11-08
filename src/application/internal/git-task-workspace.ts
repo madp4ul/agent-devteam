@@ -1,15 +1,20 @@
-import { execFile } from "node:child_process";
+import { workspaceGitSummary } from "./workspace-git-summary.ts";
+import { runGit, runGitForExitCode, gitSafeDirectoryEnvironment } from "./git-command.ts";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
+import type { WorkspaceProgressView } from "../automation-contract.ts";
+import { GitProgressReader } from "./git-progress.ts";
 import type { ProcessDiagnostic } from "../process-contract.ts";
 import type { RuntimeStartupBoundary } from "../runtime-contract.ts";
 import type {
   TaskWorkspaceGitStateView,
   TaskWorkspaceView,
+  WorkspaceCleanupFailure,
 } from "../task-contract.ts";
 import { normalizedPath, samePath } from "./path-identity.ts";
+import { GitArchivalReview } from "./git-archival-review.ts";
 
 export async function validateTaskWorkspaceConsistency(
   projectRepositoryPath: string,
@@ -132,6 +137,7 @@ export class GitTaskWorkspaceManager {
     taskId: string,
     startingRef: string,
     existing: TaskWorkspaceView | undefined,
+    onProgress?: (progress: WorkspaceProgressView) => void,
   ): Promise<TaskWorkspaceView> {
     if (existing !== undefined) {
       await this.verify(taskId, existing);
@@ -162,6 +168,8 @@ export class GitTaskWorkspaceManager {
       mkdir(this.taskWorkspaceRoot, { recursive: true }),
     );
     const path = this.pathFor(taskId);
+    const progress = new GitProgressReader(onProgress ?? (() => {}));
+    onProgress?.({ stage: "Registering worktree" });
     await atBoundary(
       "worktree-registration",
       `Could not register task ${taskId} worktree`,
@@ -170,11 +178,20 @@ export class GitTaskWorkspaceManager {
         this.projectRepositoryPath,
         "worktree",
         "add",
+        "--no-checkout",
         "--detach",
         path,
         commit,
-      ]),
+      ], undefined, (chunk) => progress.write(chunk)),
     );
+    onProgress?.({ stage: "Checking out files" });
+    await atBoundary(
+      "workspace-preparation",
+      `Could not populate task ${taskId} worktree`,
+      this.#runGit(["-C", path, "checkout", "--force", "--progress", "--detach", commit],
+        gitSafeDirectoryEnvironment(path), (chunk) => progress.write(chunk)),
+    );
+    progress.finish();
     return { path, startingRef, commit };
   }
 
@@ -229,40 +246,6 @@ export class GitTaskWorkspaceManager {
       throw new Error(`Git ancestry check failed with exit code ${descendsFromStart}.`);
     }
 
-    const branch = statusOutput
-      .split(/\r?\n/)
-      .find((line) => line.startsWith("# branch.head "))
-      ?.slice("# branch.head ".length);
-    const oid = statusOutput
-      .split(/\r?\n/)
-      .find((line) => line.startsWith("# branch.oid "))
-      ?.slice("# branch.oid ".length);
-    if (branch === undefined || oid === undefined || oid === "(initial)") {
-      throw new Error("Git status did not report a current HEAD.");
-    }
-
-    let stagedFiles = 0;
-    let unstagedFiles = 0;
-    let untrackedFiles = 0;
-    for (const line of statusOutput.split(/\r?\n/)) {
-      if (line.startsWith("? ")) {
-        untrackedFiles += 1;
-      } else if (/^[12u] /.test(line)) {
-        const state = line.slice(2, 4);
-        if (state[0] !== ".") stagedFiles += 1;
-        if (state[1] !== ".") unstagedFiles += 1;
-      }
-    }
-
-    let additions = 0;
-    let deletions = 0;
-    for (const line of numstatOutput.split(/\r?\n/)) {
-      if (line.length === 0) continue;
-      const [added, deleted] = line.split("\t", 3);
-      if (added !== undefined && added !== "-") additions += Number.parseInt(added, 10);
-      if (deleted !== undefined && deleted !== "-") deletions += Number.parseInt(deleted, 10);
-    }
-
     const history = descendsFromStart === 0
       ? {
           kind: "progress" as const,
@@ -272,19 +255,14 @@ export class GitTaskWorkspaceManager {
         }
       : { kind: "diverged" as const };
 
-    return {
-      head: branch === "(detached)"
-        ? { kind: "detached", shortHash: oid.slice(0, 7) }
-        : { kind: "branch", name: branch, shortHash: oid.slice(0, 7) },
-      history,
-      changes: { additions, deletions, stagedFiles, unstagedFiles, untrackedFiles },
-    };
+    return { ...workspaceGitSummary(statusOutput, numstatOutput), history };
   }
 
   async removeForArchival(
     taskId: string,
     workspace: TaskWorkspaceView,
     discardChanges?: true,
+    archivalPreviewToken?: string,
   ): Promise<
     { removed: true } | {
       removed: false;
@@ -296,8 +274,13 @@ export class GitTaskWorkspaceManager {
         | "workspace-nested-worktrees"
         | "workspace-locked"
         | "workspace-removal-failed"
-        | "workspace-cleanup-failed";
+        | "workspace-cleanup-failed"
+        | "workspace-preview-changed"
+        | "workspace-preview-unavailable"
+        | "workspace-nested-cleanup-failed";
       recoveryPending?: true;
+      removedWorktrees?: string[];
+      cleanupFailure?: WorkspaceCleanupFailure;
     }
   > {
     try {
@@ -311,6 +294,9 @@ export class GitTaskWorkspaceManager {
             ? "workspace-registration-invalid"
             : "workspace-cleanup-failed",
       };
+    }
+    if (archivalPreviewToken !== undefined) {
+      return this.removeReviewedArchival(taskId, workspace, archivalPreviewToken);
     }
     try {
       const registrations = await readRegisteredWorktrees(this.projectRepositoryPath, this.#runGit);
@@ -367,6 +353,69 @@ export class GitTaskWorkspaceManager {
             : "workspace-removal-failed",
         ...(recovery === "inconsistent" ? { recoveryPending: true as const } : {}),
       };
+    }
+  }
+
+  async inspectArchival(taskId: string, workspace: TaskWorkspaceView) {
+    await this.verify(taskId, workspace);
+    return (await new GitArchivalReview(this.projectRepositoryPath, this.#runGit).inspect(workspace.path)).preview;
+  }
+
+  async resolveArchivalPath(taskId: string, workspace: TaskWorkspaceView, path: string): Promise<TaskWorkspaceView> {
+    if (!samePath(workspace.path, this.pathFor(taskId))) throw new TaskWorkspaceRegistrationError("unexpected parent path");
+    const reviewer = new GitArchivalReview(this.projectRepositoryPath, this.#runGit);
+    await reviewer.resolvePath(workspace.path, workspace.path);
+    return { ...workspace, path: await reviewer.resolvePath(workspace.path, path) };
+  }
+
+  private async removeReviewedArchival(taskId: string, workspace: TaskWorkspaceView, token: string): Promise<
+    { removed: true } | { removed: false; reason: "workspace-preview-changed" | "workspace-preview-unavailable" | "workspace-nested-cleanup-failed"; removedWorktrees?: string[]; recoveryPending?: true; cleanupFailure?: WorkspaceCleanupFailure }
+  > {
+    const reviewer = new GitArchivalReview(this.projectRepositoryPath, this.#runGit);
+    const removedWorktrees: string[] = [];
+    try {
+      const review = await reviewer.inspect(workspace.path);
+      if (review.preview.token === null) return { removed: false, reason: "workspace-preview-unavailable" };
+      if (review.preview.token !== token) return { removed: false, reason: "workspace-preview-changed" };
+      const remaining = [...review.entries].reverse();
+      while (remaining.length > 0) {
+        await this.verify(taskId, workspace);
+        const paths = await reviewer.paths(workspace.path);
+        if (paths.length !== remaining.length || paths.some((path) => !remaining.some((entry) => samePath(entry.view.path, path)))) {
+          return { removed: false, reason: "workspace-preview-changed", removedWorktrees };
+        }
+        // Recheck every remaining target before each destructive step. An external
+        // writer is not excluded by the application claim; never silently adopt it.
+        for (const entry of remaining) {
+          const current = await reviewer.inspectOne(workspace.path, entry.view.path, paths);
+          if (current.fingerprint !== entry.fingerprint) {
+            return { removed: false, reason: "workspace-preview-changed", removedWorktrees };
+          }
+        }
+        const target = remaining.shift()!;
+        try {
+          await this.#runGit(["-C", this.projectRepositoryPath, "worktree", "remove", "--force", target.view.path]);
+        } catch (error) {
+          if (target.view.parent) {
+            const recovery = await this.inspectInterruptedArchival(taskId, workspace).catch(() => "inconsistent" as const);
+            if (recovery === "removed") return { removed: true };
+            return { removed: false, reason: "workspace-nested-cleanup-failed", removedWorktrees,
+              ...(recovery === "inconsistent" ? { recoveryPending: true as const } : {}) };
+          }
+          const registration = await reviewer.paths(workspace.path)
+            .then((registered) => registered.some((path) => samePath(path, target.view.path)) ? "present" as const : "absent" as const,
+              () => "unknown" as const);
+          const files = await lstat(target.view.path).then(() => "present" as const,
+            (failure: NodeJS.ErrnoException) => failure.code === "ENOENT" ? "absent" as const : "unknown" as const);
+          if (registration === "absent" && files === "absent") removedWorktrees.push(target.view.path);
+          return { removed: false, reason: "workspace-nested-cleanup-failed", removedWorktrees,
+            cleanupFailure: { path: target.view.path, registration, files } };
+        }
+        removedWorktrees.push(target.view.path);
+      }
+      return { removed: true };
+    } catch {
+      return { removed: false, reason: "workspace-nested-cleanup-failed", removedWorktrees };
     }
   }
 
@@ -455,43 +504,6 @@ function workspaceDiagnostic(
   };
 }
 
-function runGit(arguments_: string[], environment?: NodeJS.ProcessEnv): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile("git", arguments_, { encoding: "utf8", env: environment }, (error, stdout) => {
-      if (error !== null) reject(error);
-      else resolve(stdout);
-    });
-  });
-}
-
-function gitSafeDirectoryEnvironment(path: string): NodeJS.ProcessEnv {
-  const configuration: Array<[string, string]> = [];
-  const inheritedCount = Number.parseInt(process.env.GIT_CONFIG_COUNT ?? "0", 10);
-  for (let index = 0; index < inheritedCount; index += 1) {
-    const key = process.env[`GIT_CONFIG_KEY_${index}`];
-    const value = process.env[`GIT_CONFIG_VALUE_${index}`];
-    if (key !== undefined && value !== undefined && key.toLocaleLowerCase() !== "safe.directory") {
-      configuration.push([key, value]);
-    }
-  }
-  configuration.push([
-    "safe.directory",
-    /^(?:[A-Za-z]:\\|\\\\)/u.test(path) ? path.replaceAll("\\", "/") : path,
-  ]);
-  const environment: NodeJS.ProcessEnv = {
-    ...Object.fromEntries(
-      Object.entries(process.env).filter(
-        ([key]) => !/^GIT_CONFIG_(?:COUNT|KEY_\d+|VALUE_\d+)$/iu.test(key),
-      ),
-    ),
-    GIT_CONFIG_COUNT: configuration.length.toString(),
-  };
-  for (const [index, [key, value]] of configuration.entries()) {
-    environment[`GIT_CONFIG_KEY_${index}`] = key;
-    environment[`GIT_CONFIG_VALUE_${index}`] = value;
-  }
-  return environment;
-}
 
 function isDubiousOwnership(error: unknown): boolean {
   return errorDescription(error).match(/dubious ownership|safe\.directory/iu) !== null;
@@ -516,14 +528,4 @@ function hasErrorType<T extends Error>(
   return error instanceof Error && error.cause !== undefined
     ? hasErrorType(error.cause, errorType)
     : false;
-}
-
-function runGitForExitCode(arguments_: string[]): Promise<number> {
-  return new Promise((resolve, reject) => {
-    execFile("git", arguments_, { encoding: "utf8" }, (error) => {
-      if (error === null) resolve(0);
-      else if (typeof error.code === "number") resolve(error.code);
-      else reject(error);
-    });
-  });
 }

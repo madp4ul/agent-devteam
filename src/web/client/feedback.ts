@@ -7,7 +7,14 @@ export interface Feedback {
 
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    const body = error.body as { reason?: string; diagnostic?: string };
+    const body = error.body as { reason?: string; diagnostic?: string; removedWorktrees?: string[];
+      cleanupFailure?: import("../../application/task-contract.ts").WorkspaceCleanupFailure };
+    if (body.reason === "workspace-preview-changed" || body.reason === "workspace-preview-unavailable" || body.reason === "workspace-nested-cleanup-failed") {
+      const removed = body.removedWorktrees?.length ? ` Already removed: ${body.removedWorktrees.join(", ")}. Those deletions cannot be undone.` : "";
+      const failed = body.cleanupFailure === undefined ? "" : ` Git reported a failure at ${body.cleanupFailure.path}: registration ${body.cleanupFailure.registration}, files ${body.cleanupFailure.files}. Inspect this target before retrying.`;
+      return `${body.reason === "workspace-nested-cleanup-failed" ? "Workspace cleanup stopped; the task was not archived. Inspect the remaining files and Git registrations."
+        : "Workspace evidence or deletion scope changed or is unavailable. Review the refreshed preview before proceeding."}${removed}${failed}`;
+    }
     if (body.reason === "empty-title") return "Enter an outcome-oriented title.";
     if (body.reason === "empty-description") return "Enter a complete description.";
     if (body.reason === "circular-relationship") return "This relationship would create a circular wait.";
@@ -30,7 +37,7 @@ export function errorMessage(error: unknown): string {
       return "Archival stopped because the task workspace is locked. Unlock it in Git and retry; the task and workspace were left unchanged.";
     }
     if (body.reason === "workspace-nested-worktrees") {
-      return "Archival stopped because this task contains additional Git worktrees. Move or remove those nested worktrees before retrying. Their files and registrations were preserved.";
+      return "This task contains nested Git worktrees. Open the task and archive it individually to inspect and confirm deletion.";
     }
     if (body.reason === "workspace-removal-failed") {
       return "Git could not remove the registered task workspace, so the task was not archived. Inspect the workspace and registration before retrying.";

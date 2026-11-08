@@ -43,6 +43,7 @@ test("the software-delivery example completes rework, consultation, approval, an
   try {
     await page.goto(server.baseUrl);
     await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
+    await page.getByRole("button", { name: "Expand Delivery" }).click();
     await page.getByRole("button", { name: "Create task in Backlog" }).click();
     await page.getByLabel("Outcome-oriented title").fill("Add prefixes to generated summaries");
     await page.getByLabel("Complete description").fill(

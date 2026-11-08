@@ -1,7 +1,7 @@
 # 13 — Allow automation to resume while existing agents are draining
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Created:** 2026-11-07
 **Blocked by:** None
 
@@ -21,26 +21,26 @@ clear indication that existing agents are finishing while new dispatch is paused
 
 ## Acceptance criteria
 
-- [ ] Resume is accepted during `pausing`, subject to the ordinary process,
+- [x] Resume is accepted during `pausing`, subject to the ordinary process,
       configuration and runtime eligibility checks; draining alone is not a block.
-- [ ] The existing top-bar automation control is enabled and offers Resume during
+- [x] The existing top-bar automation control is enabled and offers Resume during
       draining, with an accessible label explaining that it resumes automation.
-- [ ] Hold agent A open, pause, queue unrelated eligible task B, then resume:
+- [x] Hold agent A open, pause, queue unrelated eligible task B, then resume:
       B starts before A finishes, and A continues the same attempt uninterrupted.
-- [ ] Reuse/wake the existing scheduler safely: no duplicate pump, activation,
+- [x] Reuse/wake the existing scheduler safely: no duplicate pump, activation,
       runtime start or lost scheduling wake-up on repeated pause/resume requests.
-- [ ] Agent completion racing with resume cannot overwrite the resumed state
+- [x] Agent completion racing with resume cannot overwrite the resumed state
       with `paused`. Repeated toggles and resume racing the final completion have
       deterministic, tested outcomes.
-- [ ] Preparation finishing during pause/resume observes the latest automation
+- [x] Preparation finishing during pause/resume observes the latest automation
       intent and retains workspace ownership. Coordinate this behavior with
       tickets 11/12 without requiring their implementation to begin this ticket.
-- [ ] Task-specific suspension, interruption, failure and stale-process approval
+- [x] Task-specific suspension, interruption, failure and stale-process approval
       restrictions remain in effect; global resume does not bypass them.
-- [ ] Add application/HTTP regression coverage and browser coverage proving the
+- [x] Add application/HTTP regression coverage and browser coverage proving the
       control remains usable while one agent drains. Check both dark and light
       themes and keyboard interaction.
-- [ ] Update automation contracts/documentation and architectural lifecycle facts
+- [x] Update automation contracts/documentation and architectural lifecycle facts
       where they change; retain existing startup-paused behavior.
 
 ## Implementation pointers
@@ -56,3 +56,32 @@ clear indication that existing agents are finishing while new dispatch is paused
 
 2026-11-07: User requested a ticket after waiting for the last idle-game agent
 prevented reversing a pause. Issue creation only; no live automation toggled.
+
+## Implementation evidence — 2026-11-08
+
+- Resume accepts pausing under the ordinary configuration/runtime/process checks,
+  records running intent and wakes the existing pump. Paused/draining selection
+  claims no tasks and schedules no retry timers; existing completions or a
+  command wake the pump. Current attempts remain uninterrupted.
+- Successful pump settlement honors a pending kick after releasing ownership,
+  closing the reviewed microtask lost-wakeup race. Rejected settlement only
+  releases ownership and propagates the fatal error to the existing pause handler.
+- The top-bar action remains enabled during drain (subject to normal resume
+  eligibility), says Resume and visibly identifies existing work finishing.
+  Keyboard activation and readable contrast pass in dark and light themes.
+- Five controlled application/HTTP regressions cover unrelated dispatch before
+  the original agent finishes, repeated toggles, final-agent completion, an empty
+  pump settlement wakeup, prepared-workspace retention/reuse, and interrupted-task
+  suspension. Preparation is held by a real disposable Git smudge filter, not an
+  internal application mock. Existing interruption, failure and process-approval
+  coverage remains intact.
+- Full Node suite: **462 passed, 6 skipped, 0 failed**. Final success-only
+  settlement refinement subsequently passed **13 focused application tests**,
+  including the lost-wakeup and durable-finalization-failure regressions.
+  Typecheck/build pass. Related automation, appearance, preparation and new
+  Resume browser suites: **46 passed**. An initial two-worker invocation collided
+  on the fixture's fixed port; the repository-configured single-worker run passed.
+- Independent Standards and Spec reviews each have **0 remaining findings**.
+  Both reviewed the final settlement fix. Architecture and ADR 0040 capture the
+  lifecycle decision. No live automation or project data changed; changes remain
+  unstaged and previously staged ticket snapshots were preserved.

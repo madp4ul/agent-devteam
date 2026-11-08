@@ -7,6 +7,7 @@ import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { MarkdownContent } from "./MarkdownContent.tsx";
 import { ResumeInstructions } from "./ResumeInstructions.tsx";
+import { WorkspacePreparation } from "./WorkspacePreparation.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 import { conversationAttachmentUrl } from "./api.ts";
 import { formatFileSize } from "./file-size.ts";
@@ -212,7 +213,7 @@ export function ConversationHistory({
         })()
       )}
       </div>)}
-      {active || queued ? (
+      {conversation.workspacePreparation !== undefined ? <WorkspacePreparation preparation={conversation.workspacePreparation} /> : conversation.liveStatus === "starting" ? <p className="conversation-live-state" role="status">Starting agent…</p> : active || queued ? (
         <p className="conversation-live-state" role="status" aria-label={queued ? "Follow-up queued" : "Agent working"}>
           {queued
             ? active

@@ -38,16 +38,10 @@ test("creates in workflow columns, opens tasks directly, and restores a narrow b
   await page.setViewportSize({ width: 720, height: 820 });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Product delivery" })).toBeVisible();
-  await page.getByRole("radio", { name: "Column layout" }).check();
+  await page.getByRole("button", { name: "Expand Product delivery" }).click();
 
-  const lane = page.getByTestId("board-lane");
-  const overflow = await lane.evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-    flexWrap: getComputedStyle(element).flexWrap,
-  }));
-  expect(overflow.scrollWidth).toBeGreaterThan(overflow.clientWidth);
-  expect(overflow.flexWrap).toBe("nowrap");
+  await expect(page.getByTestId("board-lane")).toHaveCSS("display", "grid");
+  const lane = page.getByTestId("column-implementation").getByTestId("task-strip");
 
   const filter = page.getByLabel("Filter tasks");
   const archivedToggle = page.getByRole("button", { name: "Show archived tasks" });
@@ -81,7 +75,7 @@ test("creates in workflow columns, opens tasks directly, and restores a narrow b
 });
 
 
-test("row layout is compact, independently scrollable, and remembered globally", async ({ page }) => {
+test("row layout stays compact and independently scrollable across collapse and expansion", async ({ page }) => {
   await page.setViewportSize({ width: 760, height: 900 });
   await page.route("**/api/board", async (route) => {
     const response = await route.fetch();
@@ -102,9 +96,7 @@ test("row layout is compact, independently scrollable, and remembered globally",
   });
 
   await page.goto("/");
-  const rowChoice = page.getByRole("radio", { name: "Row layout" });
-  const columnChoice = page.getByRole("radio", { name: "Column layout" });
-  await expect(rowChoice).toBeChecked();
+  await page.getByRole("button", { name: "Expand Product delivery" }).click();
 
   const backlog = page.getByTestId("column-backlog");
   const implementation = page.getByTestId("column-implementation");
@@ -138,18 +130,16 @@ test("row layout is compact, independently scrollable, and remembered globally",
   await page.getByLabel("Filter tasks").fill("");
   await expect.poll(() => backlogStrip.evaluate((element) => element.scrollLeft)).toBe(backlogPosition);
 
-  await columnChoice.check();
-  await expect(columnChoice).toBeChecked();
-  await rowChoice.check();
+  await page.getByRole("button", { name: "Collapse Product delivery" }).click();
+  await page.getByRole("button", { name: "Expand Product delivery" }).click();
   await expect.poll(() => backlogStrip.evaluate((element) => element.scrollLeft)).toBe(backlogPosition);
-  await columnChoice.check();
   await page.reload();
-  await expect(columnChoice).toBeChecked();
-  await expect(page.getByTestId("board-lane")).toHaveCSS("flex-wrap", "nowrap");
+  await expect(page.getByRole("button", { name: "Collapse Product delivery" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("board-lane")).toHaveCSS("display", "grid");
 });
 
 
-test("newly entered tasks are newest-first in both board layouts", async ({ page }) => {
+test("newly entered tasks are newest-first in row layout", async ({ page }) => {
   await page.goto("/");
   const createInBacklog = page.getByRole("button", { name: "Create task in Backlog" });
   for (const title of ["Ordering example older", "Ordering example newer"]) {
@@ -164,8 +154,7 @@ test("newly entered tasks are newest-first in both board layouts", async ({ page
   const newer = page.getByRole("link", { name: /Ordering example newer/ }).locator("..");
   expect((await newer.boundingBox())?.x).toBeLessThan((await older.boundingBox())?.x ?? 0);
 
-  await page.getByRole("radio", { name: "Column layout" }).check();
-  expect((await newer.boundingBox())?.y).toBeLessThan((await older.boundingBox())?.y ?? 0);
+
 });
 
 
@@ -200,7 +189,7 @@ test("automatic board refresh preserves the user's current horizontal position",
   });
 
   await page.goto("/");
-  await expect(page.getByRole("radio", { name: "Row layout" })).toBeChecked();
+  await expect(page.getByTestId("board-lane")).toHaveCSS("display", "grid");
   const lane = page.getByTestId("column-backlog").getByTestId("task-strip");
   const renderedBoardRead = async (): Promise<number> => Number(
     (await page.locator(".board-brand h1").textContent())?.replace("Scroll refresh ", ""),

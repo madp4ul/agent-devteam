@@ -1,5 +1,6 @@
 import type {
   ActiveRunView,
+  WorkspacePreparationView,
   AutomationView,
 } from "./automation-contract.ts";
 import type {
@@ -24,6 +25,7 @@ export interface UserBoardProjection {
   startup: StartupView;
   automation: AutomationView;
   activeRuns: ActiveRunView[];
+  workspacePreparations?: WorkspacePreparationView[];
   boards: UserBoardView[];
   attention: NeedsAttentionTaskView[];
 }

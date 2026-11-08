@@ -46,7 +46,7 @@ participant-addressing issue that depends on it. It does not assign priority.
 | [26](issues/26-display-interruption-resume-instructions.md) | Show resume events and supplied instructions in timeline and conversations | Implemented; user review |
 | [27](issues/27-recover-stalled-work-without-user-attention.md) | Wake an agent when watched work stalls without required user attention | Design resolved; three stall recovery delivery tickets published |
 | [28](issues/28-redesign-coordination-across-task-worktrees.md) | Reliably share and integrate parent/child work across task worktrees | Discuss source selection, task branches, synchronization, and integration |
-| [29](issues/29-confirm-nested-worktree-archival-and-list-bulk-failures.md) | Preview and confirm nested-worktree deletion; identify every bulk archival failure | Specify confirmation and cleanup using existing workspace controls |
+| [29](issues/29-confirm-nested-worktree-archival-and-list-bulk-failures.md) | Preview and confirm nested-worktree deletion; identify every bulk archival failure | Implemented with evidence revalidation, explicit consent and partial-failure reporting; user review |
 
 ## Workflow and relationships
 

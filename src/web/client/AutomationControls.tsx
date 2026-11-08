@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from "react";
 
-import type { ActiveRunView, AutomationView } from "../../application/browser-transport-contract.ts";
+import type { ActiveRunView, AutomationView, WorkspacePreparationView } from "../../application/browser-transport-contract.ts";
 import { pauseAutomation, resumeAutomation } from "./api.ts";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
+import { WorkspacePreparation } from "./WorkspacePreparation.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage, type Feedback } from "./feedback.ts";
 import { SettingsDialog } from "./SettingsDialog.tsx";
@@ -10,6 +11,7 @@ import { SettingsDialog } from "./SettingsDialog.tsx";
 export function AutomationControls({
   automation,
   activeRuns,
+  workspacePreparations = [],
   canResume = true,
   notifications,
   onChanged,
@@ -17,6 +19,7 @@ export function AutomationControls({
 }: {
   automation: AutomationView;
   activeRuns: ActiveRunView[];
+  workspacePreparations?: WorkspacePreparationView[] | undefined;
   canResume?: boolean;
   notifications: DesktopNotificationControl;
   onChanged(): Promise<void>;
@@ -27,23 +30,23 @@ export function AutomationControls({
 
   return (
     <div className="automation-control">
-      {automation.state === "paused" ? (
+      {automation.state === "paused" || automation.state === "pausing" ? (
         <button className="topbar-control automation-status-action" disabled={!canResume}
+          aria-label={automation.state === "pausing" ? "Resume automation" : undefined}
+          title={automation.state === "pausing" ? "New dispatch is paused; existing agents and workspace preparations are finishing." : undefined}
           onClick={() => void resumeAutomation().then(onChanged).catch(reportFailure)}>
-          <span className="status-dot paused" aria-hidden="true" /> Resume
+          {automation.state === "pausing" ? <span className="activity-spinner" aria-hidden="true" /> : <span className="status-dot paused" aria-hidden="true" />} Resume
+          {automation.state === "pausing" ? <small>Existing work finishing</small> : null}
         </button>
       ) : null}
-      {automation.state === "running" || automation.state === "pausing" ? (
-        <button className="topbar-control automation-status-action" disabled={automation.state === "pausing"}
+      {automation.state === "running" ? (
+        <button className="topbar-control automation-status-action"
           onClick={() => void pauseAutomation().then(onChanged).catch(reportFailure)}>
-          {automation.state === "pausing"
-            ? <span className="activity-spinner" aria-hidden="true" />
-            : <span className="status-dot running" aria-hidden="true" />}
-          {automation.state === "pausing" ? "Pausing…" : "Pause"}
+          <span className="status-dot running" aria-hidden="true" /> Pause
         </button>
       ) : null}
       <details className="live-runs">
-        <summary className="topbar-control">Current runs · {activeRuns.length}</summary>
+        <summary className="topbar-control">Current runs · {activeRuns.filter((run) => run.status !== "starting" && run.executionStarted !== false).length}{workspacePreparations.length === 0 ? "" : ` · Preparing ${workspacePreparations.length}`}</summary>
         {activeRuns.length === 0 ? <p>No active agents.</p> : (
           <ul>{activeRuns.map((run) => (
             <li key={run.attemptId}>
@@ -54,11 +57,18 @@ export function AutomationControls({
                 rel="noopener noreferrer"
               >
                 {run.agentId} · {run.taskId} · {run.boardName} / {run.columnName} · {run.status} ·{" "}
-                <ElapsedTime startedAt={run.startedAt} />
+                {run.executionStarted === false || run.status === "starting" ? (run.status === "interrupting" ? "Stopping startup" : "Starting agent") : <ElapsedTime startedAt={run.startedAt} />}
               </a>
             </li>
           ))}</ul>
         )}
+        {workspacePreparations.length === 0 ? null : <>
+          <p>Preparing workspaces · {workspacePreparations.length}</p>
+          <ul>{workspacePreparations.map((preparation) => <li key={preparation.taskId}>
+            <a href={`/tasks/${encodeURIComponent(preparation.taskId)}`}>{preparation.taskId}</a>
+            <WorkspacePreparation preparation={preparation} />
+          </li>)}</ul>
+        </>}
       </details>
       <button className="topbar-control settings-action"
         aria-label={notifications.deliveryMismatch ? "Settings, notifications need attention" : "Settings"}

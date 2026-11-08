@@ -31,6 +31,7 @@ import type {
   InterruptTaskResult,
   PauseAutomationResult,
   ResumeAutomationResult,
+  WorkspacePreparationView,
 } from "./automation-contract.ts";
 import type {
   AgentConversationQueryResult,
@@ -437,6 +438,10 @@ export class CoordinationApplication {
     return this.#automation.queryActiveRuns();
   }
 
+  queryWorkspacePreparations(): WorkspacePreparationView[] {
+    return this.#automation.queryWorkspacePreparations();
+  }
+
   async resumeAutomation(): Promise<ResumeAutomationResult> {
     if (
       this.#persistence.process.hasStaleActivations() ||
@@ -556,6 +561,7 @@ export class CoordinationApplication {
       startup,
       automation,
       activeRuns: this.queryActiveRuns(),
+      workspacePreparations: this.queryWorkspacePreparations(),
       boards: summaries.boards.map((board) => ({
         ...board,
         columns: board.columns.map((column) => ({
@@ -568,7 +574,17 @@ export class CoordinationApplication {
   }
 
   queryTaskOverviews(query: TaskOverviewsQuery): TaskOverviewsQueryResult {
-    return this.#discovery.queryTaskOverviews(query);
+    const result = this.#discovery.queryTaskOverviews(query);
+    if (result.available) {
+      for (const task of result.tasks) {
+        const preparation = this.queryWorkspacePreparations().find(({ taskId }) => taskId === task.id);
+        if (preparation !== undefined) {
+          task.workspacePreparation = preparation;
+          task.run = preparingTaskRun(task.run);
+        }
+      }
+    }
+    return result;
   }
 
   private readAllColumnTaskOverviews(boardId: string, columnId: string): TaskOverviewView[] {
@@ -659,7 +675,19 @@ export class CoordinationApplication {
     const collaborators = this.queryCollaborators();
     const conversationIndex = this.queryTaskConversationIndex(taskId);
     const activeRuns = this.queryActiveRuns();
+    const workspacePreparations = this.queryWorkspacePreparations();
+    const workspacePreparation = workspacePreparations.find((preparation) => preparation.taskId === taskId);
+    if (workspacePreparation !== undefined) {
+      context.inspection.run = preparingTaskRun(context.inspection.run);
+      for (const activation of context.task.activations) {
+        if (activation.id === workspacePreparation.activationId) activation.status = "queued";
+      }
+    }
     const conversations = conversationIndex.available ? conversationIndex.conversations : [];
+    const preparationCapacityWait = this.#automation.queryPreparationCapacityWait({
+      id: taskId, activations: context.task.activations, suspended: context.inspection.automationSuspended,
+      hasWorkspace: context.inspection.workspace !== null,
+    });
     const conversationCost = aggregateTokenCostSummaries(conversations, { compactBreakdown: true });
     const relatedTasks = this.readUserRelatedTaskReferences(context.task);
     return {
@@ -675,6 +703,9 @@ export class CoordinationApplication {
       agentInspectableContent,
       activeRun: activeRuns.find((run) => run.taskId === taskId) ?? null,
       activeRuns,
+      workspacePreparations,
+      ...(workspacePreparation === undefined ? {} : { workspacePreparation }),
+      ...(preparationCapacityWait ? { preparationCapacityWait: true as const } : {}),
       automation: this.queryAutomation(),
       startup: this.queryStartup(),
       collaborators: collaborators.available ? collaborators.collaborators : [],
@@ -760,6 +791,29 @@ export class CoordinationApplication {
     }
   }
 
+  async queryTaskArchivalPreview(taskId: string): Promise<import("./task-contract.ts").TaskArchivalPreviewResult> {
+    const inspection = this.queryTaskInspectionForUser(taskId);
+    if (!inspection.available) return inspection;
+    if (inspection.task.workspace === null) return { available: false, reason: "workspace-not-provisioned" };
+    if (this.#workspaceManager === undefined) return { available: false, reason: "workspace-preview-unavailable" };
+    try {
+      return { available: true, preview: await this.#workspaceManager.inspectArchival(taskId, inspection.task.workspace) };
+    } catch {
+      return { available: false, reason: "workspace-preview-unavailable" };
+    }
+  }
+
+  async queryArchivalWorkspaceForOpen(taskId: string, path: string) {
+    const inspection = this.queryTaskInspectionForUser(taskId);
+    if (!inspection.available) return inspection;
+    if (inspection.task.workspace === null || this.#workspaceManager === undefined) {
+      return { available: false as const, reason: "workspace-preview-unavailable" as const };
+    }
+    try {
+      return { available: true as const, workspace: await this.#workspaceManager.resolveArchivalPath(taskId, inspection.task.workspace, path) };
+    } catch { return { available: false as const, reason: "workspace-preview-changed" as const }; }
+  }
+
   queryTaskActivity(taskId: string): TaskActivityQueryResult {
     return this.#discovery.queryTaskActivity(taskId);
   }
@@ -794,6 +848,18 @@ export class CoordinationApplication {
     const conversation = await this.#persistence.conversationProjections.readConversation(taskId, conversationId, query);
     if (conversation === "invalid-page") return { available: false, reason: "invalid-page" };
     if (conversation === undefined) return { available: false, reason: "not-found" };
+    const preparation = this.queryWorkspacePreparations().find((candidate) => candidate.conversationId === conversationId);
+    if (preparation !== undefined) {
+      conversation.workspacePreparation = preparation;
+      conversation.liveStatus = "queued";
+      if (conversation.originatingActivation.id === preparation.activationId) conversation.originatingActivation.status = "queued";
+      for (const entry of conversation.history) {
+        if ((entry.kind === "activation" || entry.kind === "message") && entry.activationId === preparation.activationId) entry.status = "queued";
+      }
+    }
+    if (conversation.liveStatus === "running" && conversationIsStarting(this.queryActiveRuns(), taskId, conversation.owningAgent.id)) {
+      conversation.liveStatus = "starting";
+    }
     return { available: true, conversation };
   }
 
@@ -808,6 +874,14 @@ export class CoordinationApplication {
     const conversations = this.#persistence.conversationProjections.readTaskIndex(taskId);
     if (conversations === undefined) {
       return { available: false, reason: "not-found" };
+    }
+    const activeRuns = this.queryActiveRuns();
+    for (const conversation of conversations) {
+      if (conversation.status === "running" && conversationIsStarting(activeRuns, taskId, conversation.owningAgent.id)) conversation.status = "starting";
+    }
+    for (const preparation of this.queryWorkspacePreparations()) {
+      const conversation = conversations.find(({ id }) => id === preparation.conversationId);
+      if (conversation !== undefined) conversation.status = "preparing";
     }
     return {
       available: true,
@@ -1088,9 +1162,12 @@ export class CoordinationApplication {
         command.taskId,
         workspace,
         command.discardWorkspaceChanges,
+        command.archivalPreviewToken,
       );
       if (!removal.removed) {
-        const result = { accepted: false as const, reason: removal.reason };
+        const result = { accepted: false as const, reason: removal.reason,
+          ...(removal.cleanupFailure === undefined ? {} : { cleanupFailure: removal.cleanupFailure }),
+          ...(removal.removedWorktrees === undefined ? {} : { removedWorktrees: removal.removedWorktrees }) };
         if (!removal.recoveryPending) this.#persistence.taskArchive.cancelClaim(command, result);
         return result;
       }
@@ -1129,7 +1206,10 @@ export class CoordinationApplication {
         idempotencyKey: `${command.idempotencyKey}:${taskId}`,
       }, "completed-only");
       if (result.accepted) archivedTaskIds.push(taskId);
-      else if (result.reason !== "configuration-error") rejected.push({ taskId, reason: result.reason });
+      else if (result.reason !== "configuration-error") {
+        const title = this.#persistence.taskArchive.taskTitle(taskId);
+        rejected.push({ taskId, ...(title === undefined ? {} : { title }), reason: result.reason });
+      }
     }
     const result = { accepted: true as const, archivedTaskIds, rejected };
     this.#persistence.taskArchive.rememberBulkCommand(command.boardId, command.idempotencyKey, result);
@@ -1216,4 +1296,12 @@ function databaseStartupDiagnostic(file: string, error: unknown): ProcessDiagnos
     consequence: "Startup is blocked before process application, recovery, board mutation, or agent dispatch.",
     correction: "Correct the reported database access problem, restore a supported released backup, or start with a new database path.",
   };
+}
+
+function preparingTaskRun(run: TaskOverviewView["run"]): TaskOverviewView["run"] {
+  return { ...run, status: "queued", activeAgentId: null, queuedActivationCount: run.queuedActivationCount + 1 };
+}
+
+function conversationIsStarting(runs: ActiveRunView[], taskId: string, agentId: string): boolean {
+  return runs.some((run) => run.taskId === taskId && run.agentId === agentId && run.executionStarted === false);
 }

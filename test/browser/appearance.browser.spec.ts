@@ -2,6 +2,7 @@ import {
   availableConversationResponse,
   contrastRatio,
   expect,
+  fulfillTaskScenario,
   openAppearance,
   setAppearance,
   test,
@@ -248,7 +249,7 @@ test("sticky comment composer uses a readable translucent overlay in both appear
       actor: { kind: "agent", id: "implementer" },
       occurredAt: "2026-08-19T12:00:00.000Z",
     });
-    await route.fulfill({ response, json: detail });
+    await fulfillTaskScenario(route, response, detail);
   });
 
   for (const theme of ["dark", "light"] as const) {

@@ -1,5 +1,6 @@
 import type {
   ActiveRunView,
+  WorkspacePreparationView,
   AutomationView,
 } from "./automation-contract.ts";
 import type { AgentConversationIndexEntry } from "./conversation-contract.ts";
@@ -62,7 +63,10 @@ export interface UserTaskDetailView {
   board: ProcessBoardView;
   inspection: UserTaskInspectionView;
   activeRun: ActiveRunView | null;
+  workspacePreparation?: WorkspacePreparationView;
+  preparationCapacityWait?: true;
   activeRuns: ActiveRunView[];
+  workspacePreparations?: WorkspacePreparationView[];
   automation: AutomationView;
   collaborators: CollaboratorView[];
   relationshipTasks: UserRelatedTaskView[];

@@ -1,7 +1,7 @@
 # 11 — Dispatch unrelated tasks while workspaces are preparing
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Created:** 2026-11-07
 **Blocked by:** None
 
@@ -31,28 +31,28 @@ authority; do not create a competing scheduler or write state from adapters.
 
 ## Acceptance criteria
 
-- [ ] An application-level regression holds task A's preparation pending while
+- [x] An application-level regression holds task A's preparation pending while
       task B, with a ready workspace, starts its runtime before A completes.
-- [ ] An unrelated task needing a new workspace can also progress, subject to an
+- [x] An unrelated task needing a new workspace can also progress, subject to an
       explicit bounded preparation concurrency policy. Saturated preparation
       capacity must not block tasks whose workspaces are already ready.
-- [ ] Repeated scheduler kicks and concurrent preparation completions cannot
+- [x] Repeated scheduler kicks and concurrent preparation completions cannot
       duplicate claims, provision the same task twice, reorder that task's
       activations, or launch more than one agent on that task.
-- [ ] Preparation failure is attributable and inspectable on its task; unrelated
+- [x] Preparation failure is attributable and inspectable on its task; unrelated
       dispatch remains possible. Existing retry and user recovery rules remain
       explicit rather than silently retrying destructive Git operations.
-- [ ] Pause prevents new runtime starts, including when preparation completes
+- [x] Pause prevents new runtime starts, including when preparation completes
       during pause. Successful preparation is retained atomically with claim
       release, preserving ticket 10 / ADR 0036 and safe restart behavior.
-- [ ] Shutdown and interrupted preparation retain truthful ownership and
+- [x] Shutdown and interrupted preparation retain truthful ownership and
       recovery evidence; no unknown checkout is silently adopted or deleted.
-- [ ] Expose an authoritative preparation lifecycle for ticket 12, including
+- [x] Expose an authoritative preparation lifecycle for ticket 12, including
       task identity, stage, start time and available progress. A preparation
       claim must not count as an agent that has begun execution.
-- [ ] Verify delayed preparation, completion, failure, pause and restart with
+- [x] Verify delayed preparation, completion, failure, pause and restart with
       controlled tests that do not require a large repository or live models.
-- [ ] Update architecture documentation and record durable concurrency/lifecycle
+- [x] Update architecture documentation and record durable concurrency/lifecycle
       decisions in an ADR as required by repository instructions.
 
 ## Implementation pointers
@@ -76,3 +76,37 @@ not authorized by this ticket.
 
 2026-11-07: User requested issue creation following read-only diagnosis. This
 ticket records future implementation; no scheduler or live-state change made.
+
+## Implementation evidence — 2026-11-08
+
+- The existing pump now tracks asynchronous preparation and settlement without
+  awaiting Git before claiming unrelated work. Separate two-slot creation and
+  verification lanes bound preparation while allowing ready-work bypass.
+- Existing transactional eligibility and provisional claims retain per-task
+  ordering and ownership. Repeated Resume while running wakes the existing pump.
+  Runtime start rechecks pause and current task eligibility after preparation.
+- `queryWorkspacePreparations()` exposes host-owned task/activation/agent
+  identity, creating/verifying stage and start time. `queryActiveRuns()` excludes
+  preparation and retains actual runtime probes. Ticket 12 owns real Git counters
+  and browser transport/presentation; no progress percentage is invented here.
+- Preparation failures retain task-local startup diagnostics and explicit retry
+  authority while unrelated work continues. Initial all-failure Resume retains
+  its existing diagnostic response; persistence failures remain fatal.
+- Pause drains both preparation and runtime work. Successful preparation retains
+  its workspace atomically with release/start. Immediate close performs no late
+  storage writes or runtime starts; unknown checkouts remain preserved and cause
+  fail-closed restart rather than adoption or deletion.
+- Four controlled application regressions cover saturated-lane bypass, active
+  run/preparation distinction, failure isolation, simultaneous completion and
+  per-task ordering, and close/restart preservation. Existing pause/restart,
+  transient probe and interruption coverage remains in the suite.
+- Asynchronous preparation exposed old fixtures assuming cross-task start order
+  or leaving finished watched tasks eligible for automatic recovery. Fixtures
+  now select by task identity and explicitly move finished work to Completion;
+  unrelated work also uses a distinct thread identity. Original allowance,
+  usage and same-task ordering assertions remain intact.
+- Architecture and ADR 0038 record lifecycle ownership and bounds. Independent
+  Standards and Spec reviews, including fixture repairs, each found zero issues.
+  Final full Node suite: **452 passed, 6 skipped, 0 failed** (131.8 seconds).
+  Typecheck and build pass. Changes remain unstaged; no live host or task state
+  was changed.

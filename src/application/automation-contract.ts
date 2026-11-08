@@ -60,7 +60,26 @@ export interface ActiveRunView {
   columnId: string;
   columnName: string;
   agentId: string;
-  status: "running" | "interrupting";
+  status: "starting" | "running" | "interrupting";
+  executionStarted?: boolean;
+  startedAt: string;
+}
+
+export interface WorkspaceProgressView {
+  stage: string;
+  completed?: number;
+  total?: number;
+  percent?: number;
+}
+
+/** Host-owned preparation, separate from an agent execution attempt. */
+export interface WorkspacePreparationView {
+  taskId: string;
+  activationId: string;
+  agentId: string;
+  stage: "creating" | "verifying";
+  conversationId: string | null;
+  progress?: WorkspaceProgressView;
   startedAt: string;
 }
 
@@ -69,7 +88,6 @@ export type ResumeAutomationResult =
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { accepted: false; reason: "runtime-unavailable" }
   | { accepted: false; reason: "process-change-approval-required" }
-  | { accepted: false; reason: "pause-draining" }
   | { accepted: false; reason: "runtime-start-failed"; diagnostic: string };
 
 export interface DismissStaleActivationCommand {

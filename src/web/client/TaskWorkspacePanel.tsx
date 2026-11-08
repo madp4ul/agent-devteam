@@ -174,7 +174,7 @@ export function TaskWorkspacePanel({
   );
 }
 
-function WorkspaceGitSummary({
+export function WorkspaceGitSummary({
   startingCommit,
   state,
   unavailable,
@@ -187,18 +187,19 @@ function WorkspaceGitSummary({
     ? "Reading Git status…"
     : state.history.kind === "diverged"
       ? "History diverged from task start"
+      : state.history.kind === "no-task-baseline" ? "No task-start baseline"
       : `${state.history.commitsSinceTaskStart} ${state.history.commitsSinceTaskStart === 1 ? "commit" : "commits"} since task start`;
 
   return (
     <section className="workspace-git-summary" aria-label="Workspace Git summary">
       <div className="workspace-history-flow" aria-label="Workspace history">
-        <div className="workspace-history-node">
+        {state?.history.kind === "no-task-baseline" ? null : <div className="workspace-history-node">
           <span className="workspace-history-marker" aria-hidden="true" />
           <div>
             <span className="workspace-git-label">Task start</span>
             <code title={startingCommit}>{startingCommit.slice(0, 7)}</code>
           </div>
-        </div>
+        </div>}
         <div className={`workspace-history-connector ${state?.history.kind === "diverged" ? "diverged" : ""}`}>
           <span>{historyLabel}</span>
         </div>

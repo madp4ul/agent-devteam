@@ -43,6 +43,7 @@ test("archived tasks toggle into their retained board location and can be unarch
   await expect(automation.getByRole("button", { name: /Settings/ })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(640);
   await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByRole("button", { name: "Expand Product delivery" }).click();
   const completion = page.getByTestId("column-completion");
 
   await expect(completion.getByRole("button", { name: "Create task in Completion" })).toHaveCount(0);

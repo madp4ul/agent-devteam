@@ -3,7 +3,9 @@ import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
 import type { TaskOverviewView } from "../../application/browser-transport-contract.ts";
 import type { BrowserBoardState } from "./api.ts";
+import { WorkspacePreparation } from "./WorkspacePreparation.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
+import { taskCardSignals } from "./task-card-signals.ts";
 
 export function TaskCard({
   task,
@@ -18,6 +20,7 @@ export function TaskCard({
   activeRun?: BrowserBoardState["activeRuns"][number] | undefined;
   onOpen(taskId: string): void;
 }): ReactNode {
+  const signals = taskCardSignals(task);
   const cardRef = useRef<HTMLLIElement>(null);
   const handleRef = useRef<HTMLButtonElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -64,32 +67,33 @@ export function TaskCard({
       >
         <span className="card-title">{task.title}</span>
       </a>
+      {task.workspacePreparation === undefined ? null : <WorkspacePreparation preparation={task.workspacePreparation} />}
       <div className="card-signals">
-        {task.archived ? <span className="signal archived">Archived</span> : null}
-        {task.waitingOn.taskIds.length > 0 ? (
+        {signals.archived ? <span className="signal archived">Archived</span> : null}
+        {signals.waiting ? (
           <span className="signal waiting">Waiting on · {task.waitingOn.taskIds.join(", ")}</span>
         ) : null}
-        {task.unresolvedAttention.length > 0 ? (
+        {signals.attention ? (
           <span className="signal attention">Needs attention · {task.unresolvedAttention.length}</span>
         ) : null}
-        {task.run.queuedActivationCount > 0 ? (
+        {signals.queued ? (
           <span className="signal queued">Queued · {task.run.queuedActivationCount}</span>
         ) : null}
-        {task.run.failedActivationCount > 0 ? (
+        {signals.failed ? (
           <span className="signal failed">Failed · {task.run.failedActivationCount}</span>
         ) : null}
-        {task.run.activeAgentId === null ? null : (
+        {!signals.active ? null : (
           <span className="signal running">
             <span className="activity-spinner" aria-hidden="true" />
-            Active · {task.run.activeAgentId}
-            {activeRun === undefined ? null : <> · <ElapsedTime startedAt={activeRun.startedAt} /></>}
+            {activeRun?.executionStarted === false || activeRun?.status === "starting" ? "Starting agent" : "Active"} · {task.run.activeAgentId}
+            {activeRun === undefined || activeRun.status === "starting" || activeRun.executionStarted === false ? null : <> · <ElapsedTime startedAt={activeRun.startedAt} /></>}
           </span>
         )}
       </div>
-      {task.startupFailure === undefined ? null : (
+      {signals.startupFailure === undefined ? null : (
         <div className="startup-diagnostic">
-          <strong>Startup failed before attempt · {task.startupFailure.boundary}</strong>
-          <p>{task.startupFailure.diagnostic}</p>
+          <strong>Startup failed before attempt · {signals.startupFailure.boundary}</strong>
+          <p>{signals.startupFailure.diagnostic}</p>
         </div>
       )}
     </li>

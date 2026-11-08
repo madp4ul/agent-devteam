@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import type {
   ActiveRunView,
+  ActivationView,
   AutomationClock,
   AutomationView,
   InterruptTaskResult,
   PauseAutomationResult,
   ResumeAutomationResult,
+  WorkspacePreparationView,
 } from "../automation-contract.ts";
 import type { ProcessBoardView, StartupView } from "../process-contract.ts";
 import type {
@@ -61,13 +63,16 @@ interface ActiveRunControl {
   attemptId: string;
   activationId: string;
   controller: AbortController;
-  state: "running" | "interrupting";
+  state: "starting" | "running" | "interrupting";
+  executionStartedAt?: string;
   interruptedBy?: Actor & { kind: "user" };
   interruptIdempotencyKey?: string;
   confirmed: Promise<void>;
   confirm(): void;
   fail(error: unknown): void;
 }
+
+class WorkspacePreparationFailure extends Error {}
 
 export class AutomationCoordinator {
   readonly #processStore: ProcessStateStore;
@@ -96,6 +101,7 @@ export class AutomationCoordinator {
   #wakeAutomationPump: (() => void) | undefined;
   #closed = false;
   readonly #activeRuns = new Map<string, ActiveRunControl>();
+  readonly #preparations = new Map<string, WorkspacePreparationView>();
 
   constructor(options: AutomationCoordinatorOptions) {
     this.#processStore = options.processStore;
@@ -136,10 +142,31 @@ export class AutomationCoordinator {
   }
 
   queryActiveRuns(): ActiveRunView[] {
-    return this.#activeAttempts.readActiveRuns().map((run) => ({
+    return this.#activeAttempts.readActiveRuns().filter((run) => this.#activeRuns.has(run.taskId)).map((run) => ({
       ...run,
       status: this.#activeRuns.get(run.taskId)?.state ?? "running",
+      startedAt: this.#activeRuns.get(run.taskId)?.executionStartedAt ?? run.startedAt,
+      executionStarted: this.#activeRuns.get(run.taskId)?.executionStartedAt !== undefined,
     }));
+  }
+
+  queryWorkspacePreparations(): WorkspacePreparationView[] {
+    return [...this.#preparations.values()].map((preparation) => ({ ...preparation, ...(preparation.progress === undefined ? {} : { progress: { ...preparation.progress } }) }));
+  }
+
+  queryPreparationCapacityWait(task: { id: string; activations: ActivationView[]; suspended: boolean; hasWorkspace: boolean }): boolean {
+    const head = task.activations.find((activation) => activation.status !== "completed" && activation.status !== "dismissed");
+    return !this.#preparations.has(task.id) && this.#automation.state === "running" && !task.suspended &&
+      head?.status === "queued" && !head.stale &&
+      (head.recovery === null || (head.recovery.state === "scheduled" && Date.parse(head.recovery.dueAt) <= this.#clock.now().getTime())) &&
+      !this.queryPreparationCapacity()[task.hasWorkspace ? "verification" : "creation"];
+  }
+
+  queryPreparationCapacity(): { creation: boolean; verification: boolean } {
+    return {
+      creation: [...this.#preparations.values()].filter(({ stage }) => stage === "creating").length < 2,
+      verification: [...this.#preparations.values()].filter(({ stage }) => stage === "verifying").length < 2,
+    };
   }
 
   async resume(beforeStart?: () => void): Promise<ResumeAutomationResult> {
@@ -153,23 +180,24 @@ export class AutomationCoordinator {
     if (this.#runtimeDispatch === undefined && this.#processStore.hasWatchedColumns()) {
       return { accepted: false, reason: "runtime-unavailable" };
     }
-    if (this.#automation.state === "pausing") {
-      return { accepted: false, reason: "pause-draining" };
+    if (this.#automation.state === "running") {
+      this.kick();
+      return { accepted: true, automation: this.#automation };
     }
     beforeStart?.();
     this.#processStore.resumeAutomation();
     this.#automation = { state: "running", attemptsMayStart: true };
+    if (this.#automationPumpRunning) {
+      this.kick();
+      return { accepted: true, automation: this.#automation };
+    }
     if (this.#runtimeDispatch !== undefined) {
       let markFirstDispatchStarted: (() => void) | undefined;
       const firstDispatchStarted = new Promise<void>((resolve) => {
         markFirstDispatchStarted = resolve;
       });
       this.#automationPumpRunning = true;
-      this.#automationWork = this.runQueuedUntilSettled(() => markFirstDispatchStarted?.()).finally(
-        () => {
-          this.#automationPumpRunning = false;
-        },
-      );
+      this.#automationWork = this.trackPumpSettlement(this.runQueuedUntilSettled(() => markFirstDispatchStarted?.()));
       try {
         await Promise.race([firstDispatchStarted, this.#automationWork]);
       } catch (error) {
@@ -192,7 +220,7 @@ export class AutomationCoordinator {
 
   pause(): PauseAutomationResult {
     this.#processStore.pauseAutomation();
-    this.#automation = this.#activeRuns.size === 0
+    this.#automation = this.#activeRuns.size === 0 && this.#preparations.size === 0
       ? { state: "paused", attemptsMayStart: false }
       : { state: "pausing", attemptsMayStart: false };
     const wake = this.#wakeAutomationPump;
@@ -230,10 +258,9 @@ export class AutomationCoordinator {
       return;
     }
     this.#automationPumpRunning = true;
-    this.#automationWork = this.runQueuedUntilSettled(() => {}).finally(() => {
-      this.#automationPumpRunning = false;
-    });
+    this.#automationWork = this.trackPumpSettlement(this.runQueuedUntilSettled(() => {}));
     void this.#automationWork.catch(() => {
+      if (this.#closed) return;
       this.#processStore.pauseAutomation();
       this.#automation = { state: "paused", attemptsMayStart: false };
     });
@@ -245,6 +272,19 @@ export class AutomationCoordinator {
     this.#wakeAutomationPump?.();
     this.#wakeAutomationPump = undefined;
     for (const run of this.#activeRuns.values()) run.controller.abort();
+  }
+
+  private trackPumpSettlement(work: Promise<void>): Promise<void> {
+    return work.then(() => {
+      this.#automationPumpRunning = false;
+      // A command can arrive after the loop's final check but before this promise
+      // settles. Release ownership before honoring that wakeup; kick checks intent.
+      if (this.#automationKickPending) this.kick();
+    }, (error: unknown) => {
+      this.#automationPumpRunning = false;
+      // Fatal errors must reach the pause handler without starting replacement work.
+      throw error;
+    });
   }
 
   private async runQueuedUntilSettled(onFirstDispatch: () => void): Promise<void> {
@@ -260,33 +300,37 @@ export class AutomationCoordinator {
     if (this.#runtimeDispatch === undefined) return;
     let first = true;
     let firstError: unknown;
+    let preparationFailure: WorkspacePreparationFailure | undefined;
     const inFlightCompletions = new Set<Promise<void>>();
-    while (this.#automation.state === "running") {
+    while (!this.#closed) {
       const now = this.#clock.now();
-      const claim = this.#activationScheduling.claimNextRunnable(
+      const claim = this.#automation.state !== "running" ? undefined : this.#activationScheduling.claimNextRunnable(
         now,
         (taskId) => this.#runtimeDispatch!.workspaceManager.pathFor(taskId),
         this.#runtimeDispatch.projectAllowances,
+        this.queryPreparationCapacity(),
       );
       if (claim !== undefined) {
-        const { completion } = await this.dispatch(claim, () => {
+        const dispatch = this.dispatch(claim, () => {
           if (!first) return;
           first = false;
           onFirstDispatch();
         });
-        const tracked = completion
+        const tracked = dispatch.then(({ completion }) => completion)
           .catch((error: unknown) => {
-            firstError ??= error;
+            if (error instanceof WorkspacePreparationFailure) preparationFailure ??= error;
+            else firstError ??= error;
           })
           .finally(() => inFlightCompletions.delete(tracked));
         inFlightCompletions.add(tracked);
         continue;
       }
-      const dueAt = [this.#activationScheduling.readNextRetryDueAt(now),
+      const dueAt = this.#automation.state !== "running" ? undefined : [this.#activationScheduling.readNextRetryDueAt(now),
         this.#activationScheduling.readNextGraceDueAt(now)]
         .filter((value): value is string => value !== undefined).sort()[0];
       if (inFlightCompletions.size === 0 && dueAt === undefined) {
         if (firstError !== undefined) throw firstError;
+        if (first && preparationFailure !== undefined) throw preparationFailure;
         return;
       }
       if (first && inFlightCompletions.size === 0 && dueAt !== undefined) { first = false; onFirstDispatch(); }
@@ -309,6 +353,7 @@ export class AutomationCoordinator {
       }
     }
     await Promise.all(inFlightCompletions);
+    if (firstError !== undefined) throw firstError;
   }
 
   private async dispatch(
@@ -320,21 +365,37 @@ export class AutomationCoordinator {
     const precedingAttempt = claim.activation.attempts.at(-1);
     const resumeThreadId = precedingAttempt?.threadId ?? claim.resumeThreadId;
     let workspace;
+    this.#preparations.set(claim.task.id, {
+      taskId: claim.task.id, activationId: claim.activation.id, agentId: claim.agent.id, conversationId: claim.activation.conversationId,
+      stage: claim.workspace === undefined ? "creating" : "verifying", startedAt: this.#clock.now().toISOString(),
+    });
     try {
       workspace = await runtimeDispatch.workspaceManager.provision(
         claim.task.id,
         this.#taskProjections.readTaskStartingRef(claim.task.id) ?? this.#startingRef ?? "",
         claim.workspace,
+        (progress) => {
+          const preparation = this.#preparations.get(claim.task.id);
+          if (!this.#closed && preparation !== undefined) preparation.progress = { ...progress };
+        },
       );
     } catch (error) {
+      if (this.#closed) return { completion: Promise.resolve() };
       const failure = this.#activationScheduling.failUnstartedClaim(
         claim,
         error instanceof GitTaskWorkspaceError ? error.boundary : "workspace-preparation",
         completeDiagnostic(error),
       );
       this.#runtimeDiagnostic?.(failure);
-      throw new Error(failure.diagnostic, { cause: error });
+      throw new WorkspacePreparationFailure(failure.diagnostic, { cause: error });
+    } finally {
+      this.#preparations.delete(claim.task.id);
+      this.kick();
+      if (this.#automation.state === "pausing" && this.#activeRuns.size === 0 && this.#preparations.size === 0) {
+        this.#automation = { state: "paused", attemptsMayStart: false };
+      }
     }
+    if (this.#closed) return { completion: Promise.resolve() };
     if (this.#automation.state !== "running") {
       this.#activationScheduling.releaseUnstartedClaim(claim, workspace);
       return { completion: Promise.resolve() };
@@ -352,7 +413,7 @@ export class AutomationCoordinator {
       attemptId: attempt.id,
       activationId: claim.activation.id,
       controller,
-      state: "running" as "running" | "interrupting",
+      state: "starting",
       confirmed,
       confirm: confirmInterruption,
       fail: failInterruption,
@@ -422,6 +483,8 @@ export class AutomationCoordinator {
             this.#activeAttempts.recordReviewerPolicyConfigured(attempt.id, configuration);
           },
           started: (threadId) => {
+            activeRun.executionStartedAt ??= this.#clock.now().toISOString();
+            if (activeRun.state === "starting") activeRun.state = "running";
             if (threadId !== undefined) {
               this.#activeAttempts.recordThreadStarted(attempt.id, threadId);
             }
@@ -503,7 +566,7 @@ export class AutomationCoordinator {
       } finally {
         this.#conversationAttachments.releaseRuntimeAttachments(attempt.id);
         this.#activeRuns.delete(claim.task.id);
-        if (this.#automation.state === "pausing" && this.#activeRuns.size === 0) {
+        if (this.#automation.state === "pausing" && this.#activeRuns.size === 0 && this.#preparations.size === 0) {
           this.#automation = { state: "paused", attemptsMayStart: false };
         }
       }

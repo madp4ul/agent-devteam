@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 
 import type {
   ActiveRunView,
+  WorkspacePreparationView,
   ActivationView,
   AutomationView,
   CollaboratorView,
@@ -10,6 +11,7 @@ import type {
 } from "../../application/browser-transport-contract.ts";
 import { dismissActivation, interruptTask } from "./api.ts";
 import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
+import { WorkspacePreparation } from "./WorkspacePreparation.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage } from "./feedback.ts";
 import { Modal } from "./Modal.tsx";
@@ -20,6 +22,8 @@ interface AgentActivityState {
   collaborators: CollaboratorView[];
   inspection: UserTaskInspectionView;
   activeRun: ActiveRunView | null;
+  workspacePreparation?: WorkspacePreparationView | undefined;
+  preparationCapacityWait?: true | undefined;
   activations: ActivationView[];
 }
 
@@ -48,7 +52,7 @@ export function AgentActivityPanel({
   const hasWaitingWork = queued.length > 0 || state.inspection.run.status === "failed" ||
     state.inspection.automationSuspended ||
     state.activations.some((activation) => activation.recovery !== null);
-  const isIdle = state.activeRun === null && !hasWaitingWork &&
+  const isIdle = state.workspacePreparation === undefined && state.activeRun === null && !hasWaitingWork &&
     state.inspection.unresolvedAttention.length === 0;
 
   return (
@@ -59,14 +63,14 @@ export function AgentActivityPanel({
       <h2 id="agent-activity-heading">Agent activity</h2>
       {state.activations.map((activation) => activation.recovery?.state === "waiting" ? <RuntimeWaitingSummary key={activation.id} taskId={state.taskId} recovery={activation.recovery} onChanged={onChanged} /> : null)}
 
-      {state.activeRun !== null ? (
+      {state.workspacePreparation !== undefined ? <WorkspacePreparation preparation={state.workspacePreparation} /> : state.activeRun !== null ? (
         <div className="activity-current running">
           <div>
             <span className="agent-inspectable-content-heading">
               <strong>{agentName(state.activeRun.agentId)}</strong>
               <AgentInspectableMarker />
             </span>
-            <span>Running · <ElapsedTime startedAt={state.activeRun.startedAt} /></span>
+            <span>{state.activeRun.executionStarted === false || state.activeRun.status === "starting" ? (state.activeRun.status === "interrupting" ? "Stopping startup…" : "Starting agent…") : <>Running · <ElapsedTime startedAt={state.activeRun.startedAt} /></>}</span>
           </div>
           <button
             disabled={state.activeRun.status === "interrupting"}
@@ -123,7 +127,7 @@ export function AgentActivityPanel({
       ) : null}
 
       {laterQueued.length === 0 ? (
-        state.activeRun === null && (!hasWaitingWork || waitingReasons.length === 0)
+        state.workspacePreparation === undefined && state.activeRun === null && (!hasWaitingWork || waitingReasons.length === 0)
           ? <p className="quiet agent-inspectable-content-heading">
               <span>No agent work is running or queued.</span>
               <AgentInspectableMarker />
@@ -188,18 +192,15 @@ export function AgentActivityPanel({
 
 function waitingReasonsFor(state: AgentActivityState): Array<{ text: string; inspectable: boolean }> {
   const reasons: Array<{ text: string; inspectable: boolean }> = [];
+  if (state.preparationCapacityWait) reasons.push({ text: "Waiting for workspace preparation capacity", inspectable: false });
+  // Activations arrive in queue order. Only the first unfinished activation
+  // can hold up dispatch; later or historical work is not a current blocker.
+  const current = state.activations.find((activation) => activation.status !== "completed" && activation.status !== "dismissed");
   if (state.inspection.automationSuspended) reasons.push({ text: "Task automation is suspended", inspectable: true });
-  if (state.inspection.waitingOn.taskIds.length > 0) {
-    reasons.push({ text: `Waiting on ${state.inspection.waitingOn.taskIds.join(", ")}`, inspectable: true });
+  if (current?.status === "queued" && current.recovery?.state === "scheduled" && Date.parse(current.recovery.dueAt) > Date.now()) {
+    reasons.push({ text: `Retry scheduled for ${new Date(current.recovery.dueAt).toLocaleString()}`, inspectable: false });
   }
-  const scheduled = state.activations.find((activation) => activation.recovery?.state === "scheduled");
-  if (scheduled?.recovery?.state === "scheduled") {
-    reasons.push({ text: `Retry scheduled for ${new Date(scheduled.recovery.dueAt).toLocaleString()}`, inspectable: false });
-  }
-  const recovery = state.activations.find(
-    (activation) => activation.recovery?.state === "awaiting-retry" ||
-      activation.recovery?.state === "permission-blocked",
-  )?.recovery;
+  const recovery = current?.recovery;
   if (recovery?.state === "awaiting-retry") reasons.push({ text: "Failed activation needs retry or dismissal", inspectable: false });
   if (recovery?.state === "permission-blocked") reasons.push({ text: "Permission-blocked activation needs continuation", inspectable: false });
   if (state.automation.state !== "running") {
@@ -209,14 +210,11 @@ function waitingReasonsFor(state: AgentActivityState): Array<{ text: string; ins
         ? "Process automation is unavailable"
         : "Process automation is paused", inspectable: false });
   }
-  if (state.activations.some((activation) => activation.status === "queued" && activation.stale)) {
+  if (current?.status === "queued" && current.stale) {
     reasons.push({ text: "Queued work needs process-change approval", inspectable: false });
   }
-  const startupFailure = state.activations.find(
-    (activation) => activation.startupFailure !== null && activation.startupFailure.resolvedAt === null,
-  );
-  if (startupFailure?.startupFailure !== null && startupFailure?.startupFailure !== undefined) {
-    reasons.push({ text: `Startup failed at ${startupFailure.startupFailure.boundary}`, inspectable: false });
+  if (current?.status === "failed" && current.startupFailure !== null && current.startupFailure.resolvedAt === null) {
+    reasons.push({ text: `Startup failed at ${current.startupFailure.boundary}`, inspectable: false });
   }
   return reasons;
 }

@@ -1,6 +1,6 @@
 # Make released migrations the coordination schema authority
 
-Status: accepted
+Status: accepted; compatibility-inspection optimization refined by [ADR 0042](0042-inspect-clean-current-databases-without-copying.md).
 
 Coordination database compatibility is identified by one application-owned,
 ordered ledger of stable migration IDs. The first released identity is
@@ -19,12 +19,13 @@ of the application's registry. Equal history opens normally; an older released
 prefix proceeds through the pending migrations. A database without the ledger
 is an unsupported pre-release store. Startup reports a blocking configuration
 error and does not delete, adopt, or rewrite its database, WAL, or shared-memory
-files. Compatibility inspection uses a temporary copy because opening SQLite
+files. Compatibility inspection originally always used a temporary copy because opening SQLite
 read-only can still change a shared-memory file. Inspection copies the database
 and any WAL, shared-memory and rollback-journal sidecars. SQLite may recover a
 hot rollback journal on that disposable copy before querying the ledger; the
 copy is therefore opened writable, then application queries are restricted with
-`query_only`. The retained files are never opened by SQLite during this gate.
+`query_only`. The fallback gate never opens retained files through SQLite;
+ADR 0042 defines the narrow, locked read-only exception for current databases.
 Omitting the rollback journal can make a valid recoverable database appear to
 have malformed schema roots after an interrupted transaction.
 

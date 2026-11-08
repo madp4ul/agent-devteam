@@ -1266,7 +1266,7 @@ test("task details prioritize agent activity and preserve the responsive reading
   await expect(activity.getByText("Waiting", { exact: true })).toBeVisible();
   await expect(activity).toContainText("Process automation is paused");
   await activity.getByText(/more reasons?/).click();
-  await expect(activity).toContainText("Waiting on T-0002");
+  await expect(activity).not.toContainText("Waiting on T-0002");
   await expect(activity).toContainText("Task automation is suspended");
   await expect(activity.getByText("Implementation Agent", { exact: true })).toHaveCount(2);
   await expect(activity.getByText("Review Agent", { exact: true })).toHaveCount(1);

@@ -14,15 +14,15 @@ Specification: [Heavy usage](spec.md)
 - [08 — Use compact durable command results](issues/08-use-compact-durable-command-results.md): resolved; full tests, browser checks and independent reviews pass; changes unstaged.
 - [09 — Convert historical command-response snapshots safely](issues/09-convert-historical-command-response-snapshots.md): resolved; verified migration and offline cleanup reduced idle-game storage from 11.03 GB to 609 MB; recovery backups retained.
 - [10 — Recover an unrecorded preparation worktree blocking startup](issues/10-recover-unrecorded-preparation-worktree.md): resolved; checkout preserved, pause/provision race fixed, real host restarted paused with zero consistency diagnostics.
-- [11 — Dispatch unrelated tasks while workspaces are preparing](issues/11-dispatch-independently-of-workspace-preparation.md): open; independent dispatch, bounded preparation and preserved pause/restart ownership.
-- [12 — Show workspace creation progress instead of an agent running](issues/12-show-workspace-preparation-progress.md): open; blocked by 11; truthful progress and queue explanations, including removal of relationships as activation blockers.
-- [13 — Allow automation to resume while existing agents are draining](issues/13-resume-automation-while-pausing.md): open; enabled Resume during pausing, with safe scheduler and completion-race handling.
+- [11 — Dispatch unrelated tasks while workspaces are preparing](issues/11-dispatch-independently-of-workspace-preparation.md): resolved; separate two-slot creation/verification lanes, truthful preparation query and preserved pause/restart ownership. Full suite 452 passed / 6 skipped; both review axes clear.
+- [12 — Show workspace creation progress instead of an agent running](issues/12-show-workspace-preparation-progress.md): resolved; real bounded Git progress, preparation/startup/execution projections and shared browser presentation. Full suite 457 passed / 6 skipped; both review axes clear.
+- [13 — Allow automation to resume while existing agents are draining](issues/13-resume-automation-while-pausing.md): resolved; enabled Resume during pausing with one wakeable pump and completion/settlement race coverage. Full suite 462 passed / 6 skipped; final focused checks and both review axes clear.
 
 ## Current frontier
 
-- Tickets 11 and 13 are open and unblocked. Ticket 12 follows ticket 11's
-  preparation lifecycle contract. All three were requested as issues only on
-  2026-11-07; implementation has not begun.
+- Tickets 11–13 are resolved: bounded preparation, truthful live progress and
+  startup/execution reporting, and reversible draining through Resume. The user
+  authorized sequential implementation of all three on 2026-11-08.
 
 ## Decisions so far
 

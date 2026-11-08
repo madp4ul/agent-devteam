@@ -21,6 +21,8 @@ type ArchiveWorkspaceCapabilities = Pick<BrowserCoordinationCapabilities,
   | "unarchiveTask"
   | "queryTaskInspectionForUser"
   | "queryTaskWorkspaceGitState"
+  | "queryTaskArchivalPreview"
+  | "queryArchivalWorkspaceForOpen"
 >;
 
 export interface WorkspaceOpeners {
@@ -56,10 +58,28 @@ export function registerArchiveWorkspaceRoutes(
     const result = await application.archiveTask({
       taskId: params.taskId,
       ...(body.discardWorkspaceChanges === true ? { discardWorkspaceChanges: true } : {}),
+      ...(typeof body.archivalPreviewToken === "string" ? { archivalPreviewToken: body.archivalPreviewToken } : {}),
       actor: userActor,
       idempotencyKey: stringField(body, "idempotencyKey"),
     });
     sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
+  });
+  dispatcher.register("GET", "/api/tasks/:taskId/archive/preview", "browser/archive-workspace", async ({ response, params }) => {
+    const result = await application.queryTaskArchivalPreview(params.taskId);
+    sendJson(response, result.available ? 200 : 409, result);
+  });
+  dispatcher.register("POST", "/api/tasks/:taskId/archive/open", "browser/archive-workspace", async ({ request, response, params }) => {
+    const body = await readJsonBody<{ path: string; target: string }>(request);
+    const selected = await application.queryArchivalWorkspaceForOpen(params.taskId, stringField(body, "path"));
+    if (!selected.available) { sendJson(response, 409, selected); return; }
+    const opener = body.target === "vscode" ? openers.openWorkspaceInVisualStudioCode : openers.openWorkspace;
+    if (opener === undefined) { sendJson(response, 503, { reason: "host-integration-unavailable" }); return; }
+    try {
+      await opener(params.taskId, selected.workspace);
+      sendJson(response, 200, { accepted: true });
+    } catch (error) {
+      sendJson(response, 409, { reason: "workspace-open-failed", diagnostic: error instanceof Error ? error.message : "Could not open workspace" });
+    }
   });
   dispatcher.register("POST", "/api/tasks/:taskId/unarchive", "browser/archive-workspace", async ({ request, response, params }) => {
     const body = await readJsonBody<IdempotentBrowserRequest>(request);

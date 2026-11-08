@@ -62,6 +62,7 @@ export interface RetireAgentConversationRequest extends IdempotentBrowserRequest
 
 export interface ArchiveTaskRequest extends IdempotentBrowserRequest {
   discardWorkspaceChanges?: true;
+  archivalPreviewToken?: string;
 }
 
 export interface ArchiveCompletedTasksRequest extends IdempotentBrowserRequest {
@@ -89,6 +90,8 @@ export type {
 } from "./user-task-detail-contract.ts";
 export type {
   ArchiveCompletedTasksResult,
+  TaskArchivalPreview,
+  ArchivalWorktreeView,
   BoardMutationResult,
   BoardColumnView,
   TaskActivityView,
@@ -102,6 +105,7 @@ export type {
 } from "./task-contract.ts";
 export type {
   ActiveRunView,
+  WorkspacePreparationView,
   ActivationView,
   ActivationRecoveryAction,
   AutomationView,

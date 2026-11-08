@@ -29,7 +29,8 @@ export interface AgentConversationView {
   /** Present on bounded browser queries. Legacy browser fixtures may omit it. */
   page?: ConversationHistoryPage;
   runtimeRecovery?: RuntimeWaitingView;
-  liveStatus?: "running" | "queued" | null;
+  workspacePreparation?: import("./automation-contract.ts").WorkspacePreparationView;
+  liveStatus?: "starting" | "running" | "queued" | null;
   id: string;
   taskId: string;
   originatingActivationId: string;
@@ -90,7 +91,7 @@ export interface AgentConversationIndexEntry {
   costBreakdown?: TokenCostBreakdown;
   hasUnpricedSettledRuns: boolean;
   costPending: boolean;
-  status: "running" | "needs-attention" | null;
+  status: "starting" | "running" | "preparing" | "needs-attention" | null;
   continuation: AgentConversationView["continuation"];
   retired: boolean;
 }

@@ -25,6 +25,8 @@ export type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
   | "unarchiveTask"
   | "queryTaskInspectionForUser"
   | "queryTaskWorkspaceGitState"
+  | "queryTaskArchivalPreview"
+  | "queryArchivalWorkspaceForOpen"
   | "queryUserTaskDetail"
   | "queryTaskTimeline"
   | "queryTaskMovementMap"

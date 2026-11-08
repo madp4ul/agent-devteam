@@ -2,7 +2,7 @@
 
 **Type:** task (bug)
 
-**Status:** open
+**Status:** resolved
 
 **Blocked by:** None — can start immediately.
 
@@ -84,29 +84,29 @@ Browser steps:
 
 ## Expected behavior and acceptance criteria
 
-- [ ] With fresh queued work and only a process pause holding execution, Agent
+- [x] With fresh queued work and only a process pause holding execution, Agent
       Activity clearly reports the pause without treating task relationships as
       additional execution blockers.
-- [ ] Unresolved dependency and parent-child relationships never become execution
+- [x] Unresolved dependency and parent-child relationships never become execution
       blocker reasons, regardless of pause, unavailable automation, suspension,
       retry, or process-change approval state. Preserve relationship context in
       its appropriate task/relationship surfaces.
-- [ ] Resume can dispatch eligible queued work while the dependency remains
+- [x] Resume can dispatch eligible queued work while the dependency remains
       unfinished; retain scheduler semantics and future completion wake-ups.
-- [ ] Add browser coverage for paused queued work plus an unresolved relationship,
+- [x] Add browser coverage for paused queued work plus an unresolved relationship,
       including the displayed headline and expanded reasons. Cover running and
       at least one other actual hold to prevent a priority-only correction.
-- [ ] Adjust existing browser tests that assume dependencies block activation;
+- [x] Adjust existing browser tests that assume dependencies block activation;
       keep their independent reader-position and disclosure-state assertions.
-- [ ] Retain existing appearance behavior in both dark and light themes; apply
+- [x] Retain existing appearance behavior in both dark and light themes; apply
       the repository's theme coverage rule if introducing a new visual pattern.
 
 ## Scope
 
 Correct the execution explanation in the browser. This investigation found no
 need to change relationship ownership, completion activations, or scheduling.
-Implementation is pending; this ticket records the confirmed bug and delivery
-work requested after investigation.
+The user expanded the delivery scope on 2026-11-08 to audit other misleading
+execution blocker explanations, not only relationships.
 
 ## Comments
 
@@ -114,3 +114,30 @@ Investigation compared otherwise identical queued activity across paused,
 running, and blocked automation with/without a relationship. The evidence
 supports conflating task waiting facts with execution blockers in the panel,
 not a scheduler dependency gate or a pause-only reason-ordering problem.
+
+## Implementation evidence — 2026-11-08
+
+- Removed relationship waiting facts from Agent Activity's execution reasons.
+  Relationship surfaces and scheduler/completion wake-up semantics are unchanged.
+- Audited each remaining reason against the scheduler: process pause/unavailable
+  state and task suspension are real global holds; activation recovery, staleness,
+  and startup failure must refer to the first unfinished activation. The browser
+  projection and scheduler both use activation sequence order, and dismissed
+  activations are completed in storage. Later stale work no longer labels an
+  eligible queue head as blocked. Only future scheduled retry deadlines are holds;
+  expired deadlines and historical startup failures are not.
+- Browser regressions were red before the fixes for relationship explanations
+  across paused/running/unavailable/suspended states, a later stale activation,
+  and an elapsed retry deadline. They now pass. Existing reader-position,
+  selection, comment-draft, and disclosure-state assertions use actual holds.
+- Broader browser verification exposed two old fixture mismatches: injected
+  interruption attempts and appearance comments omitted paged timeline data.
+  Both now use the established `fulfillTaskScenario` helper without weakening
+  assertions. No appearance or scheduling implementation changed.
+- Typecheck and build pass. Full Node suite: **448 passed, 6 skipped, 0 failed**.
+  The existing application regression confirms independent dispatch while a
+  relationship remains unresolved and subsequent completion wake-ups.
+- Final automation and appearance browser suites: **40 passed, 0 failed**,
+  including both themes and all eight focused blocker/reader regressions.
+- Independent Standards and Spec reviews, including the fixture repairs, each
+  found **0 issues**. All changes remain unstaged for user review.

@@ -5,6 +5,7 @@ import {
 
 import {
   archiveCompletedTasks,
+  ApiError,
   dismissStaleActivation,
   readBoard,
   readArchivedTasks,
@@ -12,7 +13,7 @@ import {
   type BrowserBoardState,
 } from "./api.ts";
 import type { TaskOverviewView } from "../../application/browser-transport-contract.ts";
-import { BoardColumn, type BoardLayout } from "./BoardColumn.tsx";
+import { BoardColumn } from "./BoardColumn.tsx";
 import { AutomationControls } from "./AutomationControls.tsx";
 import { errorMessage } from "./feedback.ts";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
@@ -21,10 +22,12 @@ import { usePageTitle } from "./page-title.ts";
 import { useLatestRefresh, usePolling } from "./live-refresh.ts";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import type { Navigate, NavigationState } from "./navigation.ts";
+import { DisclosureIcon } from "./DisclosureIcon.tsx";
 import { TaskCreationDialog } from "./TaskCreationDialog.tsx";
 import { useTaskMovement } from "./task-movement.ts";
+import { taskCardSignals } from "./task-card-signals.ts";
 
-const layoutPreferenceKey = "coordination-board-layout";
+const expandedBoardsPreferenceKey = "coordination-expanded-boards";
 
 export function BoardPage({
   navigate,
@@ -57,7 +60,7 @@ export function BoardPage({
   const [filter, setFilter] = useState(
     pendingInitialContext.current?.filter ?? new URLSearchParams(location.search).get("q") ?? "",
   );
-  const [layout, setLayout] = useState<BoardLayout>(readLayoutPreference);
+  const [expandedBoards, setExpandedBoards] = useState<string[]>(readExpandedBoards);
   const [creation, setCreation] = useState<{ boardId: string; columnId: string }>();
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | undefined>(
     pendingInitialContext.current?.highlightedTaskId,
@@ -66,6 +69,7 @@ export function BoardPage({
     pendingInitialContext.current?.showArchived === true,
   );
   const [archivedTasks, setArchivedTasks] = useState<TaskOverviewView[]>([]);
+  const [archiveFailures, setArchiveFailures] = useState<Array<{ taskId: string; title?: string; reason: string }>>([]);
   const [archivesSettled, setArchivesSettled] = useState(false);
   const showArchivedRef = useRef(showArchived);
   const archivedLoadSequence = useRef(0);
@@ -101,15 +105,15 @@ export function BoardPage({
       scrollPositions.current.set(key, element.scrollLeft);
     }
   }, []);
-  const chooseLayout = useCallback((choice: BoardLayout) => {
+  const toggleBoard = useCallback((boardId: string) => {
     captureScrollPositions();
     pendingScrollRestore.current = true;
-    setLayout(choice);
-    try {
-      localStorage.setItem(layoutPreferenceKey, choice);
-    } catch {
-      // The in-memory preference still applies when device storage is unavailable.
-    }
+    setExpandedBoards((current) => {
+      const next = current.includes(boardId) ? current.filter((id) => id !== boardId) : [...current, boardId];
+      try { localStorage.setItem(expandedBoardsPreferenceKey, JSON.stringify(next)); }
+      catch { /* Keep the in-memory choice when browser storage is unavailable. */ }
+      return next;
+    });
   }, [captureScrollPositions]);
   const changeFilter = useCallback((nextFilter: string) => {
     if (filter.length === 0 && nextFilter.length > 0) {
@@ -138,9 +142,9 @@ export function BoardPage({
   }, [loadArchivedTasks, showArchived]);
   usePolling(
     refresh,
-    state !== undefined && (state.activeRuns.length > 0 || state.automation.state === "pausing")
+    state !== undefined && ((state.workspacePreparations?.length ?? 0) > 0 || state.activeRuns.length > 0 || state.automation.state === "pausing")
       ? 1_000
-      : undefined,
+      : state === undefined || state.startup.mode === "configuration-error" ? undefined : 5_000,
     (error) => setFeedback({ role: "alert", text: errorMessage(error) }),
   );
   useLayoutEffect(() => {
@@ -179,7 +183,7 @@ export function BoardPage({
       pendingScrollRestore.current = false;
       pendingInitialContext.current = undefined;
     }
-  }, [archivesSettled, filter, layout, showArchived, state]);
+  }, [archivesSettled, expandedBoards, filter, showArchived, state]);
 
   const rememberContext = useCallback((boardId: string, taskId?: string) => {
     captureScrollPositions();
@@ -234,6 +238,7 @@ export function BoardPage({
   const archiveCompletedForBoard = useCallback((boardId: string) => {
     void archiveCompletedTasks(boardId, crypto.randomUUID())
       .then(async (result) => {
+        setArchiveFailures(result.rejected);
         await refresh();
         if (showArchivedRef.current) await loadArchivedTasks();
         setFeedback({
@@ -310,6 +315,7 @@ export function BoardPage({
         <AutomationControls
           automation={state.automation}
           activeRuns={state.activeRuns}
+          workspacePreparations={state.workspacePreparations}
           canResume={(processImpact?.staleActivations.length ?? 0) === 0 &&
             (processImpact?.unavailableResumeAssignments.length ?? 0) === 0}
           notifications={notifications}
@@ -445,28 +451,30 @@ export function BoardPage({
             Archived
             {showArchived ? ` · ${archivedTasks.length}` : null}
           </button>
-          <fieldset className="layout-control">
-            <legend>Board layout</legend>
-            <label>
-              <input type="radio" name="board-layout" checked={layout === "row"} onChange={() => chooseLayout("row")} />
-              Row layout
-            </label>
-            <label>
-              <input type="radio" name="board-layout" checked={layout === "column"} onChange={() => chooseLayout("column")} />
-              Column layout
-            </label>
-          </fieldset>
         </div>
         {feedback === undefined ? null : (
           <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>
         )}
+        {archiveFailures.length === 0 ? null : <ul className="archive-failures" aria-label="Tasks not archived">
+          {archiveFailures.map((failure) => <li key={failure.taskId}>
+            <a href={`/tasks/${encodeURIComponent(failure.taskId)}`}>{failure.taskId}{failure.title ? ` — ${failure.title}` : ""}</a>
+            {`: ${errorMessage(new ApiError(409, { reason: failure.reason }))}`}
+          </li>)}
+        </ul>}
         {state.boards.map((board) => (
           <section key={board.id} aria-labelledby={`board-${board.id}`}>
             <div className="board-heading">
-              <div><p className="eyebrow">Board</p><h2 id={`board-${board.id}`}>{board.name}</h2></div>
+              <div><p className="eyebrow">Board</p><div className="board-title">
+                <h2 id={`board-${board.id}`}>{board.name}</h2>
+                <button className="board-disclosure" aria-label={`${expandedBoards.includes(board.id) ? "Collapse" : "Expand"} ${board.name}`}
+                  aria-expanded={expandedBoards.includes(board.id)} aria-controls={`board-columns-${board.id}`}
+                  title={expandedBoards.includes(board.id) ? "Show interesting columns only" : "Show all columns to create or move tasks"}
+                  onClick={() => toggleBoard(board.id)}><DisclosureIcon /></button>
+              </div></div>
             </div>
             <div
-              className={`board-lane ${layout}-layout`}
+              id={`board-columns-${board.id}`}
+              className="board-lane row-layout"
               data-testid="board-lane"
               ref={(element) => {
                 const key = `column:${board.id}`;
@@ -485,14 +493,17 @@ export function BoardPage({
               tabIndex={0}
               aria-label={`${board.name} workflow columns`}
             >
-              {board.columns.map((column) => (
+              {board.columns.filter((column) => expandedBoards.includes(board.id) ||
+                filter.trim().length > 0 || showArchived || column.tasks.some((task) =>
+                  (!column.frameworkOwned && column.watchingAgent === null) ||
+                  Object.values(taskCardSignals(task)).some(Boolean)
+                )).map((column) => (
                 <BoardColumn
                   key={column.id}
                   boardId={board.id}
                   column={column}
                   archivedTasks={(showArchived ? archivedTasks : []).filter((task) =>
                     task.boardId === board.id && task.column.id === column.id)}
-                  layout={layout}
                   filter={filter}
                   pendingTaskId={pendingTaskId}
                   highlightedTaskId={highlightedTaskId}
@@ -536,10 +547,11 @@ function formatDiagnosticValue(value: unknown): string {
   return JSON.stringify(value) ?? String(value);
 }
 
-function readLayoutPreference(): BoardLayout {
+function readExpandedBoards(): string[] {
   try {
-    return localStorage.getItem(layoutPreferenceKey) === "column" ? "column" : "row";
+    const value: unknown = JSON.parse(localStorage.getItem(expandedBoardsPreferenceKey) ?? "[]");
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
   } catch {
-    return "row";
+    return [];
   }
 }

@@ -25,6 +25,7 @@ import { useTaskMovement } from "./task-movement.ts";
 import { TaskTimeline } from "./Timeline.tsx";
 import { PinnedComments } from "./PinnedComments.tsx";
 import { TaskWorkspacePanel } from "./TaskWorkspacePanel.tsx";
+import { ArchivalReviewDialog } from "./ArchivalReviewDialog.tsx";
 import { TaskHeaderTitle } from "./TaskHeaderTitle.tsx";
 import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
 import { TaskRelationshipsPanel } from "./TaskRelationshipsPanel.tsx";
@@ -61,6 +62,7 @@ export function TaskPage({
   const [expandedDescriptionTaskId, setExpandedDescriptionTaskId] = useState<string>();
   const [archivalPending, setArchivalPending] = useState(false);
   const [discardConfirmation, setDiscardConfirmation] = useState(false);
+  const [archivalReview, setArchivalReview] = useState(false);
   const [timelineSourceRequest, setTimelineSourceRequest] = useState<{ sourceId: string; sequence: number }>();
   const [commentReplyIntent, setCommentReplyIntent] = useState<TaskCommentReplyIntent>();
   const pendingTimelineAnchor = useRef<TimelineViewportAnchor | null>(null);
@@ -189,6 +191,11 @@ export function TaskPage({
         setFeedback({ role: "status", text: `Archived ${task.id}.` });
       })
       .catch((error) => {
+        if (error instanceof ApiError && (error.body as { reason?: string }).reason === "workspace-nested-worktrees") {
+          setDiscardConfirmation(false);
+          setArchivalReview(true);
+          return;
+        }
         if (
           !discardWorkspaceChanges &&
           error instanceof ApiError &&
@@ -212,6 +219,7 @@ export function TaskPage({
         <AutomationControls
           automation={detail.automation}
           activeRuns={detail.activeRuns}
+          workspacePreparations={detail.workspacePreparations}
           notifications={notifications}
           canResume={detail.startup.mode !== "paused" ||
             (detail.startup.processImpact?.staleActivations.length ?? 0) === 0}
@@ -319,6 +327,8 @@ export function TaskPage({
                   collaborators: detail.collaborators,
                   inspection,
                   activeRun: detail.activeRun,
+                  workspacePreparation: detail.workspacePreparation,
+                  preparationCapacityWait: detail.preparationCapacityWait,
                   activations: task.activations,
                 }}
                 onChanged={refresh}
@@ -340,6 +350,7 @@ export function TaskPage({
             >
               <TaskTimeline
                 taskId={task.id}
+                activeRun={detail.activeRun}
                 page={detail.timeline}
                 pins={inspection.pinnedComments}
                 comments={task.comments}
@@ -431,6 +442,8 @@ export function TaskPage({
           }}
         />
       ) : null}
+      {archivalReview ? <ArchivalReviewDialog key={task.id} taskId={task.id} onClose={() => setArchivalReview(false)}
+        onArchived={async () => { await refresh(); setFeedback({ role: "status", text: `Archived ${task.id}.` }); }} /> : null}
       {discardConfirmation ? (
         <Modal
           labelledBy="discard-title"

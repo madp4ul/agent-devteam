@@ -1,9 +1,9 @@
 # 29 — Preview and confirm nested-worktree deletion during task archival
 
 **Type:** task
-**Status:** open
+**Status:** resolved
 **Blocked by:** None.
-**Next step:** Specify the archive confirmation and cleanup contract using the existing workspace controls.
+**Next step:** User review of the unstaged implementation.
 
 ## Problem and requested behavior
 
@@ -26,47 +26,47 @@ archive flow.
 
 ## Acceptance criteria
 
-- [ ] Selecting Archive on a task with nested registered worktrees opens an
+- [x] Selecting Archive on a task with nested registered worktrees opens an
   explanatory confirmation dialog instead of ending with only a rejection.
   Identify all affected nested worktrees and make the extent of deletion clear.
-- [ ] Each nested worktree has a preview based on the existing workspace Git
+- [x] Each nested worktree has a preview based on the existing workspace Git
   summary: path, branch or detached HEAD, staged/unstaged/untracked changes and
   relevant commit information. Reuse its presentation and inspection logic
   where practical instead of introducing a competing Git-status control.
-- [ ] Include unpushed-commit information and whether detached commits lack a
+- [x] Include unpushed-commit information and whether detached commits lack a
   durable named ref. Distinguish these concepts from commits since task start;
   a nested checkout need not have its own task-start baseline. Missing upstream,
   unavailable Git status, or uncertain remote information is explicit rather
   than presented as zero risk. Do not silently fetch or push during preview.
-- [ ] Account for ignored/generated files that deletion would remove; a clean
+- [x] Account for ignored/generated files that deletion would remove; a clean
   ordinary Git status must not imply that no local evidence exists. A compact
   warning/summary is sufficient; a new repository browser is not required.
-- [ ] Provide the existing Visual Studio Code and File Explorer opening options
+- [x] Provide the existing Visual Studio Code and File Explorer opening options
   for the exact nested checkout, with actionable failure feedback. The user can
   inspect it externally before choosing Abort or Proceed.
-- [ ] Abort closes the flow without deleting worktrees or archiving the task.
+- [x] Abort closes the flow without deleting worktrees or archiving the task.
   No destructive cleanup occurs before explicit Proceed. Coordinate this with
   the existing dirty-parent confirmation so the user's consent covers the
   actual files and worktrees being discarded.
-- [ ] Proceed revalidates task eligibility, workspace ownership/registration,
+- [x] Proceed revalidates task eligibility, workspace ownership/registration,
   and the inspected deletion scope before cleanup. Newly discovered worktrees
   or materially changed risks require renewed review. An uninspectable target
   must not be treated as a clean checkout.
-- [ ] Cleanup handles multiple/nested levels deliberately, removes registrations
+- [x] Cleanup handles multiple/nested levels deliberately, removes registrations
   through Git, and never deletes branches or broadens persistent Git trust.
   Preserve ordinary activation, ownership, and archival guards. Only mark the
   task archived after required cleanup succeeds. Report any partial cleanup
   honestly and make retries safe; do not promise rollback of deleted files.
-- [ ] Bulk-archive feedback retains the summary and lists every rejected task
+- [x] Bulk-archive feedback retains the summary and lists every rejected task
   with task ID, title, a navigable task link, and its actionable rejection reason.
   Nested-worktree failures explicitly suggest opening that task and archiving
   individually to review and confirm deletion. No bulk deletion confirmation or
   automatic nested-worktree deletion is required.
-- [ ] Cover single and multiple nested worktrees, clean and dirty states,
+- [x] Cover single and multiple nested worktrees, clean and dirty states,
   untracked and ignored evidence, detached/non-durable and unpushed commits,
   unavailable status, Abort/Proceed, changed previews, cleanup failure/retry,
   and mixed bulk success/failure with application and browser coverage.
-- [ ] The dialog, previews, Open actions, and bulk task links are keyboard
+- [x] The dialog, previews, Open actions, and bulk task links are keyboard
   accessible, usable with long paths/many failures and narrow viewports, and
   readable in dark and light themes. Follow the shared SVG icon-button rules
   and geometry coverage if a new icon-button pattern is introduced.
@@ -102,6 +102,41 @@ does not authorize cleaning up those six tasks or changing their evidence.
   supply existing behavior to build on; these resolved issues are not blockers.
 
 ## Comments
+
+- 2026-11-08: Implemented in the shared local checkout; no live cleanup performed.
+
+## Implementation evidence — 2026-11-08
+
+- Individual nested archival now opens a shared-modal review of parent and every
+  registered nested checkout. Shared Git summaries show changes, ignored files,
+  named-ref durability and local upstream divergence separately from task-start
+  history. Validated paths retain File Explorer/VS Code actions even if Git status
+  is unavailable; deletion remains blocked until evidence is inspectable.
+- Abort sends no consent. Proceed carries the reviewed evidence token; the
+  existing durable claim revalidates task eligibility, exact registration scope,
+  files/index/refs/upstream and canonical path identity before deepest-first Git
+  removal. Same-count changed ignored content invalidates consent. Branches and
+  persistent Git trust are untouched. Parent dirty data is covered by the same
+  explicit deletion consent; the existing durable-parent-HEAD guard remains.
+- Partial cleanup reports completed removals and the failed target's observed
+  registration/files state, including Git errors after actual removal. A retry
+  reviews the remaining scope. Parent unregistration errors retain existing
+  archival remainder/claim recovery. Unknown embedded Git metadata and redirected
+  registrations fail closed. External writers are not excluded by the application
+  claim; the dialog and ADR 0041 state that boundary explicitly.
+- Bulk archival stays non-destructive for nested worktrees, retains aggregate
+  feedback and lists every rejected task with ID, title, link and actionable reason.
+- Full pre-review Node suite: **466 passed, 6 skipped, 0 failed**. Final review
+  fixes passed **44 application/workspace/HTTP tests** and **12 browser tests**,
+  covering both themes, narrow layout, keyboard Proceed, Abort, changed-preview
+  retry, unavailable-status Open, host errors, bulk failures, ignored evidence,
+  multiple nested levels, detached/unpushed commits, path redirection and partial
+  cleanup/retry. Final typecheck and build pass.
+- Standards initially found three issues and Spec two; all were fixed and both
+  independent re-reviews report **0 remaining findings**. Shared parsing/command
+  helpers remove duplicated Git logic; Open authorization is application-owned;
+  bulk title enrichment uses a scalar read. Architecture and ADR 0041 updated.
+- All delivery changes remain unstaged; prior user-staged tickets are preserved.
 
 - 2026-10-27: Created from the user's requested follow-up to the read-only
   investigation. Individual preview/confirmation and per-task bulk failure

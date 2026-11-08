@@ -203,21 +203,23 @@ test("different tasks run concurrently while each task preserves activation orde
   ]);
   assert.ok(firstTwoRequests, "independent tasks did not begin concurrently");
   assert.deepEqual(
-    firstTwoRequests.map((request) => request.task.id),
+    firstTwoRequests.map((request) => request.task.id).sort(),
     [first.task.id, second.task.id],
   );
   assert.equal(runtime.requests.length, 2, "the later same-task activation must remain queued");
+  const firstTaskRequest = firstTwoRequests.find((request) => request.task.id === first.task.id)!;
+  const independentRequest = firstTwoRequests.find((request) => request.task.id === second.task.id)!;
 
-  runtime.complete(firstTwoRequests[0]!.activationId, {
+  runtime.complete(firstTaskRequest.activationId, {
     status: "completed",
     summary: "First task activation completed.",
   });
   const firstThreeRequests = await runtime.waitForRequests(3);
   assert.equal(firstThreeRequests[2]?.task.id, first.task.id);
-  assert.notEqual(firstThreeRequests[2]?.activationId, firstTwoRequests[0]?.activationId);
+  assert.notEqual(firstThreeRequests[2]?.activationId, firstTaskRequest.activationId);
 
   application.pauseAutomation();
-  runtime.complete(firstTwoRequests[1]!.activationId, {
+  runtime.complete(independentRequest.activationId, {
     status: "completed",
     summary: "Independent task completed.",
   });

@@ -116,14 +116,25 @@ export async function archiveTask(
   taskId: string,
   idempotencyKey: string,
   discardWorkspaceChanges = false,
+  archivalPreviewToken?: string,
 ): Promise<void> {
   await request(`/api/tasks/${encodeURIComponent(taskId)}/archive`, {
     method: "POST",
     body: serializeBrowserRequest<ArchiveTaskRequest>({
       idempotencyKey,
       ...(discardWorkspaceChanges ? { discardWorkspaceChanges: true } : {}),
+      ...(archivalPreviewToken === undefined ? {} : { archivalPreviewToken }),
     }),
   });
+}
+
+export async function readTaskArchivalPreview(taskId: string): Promise<import("../../application/browser-transport-contract.ts").TaskArchivalPreview> {
+  const result = await request<{ available: true; preview: import("../../application/browser-transport-contract.ts").TaskArchivalPreview }>(`/api/tasks/${encodeURIComponent(taskId)}/archive/preview`);
+  return result.preview;
+}
+
+export async function openArchivalWorktree(taskId: string, path: string, target: "folder" | "vscode"): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/archive/open`, { method: "POST", body: JSON.stringify({ path, target }) });
 }
 
 export async function unarchiveTask(taskId: string, idempotencyKey: string): Promise<void> {

@@ -194,8 +194,12 @@ test("waiting releases other-task dispatch while cumulative usage checkpoints su
   const other = app.createTask({ boardId: "delivery", columnId: "review", title: "Other task", description: "Progress during waiting", actor: { kind: "user", id: "paul" }, idempotencyKey: "other" });
   assert.ok(other.accepted);
   const unrelated = await runtime.waitForRequest(2); assert.equal(unrelated.task.id, other.task.id);
-  runtime.complete({ status: "completed", summary: "Other task completed", threadId: "usage-thread" });
+  runtime.complete({ status: "completed", summary: "Other task completed", threadId: "other-thread" });
   await until(() => { const result = app.queryTask(other.task.id); return result.available && result.task.activations[0]?.status === "completed"; });
+  // This single-run fixture must finish unrelated work before advancing the
+  // recovery clock; otherwise its watcher legitimately starts a concurrent run.
+  assert.ok(app.moveTask({ taskId: other.task.id, destinationColumnId: "completion", expectedRevision: 1,
+    actor: { kind: "user", id: "paul" }, idempotencyKey: "finish-other" }).accepted);
   clock.advanceTo(waiting().dueAt); const empty = await runtime.waitForRequest(3);
   runtime.setUsage(empty.attemptId, usage);
   await fail({ status: "failed", summary: "Connection lost", threadId: "usage-thread" });

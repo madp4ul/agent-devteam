@@ -389,7 +389,7 @@ test(
 
 test("successive activations reuse one task workspace while another task is isolated", async (t) => {
   const fixture = await createActivationFixture("workspace-reuse");
-  const runtime = new ControlledAgentRuntime();
+  const runtime = new ConcurrentAgentRuntime();
   const application = await CoordinationApplication.start({
     processDefinitionPath: fixture.definitionPath,
     databasePath: fixture.databasePath,
@@ -421,7 +421,7 @@ test("successive activations reuse one task workspace while another task is isol
   if (!first.accepted || !second.accepted) return;
 
   await application.resumeAutomation();
-  const firstRequest = await runtime.waitForRequest(1);
+  const firstRequest = (await runtime.waitForRequests(1))[0]!;
   await execFileAsync("git", ["-C", firstRequest.workspace.path, "switch", "-c", "task-work"]);
   await writeFile(join(firstRequest.workspace.path, "result.txt"), "Agent-created result.\n");
   await execFileAsync("git", ["-C", firstRequest.workspace.path, "add", "result.txt"]);
@@ -461,8 +461,9 @@ test("successive activations reuse one task workspace while another task is isol
   assert.equal(firstReentry.accepted, true);
   assert.equal(secondEntry.accepted, true);
 
-  runtime.complete({ status: "completed", summary: "First activation complete." });
-  const repeatedRequest = await runtime.waitForRequest(2);
+  runtime.complete(firstRequest.activationId, { status: "completed", summary: "First activation complete." });
+  const requests = await runtime.waitForRequests(3);
+  const repeatedRequest = requests.find((request) => request.task.id === first.task.id && request.activationId !== firstRequest.activationId)!;
   assert.equal(repeatedRequest.workspace.path, firstRequest.workspace.path);
   assert.equal(repeatedRequest.workspace.commit, firstRequest.workspace.commit);
   assert.equal(
@@ -470,11 +471,11 @@ test("successive activations reuse one task workspace while another task is isol
       .stdout.trim(),
     "task-work",
   );
-  runtime.complete({ status: "completed", summary: "Repeated activation complete." });
-  const otherTaskRequest = await runtime.waitForRequest(3);
+  const otherTaskRequest = requests.find((request) => request.task.id === second.task.id)!;
   assert.notEqual(otherTaskRequest.workspace.path, firstRequest.workspace.path);
   application.pauseAutomation();
-  runtime.complete({ status: "completed", summary: "Other task complete." });
+  runtime.complete(repeatedRequest.activationId, { status: "completed", summary: "Repeated activation complete." });
+  runtime.complete(otherTaskRequest.activationId, { status: "completed", summary: "Other task complete." });
   await application.waitForAutomationIdle();
 });
 

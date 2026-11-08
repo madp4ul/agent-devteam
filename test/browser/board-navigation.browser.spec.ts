@@ -16,12 +16,18 @@ test(`${theme} ${back} Back restores board reading position after loading and re
       ...Array.from({ length: 15 }, (_, index) => ({ ...task, id: `READ-${index}` })),
       task,
     ];
+    body.boards.unshift({ ...body.boards[0], id: "preceding", name: "Earlier board",
+      columns: Array.from({ length: 8 }, (_, index) => ({ ...column,
+        id: `earlier-${index}`, name: `Earlier stage ${index}`,
+        tasks: [{ ...task, id: `EARLIER-${index}` }],
+      })),
+    });
     body.attention = [];
     await route.fulfill({ response, json: body });
   });
   await page.goto("/");
   await setAppearance(page, theme);
-  await page.getByRole("radio", { name: "Column layout" }).check();
+  await page.getByRole("button", { name: "Expand Product delivery" }).click();
   await page.getByLabel("Filter tasks").fill("Inspect");
   await page.getByRole("button", { name: "Show archived tasks" }).click();
   const task = page.getByRole("link", { name: /T-0001 Inspect existing coordination/ });
@@ -32,7 +38,7 @@ test(`${theme} ${back} Back restores board reading position after loading and re
   await expect(page.getByRole("heading", { name: "Inspect existing coordination" })).toBeVisible();
   if (back === "in-app") await page.getByRole("link", { name: "Back to board" }).click();
   else await page.goBack();
-  await expect(page.getByRole("radio", { name: "Column layout" })).toBeChecked();
+  await expect(page.getByRole("button", { name: "Collapse Product delivery" })).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByLabel("Filter tasks")).toHaveValue("Inspect");
   await expect(page.getByRole("button", { name: "Show archived tasks" })).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(position);
@@ -87,7 +93,7 @@ test("return waits for archived cards before restoring a row's horizontal positi
   await expect(page.getByRole("heading", { name: "Inspect existing coordination" })).toBeVisible();
   returning = true;
   await page.goBack();
-  await expect(page.getByRole("radio", { name: "Row layout" })).toBeChecked();
+  await expect(page.getByRole("heading", { name: "Product delivery" })).toBeVisible();
   releaseArchives();
   await expect(task).toBeVisible();
   await expect.poll(() => strip.evaluate((element) => element.scrollLeft)).toBe(position);
@@ -114,7 +120,7 @@ test(`return uses fresh board content when the originating task ${change}`, asyn
     await route.fulfill({ response, json: body });
   });
   await page.goto("/");
-  await page.getByRole("radio", { name: "Column layout" }).check();
+  await page.getByRole("button", { name: "Expand Product delivery" }).click();
   const task = page.getByRole("link", { name: /T-0001 Inspect existing coordination/ });
   await task.scrollIntoViewIfNeeded();
   const position = await page.evaluate(() => window.scrollY);
@@ -122,7 +128,7 @@ test(`return uses fresh board content when the originating task ${change}`, asyn
   await expect(page.getByRole("heading", { name: "Inspect existing coordination" })).toBeVisible();
   moved = true;
   await page.goBack();
-  await expect(page.getByRole("radio", { name: "Column layout" })).toBeChecked();
+  await expect(page.getByRole("button", { name: "Collapse Product delivery" })).toHaveAttribute("aria-expanded", "true");
   if (change === "moves") {
     await expect(page.getByTestId("column-backlog").getByRole("link", { name: /T-0001/ })).toBeVisible();
     await expect(task).toBeInViewport();

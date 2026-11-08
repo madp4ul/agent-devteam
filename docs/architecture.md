@@ -49,6 +49,14 @@ browser and host share the request and response contracts for that local
 transport, while the host maps decoding and status codes. Neither side owns
 workflow or automation policy.
 
+Boards use a single Row presentation. Each board's expanded/collapsed choice
+belongs to this browser, defaults to collapsed, and persists by board identity.
+Collapsed visibility derives from the authoritative overview's activity,
+waiting, attention and status facts; it does not affect execution eligibility.
+The board uses shared refresh/polling mechanics at one second while active or
+draining and five seconds while idle, so newly interesting work appears without
+manual expansion. See [ADR 0037](adr/0037-keep-board-collapse-as-browser-presentation.md).
+
 Markdown rendered anywhere within task details can explicitly hand a local-file
 reference to the host. The task page supplies one shared workspace-link context
 to descriptions, comments, outcomes, activity messages, and conversations so
@@ -256,10 +264,19 @@ verified, and the complete pending sequence plus its ledger entries run in one
 immediate transaction whose schema, integrity, and foreign keys verify before
 commit. Divergent, malformed, newer, or ledger-less histories block startup
 without migration.
-Compatibility inspection first copies the database and all SQLite sidecars,
-including the rollback journal, into disposable storage. SQLite recovery may
-write that copy before its query-only ledger check; it never opens retained
-files during compatibility inspection. Process
+Compatibility inspection can avoid copying a clean current rollback-mode
+database. A read-only connection sets exclusive locking mode before its first
+pager access, checks the authoritative ledger, and holds its shared lock until
+a writable connection owns an immediate transaction. Schema and health checks
+finish inside that transaction before normal use. This prevents another SQLite
+writer from changing the accepted history across the handoff; detected lock
+contention is rechecked with all locks released within the existing five-second
+busy allowance; persistent contention and newly observed post-read file changes
+block startup. The project-state guard separately excludes other
+framework hosts and maintenance. See [ADR 0042](adr/0042-inspect-clean-current-databases-without-copying.md).
+WAL, journals, older histories and uncertain eligibility retain the disposable
+copy path, including all SQLite sidecars. Recovery writes only that copy before
+its query-only ledger check. Process
 application, restart recovery, workspace recovery, board mutation, and agent
 dispatch begin only after the database has opened at the current released
 history. Startup compares every application table, index, trigger, and view
@@ -290,6 +307,26 @@ Automation turns committed activation records into agent runs. It preserves the
 order of activations for each task, prevents overlapping runs on one task, and
 allows independent tasks to run concurrently. Automation always starts paused
 and proceeds only after the user resumes it.
+
+The same automation pump owns asynchronous workspace preparation. It admits at
+most two new checkouts and two existing-workspace verifications concurrently;
+a full creation lane does not block ready work in the verification lane. Durable
+claims preserve task ordering and exclusive workspace ownership throughout I/O.
+The coordinator exposes current preparation identity, stage and start time
+separately from active agent runs. Git streams bounded progress into the
+coordinator's latest snapshot; browser board/task/conversation projections expose
+stage counters without persisting fragments or loading history. Creation and
+verification lanes remain separate from progress stages. Runtime startup is
+inspectable as `starting`; running counts and execution timers begin only after
+runtime confirmation. See [ADR 0039](adr/0039-project-live-workspace-preparation-progress.md).
+Pausing drains both preparation and execution;
+successful preparation still commits ownership when execution cannot start.
+Resume can reverse that drain immediately: the same wakeable pump starts newly
+eligible work while existing attempts continue. Drain settlement marks automation
+paused only if pause remains the current intent. See
+[ADR 0040](adr/0040-resume-without-waiting-for-automation-drain.md).
+Task-local Git failures retain explicit recovery evidence without stopping
+unrelated work. See [ADR 0038](adr/0038-bound-workspace-preparation-within-automation.md).
 
 The Codex adapter keeps native reconnect progress inside the active run, retaining
 its diagnostics while allowing Codex to finish retries and HTTPS transport
@@ -464,8 +501,14 @@ non-durable commit remain user-correctable safety outcomes; invalid
 registration, rejected ownership trust, a worktree lock, unexpected inspection
 failure, and actual removal failure remain distinct host outcomes. The task is
 marked archived only after its Git registration and active workspace path are
-gone. Registered nested worktrees block archival even when discarding ordinary
-workspace changes was confirmed. They must be moved or removed explicitly.
+gone. Registered nested worktrees block ordinary and bulk archival even when
+discarding ordinary workspace changes was confirmed. Individual archival can
+instead request an application-owned deletion preview covering the parent and
+every nested registration. Explicit consent carries a fingerprint of that exact
+scope and its file/index/ref evidence; the durable archival claim then owns
+revalidation and deepest-first Git cleanup. Changed or unavailable evidence
+requires renewed review, and partial outcomes identify completed removals.
+See [ADR 0041](adr/0041-review-nested-worktree-archival.md).
 
 Git can unregister a worktree before failing to delete all its files. The
 existing durable archival claim owns recovery across that boundary. A correctly
@@ -485,7 +528,7 @@ See [ADR 0032](adr/0032-preserve-archival-remainders-and-block-nested-worktree-r
 | Boards, tasks, activity, activations, run history, notification policy, and eligible notification occurrences | Coordination framework | SQLite in the bound project state root |
 | Conversation attachment originals | Coordination framework | Framework-owned content store in the bound project state root |
 | Task implementation work | Process and agents | One Git worktree per task in the same state root |
-| Appearance, notification consent, and operating-system permission | Browser and operating system | Browser-local storage and browser permission state |
+| Appearance, board expansion, notification consent, and operating-system permission | Browser and operating system | Browser-local storage and browser permission state |
 
 The project repository is bound to its state root through repository-local Git
 configuration. The database, attachment content store, and task worktrees form one recovery and relocation

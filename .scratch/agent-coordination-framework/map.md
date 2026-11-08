@@ -22,14 +22,19 @@ without choosing the implementation yet.
 - Planning produces decisions only; implementation starts after this map is
   complete and its results have been turned into a specification.
 
-## Open bugs
+## Decisions so far
+
+- [102 � Collapse boards to interesting columns and retire Column layout](./issues/102-collapse-boards-to-interesting-columns.md)
+  � **Resolved:** Row-only boards default to collapsed with browser-local per-board
+  preferences. Shared card signals retain complete interesting columns; ordinary
+  Completion work stays hidden. Idle polling reveals changing work, and search,
+  archived exploration and explicit expansion preserve discovery and movement.
 
 - [101 — Keep task dependencies out of Agent Activity execution blockers](./issues/101-separate-dependencies-from-execution-blockers.md)
-  — **Open, unblocked:** Confirmed presentation bug lists unresolved relationships
-  as execution holds and hides the process pause. Reproduction and acceptance
-  criteria are recorded in the ticket.
-
-## Decisions so far
+  — **Resolved:** Relationships remain coordination context, not execution holds.
+  Activation-specific reasons describe only the first unfinished activation;
+  elapsed retry delays and historical startup failures no longer imply a hold.
+  Scheduler and relationship completion semantics remain unchanged.
 
 - [Show Startup Verification Progress](./issues/100-show-startup-verification-progress.md)
   — **Resolved:** Console phases, real copying bytes/backup pages and known

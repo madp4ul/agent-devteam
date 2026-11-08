@@ -3,11 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import type { UserTaskDetailView } from "../../src/application/user-task-detail-contract.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
 import { writeProcessEvolutionDefinition } from "../support/process-evolution-fixture.ts";
 import {
   clearTextSelection,
   expect,
+  fulfillTaskScenario,
   runningConversationScenario,
   selectedText,
   selectRenderedText,
@@ -288,7 +290,7 @@ test("task interruption waits for confirmation and offers contextual continuatio
       reasoningEffort: null,
       dismissal: { mayStartNext: true },
     }];
-    await route.fulfill({ response, json: body });
+    await fulfillTaskScenario(route, response, body);
   });
 
   await page.route("**/api/tasks/T-0002/conversations/*", async (route) => {
@@ -624,15 +626,110 @@ test("running agent activity uses the configured agent name and interruption con
 });
 
 
+for (const automation of ["paused", "running", "blocked", "suspended"] as const) {
+  test(`relationships are not execution blockers while automation is ${automation}`, async ({ page }) => {
+    await page.route("**/api/tasks/T-0001", async (route) => {
+      const response = await route.fetch();
+      const detail: UserTaskDetailView = await response.json();
+      detail.automation = automation === "running"
+        ? { state: "running", attemptsMayStart: true }
+        : { state: automation === "suspended" ? "paused" : automation, attemptsMayStart: false };
+      detail.activeRun = null;
+      detail.inspection.currentActivation = null;
+      detail.inspection.automationSuspended = automation === "suspended";
+      detail.inspection.waitingOn = { taskIds: ["T-0002"] };
+      detail.task.activations = [{
+        id: "independent-queue", conversationId: null, targetAgentId: "implementer", status: "queued",
+        reason: { type: "agent-mention", sourceEventId: "independent-mention" },
+        attempts: [], startupFailure: null, recovery: null, model: null, reasoningEffort: null, stale: false,
+      }];
+      await route.fulfill({ response, json: detail });
+    });
+    await page.goto("/tasks/T-0001");
+    const activity = page.getByRole("region", { name: "Agent activity" });
+    await expect(activity.getByRole("heading", { name: "Activation queue" })).toBeVisible();
+    await expect(activity).not.toContainText("Waiting on T-0002");
+    if (automation === "running") {
+      await expect(activity.getByText("Waiting", { exact: true })).toHaveCount(0);
+    } else {
+      await expect(activity.locator(".activity-current strong")).toHaveText(automation === "suspended"
+        ? "Task automation is suspended"
+        : automation === "blocked" ? "Process automation is unavailable" : "Process automation is paused");
+      if (automation === "suspended") {
+        await activity.getByText("1 more reason").click();
+        await expect(activity.getByText("Process automation is paused")).toBeVisible();
+        await expect(activity.locator(".waiting-reasons li")).toHaveCount(1);
+      } else {
+        await expect(activity.locator(".waiting-reasons")).toHaveCount(0);
+      }
+    }
+  });
+}
+
+test("later stale work does not block an eligible queue head", async ({ page }) => {
+  let firstCompleted = false;
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail: UserTaskDetailView = await response.json();
+    detail.automation = { state: "running", attemptsMayStart: true };
+    detail.activeRun = null;
+    detail.inspection.currentActivation = null;
+    detail.inspection.automationSuspended = false;
+    detail.inspection.waitingOn = { taskIds: [] };
+    detail.task.activations = [{
+      id: "first-queue", conversationId: null, targetAgentId: "implementer",
+      status: firstCompleted ? "completed" : "queued",
+      reason: { type: "agent-mention", sourceEventId: "first-mention" },
+      attempts: [], startupFailure: null, recovery: null, model: null, reasoningEffort: null, stale: false,
+    }, {
+      id: "later-queue", conversationId: null, targetAgentId: "reviewer", status: "queued",
+      reason: { type: "agent-mention", sourceEventId: "later-mention" },
+      attempts: [], startupFailure: null, recovery: null, model: null, reasoningEffort: null, stale: true,
+    }];
+    await route.fulfill({ response, json: detail });
+  });
+  await page.goto("/tasks/T-0001");
+  const activity = page.getByRole("region", { name: "Agent activity" });
+  await expect(activity.getByRole("heading", { name: "Activation queue" })).toBeVisible();
+  await expect(activity).not.toContainText("Queued work needs process-change approval");
+  firstCompleted = true;
+  await expect(activity).toContainText("Queued work needs process-change approval");
+});
+
+test("elapsed retry delay no longer explains why queued work is waiting", async ({ page }) => {
+  let dueAt = "2000-01-01T00:00:00.000Z";
+  await page.route("**/api/tasks/T-0001", async (route) => {
+    const response = await route.fetch();
+    const detail: UserTaskDetailView = await response.json();
+    detail.automation = { state: "running", attemptsMayStart: true };
+    detail.activeRun = null;
+    detail.inspection.currentActivation = null;
+    detail.inspection.automationSuspended = false;
+    detail.inspection.waitingOn = { taskIds: ["T-0002"] };
+    detail.task.activations = [{
+      id: "retry-queue", conversationId: null, targetAgentId: "implementer", status: "queued",
+      reason: { type: "agent-mention", sourceEventId: "retry-mention" },
+      attempts: [], startupFailure: null, recovery: { state: "scheduled", nextAttempt: 2, dueAt },
+      model: null, reasoningEffort: null, stale: false,
+    }];
+    await route.fulfill({ response, json: detail });
+  });
+  await page.goto("/tasks/T-0001");
+  const activity = page.getByRole("region", { name: "Agent activity" });
+  await expect(activity.getByRole("heading", { name: "Activation queue" })).toBeVisible();
+  await expect(activity).not.toContainText("Retry scheduled for");
+  dueAt = "2100-01-01T00:00:00.000Z";
+  await expect(activity).toContainText("Retry scheduled for");
+  await expect(activity).not.toContainText("Waiting on T-0002");
+});
+
 test("live task refresh moves a singly blocked activity to idle without disturbing the reader", async ({ page }) => {
   let reads = 0;
   await page.route("**/api/tasks/T-0001", async (route) => {
     const response = await route.fetch();
     const detail = await response.json();
     reads += 1;
-    detail.automation = reads < 3
-      ? { state: "running", attemptsMayStart: true }
-      : { state: "paused", attemptsMayStart: false };
+    detail.automation = { state: "paused", attemptsMayStart: false };
     detail.activeRun = null;
     detail.inspection.automationSuspended = false;
     detail.inspection.unresolvedAttention = [];
@@ -665,7 +762,7 @@ test("live task refresh moves a singly blocked activity to idle without disturbi
   await page.goto("/tasks/T-0001");
   const activity = page.getByRole("region", { name: "Agent activity" });
   await expect(activity.getByText("Waiting", { exact: true })).toBeVisible();
-  await expect(activity).toContainText("Waiting on T-0002");
+  await expect(activity).toContainText("Process automation is paused");
   const draft = page.getByRole("textbox", { name: "Comment" });
   await expect(draft).toHaveAttribute("rows", "2");
   await draft.fill("Keep the reader's in-progress comment.");
@@ -699,7 +796,7 @@ test("waiting reason disclosure survives authoritative reason-count changes", as
     reads += 1;
     detail.activeRun = null;
     detail.inspection.waitingOn = { taskIds: ["T-0002"] };
-    detail.inspection.automationSuspended = false;
+    detail.inspection.automationSuspended = true;
     detail.automation = reads === 3
       ? { state: "running", attemptsMayStart: true }
       : { state: "paused", attemptsMayStart: false };
@@ -1083,8 +1180,8 @@ test("top-bar automation action transitions and Current runs navigation stay com
   await expect(page).toHaveURL(/\/$/);
   await popup.close();
   await page.getByRole("button", { name: "Pause" }).click();
-  const pausingButton = page.getByRole("button", { name: "Pausing…" });
-  await expect(pausingButton).toBeDisabled();
+  const pausingButton = page.getByRole("button", { name: "Resume automation", exact: true });
+  await expect(pausingButton).toBeEnabled();
   await expect(pausingButton.locator(".activity-spinner")).toHaveCSS(
     "animation-name",
     "activity-spinner-spin",

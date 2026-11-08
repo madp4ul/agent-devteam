@@ -74,6 +74,7 @@ export class ActivationSchedulingModule {
     now: Date,
     pathForUnprovisionedTask: (taskId: string) => string,
     projectAllowances?: ProjectAllowanceSource,
+    capacity: { creation: boolean; verification: boolean } = { creation: true, verification: true },
   ): ClaimedActivation | undefined {
     return this.#owner.transaction(() => {
       const occurredAt = now.toISOString();
@@ -90,6 +91,8 @@ export class ActivationSchedulingModule {
          WHERE a.status = 'queued'
            AND a.stale = 0
            AND task.automation_suspended = 0
+           AND ((? = 1 AND NOT EXISTS (SELECT 1 FROM task_workspaces workspace WHERE workspace.task_id = a.task_id))
+             OR (? = 1 AND EXISTS (SELECT 1 FROM task_workspaces workspace WHERE workspace.task_id = a.task_id)))
            AND (a.retry_due_at IS NULL OR a.retry_due_at <= ?)
            AND NOT EXISTS (
              SELECT 1
@@ -100,7 +103,7 @@ export class ActivationSchedulingModule {
            )
          ORDER BY a.sequence
          LIMIT 1`,
-      ).get(occurredAt) as RunnableRow | undefined;
+      ).get(Number(capacity.creation), Number(capacity.verification), occurredAt) as RunnableRow | undefined;
       if (row === undefined) return undefined;
 
       const task = this.#taskProjections.readTask(row.task_id);

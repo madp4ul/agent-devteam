@@ -2,6 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode 
 
 import type {
   ActivationView,
+  ActiveRunView,
   AgentInspectableTaskContentView,
   AttemptView,
   CollaboratorView,
@@ -52,6 +53,7 @@ type ConversationSelection = {
 
 export function TaskTimeline({
   taskId,
+  activeRun,
   page,
   pins,
   comments,
@@ -70,6 +72,7 @@ export function TaskTimeline({
   agentInspectableContent,
 }: {
   taskId: string;
+  activeRun?: ActiveRunView | null;
   page?: TimelinePage;
   pins?: TaskCommentView[];
   comments: TaskCommentView[];
@@ -120,6 +123,7 @@ export function TaskTimeline({
     ? filterTimelineRecordsForAgents(records, windowInspectable)
     : records;
   const context: TimelineContext = {
+    activeRun,
     readOnly,
     pinnedCommentIds: pins === undefined ? undefined : new Set(pins.map(({ id }) => id)),
     taskId,
@@ -249,6 +253,7 @@ export function TaskTimeline({
 }
 
 interface TimelineContext {
+  activeRun?: ActiveRunView | null | undefined;
   onSource(sourceId: string): void;
   readOnly: boolean;
   pinnedCommentIds: Set<string> | undefined;
@@ -375,7 +380,10 @@ function AttemptCard({
 }): ReactNode {
   const { attempt, activation } = record;
   const agentName = nameForAgent(activation.targetAgentId, context.agents);
-  const status = attemptStatus(attempt);
+  const run = context.activeRun?.attemptId === attempt.id ? context.activeRun : undefined;
+  const starting = attempt.completedAt === null && (run?.executionStarted === false || run?.status === "starting");
+  const status = starting ? { label: run?.status === "interrupting" ? "Stopping startup" : "Starting agent", className: "starting" } : attemptStatus(attempt);
+  const executionStartedAt = run?.startedAt ?? attempt.startedAt;
   const outcomeTextId = `outcome-${attempt.id}`;
   return (
     <li className={`timeline-entry attempt-entry ${status.className}`} data-history-record={record.key} data-timeline-record={attempt.id}>
@@ -386,8 +394,8 @@ function AttemptCard({
           <span className="attempt-timing">
             <span className="attempt-status">{status.label}</span>
             {" · "}<span className="attempt-number">Attempt {record.number}</span>{" · "}
-            {attempt.completedAt === null ? (
-              <><ElapsedTime startedAt={attempt.startedAt} completedAt={attempt.completedAt} /> elapsed</>
+            {starting ? null : attempt.completedAt === null ? (
+              <><ElapsedTime startedAt={executionStartedAt} completedAt={attempt.completedAt} /> elapsed</>
             ) : (
               <><RelativeTime value={attempt.completedAt} />{" · "}<ElapsedTime startedAt={attempt.startedAt} completedAt={attempt.completedAt} /></>
             )}
@@ -424,7 +432,7 @@ function AttemptCard({
         <footer className="attempt-footer">
           <div className="attempt-metadata">
             <TriggerLink record={record} context={context} onSource={onSource} />
-            <span>Started <RelativeTime value={attempt.startedAt} /></span>
+            {starting ? <span>Awaiting runtime confirmation</span> : <span>Started <RelativeTime value={executionStartedAt} /></span>}
           </div>
           {onConversation === undefined || activation.conversationId === null ? null : (
             <button

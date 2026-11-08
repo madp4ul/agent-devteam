@@ -2,7 +2,7 @@ import { readTask } from "../support/read-task.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
@@ -18,6 +18,128 @@ import type {
 } from "../../src/application/runtime-contract.ts";
 
 const run = promisify(execFile);
+
+test("individual archival previews nested evidence and requires unchanged explicit consent", async (t) => {
+  const fixture = await createFixture("nested-consent");
+  await writeFile(join(fixture.repository, ".gitignore"), "evidence/\n*.generated\n");
+  await run("git", ["-C", fixture.repository, "add", ".gitignore"]);
+  await run("git", ["-C", fixture.repository, "commit", "-m", "Ignore evidence"]);
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
+    runtimeDispatch: { projectRepositoryPath: fixture.repository, taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: { async run(_request, lifecycle) { lifecycle.started("nested-consent"); return { status: "completed", summary: "Done" }; } } },
+  });
+  t.after(() => application.close());
+  const taskId = createTask(application, "Review nested deletion", "nested-create");
+  await application.resumeAutomation();
+  await application.waitForAutomationIdle();
+  application.pauseAutomation();
+  const inspection = application.queryTaskInspectionForUser(taskId);
+  assert.ok(inspection.available && inspection.task.workspace);
+  if (!inspection.available || !inspection.task.workspace) return;
+  const nested = join(inspection.task.workspace.path, "evidence", "child");
+  await run("git", ["-C", fixture.repository, "worktree", "add", "--detach", nested, "HEAD"]);
+  await writeFile(join(nested, "result.generated"), "first evidence");
+  const command = { taskId, actor: { kind: "user" as const, id: "user" }, idempotencyKey: "no-consent" };
+  assert.deepEqual(await application.archiveTask(command), { accepted: false, reason: "workspace-nested-worktrees" });
+  const preview = await application.queryTaskArchivalPreview(taskId);
+  assert.ok(preview.available);
+  if (!preview.available) return;
+  assert.equal(preview.preview.worktrees.length, 2);
+  assert.equal(preview.preview.worktrees[1]?.ignoredFiles, 1);
+  assert.equal(preview.preview.worktrees[1]?.durableHead, true);
+  assert.equal(preview.preview.worktrees[1]?.upstream.kind, "none");
+  assert.ok(preview.preview.token);
+  await writeFile(join(nested, "result.generated"), "other evidence");
+  const rejected = await application.archiveTask({ ...command, idempotencyKey: "changed", archivalPreviewToken: preview.preview.token });
+  assert.equal(rejected.accepted, false);
+  if (!rejected.accepted) assert.equal(rejected.reason, "workspace-preview-changed");
+  assert.equal(await readFile(join(nested, "result.generated"), "utf8"), "other evidence");
+  const refreshed = await application.queryTaskArchivalPreview(taskId);
+  assert.ok(refreshed.available && refreshed.preview.token);
+  if (!refreshed.available || !refreshed.preview.token) return;
+  assert.equal((await application.archiveTask({ ...command, idempotencyKey: "confirmed", archivalPreviewToken: refreshed.preview.token })).accepted, true);
+  await assert.rejects(stat(nested));
+  assert.equal(readTask(application, taskId).archived, true);
+});
+
+test("nested archival reviews new registrations, non-durable commits and multiple levels before cleanup", async (t) => {
+  const { application, fixture, taskId, workspace } = await nestedFixture(t, "nested-levels");
+  const child = join(workspace.path, "evidence", "child");
+  const grandchild = join(child, "deep", "grandchild");
+  await run("git", ["-C", fixture.repository, "worktree", "add", "--detach", child, "HEAD"]);
+  await writeFile(join(child, "README.md"), "detached result");
+  await run("git", ["-C", child, "commit", "-am", "Detached evidence"]);
+  const first = await application.queryTaskArchivalPreview(taskId);
+  assert.ok(first.available && first.preview.token);
+  if (!first.available || !first.preview.token) return;
+  assert.equal(first.preview.worktrees[1]?.durableHead, false);
+  await run("git", ["-C", fixture.repository, "worktree", "add", "--detach", grandchild, "HEAD"]);
+  const changed = await application.archiveTask({ taskId, actor: { kind: "user", id: "user" },
+    idempotencyKey: "new-registration", archivalPreviewToken: first.preview.token });
+  assert.equal(changed.accepted, false);
+  if (!changed.accepted) assert.equal(changed.reason, "workspace-preview-changed");
+  const second = await application.queryTaskArchivalPreview(taskId);
+  assert.ok(second.available && second.preview.token);
+  if (!second.available || !second.preview.token) return;
+  assert.equal(second.preview.worktrees.length, 3);
+  assert.equal((await application.archiveTask({ taskId, actor: { kind: "user", id: "user" },
+    idempotencyKey: "deep-consent", archivalPreviewToken: second.preview.token })).accepted, true);
+  const registrations = (await run("git", ["-C", fixture.repository, "worktree", "list", "--porcelain"])).stdout;
+  assert.equal(registrations.includes("grandchild"), false);
+  assert.equal(registrations.includes(taskId), false);
+});
+
+test("archival preview reports unknown upstream and unavailable nested status without permitting deletion", async (t) => {
+  const { application, fixture, taskId, workspace } = await nestedFixture(t, "nested-unavailable");
+  const child = join(workspace.path, "evidence", "child");
+  await run("git", ["-C", fixture.repository, "worktree", "add", "-b", "nested-review", child, "HEAD"]);
+  await run("git", ["-C", child, "config", "branch.nested-review.remote", "origin"]);
+  await run("git", ["-C", child, "config", "branch.nested-review.merge", "refs/heads/main"]);
+  await run("git", ["-C", child, "config", "remote.origin.url", fixture.repository]);
+  await run("git", ["-C", child, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"]);
+  await run("git", ["-C", child, "update-ref", "refs/remotes/origin/main", "HEAD"]);
+  await writeFile(join(child, "README.md"), "unpushed local work");
+  await run("git", ["-C", child, "commit", "-am", "Unpushed local work"]);
+  const known = await application.queryTaskArchivalPreview(taskId);
+  assert.ok(known.available);
+  if (known.available) assert.deepEqual(known.preview.worktrees[1]?.upstream, { kind: "known", name: "origin/main", ahead: 1, behind: 0 });
+  await run("git", ["-C", child, "update-ref", "-d", "refs/remotes/origin/main"]);
+  const first = await application.queryTaskArchivalPreview(taskId);
+  assert.ok(first.available);
+  if (!first.available) return;
+  assert.notEqual(first.preview.worktrees[1]?.upstream.kind, "known");
+  await rename(join(child, ".git"), join(child, "retained-git-pointer"));
+  const broken = await application.queryTaskArchivalPreview(taskId);
+  assert.ok(broken.available);
+  if (!broken.available) return;
+  assert.equal(broken.preview.token, null);
+  assert.ok(broken.preview.worktrees[1]?.diagnostic);
+  assert.equal(broken.preview.worktrees[1]?.canOpen, true);
+  const openable = await application.queryArchivalWorkspaceForOpen(taskId, child);
+  assert.ok(openable.available && "workspace" in openable && openable.workspace.path === child);
+  assert.equal((await application.queryArchivalWorkspaceForOpen(taskId, fixture.repository)).available, false);
+  assert.equal((await stat(child)).isDirectory(), true);
+});
+
+async function nestedFixture(t: import("node:test").TestContext, name: string) {
+  const fixture = await createFixture(name);
+  await writeFile(join(fixture.repository, ".gitignore"), "evidence/\n*.generated\n");
+  await run("git", ["-C", fixture.repository, "add", ".gitignore"]);
+  await run("git", ["-C", fixture.repository, "commit", "-m", "Ignore evidence"]);
+  const application = await CoordinationApplication.start({
+    processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
+    runtimeDispatch: { projectRepositoryPath: fixture.repository, taskWorkspaceRoot: fixture.workspaceRoot,
+      agentRuntime: { async run(_request, lifecycle) { lifecycle.started(name); return { status: "completed", summary: "Done" }; } } },
+  });
+  t.after(() => application.close());
+  const taskId = createTask(application, name, name);
+  await application.resumeAutomation(); await application.waitForAutomationIdle(); application.pauseAutomation();
+  const inspection = application.queryTaskInspectionForUser(taskId);
+  assert.ok(inspection.available && inspection.task.workspace);
+  if (!inspection.available || !inspection.task.workspace) throw new Error("Missing workspace");
+  return { application, fixture, taskId, workspace: inspection.task.workspace };
+}
 
 test("archive removes a clean durable workspace and retains task history without its transcript", async (t) => {
   const fixture = await createFixture("archive-clean");
@@ -616,7 +738,7 @@ test("bulk archive revalidates Completion after each awaited workspace cleanup",
   assert.deepEqual(await bulkPromise, {
     accepted: true,
     archivedTaskIds: [firstId],
-    rejected: [{ taskId: secondId, reason: "not-completed" }],
+    rejected: [{ taskId: secondId, title: "Move during bulk", reason: "not-completed" }],
   });
   await application.waitForAutomationIdle();
 });

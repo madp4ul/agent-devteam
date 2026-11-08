@@ -35,6 +35,8 @@ test("launch guidance reaches every role without changing the process and is sna
     assert.deepEqual(inspected.task.activations[0]?.attempts[0]?.reviewerAllowances?.projectAllowances,
       request.projectAllowances);
     assert.equal(inspected.task.activations[0]?.attempts[0]?.reviewerAllowances?.agentId, request.agent.id);
+    assert.ok(application.moveTask({ taskId: created.task.id, destinationColumnId: "completion", expectedRevision: 1,
+      actor: { kind: "user", id: "paul" }, idempotencyKey: `finish-${columnId}` }).accepted);
   }
   assert.equal(runtime.requests[0]?.projectAllowances?.launchId, runtime.requests[1]?.projectAllowances?.launchId);
   const validation = await CoordinationApplication.validateProcessDefinition(fixture.definitionPath);
@@ -204,12 +206,16 @@ test("only applied selected-agent guidance is dispatched and revocation requires
   await application.resumeAutomation();
   await application.waitForAutomationIdle();
   assert.deepEqual(firstRuntime.requests[0]?.agent.allowances, ["Run scoped tests."]);
+  assert.ok(application.moveTask({ taskId: implement.task.id, destinationColumnId: "completion", expectedRevision: 1,
+    actor: { kind: "user", id: "paul" }, idempotencyKey: "finish-implementation" }).accepted);
   const review = create("review", "review-without-allowance");
   assert.ok(review.accepted);
   await application.resumeAutomation();
   await application.waitForAutomationIdle();
   assert.equal(firstRuntime.requests[1]?.agent.id, "reviewer");
   assert.equal(firstRuntime.requests[1]?.agent.allowances, undefined);
+  assert.ok(application.moveTask({ taskId: review.task.id, destinationColumnId: "completion", expectedRevision: 1,
+    actor: { kind: "user", id: "paul" }, idempotencyKey: "finish-review" }).accepted);
   const queued = create("implementation", "queued-before-revocation");
   assert.ok(queued.accepted);
   application.close();

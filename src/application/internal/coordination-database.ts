@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { closeSync, existsSync, fstatSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, lstatSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
+import { setTimeout } from "node:timers/promises";
 
 import { coordinationMigrations } from "./migrations/registry.ts";
 import { readExpectedCoordinationSchema, verifyCoordinationSchema } from "./coordination-schema-snapshot.ts";
@@ -82,7 +83,9 @@ export class CoordinationDatabase {
     const migrations = options.migrations ?? coordinationMigrations;
     assertMigrationRegistry(migrations);
     const existed = path !== ":memory:" && existsSync(path);
-    const applied = existed ? inspectExistingMigrationHistory(path, migrations, options.startupProgress) : [];
+    const direct = existed ? await tryOpenCurrentDatabase(path, migrations, options.startupProgress) : undefined;
+    const applied = direct !== undefined ? migrations.map(({ id }) => id)
+      : existed ? inspectExistingMigrationHistory(path, migrations, options.startupProgress) : [];
     const pending = migrations.slice(applied.length);
     const schemaAndHealthVerificationSteps = 3; // Schema, integrity, foreign keys.
     const verifiedBackupSteps = 4; // Copy, integrity, foreign keys, migration history.
@@ -92,7 +95,7 @@ export class CoordinationDatabase {
       reportStartupProgress(options.startupProgress, { phase, remainingSteps: remainingSteps-- });
     };
     progress("Opening coordination database");
-    const connection = new DatabaseSync(path);
+    const connection = direct ?? new DatabaseSync(path);
     let recoveryBackupPath: string | undefined;
     try {
       connection.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000");
@@ -104,6 +107,7 @@ export class CoordinationDatabase {
           undefined,
           progress,
         );
+        if (direct !== undefined) connection.exec("COMMIT");
         return new CoordinationDatabase(connection);
       }
 
@@ -146,6 +150,7 @@ export class CoordinationDatabase {
       );
       return new CoordinationDatabase(connection);
     } catch (error) {
+      if (direct !== undefined && connection.isTransaction) connection.exec("ROLLBACK");
       connection.close();
       if (error instanceof CoordinationDatabaseStartupError) throw error;
       throw startupError(
@@ -306,6 +311,121 @@ function verifyRecoveryBackup(path: string, expectedHistory: readonly string[], 
 function createMigrationBackupPath(databasePath: string): string {
   const suffix = `${new Date().toISOString().replaceAll(":", "-")}-${randomUUID()}`;
   return join(dirname(databasePath), `${basename(databasePath)}.pre-migration-${suffix}.sqlite3`);
+}
+
+/**
+ * Keep rollback-mode SQLite locks continuous from read-only compatibility
+ * inspection through verification on the returned writable transaction.
+ * Ineligible/pre-read recovery uses the disposable-copy path. Contention and
+ * ambiguity after a protected read refuse rather than release into an unsafe copy.
+ */
+async function tryOpenCurrentDatabase(
+  path: string,
+  migrations: readonly CoordinationMigration[],
+  progress?: StartupProgressObserver,
+): Promise<DatabaseSync | undefined> {
+  const deadline = performance.now() + 5000; // Preserve the normal SQLite busy allowance.
+  let contention: unknown;
+  for (;;) {
+    try {
+      const connection = tryOpenCurrentDatabaseOnce(path, migrations, progress);
+      if (connection !== undefined || contention === undefined) return connection;
+      // After observed contention, even a newly present sidecar must not route
+      // us into an unfrozen copy. Recheck from scratch, or fail within the bound.
+    } catch (error) {
+      if (!isSqliteBusy(error)) throw error;
+      contention = error;
+    }
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) {
+      throw startupError("incompatible-history", path,
+        "The coordination database is busy; retry startup after the other SQLite connection finishes. Retained files were left untouched.",
+        undefined, undefined, contention);
+    }
+    reportStartupProgress(progress, { phase: "Waiting for database access" });
+    // All connections/locks from the failed attempt closed in its finally.
+    // Waiting with its SHARED lock would prevent the other writer committing.
+    await setTimeout(Math.min(25, remaining));
+  }
+}
+
+function tryOpenCurrentDatabaseOnce(
+  path: string,
+  migrations: readonly CoordinationMigration[],
+  progress?: StartupProgressObserver,
+): DatabaseSync | undefined {
+  let inspection: DatabaseSync | undefined;
+  let writable: DatabaseSync | undefined;
+  let protectedRead = false;
+  try {
+    const identity = lstatSync(path);
+    if (!identity.isFile() || !sqliteSidecarsAbsent(path)) return undefined;
+    // Close this ordinary fd BEFORE SQLite takes locks: on POSIX, closing any
+    // fd for this inode could otherwise release the process's SQLite locks.
+    const input = openSync(path, "r");
+    try {
+      const file = fstatSync(input);
+      const header = Buffer.alloc(20);
+      if (file.dev !== identity.dev || file.ino !== identity.ino ||
+        readSync(input, header, 0, header.length, 0) !== header.length ||
+        header.toString("ascii", 0, 16) !== "SQLite format 3\0" || header[18] !== 1 || header[19] !== 1) return undefined;
+    } finally { closeSync(input); }
+
+    reportStartupProgress(progress, { phase: "Inspecting current migration history without copying" });
+    inspection = new DatabaseSync(path, { readOnly: true });
+    // Set before the first pager access. Even a race to WAL cannot create/map
+    // or change SHM; EXCLUSIVE WAL uses a private index. Hot rollback recovery
+    // cannot write through this read-only connection and falls back instead.
+    inspection.exec("PRAGMA locking_mode = EXCLUSIVE; BEGIN");
+    const applied = readAppliedMigrations(inspection);
+    protectedRead = true;
+    const mode = inspection.prepare("PRAGMA main.journal_mode").get() as { journal_mode: string };
+    const currentIdentity = lstatSync(path);
+    if (mode.journal_mode !== "delete" || !sqliteSidecarsAbsent(path) || !currentIdentity.isFile() ||
+      currentIdentity.dev !== identity.dev || currentIdentity.ino !== identity.ino) {
+      throw startupError("incompatible-history", path,
+        "SQLite files changed during compatibility inspection; retry startup after external database activity finishes. Retained files were left untouched.");
+    }
+    if (applied.length !== migrations.length || applied.some((id, index) => id !== migrations[index]?.id)) return undefined;
+
+    // The retained SHARED lock prevents any other SQLite connection from
+    // committing or switching journal mode. RESERVED excludes another writer
+    // before we release that lock. Never wait while holding up another writer.
+    writable = new DatabaseSync(path);
+    writable.exec("PRAGMA busy_timeout = 0; BEGIN IMMEDIATE");
+    inspection.close();
+    inspection = undefined;
+    const result = writable;
+    writable = undefined;
+    return result;
+  } catch (error) {
+    if (error instanceof CoordinationDatabaseStartupError) throw error;
+    if (isSqliteBusy(error)) throw error;
+    if (protectedRead) {
+      throw startupError("incompatible-history", path,
+        "Could not safely finish locked compatibility inspection; retained files were left untouched.", undefined, undefined, error);
+    }
+    return undefined;
+  } finally {
+    writable?.close();
+    inspection?.close();
+  }
+}
+
+function isSqliteBusy(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const code = (error as { errcode?: number }).errcode;
+  return code !== undefined && ((code & 0xff) === 5 || (code & 0xff) === 6);
+}
+
+function sqliteSidecarsAbsent(path: string): boolean {
+  return ["-wal", "-shm", "-journal"].every((suffix) => {
+    try { lstatSync(`${path}${suffix}`); return false; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+      throw error;
+    }
+  });
 }
 
 function inspectExistingMigrationHistory(

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -10,6 +10,63 @@ import type { TaskWorkspaceView } from "../../src/application/task-contract.ts";
 import { GitTaskWorkspaceManager, validateTaskWorkspaceConsistency } from "../../src/application/internal/git-task-workspace.ts";
 
 const run = promisify(execFile);
+
+test("archival refuses redirected nested registrations and unregistered Git metadata", async () => {
+  const fixture = await createFixture("nested-path-identity");
+  const workspace = await provisionDurableWorkspace(fixture, "T-0210");
+  const nested = join(workspace.path, "nested");
+  await git(fixture.repository, "worktree", "add", "--detach", nested, fixture.commit);
+  await writeFile(join(nested, "keep.txt"), "outside evidence");
+  const manager = new GitTaskWorkspaceManager(fixture.repository, fixture.workspaceRoot);
+  const before = await manager.inspectArchival("T-0210", workspace);
+  assert.ok(before.token);
+  const outside = join(dirname(fixture.repository), "outside-checkout");
+  await rename(nested, outside);
+  await symlink(outside, nested, "junction");
+  const redirected = await manager.inspectArchival("T-0210", workspace);
+  assert.equal(redirected.token, null);
+  assert.equal(redirected.worktrees[1]?.canOpen, false);
+  assert.equal((await manager.removeForArchival("T-0210", workspace, true, before.token)).removed, false);
+  assert.equal(await readFile(join(outside, "keep.txt"), "utf8"), "outside evidence");
+
+  const another = await provisionDurableWorkspace(fixture, "T-0211");
+  await mkdir(join(another.path, "embedded", ".git"), { recursive: true });
+  await writeFile(join(another.path, "embedded", ".git", "HEAD"), "unregistered metadata");
+  const unknown = await manager.inspectArchival("T-0211", another);
+  assert.equal(unknown.token, null);
+  assert.match(unknown.worktrees[0]?.diagnostic ?? "", /Unregistered nested Git metadata/);
+});
+
+for (const failure of ["before", "after"] as const) test(`reviewed nested cleanup reports failure ${failure} removal and safely retries remaining scope`, async () => {
+  const fixture = await createFixture("reviewed-partial");
+  const workspace = await provisionDurableWorkspace(fixture, "T-0209");
+  const short = join(workspace.path, "one");
+  const deep = join(workspace.path, "longer-child");
+  await git(fixture.repository, "worktree", "add", "--detach", short, fixture.commit);
+  await git(fixture.repository, "worktree", "add", "--detach", deep, fixture.commit);
+  let fail = true;
+  const manager = new GitTaskWorkspaceManager(fixture.repository, fixture.workspaceRoot, async (args, env) => {
+    const failing = fail && args.includes("remove") && args.at(-1) === short;
+    if (failing && failure === "before") throw new Error("Git filesystem removal failed");
+    const output = (await run("git", args, { env })).stdout;
+    if (failing) throw new Error("Git reported failure after unregistering/deleting");
+    return output;
+  });
+  const preview = await manager.inspectArchival("T-0209", workspace);
+  assert.ok(preview.token);
+  const result = await manager.removeForArchival("T-0209", workspace, true, preview.token);
+  assert.equal(result.removed, false);
+  if (result.removed) return;
+  assert.equal(result.reason, "workspace-nested-cleanup-failed");
+  assert.deepEqual(result.removedWorktrees, failure === "before" ? [deep] : [deep, short]);
+  assert.deepEqual(result.cleanupFailure, { path: short, registration: failure === "before" ? "present" : "absent", files: failure === "before" ? "present" : "absent" });
+  if (failure === "before") assert.equal((await stat(short)).isDirectory(), true);
+  fail = false;
+  const refreshed = await manager.inspectArchival("T-0209", workspace);
+  assert.ok(refreshed.token);
+  assert.equal(refreshed.worktrees.length, failure === "before" ? 2 : 1);
+  assert.deepEqual(await manager.removeForArchival("T-0209", workspace, true, refreshed.token), { removed: true });
+});
 
 test("archival refuses nested evidence worktrees even when ignored and discard is confirmed", async () => {
   const fixture = await createFixture("archive-nested-evidence");
@@ -356,3 +413,30 @@ async function git(repositoryPath: string, ...arguments_: string[]): Promise<str
 function samePath(left: string, right: string): boolean {
   return resolve(left).toLocaleLowerCase() === resolve(right).toLocaleLowerCase();
 }
+
+test("forced piped checkout emits real Git counters and never resets an existing workspace", async () => {
+  const fixture = await createFixture("checkout-progress");
+  await Promise.all(Array.from({ length: 200 }, (_, index) => writeFile(join(fixture.repository, `source-${index}.txt`), "tracked content\n")));
+  await git(fixture.repository, "add", ".");
+  await git(fixture.repository, "commit", "-m", "Progress files");
+  const manager = new GitTaskWorkspaceManager(fixture.repository, fixture.workspaceRoot);
+  const updates: import("../../src/application/automation-contract.ts").WorkspaceProgressView[] = [];
+  const workspace = await manager.provision("T-0199", "HEAD", undefined, (progress) => updates.push(progress));
+  assert.ok(updates.some((progress) => progress.total !== undefined && progress.completed === progress.total), JSON.stringify(updates));
+  await writeFile(join(workspace.path, "source-0.txt"), "keep user work\n");
+  assert.deepEqual(await manager.provision("T-0199", "HEAD", workspace), workspace);
+  assert.equal(await readFile(join(workspace.path, "source-0.txt"), "utf8"), "keep user work\n");
+});
+
+test("checkout failure after registration retains evidence and reports the preparation boundary", async () => {
+  const fixture = await createFixture("checkout-progress-failure");
+  const manager = new GitTaskWorkspaceManager(fixture.repository, fixture.workspaceRoot, async (args, environment) => {
+    if (args.includes("checkout")) throw new Error("checkout output stopped");
+    return (await run("git", args, { env: environment })).stdout;
+  });
+  await assert.rejects(manager.provision("T-0198", "HEAD", undefined), (error: unknown) =>
+    error instanceof Error && "boundary" in error && error.boundary === "workspace-preparation");
+  assert.ok((await stat(manager.pathFor("T-0198"))).isDirectory());
+  const diagnostics = await validateTaskWorkspaceConsistency(fixture.repository, fixture.workspaceRoot, []);
+  assert.ok(diagnostics.length > 0, "unrecorded registered checkout must remain explicit recovery evidence");
+});

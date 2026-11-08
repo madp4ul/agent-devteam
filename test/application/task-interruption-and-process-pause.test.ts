@@ -516,10 +516,11 @@ test("pause after workspace preparation releases the unstarted claim with contin
   await workspacePrepared;
   assert.deepEqual(application.pauseAutomation(), {
     accepted: true,
-    automation: { state: "paused", attemptsMayStart: false },
+    automation: { state: "pausing", attemptsMayStart: false },
   });
   releaseProvision();
   await application.waitForAutomationIdle();
+  assert.deepEqual(application.queryAutomation(), { state: "paused", attemptsMayStart: false });
 
   assert.equal(runtime.requests.length, 1);
   const paused = application.queryTask(created.task.id);

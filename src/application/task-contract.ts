@@ -72,6 +72,7 @@ export interface TaskWorkspaceGitStateView {
     | { kind: "detached"; shortHash: string };
   history:
     | { kind: "progress"; commitsSinceTaskStart: number }
+    | { kind: "no-task-baseline" }
     | { kind: "diverged" };
   changes: {
     additions: number;
@@ -83,6 +84,7 @@ export interface TaskWorkspaceGitStateView {
 }
 
 export interface TaskOverviewView {
+  workspacePreparation?: import("./automation-contract.ts").WorkspacePreparationView;
   id: string;
   title: string;
   boardId: string;
@@ -384,6 +386,7 @@ export type SetTaskCommentPinResult =
 
 export interface ArchiveTaskCommand {
   taskId: string;
+  archivalPreviewToken?: string;
   discardWorkspaceChanges?: true;
   actor: Actor & { kind: "user" };
   idempotencyKey: string;
@@ -400,7 +403,34 @@ export interface ArchiveCompletedTasksCommand {
 export type ArchiveTaskResult =
   | { accepted: true; task: TaskCommandSummary }
   | { accepted: false; reason: "not-found" | "already-archived" | "archive-in-progress" | "not-completed" | "waiting-relationships" | "activation-work-pending" | "automation-suspended" | "workspace-dirty" | "workspace-commit-not-durable" | "workspace-registration-invalid" | "workspace-ownership-untrusted" | "workspace-nested-worktrees" | "workspace-locked" | "workspace-removal-failed" | "workspace-cleanup-failed" | "runtime-unavailable" }
+  | { accepted: false; reason: "workspace-preview-changed" | "workspace-preview-unavailable" | "workspace-nested-cleanup-failed"; removedWorktrees?: string[]; cleanupFailure?: WorkspaceCleanupFailure }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
+
+export interface ArchivalWorktreeView {
+  path: string;
+  canOpen: boolean;
+  parent: boolean;
+  state?: TaskWorkspaceGitStateView;
+  ignoredFiles: number;
+  durableHead: boolean;
+  upstream: { kind: "none" } | { kind: "unknown" } | { kind: "known"; name: string; ahead: number; behind: number };
+  diagnostic?: string;
+}
+
+export interface WorkspaceCleanupFailure {
+  path: string;
+  registration: "present" | "absent" | "unknown";
+  files: "present" | "absent" | "unknown";
+}
+
+export interface TaskArchivalPreview {
+  token: string | null;
+  worktrees: ArchivalWorktreeView[];
+}
+
+export type TaskArchivalPreviewResult =
+  | { available: true; preview: TaskArchivalPreview }
+  | { available: false; reason: "not-found" | "workspace-not-provisioned" | "workspace-preview-unavailable" | "configuration-error" };
 
 export type UnarchiveTaskResult =
   | { accepted: true; task: TaskCommandSummary }
@@ -411,7 +441,7 @@ export type ArchiveCompletedTasksResult =
   | {
       accepted: true;
       archivedTaskIds: string[];
-      rejected: Array<{ taskId: string; reason: Exclude<ArchiveTaskResult, { accepted: true }>["reason"] }>;
+      rejected: Array<{ taskId: string; title?: string; reason: Exclude<ArchiveTaskResult, { accepted: true }>["reason"] }>;
     }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 

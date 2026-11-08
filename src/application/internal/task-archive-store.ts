@@ -112,6 +112,10 @@ export class TaskArchiveStore {
     ).all(boardId) as Array<{ id: string }>).map(({ id }) => id);
   }
 
+  taskTitle(taskId: string): string | undefined {
+    return (this.#database.prepare("SELECT title FROM tasks WHERE id = ?").get(taskId) as { title: string } | undefined)?.title;
+  }
+
   cancelClaim(
     command: ArchiveTaskCommand,
     result: Exclude<ArchiveTaskResult, { accepted: true }>,

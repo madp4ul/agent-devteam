@@ -19,14 +19,14 @@ test("current databases report only applicable verification work and known remai
   const updates: StartupProgressUpdate[] = [];
   const database = await CoordinationDatabase.open(path, (update) => updates.push(update));
   database.close();
-  assert.match(updates.find(({ detail }) => detail !== undefined)?.detail ?? "", /copied \d+ \/ \d+ bytes/);
+  assert.ok(!updates.some(({ detail }) => detail?.includes("copied")));
   assert.deepEqual(updates.filter(({ detail }) => detail === undefined).map(({ phase }) => phase), [
-    "Copying database for migration inspection", "Inspecting migration history",
+    "Inspecting current migration history without copying",
     "Opening coordination database", "Checking database schema", "Checking database integrity",
     "Checking database foreign keys",
   ]);
   assert.deepEqual(updates.filter(({ detail }) => detail === undefined).map(({ remainingSteps }) => remainingSteps), [
-    undefined, undefined, 3, 2, 1, 0,
+    undefined, 3, 2, 1, 0,
   ]);
 });
 
@@ -96,7 +96,8 @@ test("upgrade reporting includes the verified backup and only the pending migrat
     startupProgress: (update) => updates.push(update),
   });
   database.close();
-  const phases = updates.filter(({ detail }) => detail === undefined).slice(2);
+  assert.match(updates.find(({ detail }) => detail?.includes("copied"))?.detail ?? "", /copied \d+ \/ \d+ bytes/);
+  const phases = updates.filter(({ detail, remainingSteps }) => detail === undefined && remainingSteps !== undefined);
   assert.deepEqual(phases.map(({ phase }) => phase), [
     "Opening coordination database", "Creating pre-upgrade recovery backup",
     "Checking recovery backup integrity", "Checking recovery backup foreign keys",

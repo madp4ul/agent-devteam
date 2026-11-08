@@ -505,6 +505,21 @@ test("open workspace uses only the authoritative provisioned path and reports ho
   assert.equal(openedInVisualStudioCode.response.status, 200);
   assert.equal(openedInVisualStudioCodePath, join(workspaceRoot, created.task.id));
 
+  const nestedPath = join(workspaceRoot, created.task.id, "nested-evidence");
+  await execFileAsync("git", ["-C", repositoryPath, "worktree", "add", "--detach", nestedPath, "HEAD"]);
+  const previewResponse = await fetch(`${server.baseUrl}/api/tasks/${created.task.id}/archive/preview`);
+  assert.equal(previewResponse.status, 200);
+  const preview = await previewResponse.json() as { preview: { token: string; worktrees: Array<{ path: string }> } };
+  assert.equal(preview.preview.worktrees.length, 2);
+  const nestedOpenUrl = `${server.baseUrl}/api/tasks/${created.task.id}/archive/open`;
+  assert.equal((await postJson(nestedOpenUrl, { path: nestedPath, target: "vscode", token: preview.preview.token })).response.status, 200);
+  assert.equal(openedInVisualStudioCodePath, nestedPath);
+  assert.equal((await postJson(nestedOpenUrl, { path: repositoryPath, target: "folder", token: preview.preview.token })).response.status, 409);
+  assert.equal(openedPath, join(workspaceRoot, created.task.id));
+  await writeFile(join(nestedPath, "new-evidence.txt"), "review again");
+  assert.equal((await postJson(nestedOpenUrl, { path: nestedPath, target: "folder", token: preview.preview.token })).response.status, 200);
+  assert.equal(openedPath, nestedPath);
+
   const unavailableServer = await startWebServer(application, {
     host: "127.0.0.1",
     port: 0,
