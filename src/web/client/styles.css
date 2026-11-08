@@ -207,9 +207,17 @@ p { line-height: 1.55; }
 .live-runs { position: relative; align-self: stretch; }
 .live-runs > summary { cursor: pointer; list-style: none; }
 .live-runs > summary::-webkit-details-marker { display: none; }
-.live-runs > ul, .live-runs > p { position: absolute; right: 0; z-index: 5; min-width: 24rem; margin-top: .75rem; padding: .75rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--paper); color: var(--ink); box-shadow: var(--shadow); list-style: none; }
-.live-runs li + li { margin-top: .5rem; }
-.live-runs li > a { display: block; width: 100%; padding: .72rem 1rem; text-align: left; text-decoration: none; }
+.live-runs > summary:focus-visible { outline: 3px solid #eb9a46; outline-offset: -3px; }
+.live-runs-popover { position: absolute; right: 0; z-index: 5; width: min(25rem, calc(100vw - 2rem)); max-height: calc(100vh - 6rem); overflow-y: auto; margin-top: .75rem; padding: .85rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--paper); color: var(--ink); box-shadow: var(--shadow); white-space: normal; overflow-wrap: anywhere; }
+.live-runs-popover > p { margin: 0; font-size: .85rem; }
+.live-runs-popover section + section { margin-top: .85rem; padding-top: .85rem; border-top: 1px solid var(--line); }
+.live-runs-popover h2 { margin-bottom: .5rem; color: var(--text-muted); font-family: inherit; font-size: .78rem; font-weight: 600; letter-spacing: normal; }
+.live-runs-popover ul { margin: 0; padding: 0; list-style: none; }
+.live-runs-popover li + li { margin-top: .6rem; padding-top: .6rem; border-top: 1px solid var(--line); }
+.live-runs-popover a { border-radius: .3rem; text-decoration: none; }
+.live-runs-popover a:hover { background: var(--surface-hover); }
+.live-run-link { display: grid; gap: .2rem; padding: .3rem; font-size: .78rem; }
+.live-run-identity { font-size: .85rem; font-weight: 600; }
 .attempt-control { margin-top: 1rem; padding: .85rem; border: 1px solid var(--line); border-radius: .75rem; background: #f5f6f1; }
 .attempt-control label { display: grid; gap: .4rem; margin-bottom: .65rem; }
 main { padding: 2rem clamp(1rem, 4vw, 4rem) 4rem; }

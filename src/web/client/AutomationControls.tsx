@@ -33,10 +33,8 @@ export function AutomationControls({
       {automation.state === "paused" || automation.state === "pausing" ? (
         <button className="topbar-control automation-status-action" disabled={!canResume}
           aria-label={automation.state === "pausing" ? "Resume automation" : undefined}
-          title={automation.state === "pausing" ? "New dispatch is paused; existing agents and workspace preparations are finishing." : undefined}
           onClick={() => void resumeAutomation().then(onChanged).catch(reportFailure)}>
           {automation.state === "pausing" ? <span className="activity-spinner" aria-hidden="true" /> : <span className="status-dot paused" aria-hidden="true" />} Resume
-          {automation.state === "pausing" ? <small>Existing work finishing</small> : null}
         </button>
       ) : null}
       {automation.state === "running" ? (
@@ -47,28 +45,36 @@ export function AutomationControls({
       ) : null}
       <details className="live-runs">
         <summary className="topbar-control">Current runs · {activeRuns.filter((run) => run.status !== "starting" && run.executionStarted !== false).length}{workspacePreparations.length === 0 ? "" : ` · Preparing ${workspacePreparations.length}`}</summary>
-        {activeRuns.length === 0 ? <p>No active agents.</p> : (
-          <ul>{activeRuns.map((run) => (
-            <li key={run.attemptId}>
-              <a
-                className="secondary"
-                href={`/tasks/${encodeURIComponent(run.taskId)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {run.agentId} · {run.taskId} · {run.boardName} / {run.columnName} · {run.status} ·{" "}
-                {run.executionStarted === false || run.status === "starting" ? (run.status === "interrupting" ? "Stopping startup" : "Starting agent") : <ElapsedTime startedAt={run.startedAt} />}
-              </a>
-            </li>
-          ))}</ul>
-        )}
-        {workspacePreparations.length === 0 ? null : <>
-          <p>Preparing workspaces · {workspacePreparations.length}</p>
-          <ul>{workspacePreparations.map((preparation) => <li key={preparation.taskId}>
-            <a href={`/tasks/${encodeURIComponent(preparation.taskId)}`}>{preparation.taskId}</a>
-            <WorkspacePreparation preparation={preparation} />
-          </li>)}</ul>
-        </>}
+        <div className="live-runs-popover">
+          {activeRuns.length === 0 && workspacePreparations.length === 0 ? <p>No active agents.</p> : null}
+          {activeRuns.length === 0 ? null : <section aria-label="Agent runs">
+            <h2>Agent runs · {activeRuns.length}</h2>
+            <ul>{activeRuns.map((run) => (
+              <li key={run.attemptId}>
+                <a className="live-run-link"
+                  href={`/tasks/${encodeURIComponent(run.taskId)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span className="live-run-identity">{run.agentId} · {run.taskId}</span>
+                  <span>{run.taskTitle}</span>
+                  <span className="quiet">{run.boardName} / {run.columnName}</span>
+                  <span className="quiet">{run.executionStarted === false || run.status === "starting"
+                    ? (run.status === "interrupting" ? "Stopping startup" : "Starting agent")
+                    : <>{run.status === "interrupting" ? "Stopping agent" : "Running"} · <ElapsedTime startedAt={run.startedAt} /> elapsed</>}
+                  </span>
+                </a>
+              </li>
+            ))}</ul>
+          </section>}
+          {workspacePreparations.length === 0 ? null : <section aria-label="Preparing workspaces">
+            <h2>Preparing workspaces · {workspacePreparations.length}</h2>
+            <ul>{workspacePreparations.map((preparation) => <li key={preparation.taskId}>
+              <a className="live-run-identity" href={`/tasks/${encodeURIComponent(preparation.taskId)}`}>{preparation.taskId}</a>
+              <WorkspacePreparation preparation={preparation} />
+            </li>)}</ul>
+          </section>}
+        </div>
       </details>
       <button className="topbar-control settings-action"
         aria-label={notifications.deliveryMismatch ? "Settings, notifications need attention" : "Settings"}

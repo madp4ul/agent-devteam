@@ -54,6 +54,13 @@ clear indication that existing agents are finishing while new dispatch is paused
 
 ## Comments
 
+2026-11-08 user review: The original button styling was preferred. Showing both
+“Resume” and “existing work finishing” inside it is unnecessary and visually
+mismatched. Preserve enabled Resume during draining, but restore a single-label
+button. This supersedes any interpretation above requiring explanatory text
+inside the control. Deferred presentation correction:
+[framework 104](../../agent-coordination-framework/issues/104-restore-simple-resume-button-presentation.md).
+
 2026-11-07: User requested a ticket after waiting for the last idle-game agent
 prevented reversing a pause. Issue creation only; no live automation toggled.
 

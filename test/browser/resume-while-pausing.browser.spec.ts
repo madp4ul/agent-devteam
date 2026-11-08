@@ -21,7 +21,7 @@ for (const theme of ["dark", "light"] as const) {
     await setAppearance(page, theme);
     const resume = page.getByRole("button", { name: "Resume automation", exact: true });
     await expect(resume).toBeEnabled();
-    await expect(resume).toContainText("Existing work finishing");
+    await expect(resume).toHaveText("Resume");
     expect(await contrastRatio(resume)).toBeGreaterThanOrEqual(4.5);
     await resume.focus();
     await expect(resume).toBeFocused();
