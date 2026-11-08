@@ -24,6 +24,11 @@ without choosing the implementation yet.
 
 ## Decisions so far
 
+- [105 - Interrupt agents waiting on programs](./issues/105-interrupt-agents-waiting-on-programs.md)
+  - **Resolved:** Reproduced and fixed detached-child output retaining SDK iteration.
+  Supervise SDK execution independently, retain ownership until termination,
+  and deliver waiting guidance to existing conversations.
+
 - [102 — Collapse boards to interesting columns and retire Column layout](./issues/102-collapse-boards-to-interesting-columns.md)
   — **Resolved:** Row-only boards default to collapsed with browser-local per-board
   preferences. Shared card signals retain complete interesting columns; ordinary

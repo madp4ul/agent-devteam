@@ -7,6 +7,22 @@ function data(prompt: string): Array<Record<string, any>> {
   return [...prompt.matchAll(/```json\n([\s\S]*?)\n```/gu)].map((match) => JSON.parse(match[1]!));
 }
 
+test("waiting guidance reaches fresh, returning and interrupted conversations", () => {
+  const activation = request("waiting-guidance", "T-0038");
+  const prompts = [composeActivationPrompt(activation)];
+  activation.activationContext = { kind: "resumed", comments: [], activity: [], sourceDelivery: "current-context" };
+  activation.attempt.thread = "resumed";
+  prompts.push(composeActivationPrompt(activation));
+  activation.attempt.number = 2;
+  activation.attempt.precedingOutcome = { status: "user-interrupted", summary: "Interrupted" };
+  prompts.push(composeActivationPrompt(activation));
+  for (const prompt of prompts) {
+    assert.match(prompt, /Do not keep an activation open while waiting/);
+    assert.match(prompt, /Arrange a continuation path and end your run/);
+    assert.match(prompt, /independently of the command runner's lifetime and output streams/);
+  }
+});
+
 test("a fresh prompt separates framework hierarchy from bounded JSON task and source data", () => {
   const activation = request("activation-composed", "T-0038");
   activation.task.description = "Verify the prompt boundary.";

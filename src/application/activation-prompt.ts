@@ -3,6 +3,8 @@ import { commentHistoryRecord, historyCounts, historyCoverage, type TaskHistoryP
 
 const WORKSPACE_GUIDANCE = "The parent task-worktrees directory is reserved for framework-managed task workspaces. Do not create sibling checkouts there or change task workspace directories or registrations. Keep auxiliary Git worktrees inside your own workspace. If Windows path limits prevent that, request user help arranging a short location outside task-worktrees; do not substitute a sibling checkout.";
 
+const WAITING_GUIDANCE = "Do not keep an activation open while waiting for another participant, user action, or an interactive program to close. Arrange a continuation path and end your run. Use bounded waits for finite commands needed for your current work, and finish or cancel those commands before yielding. Launch user review apps independently of the command runner's lifetime and output streams; merely omitting an explicit wait may still leave the run blocked.";
+
 export const FRAMEWORK_GUIDANCE = `You are part of a team of agents with different responsibilities, working together to complete this task. Each task has its own team and shared coordination record. Tools can read and change tasks across this project. Process, board, and role guidance describe responsibilities and cooperation; tool descriptions explain operations and their effects.
 
 Your agent ID identifies an agent definition. A participant is identified by both task ID and agent ID. The same agent ID on another task has independent conversational memory. The framework manages each participant's current conversation; tools address participants, not conversation IDs.
@@ -10,6 +12,8 @@ Your agent ID identifies an agent definition. A participant is identified by bot
 A task lives on a board and moves through its columns as work progresses. Together, the columns define the board's workflow and identify responsibility for each stage. A column can be watched by an agent, who is normally activated when a task enters it. A comment with a canonical @agent-id token requests that participant on the destination task without transferring column responsibility. @user creates user attention; plain names do not activate anyone. Your own participant is self-addressing; the same agent ID on another task is another participant. External authors carry origin task ID/title; a reply posted to that task reaches its participants.
 
 A request to run an agent is an activation. Only one agent runs on a task at a time; other requests queue behind that run. Other participants may still change its shared task state. Agents can create relationships between tasks to represent work waiting for another task to complete. Each relationship names the agent to resume on the waiting task when the other task completes. Each completion requests that agent, even if the task is still waiting on other tasks. Removing a relationship does not activate its resume agent. Agents must move tasks between columns explicitly; ending a run does not move the task by itself.
+
+${WAITING_GUIDANCE}
 
 Before finishing, ensure a continuation path by moving the task to another appropriate column, requesting another participant with a comment mention, or waiting on another task through a relationship. A move can hand responsibility to another agent or the user, or mark the task as complete in Completion. If you cannot proceed, mention @user and explain what is needed. A comment describing next steps alone is not a continuation path. Without continuation or user attention, the framework activates the agent watching the current column to recover stalled work.
 
@@ -27,11 +31,11 @@ ${WORKSPACE_GUIDANCE}
 
 Only the user can archive or unarchive tasks. Archived tasks are read-only. Coordination access does not change Codex filesystem/command permissions. attempt.permission_block.report records a denied required action needing user intervention. Computer use skills are not supported in this environment.`;
 
-const RETURNING_FRAMING = "This is a new activation in the existing conversation. The following JSON is task state and historical data captured at dispatch. Counts/cursors identify omissions. The activation section identifies this turn's request." + "\n\n" + WORKSPACE_GUIDANCE;
+const RETURNING_FRAMING = "This is a new activation in the existing conversation. The following JSON is task state and historical data captured at dispatch. Counts/cursors identify omissions. The activation section identifies this turn's request." + "\n\n" + WORKSPACE_GUIDANCE + "\n\n" + WAITING_GUIDANCE;
 
 export function composeActivationPrompt(request: AgentRunRequest): string {
   if (request.attempt.thread === "resumed" && request.attempt.number > 1 && request.attempt.fullCompositionReason === undefined) {
-    return `# Attempt continuation\n\nContinue handling activation ${request.activationId} for task ${request.task.id}.\n\n${WORKSPACE_GUIDANCE}\n\n${jsonData({
+    return `# Attempt continuation\n\nContinue handling activation ${request.activationId} for task ${request.task.id}.\n\n${WORKSPACE_GUIDANCE}\n\n${WAITING_GUIDANCE}\n\n${jsonData({
       attempt: request.attempt,
       ...(request.attempt.precedingOutcome?.status === "user-interrupted" ? { interruption: "The preceding attempt was interrupted by the user; this is an explicit continuation." } : {}),
     })}${attachmentsSection(request)}`;

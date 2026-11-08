@@ -333,6 +333,16 @@ its diagnostics while allowing Codex to finish retries and HTTPS transport
 fallback. It reports completion or terminal failure to the core; a reconnect
 notice alone never settles the attempt or closes the native stream.
 
+Each SDK invocation runs in an owned Node subprocess with acknowledged IPC event
+delivery. Runtime projection and lifecycle persistence remain in the host.
+Cancellation terminates that worker's Windows process tree (or POSIX process
+group) independently of a blocked SDK iterator, and confirms termination before
+settlement releases task ownership. A terminal release handshake keeps the
+worker addressable through completion races. A termination failure logs a host
+diagnostic and retains ownership; it never turns a timeout into successful
+interruption. Existing task suspension and continuation semantics are unchanged.
+See [ADR 0043](adr/0043-supervise-codex-execution-outside-its-event-stream.md).
+
 Transient runtime recovery is owned by settlement and scheduling in the core.
 Released migration 0012 stores mutable outage episodes and marks provisional
 probes. Deterministic classification prefers explicit runtime codes/deadlines;

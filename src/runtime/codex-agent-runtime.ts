@@ -1,4 +1,4 @@
-import { Codex, type CodexOptions, type Input, type ThreadEvent, type ThreadOptions } from "@openai/codex-sdk";
+import type { Input, ThreadEvent, ThreadOptions } from "@openai/codex-sdk";
 import { dirname, extname } from "node:path";
 
 import type {
@@ -19,6 +19,7 @@ import {
 } from "./codex-session-evidence-reader.ts";
 import { projectCodexTurn } from "./codex-turn-projector.ts";
 import { CodexReviewerAllowances } from "./codex-reviewer-allowances.ts";
+import { createIsolatedCodexClient } from "./isolated-codex-client.ts";
 
 export { composeActivationPrompt } from "../application/activation-prompt.ts";
 
@@ -125,7 +126,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
       if (signal?.aborted) throw signal.reason ?? new Error("Agent run interrupted");
       const execute = async (): Promise<AgentRunOutcome> => {
         threadReplaced = false;
-        const client = (this.#options.createClient ?? createCodexClient)(clientOptions);
+        const client = (this.#options.createClient ?? createIsolatedCodexClient)(clientOptions);
         const threadOptions: CodexThreadOptionsLike = {
           workingDirectory: request.workspace.path,
           ...(request.agent.model === undefined ? {} : { model: request.agent.model }),
@@ -330,8 +331,4 @@ async function* observeEvents(
     observed();
     yield event;
   }
-}
-
-function createCodexClient(options: CodexClientOptionsLike): CodexClientLike {
-  return new Codex(options as CodexOptions) as unknown as CodexClientLike;
 }
