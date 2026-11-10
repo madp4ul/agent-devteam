@@ -8,6 +8,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
 import { CoordinationDatabase } from "../../src/application/internal/coordination-database.ts";
+import { coordinationMigrations } from "../../src/application/internal/migrations/registry.ts";
+import { canonicalHumanIdentityMigration } from "../../src/application/internal/migrations/0013-canonical-human-identity.ts";
 import { ConversationContextDeliveryModule } from "../../src/application/internal/conversation-context-delivery-module.ts";
 import { AgentToolScopeRegistry } from "../../src/mcp/agent-tool-scope.ts";
 import { startWebServer } from "../../src/web/web-server.ts";
@@ -71,9 +73,13 @@ test(`${storedData}: browser human comments retain unique IDs and canonical attr
       database.prepare("UPDATE command_responses SET command_type = ?, response_json = ? WHERE command_type = ? AND idempotency_key = ?")
         .run(JSON.stringify(identity), toLegacy(row.response_json), row.command_type, row.idempotency_key);
     }
-    database.exec("DELETE FROM coordination_migrations WHERE position >= 13");
     database.close();
-    application = await CoordinationApplication.start(options);
+    // Replay the data conversion in a synthetic pending migration. Rewinding the
+    // current ledger would incorrectly rerun newer structural migrations.
+    application = await CoordinationApplication.startForMigrationTest(options, {
+      migrations: [...coordinationMigrations, { ...canonicalHumanIdentityMigration,
+        id: `${String(coordinationMigrations.length + 1).padStart(4, "0")}_test_human_attribution` }],
+    });
     server = await startWebServer(application, { host: "127.0.0.1", port: 0, agentToolScopes: scopes });
     const replay = await post(`tasks/${taskId}/comments`, { body: "@user @implementer Please reply to me.", idempotencyKey: "comment" });
     assert.equal(replay.comment.id, comment.id, "upgrade preserves retry identity");

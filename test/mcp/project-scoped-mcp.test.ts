@@ -297,6 +297,13 @@ boards:
   assert.deepEqual(
     listed.tools.map((tool) => tool.name),
     [
+      "resource.claim",
+      "resource.release",
+      "resource.list",
+      "resource.inspect",
+      "resource.create",
+      "resource.edit",
+      "resource.archive",
       "board.list",
       "task.list",
       "task.archive.list",
@@ -334,7 +341,7 @@ boards:
   assert.match(commentTool.description ?? "", /display name or agent ID without the @ prefix/u);
   assert.match(commentTool.description ?? "", /@review-agent please review/u);
   assert.match(commentTool.description ?? "", /Review Agent completed the review/u);
-  assert.equal(listed.tools.length, 20);
+  assert.equal(listed.tools.length, 27);
   for (const tool of listed.tools) {
     const properties = tool.inputSchema.properties ?? {};
     assert.equal("actor" in properties || "attemptId" in properties || "conversationId" in properties || "callerTaskId" in properties, false);
@@ -572,7 +579,7 @@ boards:
     taskId: "T-0002", targetTaskId: created.task.id, resumeAgent: "self", idempotencyKey: "reject-mcp-cycle",
   } });
   assert.equal(circularDependency.isError, true);
-  assert.deepEqual(JSON.parse(textContent(circularDependency.content)),
+  assert.partialDeepStrictEqual(JSON.parse(textContent(circularDependency.content)),
     { accepted: false, reason: "circular-relationship" });
   const dependencyPayload = JSON.parse(textContent(dependencyResult.content)) as {
     accepted: true;

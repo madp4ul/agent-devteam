@@ -17,7 +17,8 @@ export function errorMessage(error: unknown): string {
     }
     if (body.reason === "empty-title") return "Enter an outcome-oriented title.";
     if (body.reason === "empty-description") return "Enter a complete description.";
-    if (body.reason === "circular-relationship") return "This relationship would create a circular wait.";
+    if (body.reason === "active-resource-claims") return "This task still holds or is waiting for shared resources. Ask a participant on the task to release or cancel its claims before archiving it.";
+    if (body.reason === "circular-relationship") return body.diagnostic ?? "This relationship would create a circular wait.";
     if (body.reason === "completion-is-not-starting-column") {
       return "Create the task in a workflow column, then move it to Completion when the work is done.";
     }

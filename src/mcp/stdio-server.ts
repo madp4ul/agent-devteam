@@ -20,9 +20,38 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Tools operate on mapped mutable project tasks across boards. current always identifies the caller's task; self resolves to the caller's stable agent ID. Keys identify intended mutations across retries: exact normalized requests replay, changed requests reject. Task participants have independent memory across tasks. Execution, archival and process controls remain user-owned.",
+      "Tools operate on mapped mutable project tasks across boards. current always identifies the caller's task; self resolves to the caller's stable agent ID. Keys identify intended mutations across retries: exact normalized requests replay, changed requests reject. Task participants have independent memory across tasks. Execution, task archival and process controls remain user-owned.",
   },
 );
+
+server.registerTool("resource.claim", {
+  description: "Request exclusive use for your current task. A free resource is held immediately without another activation; otherwise your FIFO pending claim suppresses stall recovery and a later grant activates you. Other task work can continue. Duplicate active claims fail. Stop resource use and release every claim before completing your task.",
+  inputSchema: { resourceId: z.string().min(1), idempotencyKey: z.string().min(1) },
+}, async ({ resourceId, ...body }) => callAgentApi("POST", `/agent-api/resources/${encodeURIComponent(resourceId)}/claim`, body));
+server.registerTool("resource.release", {
+  description: "Release a specific held claim after stopping resource use, or cancel a pending claim. Any agent on your current task may release its claims; another task's claims cannot be released. A held release grants the next FIFO waiter and queues its requester. Use the claim ID returned by claim or inspection, never a resource ID. A released claim cannot revive or release a newer claim.",
+  inputSchema: { claimId: z.string().min(1), idempotencyKey: z.string().min(1) },
+}, async ({ claimId, ...body }) => callAgentApi("POST", `/agent-api/resource-claims/${encodeURIComponent(claimId)}/release`, body));
+server.registerTool("resource.list", {
+  description: "List project shared resources. Archived definitions are excluded unless explicitly requested.",
+  inputSchema: { includeArchived: z.boolean().optional() },
+}, async ({ includeArchived }) => callAgentApi("GET", `/agent-api/resources${includeArchived ? "?includeArchived=true" : ""}`));
+server.registerTool("resource.inspect", {
+  description: "Inspect a project shared resource, including an archived definition.",
+  inputSchema: { resourceId: z.string().min(1) },
+}, async ({ resourceId }) => callAgentApi("GET", `/agent-api/resources/${encodeURIComponent(resourceId)}`));
+server.registerTool("resource.create", {
+  description: "Create a project shared resource with a title and optional description. Exact retries replay.",
+  inputSchema: { title: z.string().min(1), description: z.string().optional(), idempotencyKey: z.string().min(1) },
+}, async body => callAgentApi("POST", "/agent-api/resources", body));
+server.registerTool("resource.edit", {
+  description: "Edit a shared resource definition using its current revision. Omitted fields stay unchanged.",
+  inputSchema: { resourceId: z.string().min(1), expectedRevision: z.number().int().positive(), title: z.string().min(1).optional(), description: z.string().optional(), idempotencyKey: z.string().min(1) },
+}, async ({ resourceId, ...body }) => callAgentApi("PATCH", `/agent-api/resources/${encodeURIComponent(resourceId)}`, body));
+server.registerTool("resource.archive", {
+  description: "Archive an unused shared resource definition. Archived definitions remain inspectable.",
+  inputSchema: { resourceId: z.string().min(1), expectedRevision: z.number().int().positive(), idempotencyKey: z.string().min(1) },
+}, async ({ resourceId, ...body }) => callAgentApi("POST", `/agent-api/resources/${encodeURIComponent(resourceId)}/archive`, body));
 
 server.registerTool(
   "board.list",

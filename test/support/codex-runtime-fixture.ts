@@ -206,6 +206,7 @@ export function request(activationId: string, taskId: string): AgentRunRequest {
       ],
       activity: [],
       activations: [],
+      resourceClaims: [],
     },
     workspace: {
       path: "C:\\tasks\\worktree",

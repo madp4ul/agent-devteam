@@ -1,6 +1,11 @@
 import type { CoordinationApplication } from "../../application/coordination-application.ts";
 
 export type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
+  | "queryResources"
+  | "queryResource"
+  | "createResource"
+  | "editResource"
+  | "archiveResource"
   | "queryNotificationPolicy"
   | "queryProcessCostStatistics"
   | "updateNotificationPolicy"

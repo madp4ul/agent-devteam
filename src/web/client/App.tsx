@@ -1,3 +1,4 @@
+import { ResourcePage } from "./Resources.tsx";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { BoardPage } from "./BoardPage.tsx";
@@ -36,10 +37,12 @@ export function App(): ReactNode {
     setLocationKey((value) => value + 1);
   }, []);
   const notifications = useDesktopNotifications(navigate);
+  const resourceMatch = /^\/resources\/([^/]+)$/.exec(window.location.pathname);
+  const resourceId = resourceMatch?.[1] === undefined ? undefined : decodeURIComponent(resourceMatch[1]);
   const taskMatch = /^\/tasks\/([^/]+)$/.exec(window.location.pathname);
   const taskId = taskMatch?.[1] === undefined ? undefined : decodeURIComponent(taskMatch[1]);
   return <>
-    {taskId === undefined ? (
+    {resourceId !== undefined ? <ResourcePage key={`resource-${locationKey}`} resourceId={resourceId} navigate={navigate} notifications={notifications} /> : taskId === undefined ? (
       <BoardPage key={`board-${locationKey}`} navigate={navigate} notifications={notifications} />
     ) : (
       <TaskMarkdownProvider taskId={taskId}>

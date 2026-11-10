@@ -1,3 +1,4 @@
+import { registerResourceRoutes } from "../http/resource-routes.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { createHttpDispatcher, type RouteCatalogEntry } from "../http/dispatcher.ts";
@@ -21,6 +22,7 @@ export function createBrowserApiRoutes(
   openers: WorkspaceOpeners,
 ): BrowserApiRoutes {
   const dispatcher = createHttpDispatcher<HttpRouteContext>();
+  registerResourceRoutes(dispatcher, application, "/api", () => ({ actor: { kind: "user", id: "user" } }));
   registerSettingsRoutes(dispatcher, application);
   registerAutomationRoutes(dispatcher, application);
   registerTaskRoutes(dispatcher, application);

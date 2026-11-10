@@ -162,7 +162,8 @@ export class ProcessStateStore {
       if (
         impact.unmappedTasks.length === 0 &&
         impact.staleActivations.length === 0 &&
-        impact.unavailableResumeAssignments.length === 0
+        impact.unavailableResumeAssignments.length === 0 &&
+        (impact.unavailableResourceAssignments?.length ?? 0) === 0
       ) {
         connection.prepare("UPDATE runtime SET impact_previous_version = NULL WHERE singleton = 1").run();
         return undefined;
@@ -222,7 +223,9 @@ export class ProcessStateStore {
       target_task_id: string;
       resume_agent_id: string | null;
     }>;
+    const unavailableResourceAssignments = this.unavailableResourceAssignments();
     return {
+      ...(unavailableResourceAssignments.length ? { unavailableResourceAssignments } : {}),
       previousVersion,
       currentVersion,
       unmappedTasks: unmappedTasks.map((task) => ({
@@ -258,7 +261,8 @@ export class ProcessStateStore {
     const impact = this.readDefinitionImpact(previousVersion, currentVersion);
     return impact.unmappedTasks.length > 0 ||
       impact.staleActivations.length > 0 ||
-      impact.unavailableResumeAssignments.length > 0
+      impact.unavailableResumeAssignments.length > 0 ||
+      (impact.unavailableResourceAssignments?.length ?? 0) > 0
       ? impact
       : undefined;
   }
@@ -276,6 +280,7 @@ export class ProcessStateStore {
   }
 
   hasUnavailableResumeAssignments(): boolean {
+    if (this.unavailableResourceAssignments().length > 0) return true;
     return this.#database.connection.prepare(
       `SELECT 1
        FROM task_relationships relationship
@@ -284,6 +289,14 @@ export class ProcessStateStore {
        WHERE ${unavailableResumeAssignmentPredicate}
        LIMIT 1`,
     ).get() !== undefined;
+  }
+
+  private unavailableResourceAssignments(): NonNullable<ProcessDefinitionImpact["unavailableResourceAssignments"]> {
+    return (this.#database.connection.prepare(`SELECT claim.id AS claimId, claim.resource_id AS resourceId,
+      claim.task_id AS taskId, claim.requesting_agent_id AS requestingAgentId
+      FROM resource_claims claim JOIN agents agent ON agent.id = claim.requesting_agent_id
+      WHERE claim.status = 'pending' AND agent.applied <> 1 ORDER BY claim.sequence`).all() as unknown as
+      NonNullable<ProcessDefinitionImpact["unavailableResourceAssignments"]>).map(row => ({ ...row }));
   }
 
   rebaseCompatibleStaleActivations(): string[] {

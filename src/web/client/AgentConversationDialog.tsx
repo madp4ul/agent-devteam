@@ -537,6 +537,7 @@ function activationReasonLabel(reason: AgentConversationView["originatingActivat
     case "column-entry": return "Column entry";
     case "agent-mention": return "Agent mention";
     case "relationship-satisfied": return "Relationship satisfied";
+    case "resource-granted": return "Resource granted";
     case "relationship-changed": return "Relationship changed";
     case "user-follow-up": return "User follow-up";
     case "stall-recovery": return "Stall recovery";

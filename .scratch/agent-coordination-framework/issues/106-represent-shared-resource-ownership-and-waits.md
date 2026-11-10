@@ -2,7 +2,7 @@
 
 **Type:** research
 
-**Status:** open
+**Status:** resolved
 
 **Blocked by:** None
 
@@ -12,10 +12,10 @@
 
 ## Scope
 
-Discussion draft, not an approved specification or implementation assignment.
-The user will let the current Autonomous V2 checkpoint proceed and observe further
-resource problems before choosing a temporary process workaround or framework
-support. Do not change the running process as part of this issue.
+The original discussion draft below is retained as historical context. Grilling
+on 2026-11-10 resolved the design and authorized implementation through the
+[shared-resources specification](../../shared-resources/spec.md). Do not change
+the running Idle Game process as part of this issue.
 
 ## Problem
 
@@ -130,3 +130,32 @@ generic proposal to wake parents merely because children are in unwatched column
 
 - 2026-11-10: User requested this draft and deferred detailed design until later.
   No runtime or process changes were made.
+- 2026-11-10: Grilling completed; user approved the shared understanding and
+  authorized specification, delivery tickets, implementation and review without
+  further skill confirmation gates. The clean implementation baseline is
+  `f39d0af6d1e9f4654678089113f312535c104baa`.
+
+## Answer
+
+Represent project-local resources with sequential R IDs and task-owned claims.
+One atomic request grants immediately or queues FIFO; queued handoff assigns
+ownership and creates the original participant's normal activation together.
+Pending claims suppress stall recovery but permit other task work. Any same-task
+agent can cancel/release; users do not directly claim/release, but human Completion
+clears all claims while agent Completion rejects them. Archive only unused resources.
+Keep lifecycle timeline evidence and current exact-claim status in grant context.
+Reject cycles across task relationships and resource queue ordering with actionable
+coordination guidance. Resource overview/detail and task sidebar expose the model.
+
+The decision is resolved; delivery is tracked separately in
+[01 — catalog](../../shared-resources/issues/01-resource-catalog.md),
+[02 — claim lifecycle](../../shared-resources/issues/02-claim-and-wake-lifecycle.md), and
+[03 — combined cycles](../../shared-resources/issues/03-combined-wait-cycles.md).
+See the [specification](../../shared-resources/spec.md) for the complete approved
+behavior and [ADR 0044](../../../docs/adr/0044-coordinate-shared-resources-through-task-owned-claims.md)
+for durable design reasoning.
+
+Delivery completed 2026-11-10: all three implementation tickets are implemented
+and reviewed. See the specification's delivery validation for full-suite results,
+resolved review findings and the confirmed pre-existing test failure. Changes are
+unstaged for user review; the running project was not restarted.

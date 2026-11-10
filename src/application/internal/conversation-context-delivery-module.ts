@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { readResourceClaim } from "./resource-module.ts";
 
 import type { ActivationContextView } from "../runtime-contract.ts";
 import type { TaskView } from "../task-contract.ts";
@@ -22,7 +23,7 @@ export class ConversationContextDeliveryModule {
       const stored = this.#database
         .prepare("SELECT context_json FROM activation_contexts WHERE activation_id = ?")
         .get(activationId) as { context_json: string } | undefined;
-      if (stored !== undefined) return JSON.parse(stored.context_json) as ActivationContextView;
+      if (stored !== undefined) return this.refreshGrant(activationId, JSON.parse(stored.context_json) as ActivationContextView);
 
       const conversation = this.#database.prepare(
         `SELECT conversation.id, conversation.originating_activation_id,
@@ -109,7 +110,16 @@ export class ConversationContextDeliveryModule {
         JSON.stringify(currentPins.map(({ id }) => id)),
         conversation.id,
       );
-      return context;
+      return this.refreshGrant(activationId, context);
     });
+  }
+  private refreshGrant(activationId: string, context: ActivationContextView): ActivationContextView {
+    const grant = this.#database.prepare(`SELECT json_extract(event.details_json, '$.claimId') AS claim_id
+      FROM activations activation JOIN activity_ledger event ON event.id = activation.source_event_id
+      WHERE activation.id = ? AND activation.reason_type = 'resource-granted'`).get(activationId) as { claim_id: string } | undefined;
+    if (!grant) return context;
+    const claim = readResourceClaim(this.#database, grant.claim_id);
+    if (!claim) throw new Error(`Grant activation ${activationId} has no retained resource claim`);
+    return { ...context, resourceGrant: claim };
   }
 }

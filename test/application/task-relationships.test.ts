@@ -1022,9 +1022,9 @@ test("retained mixed relationships reject circular waits even through completed 
   assert.equal(application.moveTask({ taskId: second.id, destinationColumnId: "completion",
     expectedRevision: second.revision, actor, idempotencyKey: "cycle-complete" }).accepted, true);
   const before = [first, second, third].map(({ id }) => application.queryTask(id));
-  assert.deepEqual(link(third.id, first.id, "dependency"),
+  assert.partialDeepStrictEqual(link(third.id, first.id, "dependency"),
     { accepted: false, reason: "circular-relationship" });
-  assert.deepEqual(link(second.id, first.id, "dependency"),
+  assert.partialDeepStrictEqual(link(second.id, first.id, "dependency"),
     { accepted: false, reason: "circular-relationship" });
   assert.deepEqual([first, second, third].map(({ id }) => application.queryTask(id)), before);
   assert.equal(link(first.id, third.id, "dependency").accepted, true);

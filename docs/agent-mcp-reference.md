@@ -3,9 +3,9 @@
 The `coordination` MCP server exposes the tools below. Read tools may inspect
 shared project state. Task mutations accept any mapped mutable project task. Their required
 `taskId` is `current` or a concrete ID; `current` always means the caller's task,
-not the last inspected destination. This is the complete twenty-tool surface.
+not the last inspected destination. The table below lists the complete tool surface.
 Removed/current-only names are not MCP aliases; historical transcripts remain
-recognizable. Execution, archival, process, notification and project controls
+recognizable. Execution, task archival, process, notification and project controls
 are not agent tools.
 
 Every result is JSON in one MCP text-content item. Rejected queries and
@@ -19,6 +19,13 @@ checking a now-advanced task revision. `self` resolves to the caller's stable ag
 
 | Tool | Input | Registered description | Successful result |
 | --- | --- | --- | --- |
+| `resource.claim` | `resourceId`, `idempotencyKey` | Claim for the authenticated current task; grant immediately or queue FIFO. | `{ accepted: true, claim: ResourceClaim }` |
+| `resource.release` | `claimId`, `idempotencyKey` | Release held ownership or cancel a pending claim belonging to the current task. | `{ accepted: true, claim: ResourceClaim }` |
+| `resource.list` | optional `includeArchived` | List project shared resources; archived definitions are excluded by default. | `{ available: true, resources: Resource[] }` |
+| `resource.inspect` | `resourceId` | Inspect a shared resource, including an archived definition. | `{ available: true, resource: Resource }` |
+| `resource.create` | `title`, optional `description`, `idempotencyKey` | Create a project shared resource. | `{ accepted: true, resource: Resource }` |
+| `resource.edit` | `resourceId`, `expectedRevision`, optional `title`/`description`, `idempotencyKey` | Edit supplied fields on an active resource. | `{ accepted: true, resource: Resource }` |
+| `resource.archive` | `resourceId`, `expectedRevision`, `idempotencyKey` | Archive an unused resource; its definition remains inspectable. | `{ accepted: true, resource: Resource }` |
 | `board.list` | none | List boards with ordered columns, watching agents, and task counts without task payloads. | `{ available: true, boards }`; each column includes ID, name, watcher, framework/creation flags, and task count. |
 | `task.list` | `boardId`, `columnIds[]`, optional `pageSize` (1–50), optional `cursor` | List a bounded page of compact task overviews from one or more explicit columns. | `{ available: true, tasks: TaskOverview[], nextCursor }` |
 | `task.archive.list` | optional `pageSize` (default20/max50), `cursor` | Deliberately list tasks retained in archive history. Archived tasks are excluded from ordinary column listings. | `{ available: true, tasks: TaskOverview[], nextCursor }` |
@@ -40,7 +47,31 @@ checking a now-advanced task revision. `self` resolves to the caller's stable ag
 | `task.relationship.remove` | `taskId`, `relationshipId`, `idempotencyKey` | Remove a mistaken relationship from current or a concrete task without waking its resume agent. | `{ accepted: true, relationship }` |
 | `attempt.permission_block.report` | `summary` | Report that the current activation cannot complete because the Codex permission policy blocked a required action. Use only after a required action was denied and user action or a policy change is necessary. | `{ accepted: true, taskId }` |
 
+## Resource catalog transport
+
+Browser `/api/resources` and authenticated `/agent-api/resources` expose the same
+catalog: GET lists definitions (`?includeArchived=true` includes archived ones),
+POST creates, GET `/:resourceId` inspects, PATCH `/:resourceId` edits, and POST
+`/:resourceId/archive` archives. Commands use the MCP fields above; resourceId is
+in the HTTP path. The server supplies user/agent identity and the authenticated
+agent's origin task; body fields cannot override them. Successful creation is
+201, other successful requests 200, missing resources 404, invalid fields 400,
+and revision/archival/idempotency conflicts 409.
+
+Titles are required and trimmed. Descriptions are optional, default to an empty
+string, and can be cleared. Edits require at least one supplied field. Revisions
+begin at one and increment on successful edits/archival. Archived records are
+read-only. Retry receipts retain the original result even after origin-task
+archival, preventing duplicate resources on delayed retries.
+
 ## Returned records
+
+- `Resource`: sequential project-local `id` (`R-0001`), `title`, `description`,
+  `revision`, `archived`, `owner` (held claim or null), and FIFO `queue`.
+- `ResourceClaim`: unique `id`, `resourceId`/`resourceTitle`, `taskId`/`taskTitle`,
+  `requestingAgentId`/`requestingAgentName`, `status` (`pending`, `held`, `released`,
+  `cancelled`), `requestedAt`, nullable `grantedAt` and `closedAt`. Task inspection
+  exposes active `resourceClaims`; overview `waitingOn.resourceIds` identifies pending resources.
 
 - `TaskOverview`: `id`, `title`, `boardId`, `column { id, name }`, `revision`,
   waiting state, relationships, unresolved attention, suspension/startup state,
@@ -163,3 +194,36 @@ or movement to a user-owned/Completion column. A prose-only plan does not provid
 continuation. Every waiting relationship suppresses recovery without blocking
 ordinary work. The third normally finished recovery without continuation creates
 framework attention rather than another run; technical retries use existing policy.
+
+
+## Shared resource coordination
+
+Claims and new dependency/parent-child relationships reject combined circular
+waits atomically. The check includes all retained relationships (even satisfied
+ones), resource holders, and earlier FIFO waiters. Claim rejection returns
+`reason: "circular-wait"`; relationship rejection keeps
+`reason: "circular-relationship"`. Both include `diagnostic` with the involved
+task IDs, relationship types/IDs, resource IDs and blocking chain. Inspect and
+consult the participants on those tasks to stop using and release resources,
+cancel pending claims, or remove unnecessary relationships before retrying.
+Rejection creates no claim, activity, activation or stall-recovery exemption.
+
+Use `resource.claim` from the task that will use the resource. An immediate held
+claim needs no extra activation. A pending claim establishes a reliable wait and
+suppresses stall recovery while leaving ordinary task work eligible. Release
+assigns ownership to the next FIFO task and creates one `resource-granted`
+activation for its original requesting participant, even if that task is busy or
+paused. No other task may bypass that ownership.
+
+Stop using a held resource before calling `resource.release`. The same command
+cancels a pending claim, and any agent on that task can perform it. A release uses
+the exact claim identity so an old request cannot release a newer claim. Duplicate
+active claims for one task/resource fail with the existing claim; exact transport
+retries retain normal idempotency behavior. Another task cannot release the claim.
+
+Agent Completion rejects any held or pending claims. User Completion implicitly
+releases held claims and cancels pending requests. Resource and task archival
+reject active claims. Failure, pause and restart never silently release ownership.
+Resource lifecycle events appear in task history. A grant activation retains its
+historical cause after release; current dispatch/continuation context says whether
+its exact claim is still held or was released, without requiring another query.

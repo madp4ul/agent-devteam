@@ -2,14 +2,14 @@ import type { TaskCommandSummary } from "../task-contract.ts";
 
 const taskCommands = new Set(["create-task", "create-child-task", "edit-task", "move-task", "add-task-comment", "archive-task", "unarchive-task"]);
 const relationshipCommands = new Set(["create-task-relationship", "remove-task-relationship", "edit-task-relationship-resume-agent"]);
-const boardRejections = ["not-found", "invalid-destination", "completion-is-not-starting-column", "invalid-starting-ref", "workspace-preparing", "workspace-already-provisioned", "archived-task", "unmapped-task-user-only", "empty-title", "empty-description", "resume-agent-not-found", "no-changes", "idempotency-conflict", "revision-conflict"];
+const boardRejections = ["not-found", "invalid-destination", "completion-is-not-starting-column", "active-resource-claims", "invalid-starting-ref", "workspace-preparing", "workspace-already-provisioned", "archived-task", "unmapped-task-user-only", "empty-title", "empty-description", "resume-agent-not-found", "no-changes", "idempotency-conflict", "revision-conflict"];
 const rejections: Record<string, readonly string[]> = {
   "create-task": boardRejections, "create-child-task": boardRejections, "edit-task": boardRejections, "move-task": boardRejections,
   "add-task-comment": ["not-found", "archived-task", "empty-comment", "idempotency-conflict"],
   "create-task-relationship": ["not-found", "archived-task", "self-relationship", "duplicate-relationship", "circular-relationship", "resume-agent-not-found", "idempotency-conflict"],
   "remove-task-relationship": ["not-found", "archived-task", "relationship-conflict", "idempotency-conflict"],
   "edit-task-relationship-resume-agent": ["not-found", "archived-task", "relationship-conflict", "relationship-satisfied", "resume-agent-not-found", "idempotency-conflict"],
-  "archive-task": ["not-found", "already-archived", "archive-in-progress", "not-completed", "waiting-relationships", "activation-work-pending", "automation-suspended", "workspace-dirty", "workspace-commit-not-durable", "workspace-registration-invalid", "workspace-ownership-untrusted", "workspace-nested-worktrees", "workspace-locked", "workspace-removal-failed", "workspace-cleanup-failed", "runtime-unavailable"],
+  "archive-task": ["not-found", "already-archived", "archive-in-progress", "not-completed", "active-resource-claims", "waiting-relationships", "activation-work-pending", "automation-suspended", "workspace-dirty", "workspace-commit-not-durable", "workspace-registration-invalid", "workspace-ownership-untrusted", "workspace-nested-worktrees", "workspace-locked", "workspace-removal-failed", "workspace-cleanup-failed", "runtime-unavailable"],
   "unarchive-task": ["not-found", "not-archived"],
 };
 

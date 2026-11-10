@@ -740,6 +740,7 @@ test("full task inspection keeps history and attachments behind on-demand querie
     revision: 2,
     workspaceStatus: { state: "unprovisioned", startingRef: "main", startingRefEditable: true },
     relationships: [],
+    resourceClaims: [],
     waitingOn: { taskIds: [] },
     run: {
       status: "queued",

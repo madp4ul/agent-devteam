@@ -19,6 +19,8 @@ const eligibleTask = `
       WHERE work.task_id = task.id AND work.status <> 'completed' AND work.id <> ?)
     AND NOT EXISTS (SELECT 1 FROM attention_reasons attention
       WHERE attention.task_id = task.id AND attention.resolved_at IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM resource_claims claim
+      WHERE claim.task_id = task.id AND claim.status = 'pending')
     AND NOT EXISTS (SELECT 1 FROM task_relationships relationship
       JOIN tasks target ON target.id = relationship.target_task_id
       WHERE relationship.source_task_id = task.id AND target.column_id <> 'completion')`;

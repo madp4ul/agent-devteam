@@ -20,6 +20,10 @@ export interface TaskActivityView {
     | "relationship.created"
     | "relationship.removed"
     | "relationship.satisfied"
+    | "resource.requested"
+    | "resource.granted"
+    | "resource.cancelled"
+    | "resource.released"
     | "relationship.resume-agent-changed"
     | "attention.created"
     | "attention.resolved"
@@ -84,6 +88,7 @@ export interface TaskWorkspaceGitStateView {
 }
 
 export interface TaskOverviewView {
+  heldResourceIds?: string[];
   workspacePreparation?: import("./automation-contract.ts").WorkspacePreparationView;
   id: string;
   title: string;
@@ -91,7 +96,7 @@ export interface TaskOverviewView {
   column: { id: string; name: string };
   revision: number;
   archived?: true;
-  waitingOn: { taskIds: string[] };
+  waitingOn: { taskIds: string[]; resourceIds?: string[] };
   relationships: TaskRelationshipView[];
   unresolvedAttention: TaskAttentionView[];
   automationSuspended: boolean;
@@ -113,6 +118,7 @@ export interface TaskOverviewsQuery {
 }
 
 export interface TaskInspectionView {
+  resourceClaims: import("./resource-contract.ts").ResourceClaimView[];
   workspaceStatus: {
     state: "unprovisioned" | "preparing" | "provisioned";
     startingRef: string;
@@ -203,6 +209,7 @@ export interface TaskAttachmentView {
 }
 
 export interface TaskView {
+  resourceClaims: import("./resource-contract.ts").ResourceClaimView[];
   id: string;
   title: string;
   description: string;
@@ -402,7 +409,7 @@ export interface ArchiveCompletedTasksCommand {
 
 export type ArchiveTaskResult =
   | { accepted: true; task: TaskCommandSummary }
-  | { accepted: false; reason: "not-found" | "already-archived" | "archive-in-progress" | "not-completed" | "waiting-relationships" | "activation-work-pending" | "automation-suspended" | "workspace-dirty" | "workspace-commit-not-durable" | "workspace-registration-invalid" | "workspace-ownership-untrusted" | "workspace-nested-worktrees" | "workspace-locked" | "workspace-removal-failed" | "workspace-cleanup-failed" | "runtime-unavailable" }
+  | { accepted: false; reason: "not-found" | "already-archived" | "archive-in-progress" | "not-completed" | "active-resource-claims" | "waiting-relationships" | "activation-work-pending" | "automation-suspended" | "workspace-dirty" | "workspace-commit-not-durable" | "workspace-registration-invalid" | "workspace-ownership-untrusted" | "workspace-nested-worktrees" | "workspace-locked" | "workspace-removal-failed" | "workspace-cleanup-failed" | "runtime-unavailable" }
   | { accepted: false; reason: "workspace-preview-changed" | "workspace-preview-unavailable" | "workspace-nested-cleanup-failed"; removedWorktrees?: string[]; cleanupFailure?: WorkspaceCleanupFailure }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] };
 
@@ -448,7 +455,7 @@ export type ArchiveCompletedTasksResult =
 export type BoardMutationResult =
   | { accepted: true; task: TaskCommandSummary }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { accepted: false; reason: "not-found" | "invalid-destination" | "completion-is-not-starting-column" | "invalid-starting-ref" | "workspace-preparing" | "workspace-already-provisioned" | "archived-task" | "unmapped-task-user-only" | "empty-title" | "empty-description" | "resume-agent-not-found" | "no-changes" | "idempotency-conflict" }
+  | { accepted: false; reason: "not-found" | "invalid-destination" | "completion-is-not-starting-column" | "active-resource-claims" | "invalid-starting-ref" | "workspace-preparing" | "workspace-already-provisioned" | "archived-task" | "unmapped-task-user-only" | "empty-title" | "empty-description" | "resume-agent-not-found" | "no-changes" | "idempotency-conflict"; diagnostic?: string }
   | { accepted: false; reason: "revision-conflict"; currentTask: TaskCommandSummary };
 
 export type MoveTaskResult =
@@ -465,7 +472,7 @@ export type InertMoveTaskResult = {
 export type TaskRelationshipMutationResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskCommandSummary; targetTask: TaskCommandSummary }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
-  | { accepted: false; reason: "not-found" | "archived-task" | "self-relationship" | "duplicate-relationship" | "circular-relationship" | "resume-agent-not-found" | "idempotency-conflict" };
+  | { accepted: false; reason: "not-found" | "archived-task" | "self-relationship" | "duplicate-relationship" | "circular-relationship" | "resume-agent-not-found" | "idempotency-conflict"; diagnostic?: string };
 
 export type EditTaskRelationshipResumeAgentResult =
   | { accepted: true; relationship: TaskRelationshipView; sourceTask: TaskCommandSummary; targetTask: TaskCommandSummary }

@@ -223,6 +223,7 @@ function activationReasonLabel(activation: ActivationView): string {
   if (activation.reason.type === "stall-recovery") return "Stall recovery";
   if (activation.reason.type === "column-entry") return "Column entry";
   if (activation.reason.type === "relationship-satisfied") return "Relationship satisfied";
+  if (activation.reason.type === "resource-granted") return "Resource granted";
   if (activation.reason.type === "relationship-changed") return "Relationship changed";
   return "Mentioned in a comment";
 }

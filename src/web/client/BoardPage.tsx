@@ -1,3 +1,4 @@
+import { ResourceRow } from "./Resources.tsx";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   monitorForElements,
@@ -71,6 +72,8 @@ export function BoardPage({
   const [archivedTasks, setArchivedTasks] = useState<TaskOverviewView[]>([]);
   const [archiveFailures, setArchiveFailures] = useState<Array<{ taskId: string; title?: string; reason: string }>>([]);
   const [archivesSettled, setArchivesSettled] = useState(false);
+  const [resourcesSettled, setResourcesSettled] = useState(false);
+  const resourcesLoaded = useCallback(() => setResourcesSettled(true), []);
   const showArchivedRef = useRef(showArchived);
   const archivedLoadSequence = useRef(0);
   const laneRefs = useRef(new Map<string, HTMLDivElement>());
@@ -148,7 +151,7 @@ export function BoardPage({
     (error) => setFeedback({ role: "alert", text: errorMessage(error) }),
   );
   useLayoutEffect(() => {
-    if (state === undefined || !pendingScrollRestore.current) return;
+    if (state === undefined || !resourcesSettled || !pendingScrollRestore.current) return;
     if (pendingInitialContext.current?.showArchived && showArchived && !archivesSettled) return;
     let restored = false;
     for (const [key, element] of scrollElements.current) {
@@ -183,7 +186,7 @@ export function BoardPage({
       pendingScrollRestore.current = false;
       pendingInitialContext.current = undefined;
     }
-  }, [archivesSettled, expandedBoards, filter, showArchived, state]);
+  }, [archivesSettled, resourcesSettled, expandedBoards, filter, showArchived, state]);
 
   const rememberContext = useCallback((boardId: string, taskId?: string) => {
     captureScrollPositions();
@@ -214,7 +217,7 @@ export function BoardPage({
   }, [captureScrollPositions, filter, highlightedTaskId, showArchived]);
   const openTask = useCallback((taskId: string, boardId: string) => {
     rememberContext(boardId, taskId);
-    navigate(`/tasks/${encodeURIComponent(taskId)}`, { returnToBoard: true });
+    navigate(`/tasks/${encodeURIComponent(taskId)}`, { ...window.history.state, returnToBoard: true });
   }, [navigate, rememberContext]);
   const locateTask = useCallback((taskId: string, boardId: string) => {
     setFilter("");
@@ -317,7 +320,8 @@ export function BoardPage({
           activeRuns={state.activeRuns}
           workspacePreparations={state.workspacePreparations}
           canResume={(processImpact?.staleActivations.length ?? 0) === 0 &&
-            (processImpact?.unavailableResumeAssignments.length ?? 0) === 0}
+            (processImpact?.unavailableResumeAssignments.length ?? 0) === 0 &&
+            (processImpact?.unavailableResourceAssignments?.length ?? 0) === 0}
           notifications={notifications}
           onChanged={refresh}
           onFeedback={setFeedback}
@@ -383,6 +387,13 @@ export function BoardPage({
                 ))}
               </ul>
             )}
+            {(processImpact.unavailableResourceAssignments?.length ?? 0) > 0 && <>
+              <h3>Unavailable resource requesters · {processImpact.unavailableResourceAssignments!.length}</h3>
+              <p>Restore the requesting agent in the process, or ask another participant on the task to cancel the pending claim. Completing the task as a user also cancels it.</p>
+              <ul>{processImpact.unavailableResourceAssignments!.map(claim => <li key={claim.claimId}>
+                <a href={`/tasks/${encodeURIComponent(claim.taskId)}`}>{claim.taskId}</a> waits for <a href={`/resources/${encodeURIComponent(claim.resourceId)}`}>{claim.resourceId}</a> · {claim.requestingAgentId}
+              </li>)}</ul>
+            </>}
             {processImpact.staleActivations.some((activation) => activation.targetAvailable) ? (
               <button onClick={() => void resumeWithCurrentProcess().then(refresh).catch((error) =>
                 setFeedback({ role: "alert", text: errorMessage(error) }))}>
@@ -525,6 +536,16 @@ export function BoardPage({
             </div>
           </section>
         ))}
+        <ResourceRow includeArchived={showArchived} onLoaded={resourcesLoaded}
+          onStrip={(element) => {
+            if (element === null) scrollElements.current.delete("resources");
+            else scrollElements.current.set("resources", element);
+          }}
+          onStripScroll={(position) => scrollPositions.current.set("resources", position)}
+          navigate={(path) => {
+            rememberContext(state.boards[0]?.id ?? "");
+            navigate(path, { ...window.history.state, returnToBoard: true });
+          }} />
       </main>
       {creation === undefined ? null : (
         <TaskCreationDialog

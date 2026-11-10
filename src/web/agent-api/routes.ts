@@ -1,3 +1,5 @@
+import { registerResourceRoutes } from "../http/resource-routes.ts";
+import { registerResourceClaimRoutes } from "./resource-claim-routes.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { AgentToolScopeRegistry } from "../../mcp/agent-tool-scope.ts";
@@ -18,8 +20,10 @@ export function createAgentApiRoutes(
   scopes: AgentToolScopeRegistry | undefined,
 ): AgentApiRoutes {
   const dispatcher = createHttpDispatcher<AgentRouteContext>();
+  registerResourceRoutes(dispatcher, application, "/agent-api", ({ scope }) => ({ actor: { kind: "agent", id: scope.agentId }, originTaskId: scope.taskId, ...(scope.attemptId === undefined ? {} : { attemptId: scope.attemptId }) }));
   registerDiscoveryRoutes(dispatcher, application);
   registerCurrentTaskRoutes(dispatcher, application);
+  registerResourceClaimRoutes(dispatcher, application);
 
   return {
     async dispatch(request, response, method, url) {

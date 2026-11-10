@@ -211,6 +211,31 @@ relationship edits, removal, process changes, or task movement do not retarget
 or cancel it. Unresolved outgoing relationships prevent archival so their
 future continuation cannot be orphaned.
 
+Shared resources are project-local coordination records with R-prefixed identities,
+independent of boards and process configuration. `ResourceModule` owns catalog
+commands and projections behind `CoordinationApplication`, using the existing
+idempotent command transaction and released migrations 0016/0017. Browser and authenticated
+agent routes share transport codecs while their composition supplies actor
+identity. The overview row and resource detail poll these application projections.
+Resource catalog retry receipts survive origin-task archival. The application owns
+exclusive task claims and FIFO queues in the same SQLite state. Resource
+commands and task lifecycle commands share transactional claim operations, so
+release, successor ownership, lifecycle activity and the requesting participant's
+grant activation commit together. An immediate grant creates no activation.
+Pending claims provide stall-recovery continuation without changing normal
+activation eligibility. Agent Completion rejects active claims; human Completion
+cancels pending claims and releases held resources. Task and resource archival
+cannot orphan active claims. Pauses, failures and restart preserve ownership.
+
+Resource grant activations retain their exact claim identity and ordinary queue
+position after a release. Dispatch supplies the current claim state alongside
+historical grant evidence, including on retries. Cycle rejection combines retained
+task relationships with resource queue predecessors and reports an actionable
+chain when either kind of new edge would close a cycle. Browser and agent adapters
+inspect the same ownership and waiting facts; the browser offers resource catalog
+management but no direct claim/release controls. See
+[ADR 0044](adr/0044-coordinate-shared-resources-through-task-owned-claims.md).
+
 The database is outside the project checkout and is kept with the task
 workspaces in one bound project state root. Startup validates that retained
 state rather than silently replacing or adopting inconsistent data.

@@ -29,9 +29,9 @@ without choosing the implementation yet.
     cross-task consultation, literal examples and corrected retries remain supported.
 
 - [106 - Represent shared resource ownership and waits](./issues/106-represent-shared-resource-ownership-and-waits.md)
-  - **Open research draft:** Resource contention, visible grant waits, and release
-    before completion. Design and process-versus-framework choice deferred until
-    after observing the current checkpoint.
+  - **Design resolved:** Project-local resources with task-owned FIFO claims,
+    durable grant activations, explicit completion rules and combined cycle checks.
+    [Specification and delivery tickets](../shared-resources/spec.md) track implementation.
 
 - [105 - Interrupt agents waiting on programs](./issues/105-interrupt-agents-waiting-on-programs.md)
   - **Resolved:** Reproduced and fixed detached-child output retaining SDK iteration.

@@ -287,6 +287,7 @@ export class TaskDiscovery {
         })),
         participants: this.#taskProjections.readTaskParticipants(task.id),
         waitingOn: overview.waitingOn,
+        resourceClaims: task.resourceClaims,
         run: overview.run,
         unresolvedAttention: overview.unresolvedAttention,
         currentActivation:

@@ -74,6 +74,8 @@ export class TaskArchiveStore {
             ? { accepted: false as const, reason: "archive-in-progress" as const }
             : eligibility === "completed-only" && task.column_id !== "completion"
               ? { accepted: false as const, reason: "not-completed" as const }
+              : this.#database.prepare("SELECT 1 FROM resource_claims WHERE task_id = ? AND status IN ('held', 'pending') LIMIT 1").get(command.taskId)
+                ? { accepted: false as const, reason: "active-resource-claims" as const }
               : this.hasUnresolvedRelationships(command.taskId)
                 ? { accepted: false as const, reason: "waiting-relationships" as const }
               : task.automation_suspended === 1

@@ -1,3 +1,5 @@
+import { resourceCatalogMigration } from "./0016-resource-catalog.ts";
+import { resourceClaimsMigration } from "./0017-resource-claims.ts";
 import { initialReleasedMigration } from "./0001-initial-released-schema.ts";
 import { boundTaskDetailLookupsMigration } from "./0002-bound-task-detail-lookups.ts";
 import { relationshipResumeOwnersMigration } from "./0003-relationship-resume-owners.ts";
@@ -31,4 +33,6 @@ export const coordinationMigrations = [
   canonicalHumanIdentityMigration,
   compactCommandResultsMigration,
   compactHistoricalCommandResponsesMigration,
+  resourceCatalogMigration,
+  resourceClaimsMigration,
 ] as const;

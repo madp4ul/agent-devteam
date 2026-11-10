@@ -334,6 +334,7 @@ export interface AgentRunAttachment {
 }
 
 export interface ActivationContextView {
+  resourceGrant?: import("./resource-contract.ts").ResourceClaimView;
   history?: TaskHistoryPage;
   fullHistory?: HistoryCoverage;
   pinChanges?: { pinned: TaskCommentView[]; unpinned: string[] };

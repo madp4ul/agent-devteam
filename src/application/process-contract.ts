@@ -42,6 +42,7 @@ export interface BoardSummaryView {
 }
 
 export interface ProcessDefinitionImpact {
+  unavailableResourceAssignments?: Array<{ claimId: string; resourceId: string; taskId: string; requestingAgentId: string }>;
   previousVersion: string;
   currentVersion: string;
   unmappedTasks: Array<{

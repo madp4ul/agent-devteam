@@ -71,7 +71,10 @@ export function TaskCard({
       <div className="card-signals">
         {signals.archived ? <span className="signal archived">Archived</span> : null}
         {signals.waiting ? (
-          <span className="signal waiting">Waiting on · {task.waitingOn.taskIds.join(", ")}</span>
+          <span className="signal waiting">Waiting on · {[...task.waitingOn.taskIds, ...(task.waitingOn.resourceIds ?? [])].join(", ")}</span>
+        ) : null}
+        {signals.holding ? (
+          <span className="signal running">Holding · {task.heldResourceIds?.join(", ")}</span>
         ) : null}
         {signals.attention ? (
           <span className="signal attention">Needs attention · {task.unresolvedAttention.length}</span>

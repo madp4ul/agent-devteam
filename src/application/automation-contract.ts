@@ -9,7 +9,7 @@ export interface AutomationClock {
 }
 
 export interface ActivationReasonView {
-  type: "column-entry" | "agent-mention" | "relationship-satisfied" | "relationship-changed" | "user-follow-up" | "stall-recovery";
+  type: "column-entry" | "agent-mention" | "relationship-satisfied" | "relationship-changed" | "user-follow-up" | "stall-recovery" | "resource-granted";
   sourceEventId: string;
 }
 

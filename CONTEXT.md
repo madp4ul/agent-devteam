@@ -125,6 +125,27 @@ a time.
 A generated identifier used to refer to a task from comments and external
 resources.
 
+**Shared resource**:
+A named, project-local resource whose exclusive use is coordinated between tasks,
+identified by an R-prefixed resource ID rather than a task ID.
+
+**Resource claim**:
+One task's request for exclusive use of a shared resource, retaining the requesting
+participant and its own identity across waiting, ownership and release.
+
+**Pending resource claim**:
+A claim awaiting its FIFO turn, providing a continuation path for the requesting
+participant without preventing other work on its task.
+
+**Held resource claim**:
+A claim granting its task exclusive coordination ownership; any participant on
+that task may use or release it, while the requesting participant receives any
+queued grant activation.
+
+**Resource grant activation**:
+A durable request to resume the participant whose pending claim became held,
+retaining that claim's identity even if the claim is released before dispatch.
+
 **Task overview**:
 A compact read projection of a task's title, column, waiting state,
 relationships, and run state. Board views and agent tools use it to provide
@@ -276,7 +297,7 @@ re-resolved when the run begins.
 
 **Stall recovery**:
 A bounded framework activation of a task's current column watcher when no
-unfinished activation, unresolved outgoing waiting relationship, user attention,
+unfinished activation, unresolved outgoing waiting relationship, pending resource claim, user attention,
 or task suspension provides a continuation path. Recovery is immediate except
 for 60 seconds after the last attention reason is addressed or an activation
 is dismissed. Three recovery activations without continuation create explicit

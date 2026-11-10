@@ -1,3 +1,4 @@
+import { ResourceModule } from "./resource-module.ts";
 import {
   CoordinationDatabase,
   type CoordinationDatabaseOpenOptions,
@@ -24,6 +25,7 @@ import { StallRecoveryModule } from "./stall-recovery-module.ts";
 import { reportStartupProgress, type StartupProgressObserver } from "../startup-contract.ts";
 
 export interface CoordinationPersistence {
+  resources: ResourceModule;
   process: ProcessStateStore;
   activationScheduling: ActivationSchedulingModule;
   activationResolutions: ActivationResolutionModule;
@@ -97,6 +99,7 @@ function composeCoordinationPersistence(
   const notifications = new NotificationStore(database);
   const activityJournal = new ActivityJournal(database.connection);
   const activationCreation = new ActivationCreationModule(database, activityJournal);
+  const resources = new ResourceModule(database, idempotentCommands, activityJournal, activationCreation);
   const attentionRecorder = new AttentionRecorder(
     database.connection,
     activityJournal,
@@ -131,6 +134,7 @@ function composeCoordinationPersistence(
     new StallRecoveryModule(database, activationCreation, activityJournal, attentionRecorder),
   );
   return {
+    resources,
     process: new ProcessStateStore(database),
     activationScheduling,
     activationResolutions,
@@ -143,6 +147,7 @@ function composeCoordinationPersistence(
       attentionRecorder,
       activationCreation,
       now,
+      resources,
     ),
     taskProjections,
     conversationProjections,

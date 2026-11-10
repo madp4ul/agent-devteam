@@ -242,10 +242,11 @@ function responseKeys(database: DatabaseSync) {
 }
 
 function authoritativeFacts(database: DatabaseSync) {
+  // Empty tables added by later migrations contain no authoritative facts.
   return Object.fromEntries(database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT IN ('command_responses', 'coordination_migrations') ORDER BY name")
     .all().map(({ name }) => [name, database.prepare(name === "sqlite_sequence"
       // sqlite_sequence has no domain row identity; VACUUM may renumber its
       // internal rows while retaining every named counter.
       ? "SELECT name, seq FROM sqlite_sequence ORDER BY name"
-      : `SELECT rowid AS retained_rowid, * FROM "${String(name).replaceAll('"', '""')}" ORDER BY rowid`).all()]));
+      : `SELECT rowid AS retained_rowid, * FROM "${String(name).replaceAll('"', '""')}" ORDER BY rowid`).all()] as const).filter(([, rows]) => rows.length > 0));
 }

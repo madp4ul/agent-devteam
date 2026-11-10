@@ -615,6 +615,7 @@ function activationReasonLabel(reason: AgentConversationView["originatingActivat
     case "stall-recovery": return "Stall recovery";
     case "agent-mention": return "Mentioned in a task comment";
     case "relationship-satisfied": return "Relationship satisfied";
+    case "resource-granted": return "Resource granted";
     case "relationship-changed": return "Relationship changed";
     case "user-follow-up": return "User follow-up";
   }

@@ -797,6 +797,10 @@ function activityLabel(type: TaskActivityView["type"]): string {
     "relationship.created": "Relationship created",
     "relationship.removed": "Relationship removed",
     "relationship.satisfied": "Relationship satisfied",
+    "resource.requested": "Resource requested",
+    "resource.granted": "Resource granted",
+    "resource.cancelled": "Resource claim cancelled",
+    "resource.released": "Resource released",
     "relationship.resume-agent-changed": "Resume agent changed",
     "attention.created": "Attention requested",
     "attention.resolved": "Attention resolved",
@@ -821,6 +825,9 @@ function activityLabel(type: TaskActivityView["type"]): string {
 }
 
 function activityDescription(activity: TaskActivityView, columns: TimelineColumn[], agents: TimelineAgent[]): string {
+  if (activity.type.startsWith("resource.")) {
+    return `${activity.details.resourceId} · ${activity.details.resourceTitle ?? "Shared resource"}. Requested by ${activity.details.requestingAgentName ?? nameForAgent(activity.details.requestingAgentId ?? "unknown", agents)}.`;
+  }
   if (activity.type === "stall.detected") return `No continuation path remained. Recovery ${activity.details.recoveryNumber} of ${activity.details.recoveryLimit} requested for ${nameForAgent(activity.details.targetAgentId ?? "the watcher", agents)}.`;
   if (activity.type === "stall.recovery-skipped" || activity.type === "stall.recovery-exhausted") return activity.details.explanation ?? activityLabel(activity.type);
   if (activity.type === "task.moved") {
@@ -933,6 +940,7 @@ function reasonLabel(reason: ActivationView["reason"]["type"]): string {
     "agent-mention": "an agent mention",
     "column-entry": "entering a watched column",
     "relationship-satisfied": "a relationship being satisfied",
+    "resource-granted": "a shared resource grant",
     "relationship-changed": "a relationship change",
     "user-follow-up": "a user follow-up",
     "stall-recovery": "stall recovery",

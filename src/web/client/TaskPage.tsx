@@ -29,6 +29,7 @@ import { ArchivalReviewDialog } from "./ArchivalReviewDialog.tsx";
 import { TaskHeaderTitle } from "./TaskHeaderTitle.tsx";
 import { MoveTaskPanel } from "./MoveTaskPanel.tsx";
 import { TaskRelationshipsPanel } from "./TaskRelationshipsPanel.tsx";
+import { TaskResourcesPanel } from "./Resources.tsx";
 import { TaskAttentionPanel } from "./TaskAttentionPanel.tsx";
 import { acknowledgeUserMention } from "./AttentionReasonAction.tsx";
 import { TaskConversationsPanel } from "./TaskConversationsPanel.tsx";
@@ -127,7 +128,7 @@ export function TaskPage({
     event.preventDefault();
     const navigation = window.history.state as NavigationState | null;
     if (navigation?.returnToBoard === true) window.history.back();
-    else navigate("/");
+    else navigate("/", navigation?.boardContext ? { boardContext: navigation.boardContext } : undefined);
   };
   if (detail === undefined) {
     return feedback === undefined ? (
@@ -213,7 +214,7 @@ export function TaskPage({
     <div className="app-shell task-shell">
       <header className="topbar detail-topbar">
         <div className="task-header-context">
-          <a href="/" className="back-link" onClick={back}>← Back to board</a>
+          <a href="/" className="back-link" onClick={back}>Back to board</a>
           <TaskHeaderTitle title={task.title} headingRef={taskHeadingRef} />
         </div>
         <AutomationControls
@@ -372,6 +373,7 @@ export function TaskPage({
           </div>
 
           <div className="detail-column">
+            <TaskResourcesPanel claims={inspection.resourceClaims} navigate={navigate} />
             <div data-task-section="workspace">
               <TaskWorkspacePanel
                 taskId={task.id}
@@ -578,6 +580,7 @@ function interruptionReasonDescription(reason: string | undefined): string {
   if (reason === "stall-recovery") return "stall recovery";
   if (reason === "column-entry") return "column entry";
   if (reason === "relationship-satisfied") return "a relationship being satisfied";
+  if (reason === "resource-granted") return "a shared resource grant";
   if (reason === "relationship-changed") return "a relationship change";
   if (reason === "user-follow-up") return "a user follow-up";
   return "a mention in a comment";

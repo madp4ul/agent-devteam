@@ -1,3 +1,5 @@
+import type { CreateResourceCommand, EditResourceCommand, ArchiveResourceCommand, ResourceMutationResult, ResourceQueryResult, ResourcesQueryResult } from "./resource-contract.ts";
+import type { ClaimResourceCommand, ReleaseResourceCommand, ResourceClaimResult } from "./resource-contract.ts";
 import {
   openEphemeralCoordinationPersistence,
   openCoordinationPersistence,
@@ -1010,6 +1012,33 @@ export class CoordinationApplication {
       })),
     };
     return { available: true, task, board };
+  }
+
+  queryResources(includeArchived = false): ResourcesQueryResult {
+    if (this.#startup.mode === "configuration-error") return { available: false, reason: "configuration-error" };
+    return { available: true, resources: this.#persistence.resources.list(includeArchived) };
+  }
+  queryResource(resourceId: string): ResourceQueryResult {
+    if (this.#startup.mode === "configuration-error") return { available: false, reason: "configuration-error" };
+    const resource = this.#persistence.resources.inspect(resourceId);
+    return resource ? { available: true, resource } : { available: false, reason: "not-found" };
+  }
+  createResource(command: CreateResourceCommand): ResourceMutationResult {
+    return this.configurationErrorRejection() ?? this.#persistence.resources.create(command);
+  }
+  claimResource(command: ClaimResourceCommand): ResourceClaimResult {
+    return this.configurationErrorRejection() ?? this.#persistence.resources.claim(command);
+  }
+  releaseResource(command: ReleaseResourceCommand): ResourceClaimResult {
+    const result = this.configurationErrorRejection() ?? this.#persistence.resources.release(command);
+    if (result.accepted) this.#automation.kick();
+    return result;
+  }
+  editResource(command: EditResourceCommand): ResourceMutationResult {
+    return this.configurationErrorRejection() ?? this.#persistence.resources.edit(command);
+  }
+  archiveResource(command: ArchiveResourceCommand): ResourceMutationResult {
+    return this.configurationErrorRejection() ?? this.#persistence.resources.archive(command);
   }
 
   createTask(command: CreateTaskCommand): BoardMutationResult {

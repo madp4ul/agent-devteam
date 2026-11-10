@@ -1,4 +1,7 @@
+import { agentCommandOrigin } from "./agent-command-origin.ts";
 import { randomUUID } from "node:crypto";
+import { waitCycleDiagnostic } from "./wait-cycle.ts";
+import type { ResourceModule } from "./resource-module.ts";
 import type { DatabaseSync } from "node:sqlite";
 
 import type {
@@ -45,6 +48,7 @@ export class TaskCommandStore {
   readonly #attentionRecorder: AttentionRecorder;
   readonly #activationCreation: ActivationCreationModule;
   readonly #now: () => Date;
+  readonly #resources: ResourceModule;
 
   constructor(
     database: CoordinationDatabase,
@@ -54,7 +58,8 @@ export class TaskCommandStore {
     activityJournal: ActivityJournal,
     attentionRecorder: AttentionRecorder,
     activationCreation: ActivationCreationModule,
-    now: () => Date = () => new Date(),
+    now: () => Date,
+    resources: ResourceModule,
   ) {
     this.#database = database.connection;
     this.#projections = projections;
@@ -64,10 +69,11 @@ export class TaskCommandStore {
     this.#attentionRecorder = attentionRecorder;
     this.#activationCreation = activationCreation;
     this.#now = now;
+    this.#resources = resources;
   }
 
   createTask(command: CreateTaskCommand): BoardMutationResult {
-    const origin = this.agentCommandOrigin(command);
+    const origin = agentCommandOrigin(this.#database, command);
     return this.#idempotentCommands.execute<BoardMutationResult>({
       kind: "create-task",
       caller: [command.actor.kind, command.actor.id, origin?.id ?? ""],
@@ -85,7 +91,7 @@ export class TaskCommandStore {
   }
 
   createChildTask(command: CreateChildTaskCommand): BoardMutationResult {
-    const origin = this.agentCommandOrigin(command);
+    const origin = agentCommandOrigin(this.#database, command);
     return this.#idempotentCommands.execute<BoardMutationResult>({
       kind: "create-child-task",
       caller: [command.actor.kind, command.actor.id, origin?.id ?? command.parentTaskId],
@@ -133,7 +139,7 @@ export class TaskCommandStore {
   }
 
   editTask(command: EditTaskCommand, defaultStartingRef: string): BoardMutationResult {
-    const origin = this.agentCommandOrigin(command);
+    const origin = agentCommandOrigin(this.#database, command);
     const title = command.title?.trim();
     const description = command.description?.trim();
     const startingRef = command.startingRef?.trim();
@@ -208,7 +214,7 @@ export class TaskCommandStore {
   }
 
   moveTask(command: MoveTaskCommand): MoveTaskResult {
-    const origin = this.agentCommandOrigin(command);
+    const origin = agentCommandOrigin(this.#database, command);
     return this.#idempotentCommands.execute<MoveTaskResult>({
       kind: "move-task",
       scope: [origin?.id ?? command.taskId],
@@ -239,6 +245,14 @@ export class TaskCommandStore {
         return { accepted: false, reason: "invalid-destination" };
       }
 
+      if (command.destinationColumnId === "completion") {
+        const claims = this.#resources.taskClaims(command.taskId);
+        if (command.actor.kind === "agent" && claims.length > 0) {
+          return { accepted: false, reason: "active-resource-claims",
+            diagnostic: `Task ${command.taskId} still has active resource claims: ${claims.map(claim => `${claim.resourceId} (${claim.status}, claim ${claim.id}, requested by ${claim.requestingAgentId})`).join("; ")}. Coordinate with the requesting participants, stop using held resources, then use resource.release with each claimId to release or cancel it before completing the task.` };
+        }
+        if (command.actor.kind === "user") this.#resources.clearTask(command.taskId, command.actor);
+      }
       const relationshipsSatisfied = command.destinationColumnId === "completion"
         ? (this.#database
             .prepare(
@@ -323,7 +337,7 @@ export class TaskCommandStore {
   }
 
   resolveInertMove(command: MoveTaskCommand): InertMoveTaskResult | MoveTaskResult | undefined {
-    const origin = this.agentCommandOrigin(command);
+    const origin = agentCommandOrigin(this.#database, command);
     return this.#idempotentCommands.execute<InertMoveTaskResult | MoveTaskResult | undefined>({
       kind: "move-task",
       scope: [origin?.id ?? command.taskId],
@@ -359,7 +373,7 @@ export class TaskCommandStore {
   }
 
   createTaskRelationship(command: CreateTaskRelationshipCommand): TaskRelationshipMutationResult {
-    const origin = this.agentCommandOrigin(command);
+    const origin = agentCommandOrigin(this.#database, command);
     return this.#idempotentCommands.execute<TaskRelationshipMutationResult>({
       kind: "create-task-relationship",
       caller: [command.actor.kind, command.actor.id, origin?.id ?? command.sourceTaskId],
@@ -391,9 +405,9 @@ export class TaskCommandStore {
           .get(command.type, command.sourceTaskId, command.targetTaskId);
         if (duplicate !== undefined) {
           result = { accepted: false, reason: "duplicate-relationship" };
-        } else if (this.relationshipWouldCreateCycle(command.sourceTaskId, command.targetTaskId)) {
-          result = { accepted: false, reason: "circular-relationship" };
         } else {
+          const diagnostic = waitCycleDiagnostic(this.#database, { source: command.sourceTaskId, target: command.targetTaskId, label: `proposed ${command.type} relationship` });
+          if (diagnostic) return { accepted: false, reason: "circular-relationship", diagnostic };
           const relationship = this.insertRelationship(
             command.type,
             command.sourceTaskId,
@@ -419,7 +433,7 @@ export class TaskCommandStore {
   }
 
   removeTaskRelationship(command: RemoveTaskRelationshipCommand): RemoveTaskRelationshipResult {
-    const origin = this.agentCommandOrigin(command);
+    const origin = agentCommandOrigin(this.#database, command);
     return this.#idempotentCommands.execute<RemoveTaskRelationshipResult>({
       kind: "remove-task-relationship",
       caller: [command.actor.kind, command.actor.id, origin?.id ?? command.taskId],
@@ -500,7 +514,7 @@ export class TaskCommandStore {
   editTaskRelationshipResumeAgent(
     command: EditTaskRelationshipResumeAgentCommand,
   ): EditTaskRelationshipResumeAgentResult {
-    const origin = this.agentCommandOrigin(command);
+    const origin = agentCommandOrigin(this.#database, command);
     return this.#idempotentCommands.execute<EditTaskRelationshipResumeAgentResult>({
       kind: "edit-task-relationship-resume-agent",
       caller: [command.actor.kind, command.actor.id, origin?.id ?? command.taskId],
@@ -582,7 +596,7 @@ export class TaskCommandStore {
   }
 
   addTaskComment(command: AddTaskCommentCommand): AddTaskCommentResult {
-    const originTask = this.agentCommandOrigin(command);
+    const originTask = agentCommandOrigin(this.#database, command);
     return this.#idempotentCommands.execute<AddTaskCommentResult>({
       kind: "add-task-comment",
       scope: [originTask?.id ?? command.callerTaskId ?? command.taskId],
@@ -655,7 +669,7 @@ export class TaskCommandStore {
   }
 
   setTaskCommentPin(command: SetTaskCommentPinCommand): SetTaskCommentPinResult {
-    const origin = this.agentCommandOrigin(command);
+    const origin = agentCommandOrigin(this.#database, command);
     return this.#idempotentCommands.execute<SetTaskCommentPinResult>({
       kind: command.pinned ? "pin-task-comment" : "unpin-task-comment",
       scope: [origin?.id ?? command.taskId], caller: [command.actor.kind, command.actor.id],
@@ -682,27 +696,6 @@ export class TaskCommandStore {
       request: JSON.stringify({ taskId: command.taskId, commentId: command.commentId, pinned: command.pinned }),
       onConflict: () => ({ accepted: false, reason: "idempotency-conflict" }),
     });
-  }
-
-  private agentCommandOrigin(command: { actor: Actor; attemptId?: string; callerTaskId?: string }): { id: string; title: string } | undefined {
-    if (command.actor.kind !== "agent") return undefined;
-    if (command.attemptId === undefined) {
-      if (command.callerTaskId === undefined) return undefined;
-      const task = this.#database.prepare("SELECT id, title FROM tasks WHERE id = ?")
-        .get(command.callerTaskId) as { id: string; title: string } | undefined;
-      if (task === undefined) throw new Error("Agent action origin task is unavailable");
-      return { id: task.id, title: task.title };
-    }
-    const origin = this.#database.prepare(
-      `SELECT task.id, task.title FROM attempts attempt
-       JOIN activations activation ON activation.id = attempt.activation_id
-       JOIN tasks task ON task.id = activation.task_id
-       WHERE attempt.id = ? AND activation.target_agent_id = ? AND attempt.status = 'running'`,
-    ).get(command.attemptId, command.actor.id) as { id: string; title: string } | undefined;
-    if (origin === undefined || (command.callerTaskId !== undefined && origin.id !== command.callerTaskId)) {
-      throw new Error("Agent action attempt provenance is not current");
-    }
-    return { id: origin.id, title: origin.title };
   }
 
   private agentActivityProvenance(
@@ -819,17 +812,6 @@ export class TaskCommandStore {
     return destination === undefined
       ? { accepted: false, reason: "invalid-destination" }
       : undefined;
-  }
-
-  private relationshipWouldCreateCycle(sourceTaskId: string, targetTaskId: string): boolean {
-    return this.#database.prepare(
-      `WITH RECURSIVE reachable(id) AS (
-         SELECT ?
-         UNION
-         SELECT relationship.target_task_id
-         FROM task_relationships relationship JOIN reachable ON relationship.source_task_id = reachable.id
-       ) SELECT 1 FROM reachable WHERE id = ? LIMIT 1`,
-    ).get(targetTaskId, sourceTaskId) !== undefined;
   }
 
   private insertRelationship(

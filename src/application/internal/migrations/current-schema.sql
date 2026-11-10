@@ -26,7 +26,7 @@ CREATE TABLE "activations" (
         id TEXT NOT NULL UNIQUE,
         task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
         target_agent_id TEXT NOT NULL REFERENCES agents(id),
-        reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention', 'relationship-satisfied', 'relationship-changed', 'user-follow-up', 'stall-recovery')),
+        reason_type TEXT NOT NULL CHECK (reason_type IN ('column-entry', 'agent-mention', 'relationship-satisfied', 'relationship-changed', 'user-follow-up', 'stall-recovery', 'resource-granted')),
         source_event_id TEXT NOT NULL,
         status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
         created_at TEXT NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE "activity_ledger" (
           'relationship.created', 'relationship.removed', 'relationship.satisfied', 'relationship.resume-agent-changed',
           'attention.created', 'attention.resolved', 'activation.created', 'activation.dismissed',
           'attempt.started', 'attempt.completed', 'automation.suspended', 'automation.resumed',
-          'conversation.continued', 'conversation.retired', 'task.archived', 'task.unarchived', 'stall.detected', 'stall.recovery-skipped', 'stall.recovery-exhausted', 'runtime.waiting', 'runtime.recovered', 'runtime.waiting-stopped', 'runtime.waiting-ended'
+          'conversation.continued', 'conversation.retired', 'task.archived', 'task.unarchived', 'stall.detected', 'stall.recovery-skipped', 'stall.recovery-exhausted', 'runtime.waiting', 'runtime.recovered', 'runtime.waiting-stopped', 'runtime.waiting-ended', 'resource.requested', 'resource.granted', 'resource.cancelled', 'resource.released'
         )),
         actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'agent', 'framework')),
         actor_id TEXT NOT NULL,
@@ -263,6 +263,29 @@ CREATE TABLE pending_conversation_uploads (
       created_at TEXT NOT NULL
     );
 
+-- table resource_claims on resource_claims
+CREATE TABLE resource_claims (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT NOT NULL UNIQUE,
+      resource_id TEXT NOT NULL REFERENCES resources(id),
+      task_id TEXT NOT NULL REFERENCES tasks(id),
+      requesting_agent_id TEXT NOT NULL REFERENCES agents(id),
+      status TEXT NOT NULL CHECK (status IN ('pending', 'held', 'released', 'cancelled')),
+      requested_at TEXT NOT NULL,
+      granted_at TEXT,
+      closed_at TEXT
+    );
+
+-- table resources on resources
+CREATE TABLE resources (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      revision INTEGER NOT NULL DEFAULT 1,
+      archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+    );
+
 -- table runtime on runtime
 CREATE TABLE runtime (
       singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -451,6 +474,15 @@ CREATE UNIQUE INDEX one_relationship_of_each_type
 CREATE UNIQUE INDEX one_running_activation_per_task
         ON activations(task_id) WHERE status = 'running';
 
+-- index resource_active_task_claim on resource_claims
+CREATE UNIQUE INDEX resource_active_task_claim ON resource_claims(task_id, resource_id) WHERE status IN ('pending', 'held');
+
+-- index resource_claim_queue on resource_claims
+CREATE INDEX resource_claim_queue ON resource_claims(resource_id, status, sequence);
+
+-- index resource_single_holder on resource_claims
+CREATE UNIQUE INDEX resource_single_holder ON resource_claims(resource_id) WHERE status = 'held';
+
 -- index runtime_recovery_activation on runtime_recovery_episodes
 CREATE INDEX runtime_recovery_activation ON runtime_recovery_episodes(activation_id, sequence);
 
@@ -596,6 +628,10 @@ CREATE TRIGGER dismissed_activation_grants_stall_grace
           VALUES (NEW.task_id, strftime('%Y-%m-%dT%H:%M:%fZ', NEW.occurred_at, '+60 seconds'))
           ON CONFLICT(task_id) DO UPDATE SET grace_until = excluded.grace_until;
         END;
+
+-- trigger pending_resource_resets_stall on resource_claims
+CREATE TRIGGER pending_resource_resets_stall AFTER INSERT ON resource_claims WHEN NEW.status = 'pending'
+      BEGIN UPDATE task_stall_recovery SET recovery_count = 0 WHERE task_id = NEW.task_id; END;
 
 -- trigger regular_activation_resets_stall on activations
 CREATE TRIGGER regular_activation_resets_stall

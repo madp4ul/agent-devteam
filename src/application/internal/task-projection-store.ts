@@ -1,3 +1,4 @@
+import { readActiveTaskResourceClaims } from "./resource-module.ts";
 import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
 import { ActivityJournal } from "./activity-journal.ts";
 import type { DatabaseSync } from "node:sqlite";
@@ -141,6 +142,7 @@ export class TaskProjectionStore {
       ...(row.archived_at === null ? {} : { archived: true as const }),
       comments: this.readTaskComments(taskId, bounded),
       relationships: this.readTaskRelationships(taskId),
+      resourceClaims: readActiveTaskResourceClaims(this.#database, taskId),
       activity: activity.map((event) => ({
         id: event.id,
         type: event.type,
@@ -258,6 +260,7 @@ export class TaskProjectionStore {
     knownRelationships?: TaskRelationshipView[],
   ): StoredTaskOverview {
     const archived = row.archived_at !== null;
+    const heldResourceIds = readActiveTaskResourceClaims(this.#database, row.id).filter(claim => claim.status === "held").map(claim => claim.resourceId);
     const waitingTaskIds = this.readWaitingTaskIds(row.id);
     const startupFailure = archived ? undefined : this.readLatestUnresolvedStartupFailure(row.id);
     return {
@@ -270,7 +273,8 @@ export class TaskProjectionStore {
         column: { id: row.column_id, name: row.column_name },
         revision: row.revision,
         ...(archived ? { archived: true as const } : {}),
-        waitingOn: { taskIds: waitingTaskIds },
+        ...(heldResourceIds.length > 0 ? { heldResourceIds } : {}),
+        waitingOn: this.waitingOn(row.id, waitingTaskIds),
         relationships: knownRelationships ?? this.readTaskRelationships(row.id),
         unresolvedAttention: this.readUnresolvedAttention(row.id),
         automationSuspended: row.automation_suspended === 1,
@@ -294,6 +298,10 @@ export class TaskProjectionStore {
     };
   }
 
+  private waitingOn(taskId: string, taskIds: string[]): TaskOverviewView["waitingOn"] {
+    const resources = this.#database.prepare("SELECT resource_id FROM resource_claims WHERE task_id = ? AND status = 'pending' ORDER BY sequence").all(taskId) as Array<{ resource_id: string }>;
+    return { taskIds, ...(resources.length ? { resourceIds: resources.map(r => r.resource_id) } : {}) };
+  }
   readTaskReferences(taskIds: string[]): StoredTaskReference[] {
     if (taskIds.length === 0) return [];
     const placeholders = taskIds.map(() => "?").join(", ");
@@ -319,7 +327,7 @@ export class TaskProjectionStore {
         boardId: row.board_id,
         column: { id: row.column_id, name: row.column_name },
         archived: row.archived_at !== null,
-        waitingOn: { taskIds: waitingTaskIds },
+        waitingOn: this.waitingOn(row.id, waitingTaskIds),
       };
     });
   }
@@ -364,7 +372,7 @@ export class TaskProjectionStore {
         column: { id: task.columnId, name: column.name },
         revision: task.revision,
         archived: true,
-        waitingOn: { taskIds: waitingTaskIds },
+        waitingOn: this.waitingOn(id, waitingTaskIds),
         relationships: task.relationships,
         unresolvedAttention: this.readUnresolvedAttention(id),
         automationSuspended: this.isTaskAutomationSuspended(id),

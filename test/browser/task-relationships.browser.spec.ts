@@ -18,7 +18,10 @@ test("circular waiting is rejected through the browser without changing relation
   await dialog.getByRole("option", { name: /Cycle target/ }).click();
   await dialog.getByRole("combobox", { name: "Resume agent" }).selectOption("implementer");
   await dialog.getByRole("button", { name: "Create dependency" }).click();
-  await expect(page.getByRole("alert")).toContainText("This relationship would create a circular wait.");
+  await expect(page.getByRole("alert")).toContainText("This operation would create a circular wait:");
+  await expect(page.getByRole("alert")).toContainText(`T-0001 --[proposed dependency relationship]--> ${task.id}`);
+  await expect(page.getByRole("alert")).toContainText("Consult the participants");
+  await expect(page.getByRole("alert")).toContainText("remove unnecessary relationships before retrying");
   const detail = await (await request.get("/api/tasks/T-0001")).json();
   expect(detail.task.relationships.filter((edge: { sourceTaskId: string; targetTaskId: string }) =>
     edge.sourceTaskId === "T-0001" && edge.targetTaskId === task.id)).toHaveLength(0);

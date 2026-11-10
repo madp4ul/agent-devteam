@@ -24,9 +24,10 @@ export class ActivationCreationModule {
     occurredAt: string;
   }): string {
     const profile = this.#database
-      .prepare("SELECT name, model, reasoning_effort FROM agents WHERE id = ? AND applied = 1")
+      .prepare("SELECT name, model, reasoning_effort, applied FROM agents WHERE id = ?")
       .get(input.targetAgentId) as {
         name: string;
+        applied: number;
         model: string | null;
         reasoning_effort: ActivationView["reasoningEffort"];
       };
@@ -90,6 +91,9 @@ export class ActivationCreationModule {
     this.#database
       .prepare("UPDATE activations SET conversation_id = ? WHERE id = ?")
       .run(conversationId, activationId);
+    if (profile.applied !== 1) {
+      this.#database.prepare("UPDATE activations SET stale = 1 WHERE id = ?").run(activationId);
+    }
     this.#activityJournal.append(
       input.taskId,
       "activation.created",

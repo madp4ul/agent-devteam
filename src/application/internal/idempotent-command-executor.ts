@@ -7,6 +7,11 @@ import type { CoordinationDatabase } from "./coordination-database.ts";
 type RetentionPolicy<Result> = (result: Result) => boolean;
 
 type UnscopedCommandKind =
+  | "claim-resource"
+  | "release-resource"
+  | "create-resource"
+  | "edit-resource"
+  | "archive-resource"
   | "create-task"
   | "create-child-task"
   | "create-task-relationship"

@@ -3,6 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 // Creation and lifecycle receipts survive expiry: replaying them must not create
 // another task, repeat archival, or revive an archived task through an old retry.
 const durableReceiptKinds = new Set([
+  "create-resource", "edit-resource", "archive-resource",
   "create-task", "create-child-task", "archive-task", "unarchive-task", "archive-completed-tasks",
 ]);
 

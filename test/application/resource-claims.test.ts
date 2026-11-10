@@ -1,0 +1,202 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import { CompletingAgentRuntime, ControlledAgentRuntime, createActivationFixture } from "../support/activation-fixture.ts";
+import { composeActivationPrompt } from "../../src/application/activation-prompt.ts";
+
+test("resource mutations reject mismatched and settled attempt provenance before any effects", async t => {
+  const fixture = await createActivationFixture("resource-provenance");
+  const runtime = new ControlledAgentRuntime("provenance-thread");
+  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
+    runtimeDispatch: { projectRepositoryPath: fixture.repositoryPath, taskWorkspaceRoot: fixture.workspaceRoot, agentRuntime: runtime } });
+  t.after(() => app.close());
+  const user = { kind: "user" as const, id: "user" }, actor = { kind: "agent" as const, id: "implementer" };
+  const tasks = ["Caller", "Other"].map(title => {
+    const result = app.createTask({ boardId: "delivery", columnId: "backlog", title, description: title, actor: user, idempotencyKey: title });
+    assert.ok(result.accepted); return result.task.id;
+  });
+  app.addTaskComment({ taskId: tasks[0]!, body: "@implementer Work now", actor: user, idempotencyKey: "activate" });
+  await app.resumeAutomation();
+  const request = await runtime.waitForRequest(1);
+  const created = app.createResource({ title: "Game", actor, originTaskId: tasks[0]!, attemptId: request.attemptId, idempotencyKey: "create" });
+  assert.ok(created.accepted);
+  const claim = { resourceId: created.resource.id, taskId: tasks[0]!, actor, attemptId: request.attemptId, idempotencyKey: "claim" };
+  assert.throws(() => app.claimResource({ ...claim, taskId: tasks[1]! }), /provenance/);
+  const held = app.claimResource(claim); assert.ok(held.accepted);
+  runtime.complete({ status: "completed", summary: "Done" });
+  await app.waitForAutomationIdle();
+  const before = app.queryResource(created.resource.id);
+  assert.throws(() => app.releaseResource({ taskId: tasks[0]!, claimId: held.claim.id, actor, attemptId: request.attemptId, idempotencyKey: "late-release" }), /provenance/);
+  assert.throws(() => app.createResource({ title: "Late", actor, originTaskId: tasks[0]!, attemptId: request.attemptId, idempotencyKey: "late-create" }), /provenance/);
+  assert.throws(() => app.editResource({ resourceId: created.resource.id, expectedRevision: 1, title: "Late", actor, originTaskId: tasks[0]!, attemptId: request.attemptId, idempotencyKey: "late-edit" }), /provenance/);
+  assert.throws(() => app.archiveResource({ resourceId: created.resource.id, expectedRevision: 1, actor, originTaskId: tasks[0]!, attemptId: request.attemptId, idempotencyKey: "late-archive" }), /provenance/);
+  assert.deepEqual(app.queryResource(created.resource.id), before);
+  const list = app.queryResources(); assert.ok(list.available); assert.equal(list.resources.length, 1);
+});
+
+test("claim release is task scoped, cancellation preserves FIFO, and human Completion clears every active claim", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "claim-scope-"));
+  const app = await CoordinationApplication.start({ processDefinitionPath: resolve("examples/software-delivery/process.yaml"), databasePath: join(directory, "state.sqlite") }); t.after(() => app.close());
+  const user = { kind: "user" as const, id: "user" }, actor = { kind: "agent" as const, id: "implementation-agent" };
+  const tasks = ["Owner", "Waiter", "Next"].map(title => { const r = app.createTask({ boardId: "delivery", columnId: "backlog", title, description: title, actor: user, idempotencyKey: title }); assert.ok(r.accepted); return r.task.id; });
+  const resources = ["Game", "Browser"].map(title => { const r = app.createResource({ title, actor: user, idempotencyKey: title }); assert.ok(r.accepted); return r.resource.id; });
+  const claim = (taskId: string, resourceId: string) => { const r = app.claimResource({ taskId, resourceId, actor, idempotencyKey: `${taskId}-${resourceId}` }); assert.ok(r.accepted); return r.claim; };
+  const owner = claim(tasks[0]!, resources[0]!);
+  const waiting = claim(tasks[1]!, resources[0]!);
+  const next = claim(tasks[2]!, resources[0]!);
+  const other = claim(tasks[1]!, resources[1]!);
+  const overviews = () => {
+    const result = app.queryTaskOverviews({ boardId: "delivery", columnIds: ["backlog", "completion"] });
+    assert.ok(result.available); return result.tasks;
+  };
+  assert.deepEqual(overviews().map(task => task.heldResourceIds), [[resources[0]], [resources[1]], undefined]);
+  assert.deepEqual(app.releaseResource({ claimId: owner.id, taskId: tasks[1]!, actor, idempotencyKey: "cross-task" }), { accepted: false, reason: "claim-task-mismatch" });
+  assert.deepEqual(app.claimResource({ taskId: tasks[0]!, resourceId: resources[1]!, actor: user, idempotencyKey: "human" }), { accepted: false, reason: "invalid-agent" });
+  assert.equal((await app.archiveTask({ taskId: tasks[0]!, actor: user, idempotencyKey: "archive" })).accepted, false);
+  assert.deepEqual(app.archiveResource({ resourceId: resources[0]!, expectedRevision: 1, actor: user, idempotencyKey: "archive-resource" }), { accepted: false, reason: "active-claims" });
+  assert.ok(app.moveTask({ taskId: tasks[1]!, destinationColumnId: "completion", expectedRevision: 1, actor: user, idempotencyKey: "complete" }).accepted);
+  const cleared = app.queryTask(tasks[1]!); assert.ok(cleared.available); assert.deepEqual(cleared.task.resourceClaims, []);
+  assert.deepEqual(cleared.task.activity.filter(a => a.type.startsWith("resource.")).map(a => a.type), ["resource.requested", "resource.requested", "resource.granted", "resource.cancelled", "resource.released"]);
+  assert.equal(cleared.task.activity.find(a => a.type === "resource.cancelled")?.details.claimId, waiting.id);
+  assert.equal(cleared.task.activity.find(a => a.type === "resource.released")?.details.claimId, other.id);
+  assert.ok(app.releaseResource({ claimId: owner.id, taskId: tasks[0]!, actor: { kind: "agent", id: "code-reviewer" }, idempotencyKey: "teammate" }).accepted);
+  assert.deepEqual(overviews().map(task => task.heldResourceIds), [undefined, undefined, [resources[0]]]);
+  const handoff = app.queryResource(resources[0]!); assert.ok(handoff.available); assert.equal(handoff.resource.owner?.id, next.id);
+  assert.deepEqual(app.claimResource({ taskId: tasks[1]!, resourceId: resources[1]!, actor, idempotencyKey: "completed" }), { accepted: false, reason: "inactive-task" });
+});
+
+test("process changes expose unavailable pending requesters and preserve their grant until the original agent returns", async t => {
+  const fixture = await createActivationFixture("resource-process-change");
+  const options = { processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath };
+  let app = await CoordinationApplication.start(options); t.after(() => app.close());
+  const user = { kind: "user" as const, id: "user" }, actor = { kind: "agent" as const, id: "implementer" };
+  const tasks = ["Owner", "Waiter"].map(title => { const r = app.createTask({ boardId: "delivery", columnId: "backlog", title, description: title, actor: user, idempotencyKey: title }); assert.ok(r.accepted); return r.task.id; });
+  const r = app.createResource({ title: "Game", actor: user, idempotencyKey: "game" }); assert.ok(r.accepted);
+  const owner = app.claimResource({ resourceId: r.resource.id, taskId: tasks[0]!, actor, idempotencyKey: "owner" });
+  const pending = app.claimResource({ resourceId: r.resource.id, taskId: tasks[1]!, actor, idempotencyKey: "pending" }); assert.ok(owner.accepted && pending.accepted);
+  await app.close();
+  const original = await readFile(fixture.definitionPath, "utf8");
+  await writeFile(fixture.definitionPath, original.replace("id: implementer", "id: successor").replace("watchingAgent: implementer", "watchingAgent: successor"));
+  app = await CoordinationApplication.start(options);
+  const startup = app.queryStartup(); assert.equal(startup.mode, "paused");
+  if (startup.mode !== "paused") return;
+  assert.deepEqual(startup.processImpact?.unavailableResourceAssignments, [{ claimId: pending.claim.id, resourceId: r.resource.id, taskId: tasks[1]!, requestingAgentId: "implementer" }]);
+  assert.deepEqual(await app.resumeWithCurrentProcess(), { accepted: false, reason: "process-change-approval-required" });
+  assert.ok(app.releaseResource({ claimId: owner.claim.id, taskId: tasks[0]!, actor: { kind: "agent", id: "successor" }, idempotencyKey: "release" }).accepted);
+  const granted = app.queryTask(tasks[1]!); assert.ok(granted.available);
+  assert.equal(granted.task.activations[0]!.targetAgentId, "implementer");
+  assert.equal(granted.task.activations[0]!.stale, true);
+  await app.close(); await writeFile(fixture.definitionPath, original); app = await CoordinationApplication.start(options);
+  const restored = app.queryResource(r.resource.id); assert.ok(restored.available);
+  assert.equal(restored.resource.owner?.id, pending.claim.id);
+});
+
+test("grant continuation refreshes its exact claim after release and a new claim, retaining historical grant evidence", async t => {
+  const fixture = await createActivationFixture("resource-continuation");
+  const runtime = new ControlledAgentRuntime("grant-thread");
+  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
+    runtimeDispatch: { projectRepositoryPath: fixture.repositoryPath, taskWorkspaceRoot: fixture.workspaceRoot, agentRuntime: runtime } });
+  t.after(() => app.close());
+  const user = { kind: "user" as const, id: "user" }, actor = { kind: "agent" as const, id: "implementer" };
+  const tasks = ["Owner", "Waiter"].map(title => { const r = app.createTask({ boardId: "delivery", columnId: "backlog", title, description: title, actor: user, idempotencyKey: title }); assert.ok(r.accepted); return r.task.id; });
+  const r = app.createResource({ title: "Game", actor: user, idempotencyKey: "game" }); assert.ok(r.accepted);
+  const held = app.claimResource({ resourceId: r.resource.id, taskId: tasks[0]!, actor, idempotencyKey: "held" });
+  const pending = app.claimResource({ resourceId: r.resource.id, taskId: tasks[1]!, actor, idempotencyKey: "pending" }); assert.ok(held.accepted && pending.accepted);
+  app.releaseResource({ taskId: tasks[0]!, claimId: held.claim.id, actor, idempotencyKey: "release-owner" });
+  await app.resumeAutomation(); const first = await runtime.waitForRequest(1);
+  assert.equal(first.activationContext.resourceGrant?.status, "held");
+  runtime.complete({ status: "permission-blocked", summary: "Waiting for permission", threadId: "grant-thread" });
+  await app.waitForAutomationIdle();
+  assert.ok(app.releaseResource({ taskId: tasks[1]!, claimId: pending.claim.id, actor, idempotencyKey: "release-waiter" }).accepted);
+  const newer = app.claimResource({ resourceId: r.resource.id, taskId: tasks[1]!, actor, idempotencyKey: "newer" }); assert.ok(newer.accepted);
+  const oldRelease = app.releaseResource({ taskId: tasks[1]!, claimId: pending.claim.id, actor, idempotencyKey: "old-release" }); assert.ok(oldRelease.accepted);
+  assert.equal(oldRelease.claim.status, "released");
+  const detail = app.queryResource(r.resource.id); assert.ok(detail.available); assert.equal(detail.resource.owner?.id, newer.claim.id);
+  const inspection = app.queryTaskInspection(tasks[1]!); assert.ok(inspection.available);
+  assert.ok(app.continuePermissionBlockedActivation({ attentionReasonId: inspection.task.unresolvedAttention[0]!.id, message: "Continue after review", actor: user, idempotencyKey: "continue" }).accepted);
+  const resumed = await runtime.waitForRequest(2);
+  assert.equal(resumed.activationContext.resourceGrant?.id, pending.claim.id);
+  assert.equal(resumed.activationContext.resourceGrant?.status, "released");
+  assert.equal(resumed.sourceEvent.id, first.sourceEvent.id);
+  assert.match(composeActivationPrompt(resumed), /"status": "released"/);
+  assert.match(composeActivationPrompt(resumed), new RegExp(pending.claim.id));
+  runtime.complete({ status: "completed", summary: "Done" }); await app.waitForAutomationIdle();
+});
+
+test("pending resource claims suppress stall recovery without suppressing ordinary work; held claims do not", async t => {
+  const fixture = await createActivationFixture("resource-stall");
+  const runtime = new CompletingAgentRuntime();
+  const app = await CoordinationApplication.start({ processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
+    runtimeDispatch: { projectRepositoryPath: fixture.repositoryPath, taskWorkspaceRoot: fixture.workspaceRoot, agentRuntime: runtime } });
+  t.after(() => app.close());
+  const user = { kind: "user" as const, id: "user" }, actor = { kind: "agent" as const, id: "implementer" };
+  const owner = app.createTask({ boardId: "delivery", columnId: "backlog", title: "Owner", description: "Owner", actor: user, idempotencyKey: "owner" });
+  const waiter = app.createTask({ boardId: "delivery", columnId: "implementation", title: "Waiter", description: "Waiter", actor: user, idempotencyKey: "waiter" });
+  const resource = app.createResource({ title: "Game", actor: user, idempotencyKey: "game" });
+  assert.ok(owner.accepted && waiter.accepted && resource.accepted);
+  const held = app.claimResource({ taskId: owner.task.id, resourceId: resource.resource.id, actor, idempotencyKey: "held" });
+  const pending = app.claimResource({ taskId: waiter.task.id, resourceId: resource.resource.id, actor, idempotencyKey: "pending" });
+  assert.ok(held.accepted && pending.accepted);
+  await app.resumeAutomation(); await app.waitForAutomationIdle();
+  assert.deepEqual(runtime.requests.map(r => r.reason.type), ["column-entry"]);
+  assert.ok(app.addTaskComment({ taskId: waiter.task.id, body: "@implementer More work", actor: user, idempotencyKey: "mention" }).accepted);
+  await app.waitForAutomationIdle();
+  assert.deepEqual(runtime.requests.map(r => r.reason.type), ["column-entry", "agent-mention"]);
+  const inspected = app.queryTaskInspection(waiter.task.id); assert.ok(inspected.available);
+  assert.deepEqual(inspected.task.waitingOn.resourceIds, [resource.resource.id]);
+  assert.equal(inspected.task.resourceClaims[0]!.status, "pending");
+  assert.ok(app.releaseResource({ taskId: owner.task.id, claimId: held.claim.id, actor, idempotencyKey: "release" }).accepted);
+  await app.waitForAutomationIdle();
+  assert.deepEqual(runtime.requests.slice(2).map(r => r.reason.type), ["resource-granted", "stall-recovery", "stall-recovery", "stall-recovery"]);
+});
+
+test("resource claims grant immediately, queue FIFO, replay safely and hand off to the original participant", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "resource-claims-"));
+  const options = { processDefinitionPath: resolve("examples/software-delivery/process.yaml"), databasePath: join(directory, "state.sqlite") };
+  let app = await CoordinationApplication.start(options);
+  t.after(() => app.close());
+  const user = { kind: "user" as const, id: "user" };
+  const actor = { kind: "agent" as const, id: "implementation-agent" };
+  const tasks = ["Owner", "First waiter", "Second waiter"].map(title => {
+    const result = app.createTask({ boardId: "delivery", columnId: "backlog", title, description: title, actor: user, idempotencyKey: title });
+    assert.ok(result.accepted); return result.task.id;
+  });
+  const resource = app.createResource({ title: "Game", actor: user, idempotencyKey: "resource" });
+  assert.ok(resource.accepted);
+  const command = { resourceId: resource.resource.id, taskId: tasks[0]!, actor, idempotencyKey: "claim" };
+  const held = app.claimResource(command);
+  assert.ok(held.accepted); assert.equal(held.claim.status, "held");
+  assert.deepEqual(app.claimResource(command), held);
+  const duplicate = app.claimResource({ ...command, idempotencyKey: "duplicate" });
+  assert.ok(!duplicate.accepted); assert.equal(duplicate.reason, "active-claim-exists");
+  const first = app.claimResource({ ...command, taskId: tasks[1]!, idempotencyKey: "first" });
+  const second = app.claimResource({ ...command, taskId: tasks[2]!, idempotencyKey: "second" });
+  assert.ok(first.accepted && second.accepted);
+  assert.equal(first.claim.status, "pending"); assert.equal(second.claim.status, "pending");
+  const ownerTask = app.queryTask(tasks[0]!); assert.ok(ownerTask.available);
+  assert.equal(ownerTask.task.activations.length, 0);
+  await app.close(); app = await CoordinationApplication.start(options);
+  assert.ok(app.addTaskComment({ taskId: tasks[1]!, body: "@implementation-agent Inspect while waiting", actor: user, idempotencyKey: "ordinary-work" }).accepted);
+  const release = { taskId: tasks[0]!, claimId: held.claim.id, actor, idempotencyKey: "release" };
+  assert.ok(app.releaseResource(release).accepted);
+  assert.ok(app.releaseResource(release).accepted);
+  const inspection = app.queryResource(resource.resource.id); assert.ok(inspection.available);
+  assert.equal(inspection.resource.owner?.id, first.claim.id);
+  assert.deepEqual(inspection.resource.queue.map(c => c.id), [second.claim.id]);
+  const waitingTask = app.queryTask(tasks[1]!); assert.ok(waitingTask.available);
+  assert.deepEqual(waitingTask.task.activations.map(a => a.reason.type), ["agent-mention", "resource-granted"]);
+  assert.equal(waitingTask.task.activations[1]!.targetAgentId, actor.id);
+  assert.equal((await app.archiveTask({ taskId: tasks[1]!, actor: user, idempotencyKey: "archive-held" })).accepted, false);
+  const denied = app.moveTask({ taskId: tasks[1]!, destinationColumnId: "completion", expectedRevision: 1, actor, idempotencyKey: "agent-complete" });
+  assert.ok(!denied.accepted); assert.equal(denied.reason, "active-resource-claims");
+  assert.match(denied.diagnostic ?? "", /resource\.release/);
+  assert.match(denied.diagnostic ?? "", new RegExp(first.claim.id));
+  assert.ok(app.moveTask({ taskId: tasks[1]!, destinationColumnId: "completion", expectedRevision: 1, actor: user, idempotencyKey: "human-complete" }).accepted);
+  const handoff = app.queryResource(resource.resource.id); assert.ok(handoff.available);
+  assert.equal(handoff.resource.owner?.id, second.claim.id);
+  assert.deepEqual(handoff.resource.queue, []);
+});
+

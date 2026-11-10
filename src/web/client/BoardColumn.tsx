@@ -4,6 +4,7 @@ import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element
 import type { TaskOverviewView } from "../../application/browser-transport-contract.ts";
 import type { BrowserBoardState, BrowserColumnView } from "./api.ts";
 import { TaskCard } from "./TaskCard.tsx";
+import { PlusIcon } from "./PlusIcon.tsx";
 
 export function BoardColumn({
   boardId,
@@ -77,9 +78,7 @@ export function BoardColumn({
               title={`Create task in ${column.name}`}
               onClick={onCreate}
             >
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <path d="M10 4v12M4 10h12" />
-              </svg>
+              <PlusIcon />
             </button>
           ) : null}
         </div>

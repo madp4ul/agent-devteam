@@ -1,6 +1,13 @@
 import type { CoordinationApplication } from "../../application/coordination-application.ts";
 
 export type AgentCoordinationCapabilities = Pick<CoordinationApplication,
+  | "queryResources"
+  | "queryResource"
+  | "createResource"
+  | "editResource"
+  | "archiveResource"
+  | "claimResource"
+  | "releaseResource"
   | "queryBoardSummaries"
   | "queryTaskOverviews"
   | "queryArchivedTaskOverviews"
