@@ -24,6 +24,15 @@ without choosing the implementation yet.
 
 ## Decisions so far
 
+- [107 - Reject agent self-mentions in comments](./issues/107-reject-agent-self-mentions-in-comments.md)
+  - **Resolved:** Comment mutations atomically reject task-local self-mentions;
+    cross-task consultation, literal examples and corrected retries remain supported.
+
+- [106 - Represent shared resource ownership and waits](./issues/106-represent-shared-resource-ownership-and-waits.md)
+  - **Open research draft:** Resource contention, visible grant waits, and release
+    before completion. Design and process-versus-framework choice deferred until
+    after observing the current checkpoint.
+
 - [105 - Interrupt agents waiting on programs](./issues/105-interrupt-agents-waiting-on-programs.md)
   - **Resolved:** Reproduced and fixed detached-child output retaining SDK iteration.
   Supervise SDK execution independently, retain ownership until termination,

@@ -7,6 +7,39 @@ import test from "node:test";
 
 import { CoordinationApplication } from "../../src/application/coordination-application.ts";
 
+test("self-mention rejection is atomic and permits a corrected retry and cross-task consultation", async (t) => {
+  const application = await CoordinationApplication.start(await createFixture("self-mention"));
+  t.after(() => application.close());
+  const create = (title: string) => {
+    const result = application.createTask({ boardId: "delivery", columnId: "backlog", title,
+      description: title, actor: { kind: "user", id: "paul" }, idempotencyKey: title });
+    assert.ok(result.accepted);
+    return result.task.id;
+  };
+  const origin = create("Origin"), other = create("Other");
+  const caller = { actor: { kind: "agent" as const, id: "implementer" }, callerTaskId: origin };
+  const command = { ...caller, taskId: origin, body: "@reviewer @user @implementer continue",
+    pinned: true, idempotencyKey: "comment" };
+  const before = readTask(application, origin);
+  const rejected = application.addTaskComment(command);
+  assert.equal(rejected.accepted, false);
+  assert.equal("reason" in rejected && rejected.reason, "self-mention");
+  assert.deepEqual(readTask(application, origin), before);
+  const corrected = { ...command, body: "Implementer progress; literal `@implementer`." };
+  const accepted = application.addTaskComment(corrected);
+  assert.ok(accepted.accepted);
+  assert.deepEqual(application.addTaskComment(corrected), accepted);
+  assert.equal(readTask(application, origin).comments.length, before.comments.length + 1);
+  assert.deepEqual(readTask(application, origin).activations, before.activations);
+  const cross = application.addTaskComment({ ...command, taskId: other, body: "@implementer please consult", idempotencyKey: "cross" });
+  assert.ok(cross.accepted);
+  assert.deepEqual(readTask(application, other).activations.map(a => a.targetAgentId), ["implementer"]);
+  const user = application.addTaskComment({ taskId: origin, body: "@implementer please continue",
+    actor: { kind: "user", id: "paul" }, idempotencyKey: "user" });
+  assert.ok(user.accepted);
+  assert.deepEqual(readTask(application, origin).activations.map(a => a.targetAgentId), ["implementer"]);
+});
+
 test("one comment activates each mentioned agent once in textual mention order", async (t) => {
   const fixture = await createFixture("mention-order");
   const application = await CoordinationApplication.start(fixture);

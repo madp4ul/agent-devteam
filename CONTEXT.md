@@ -449,6 +449,10 @@ Canonical participant tokens are executable coordination requests, not merely
 typographic references. Descriptive prose uses the participant's display name
 without `@`; an agent must not write a token for its own task-local participant or for a participant
 whose response is not actually requested.
+Agent comments containing an executable mention of their own task-local
+participant are rejected as a whole, without posting or activating anyone.
+The same agent role on another task remains a distinct participant.
+
 Mentions address the comment's destination task; the same agent ID on a different
 task refers to another participant, including when replying to an external author.
 Tokens inside inline code remain illustrative text rather than executable

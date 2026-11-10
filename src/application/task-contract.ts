@@ -479,6 +479,7 @@ export type RemoveTaskRelationshipResult =
 
 export type AddTaskCommentResult =
   | { accepted: true; task: TaskCommandSummary; comment: TaskCommentView }
+  | { accepted: false; reason: "self-mention"; message: string }
   | { accepted: false; reason: "configuration-error"; diagnostics: ProcessDiagnostic[] }
   | { accepted: false; reason: "not-found" | "archived-task" | "empty-comment" | "idempotency-conflict" };
 

@@ -600,6 +600,11 @@ export class TaskCommandStore {
       if (command.body.trim().length === 0) {
         return { accepted: false, reason: "empty-comment" };
       }
+      if (command.actor.kind === "agent" && (originTask?.id ?? command.taskId) === task.id &&
+          findParticipantMentions(command.body).some(mention => mention.participantId === command.actor.id)) {
+        return { accepted: false, reason: "self-mention",
+          message: "You cannot mention your own participant on this task. Post a progress note without the self-mention." };
+      }
       const attemptId = command.actor.kind === "agent" ? command.attemptId : undefined;
       const comment = {
         ...(command.pinned === true ? { pinned: true as const } : {}),

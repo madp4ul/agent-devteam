@@ -109,6 +109,13 @@ test("authenticated cross-task comments preserve caller scope and normalize curr
     body: "Question from caller team", idempotencyKey: "http-key",
     actor: { kind: "agent", id: "reviewer" }, originTaskId: target.task.id, attemptId: "spoofed",
   };
+  const self = await post("current", { ...payload, body: "@implementer @reviewer @user continue",
+    callerTaskId: target.task.id, idempotencyKey: "reject-self" });
+  const selfResult = await self.json();
+  assert.equal(selfResult.accepted, false);
+  assert.equal(selfResult.reason, "self-mention");
+  assert.match(selfResult.message, /without the self-mention/);
+  assert.equal((await (await post("current", { body: "Progress note", idempotencyKey: "reject-self" })).json()).accepted, true);
   const cross = await post(target.task.id, payload);
   assert.equal(cross.status, 200);
   const crossResult = await cross.json();

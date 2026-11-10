@@ -70,6 +70,14 @@ test("a running mentioned participant can mutate another board without claiming 
   await application.pauseAutomation();
   const caller = { actor: { kind: "agent" as const, id: "implementer" },
     callerTaskId: origin.id, attemptId: request.attemptId };
+  const selfComment = { ...caller, taskId: origin.id, body: "@implementer continue",
+    idempotencyKey: "self-comment" };
+  assert.equal(application.addTaskComment(selfComment).accepted, false);
+  // The authenticated attempt also identifies the origin when no explicit scope is supplied.
+  const { callerTaskId: _scope, ...attemptOnlyComment } = selfComment;
+  assert.equal(application.addTaskComment(attemptOnlyComment).accepted, false);
+  assert.throws(() => application.addTaskComment({ ...selfComment, callerTaskId: target.id }), /provenance/);
+  assert.ok(application.addTaskComment({ ...selfComment, taskId: target.id }).accepted);
   const edit = { ...caller, taskId: target.id, title: "Planned", expectedRevision: 1, idempotencyKey: "edit" };
   assert.ok(application.editTask(edit).accepted);
   for (const invalid of [{ ...caller, callerTaskId: target.id }, { ...caller, actor: { kind: "agent" as const, id: "reviewer" } }]) {
