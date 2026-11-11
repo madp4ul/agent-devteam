@@ -25,11 +25,11 @@ without choosing the implementation yet.
 ## Decisions so far
 
 - [109 - Expose and recover unconfirmed runtime termination](./issues/109-expose-and-recover-unconfirmed-runtime-termination.md)
-  - **Open:** Follow-up to 108 for visible cleanup state, retryable termination
+  - **Resolved:** Visible cleanup state, retryable termination
     verification and supported safe shutdown without losing conversation continuity.
 - [110 - Unify Stop retries, interruption and retry status](./issues/110-unify-stop-retries-interruption-and-retry-status.md)
-  - **Open, blocked by 109:** Preserve stop intent across reload, coordinate both
-    stop controls and explain retry eligibility while automation is paused.
+  - **Resolved:** Host-owned stop intent survives reload, coordinates both
+    stop controls and explains retry eligibility while automation is paused.
 
 - [108 - Settle budget retries after Windows termination errors](./issues/108-settle-budget-retries-after-windows-termination-errors.md)
   - **Resolved:** Verify process liveness after taskkill

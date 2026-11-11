@@ -717,9 +717,9 @@ test("elapsed retry delay no longer explains why queued work is waiting", async 
   await page.goto("/tasks/T-0001");
   const activity = page.getByRole("region", { name: "Agent activity" });
   await expect(activity.getByRole("heading", { name: "Activation queue" })).toBeVisible();
-  await expect(activity).not.toContainText("Retry scheduled for");
+  await expect(activity).not.toContainText("Earliest retry eligibility:");
   dueAt = "2100-01-01T00:00:00.000Z";
-  await expect(activity).toContainText("Retry scheduled for");
+  await expect(activity).toContainText("Earliest retry eligibility:");
   await expect(activity).not.toContainText("Waiting on T-0002");
 });
 

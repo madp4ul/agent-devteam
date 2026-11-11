@@ -204,16 +204,21 @@ async function run(arguments_: string[]): Promise<void> {
       let closing: Promise<void> | undefined;
       const close = (): Promise<void> => {
         closing ??= (async () => {
-          application.pauseAutomation();
-          await application.waitForAutomationIdle();
+          const readiness = await application.prepareShutdown();
+          if (!readiness.ready) {
+            console.error("Shutdown paused: runtime termination is unconfirmed. The host remains available for recovery; no new agents will start.");
+            for (const run of readiness.blockedRuns) console.error(`${run.taskId}: ${run.termination?.diagnostic ?? "Termination verification required"}`);
+            console.error("Open the task's Agent activity and retry termination verification. See docs/project-state-backup-and-restore.md before any forced host stop. Press Ctrl+C again after recovery to close safely.");
+            return;
+          }
           await server.close();
           application.close();
           await projectStateGuard?.release();
-        })();
+        })().finally(() => { closing = undefined; });
         return closing;
       };
-      process.once("SIGINT", () => void close());
-      process.once("SIGTERM", () => void close());
+      process.on("SIGINT", () => void close());
+      process.on("SIGTERM", () => void close());
       return;
     } finally {
       await progress.finish(startupResult);

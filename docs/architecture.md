@@ -370,10 +370,24 @@ descendants and confirms the observed owned identities have all exited; an
 already-exited descendant therefore does not strand budget recovery or Pause.
 Surviving captured processes keep ownership while periodic inspection watches
 for their exit. Successful tree termination does not depend on inspection access.
-An unconfirmed termination failure logs a host
-diagnostic and retains ownership; it never turns a timeout into successful
-interruption. Existing task suspension and continuation semantics are unchanged.
+The runtime reports cleanup and blocked verification separately from execution.
+The automation coordinator retains the diagnostic, attempt-scoped verification
+callback, and interruption/stop intent while keeping task ownership. Browser
+projections overlay that live state on activity, conversations and board runs.
+Retry verification reuses the owned identities and operation; it cannot dispatch
+another attempt or turn a timeout into successful interruption. CLI shutdown
+pauses dispatch and returns a visible blocker while keeping the host available
+for recovery, rather than silently waiting on an unverifiable process tree.
+
+Stop retries is one activation-scoped application command. Queued activations
+are dismissed immediately; occupied activations join interruption and the host
+finalizes dismissal after safe runtime settlement, independent of HTTP request
+lifetime. Ordinary interruption still suspends for continuation. Pending stop
+intent survives browser reload in the coordinator; after a host crash, existing
+paused startup recovery applies, not replay of an in-memory command. Retry times
+are eligibility thresholds, not promised dispatch times.
 See [ADR 0043](adr/0043-supervise-codex-execution-outside-its-event-stream.md).
+See [ADR 0044](adr/0044-own-termination-recovery-and-stop-intent-in-the-host.md).
 
 Transient runtime recovery is owned by settlement and scheduling in the core.
 Released migration 0012 stores mutable outage episodes and marks provisional

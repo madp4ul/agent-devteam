@@ -390,9 +390,14 @@ export interface AttemptTranscriptAccess {
 
 export interface AgentRunLifecycle {
   started(threadId?: string): void;
+  terminationChanged?(state: RuntimeTerminationState, retry: () => void): void;
   transcriptItemUpdated?(ordinal: number, item: AttemptTranscriptItem): void;
   reviewerPolicyConfigured?(configuration: ReviewerPolicyConfiguration): void;
 }
+
+export type RuntimeTerminationState =
+  | { state: "checking" }
+  | { state: "blocked"; diagnostic: string; retryAvailable: boolean };
 
 export interface ReviewerPolicyConfiguration {
   status: "active" | "unavailable";

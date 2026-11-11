@@ -30,6 +30,8 @@ type TaskCapabilities = Pick<BrowserCoordinationCapabilities,
   | "queryTaskTimeline"
   | "queryTaskMovementMap"
   | "interruptTask"
+  | "stopActivation"
+  | "retryTaskTermination"
   | "continueInterruptedTask"
   | "editTask"
   | "moveTask"
@@ -91,11 +93,23 @@ export function registerTaskRoutes(
       idempotencyKey: stringField(body, "idempotencyKey"),
     });
     if (result.accepted) {
-      await result.confirmed;
-      sendJson(response, 200, { accepted: true, state: "interrupted" });
+      // Acknowledgement must not depend on keeping a browser request alive.
+      void result.confirmed.catch(() => {});
+      sendJson(response, result.state === "interrupted" ? 200 : 202, { accepted: true, state: result.state });
     } else {
       sendJson(response, result.reason === "not-found" ? 404 : 409, result);
     }
+  });
+  dispatcher.register("POST", "/api/tasks/:taskId/stop-activation", "browser/tasks", async ({ request, response, params }) => {
+    const body = await readJsonBody(request);
+    const result = application.stopActivation({ taskId: params.taskId, activationId: stringField(body, "activationId"),
+      actor: userActor, idempotencyKey: stringField(body, "idempotencyKey") });
+    sendJson(response, result.accepted ? (result.state === "stopping" ? 202 : 200) : 409, result);
+  });
+  dispatcher.register("POST", "/api/tasks/:taskId/retry-termination", "browser/tasks", async ({ request, response, params }) => {
+    const body = await readJsonBody(request);
+    const result = application.retryTaskTermination(params.taskId, stringField(body, "attemptId"));
+    sendJson(response, result.accepted ? 202 : 409, result);
   });
   dispatcher.register("POST", "/api/tasks/:taskId/continue", "browser/tasks", async ({ request, response, params }) => {
     const body = await readJsonBody<ContinueInterruptedTaskRequest>(request);

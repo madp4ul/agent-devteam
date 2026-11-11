@@ -4,6 +4,7 @@ import type { AgentConversationIndexEntry, AgentInspectableTaskContentView, User
 import { AgentConversationDialog } from "./AgentConversationDialog.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 import { CostEstimate } from "./CostEstimate.tsx";
+import { runStatusLabel } from "./RunCleanup.tsx";
 
 const conversationStatusPresentation = {
   starting: { className: "status-preparing", label: "Starting agent" },
@@ -49,7 +50,9 @@ export function TaskConversationsPanel({
         </div>
         <ul className="conversation-index">
           {conversations.map((conversation) => {
-            const status = conversation.status === null
+            const status = conversation.activeRun !== undefined && conversation.activeRun.status !== "running"
+              ? { label: runStatusLabel(conversation.activeRun), className: "status-preparing" }
+              : conversation.status === null
               ? null
               : conversationStatusPresentation[conversation.status];
             return <li key={conversation.id}>
@@ -66,7 +69,7 @@ export function TaskConversationsPanel({
                   {conversation.retired ? <span className="conversation-retired-label">Retired</span> : null}
                   {status === null ? null : (
                     <span
-                      className={conversation.status === "running"
+                      className={conversation.status === "running" && (conversation.activeRun === undefined || conversation.activeRun.status === "running")
                         ? "activity-spinner"
                         : `conversation-status-dot ${status.className}`}
                       role="status"

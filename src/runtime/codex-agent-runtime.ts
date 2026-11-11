@@ -43,7 +43,7 @@ export type CodexThreadOptionsLike = Pick<
 export interface CodexThreadLike {
   runStreamed(
     prompt: Input,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; terminationChanged?: AgentRunLifecycle["terminationChanged"] },
   ): Promise<{ events: AsyncIterable<ThreadEvent> }>;
 }
 
@@ -156,7 +156,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
         try {
           streamed = await thread.runStreamed(
             codexInput(effectiveRequest),
-            signal === undefined ? {} : { signal },
+            { ...(signal === undefined ? {} : { signal }), ...(lifecycle.terminationChanged === undefined ? {} : { terminationChanged: lifecycle.terminationChanged }) },
           );
         } catch (error) {
           if (
@@ -171,7 +171,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           thread = client.startThread(threadOptions);
           streamed = await thread.runStreamed(
             codexInput(effectiveRequest),
-            signal === undefined ? {} : { signal },
+            { ...(signal === undefined ? {} : { signal }), ...(lifecycle.terminationChanged === undefined ? {} : { terminationChanged: lifecycle.terminationChanged }) },
           );
         }
         let threadIdentityEstablished = false;
@@ -204,7 +204,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           thread = client.startThread(threadOptions);
           streamed = await thread.runStreamed(
             codexInput(effectiveRequest),
-            signal === undefined ? {} : { signal },
+            { ...(signal === undefined ? {} : { signal }), ...(lifecycle.terminationChanged === undefined ? {} : { terminationChanged: lifecycle.terminationChanged }) },
           );
           projected = await project(streamed.events);
         }

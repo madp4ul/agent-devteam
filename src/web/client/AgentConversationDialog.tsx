@@ -1,4 +1,5 @@
 import { RuntimeWaitingSummary } from "./RuntimeWaitingSummary.tsx";
+import { RunCleanup } from "./RunCleanup.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import type { AgentConversationView, AgentInspectableTaskContentView } from "../../application/browser-transport-contract.ts";
@@ -372,7 +373,8 @@ export function AgentConversationDialog({
             <CloseIconButton buttonRef={closeButtonRef} label="Close conversation" onClick={onClose} />
           </div>
         </header>
-        {conversation?.runtimeRecovery === undefined ? null : <RuntimeWaitingSummary taskId={taskId} recovery={conversation.runtimeRecovery} onChanged={refresh} />}
+        <RunCleanup run={conversation?.activeRun} onChanged={refresh} />
+        {conversation?.runtimeRecovery === undefined ? null : <RuntimeWaitingSummary taskId={taskId} recovery={conversation.runtimeRecovery} activeRun={conversation.activeRun} automation={conversation.automation} onChanged={refresh} />}
         <div
           ref={contentRef}
           className="transcript-content"

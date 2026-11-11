@@ -8,6 +8,9 @@ import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { createIsolatedCodexClient } from "../../src/runtime/isolated-codex-client.ts";
 import { createRuntime, request } from "../support/codex-runtime-fixture.ts";
+import { CoordinationApplication } from "../../src/application/coordination-application.ts";
+import { createHandoffFixture } from "../support/handoff-fixture.ts";
+import { startWebServer } from "../../src/web/web-server.ts";
 
 test("interrupt stops a detached program holding SDK output open and preserves unrelated processes and evidence", { timeout: 10000 }, async (t) => {
   const directory = await fixture(t, `
@@ -388,6 +391,115 @@ const timer = setInterval(() => {
     }
   }
   assert.notEqual(await bounded(running), "still blocked");
+});
+
+test("termination inspection failure is visible and retryable without restarting the run", { skip: process.platform !== "win32" }, async (t) => {
+  const directory = await fixture(t, `emit({ type: 'thread.started', thread_id: 'retained-thread' }); emit({ type: 'error', message: 'Usage limit reached' }); setInterval(() => {}, 1000);`);
+  const original = childProcess.execFile;
+  let killed = false;
+  let failInspection = true;
+  t.mock.method(childProcess, "execFile", (...args: any[]) => {
+    if (args[0] === "powershell.exe" && killed && failInspection) return args.at(-1)(new Error("Inspection temporarily unavailable"), "", "");
+    if (args[0] === "taskkill.exe") {
+      const callback = args.pop();
+      args.push((error: Error | null, stdout: string, stderr: string) => { killed = true; callback(error ?? new Error("Already exited child"), stdout, stderr); });
+    }
+    return Reflect.apply(original, childProcess, args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const runtime = createRuntime({ mcpServer: { command: "unused", args: () => [] },
+    createClient: () => createIsolatedCodexClient({ codexPathOverride: process.execPath }) });
+  const runRequest = request("retry-verification", "T-0001"); runRequest.workspace.path = directory;
+  const blocked = Promise.withResolvers<() => void>();
+  const running = runtime.run(runRequest, { started() {}, terminationChanged(state, retry) {
+    if (state.state === "blocked") { assert.match(state.diagnostic, /Inspection temporarily unavailable/); blocked.resolve(retry); }
+  } });
+  const retry = await bounded(blocked.promise);
+  assert.notEqual(retry, "still blocked");
+  if (typeof retry !== "function") return;
+  failInspection = false;
+  retry(); retry(); // Repeated requests join the same termination operation.
+  const outcome = await bounded(running);
+  assert.notEqual(outcome, "still blocked");
+  if (typeof outcome !== "string") { assert.equal(outcome.status, "failed"); assert.equal(outcome.threadId, "retained-thread"); }
+});
+
+test("HTTP stop orders and Pause recover multiple real budget-failed workers without losing conversations", { skip: process.platform !== "win32", timeout: 20000 }, async (t) => {
+  const directory = await fixture(t, `emit({ type: 'thread.started', thread_id: 'thread-' + process.pid }); emit({ type: 'item.completed', item: { id: 'saved', type: 'agent_message', text: 'Retained work before budget failure' } }); emit({ type: 'error', message: 'Usage limit reached' }); setInterval(() => {}, 1000);`);
+  const original = childProcess.execFile;
+  const killed = new Set<number>();
+  const killCallbacks: Array<() => void> = [];
+  let failInspection = true;
+  t.mock.method(childProcess, "execFile", (...args: any[]) => {
+    if (args[0] === "powershell.exe" && killed.size >= 2 && failInspection) return args.at(-1)(new Error("Inspection temporarily unavailable"), "", "");
+    if (args[0] === "taskkill.exe") {
+      const pid = Number(args[1][1]);
+      const callback = args.pop();
+      args.push((error: Error | null, stdout: string, stderr: string) => {
+        killed.add(pid);
+        killCallbacks.push(() => callback(error ?? new Error("Already exited child"), stdout, stderr));
+        if (killed.size === 2) for (const complete of killCallbacks) complete();
+      });
+    }
+    return Reflect.apply(original, childProcess, args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const setup = await createHandoffFixture();
+  // Both native processes reach cleanup before inspection is allowed to finish.
+  const blocked = new Set<string>();
+  const ready = Promise.withResolvers<void>();
+  const native = createRuntime({ mcpServer: { command: "unused", args: () => [] }, createClient: () => {
+    const client = createIsolatedCodexClient({ codexPathOverride: process.execPath });
+    return { startThread: (options) => client.startThread({ ...options, workingDirectory: directory }) };
+  } });
+  const app = await CoordinationApplication.start({ processDefinitionPath: setup.definitionPath, databasePath: setup.databasePath,
+    runtimeDispatch: { projectRepositoryPath: setup.repositoryPath, taskWorkspaceRoot: setup.workspaceRoot, agentRuntime: {
+      run: (request, lifecycle, signal) => native.run(request, { ...lifecycle, terminationChanged: (state, retry) => {
+        lifecycle.terminationChanged?.(state, retry);
+        if (state.state === "blocked") { blocked.add(request.task.id); if (blocked.size === 2) ready.resolve(); }
+      } }, signal),
+    } }, transcriptAccess: native });
+  t.after(() => app.close());
+  const server = await startWebServer(app, { host: "127.0.0.1", port: 0, assetDirectory: directory });
+  t.after(() => server.close());
+  const tasks = [0, 1].map((index) => {
+    const result = app.createTask({ boardId: "delivery", columnId: "implementation", title: `Budget ${index}`, description: "Preserve history", actor: { kind: "user", id: "paul" }, idempotencyKey: `create-${index}` });
+    assert.ok(result.accepted); return result.task.id;
+  });
+  await app.resumeAutomation();
+  // Force verification failures for both roots, while allowing their initial captures.
+  await ready.promise;
+  assert.equal((await app.prepareShutdown()).ready, false);
+  const post = (task: string, command: string, body: object) => fetch(`${server.baseUrl}/api/tasks/${task}/${command}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  for (const [index, task] of tasks.entries()) {
+    const run = app.queryActiveRuns().find((run) => run.taskId === task)!;
+    const body = { activationId: run.activationId, idempotencyKey: `stop-${task}` };
+    assert.equal((await post(task, "retry-termination", { attemptId: "wrong" })).status, 409);
+    if (index === 0) assert.equal((await post(task, "interrupt", { ...body, idempotencyKey: `interrupt-${task}` })).status, 202);
+    assert.equal((await post(task, "stop-activation", body)).status, 202);
+    assert.equal((await post(task, "interrupt", { ...body, idempotencyKey: `again-${task}` })).status, 202);
+    assert.equal((await post(task, "stop-activation", body)).status, 202);
+    const detail = await (await fetch(`${server.baseUrl}/api/tasks/${task}`)).json();
+    assert.equal(detail.activeRun.stopRequested, true);
+    assert.equal(detail.activeRun.status, "termination-blocked");
+  }
+  failInspection = false;
+  for (const run of app.queryActiveRuns()) assert.equal((await post(run.taskId, "retry-termination", { attemptId: run.attemptId })).status, 202);
+  await app.waitForAutomationIdle();
+  assert.deepEqual(await app.prepareShutdown(), { ready: true });
+  assert.equal(app.queryAutomation().state, "paused");
+  for (const taskId of tasks) {
+    const result = app.queryTask(taskId); assert.ok(result.available);
+    const activation = result.task.activations[0]!;
+    assert.equal(activation.status, "dismissed");
+    assert.match(activation.attempts[0]!.threadId!, /^thread-/);
+    const conversation = await app.queryAgentConversation(taskId, activation.conversationId!);
+    assert.ok(conversation.available);
+    assert.match(JSON.stringify(conversation), /Retained work before budget failure/);
+    assert.equal((await post(taskId, "stop-activation", { activationId: activation.id, idempotencyKey: "replay" })).status, 200);
+  }
 });
 
 async function fixture(t: TestContext, body: string): Promise<string> {

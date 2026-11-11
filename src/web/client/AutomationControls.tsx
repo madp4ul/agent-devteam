@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { runStatusLabel } from "./RunCleanup.tsx";
 
 import type { ActiveRunView, AutomationView, WorkspacePreparationView } from "../../application/browser-transport-contract.ts";
 import { pauseAutomation, resumeAutomation } from "./api.ts";
@@ -44,7 +45,7 @@ export function AutomationControls({
         </button>
       ) : null}
       <details className="live-runs">
-        <summary className="topbar-control">Current runs · {activeRuns.filter((run) => run.status !== "starting" && run.executionStarted !== false).length}{workspacePreparations.length === 0 ? "" : ` · Preparing ${workspacePreparations.length}`}</summary>
+        <summary className="topbar-control">Current runs · {activeRuns.filter((run) => run.status === "running" && run.executionStarted !== false).length}{activeRuns.some((run) => run.status === "interrupting" || run.status === "cleaning-up" || run.status === "termination-blocked") ? ` · Stopping ${activeRuns.filter((run) => run.status === "interrupting" || run.status === "cleaning-up" || run.status === "termination-blocked").length}` : ""}{workspacePreparations.length === 0 ? "" : ` · Preparing ${workspacePreparations.length}`}</summary>
         <div className="live-runs-popover">
           {activeRuns.length === 0 && workspacePreparations.length === 0 ? <p>No active agents.</p> : null}
           {activeRuns.length === 0 ? null : <section aria-label="Agent runs">
@@ -59,9 +60,7 @@ export function AutomationControls({
                   <span className="live-run-identity">{run.agentId} · {run.taskId}</span>
                   <span>{run.taskTitle}</span>
                   <span className="quiet">{run.boardName} / {run.columnName}</span>
-                  <span className="quiet">{run.executionStarted === false || run.status === "starting"
-                    ? (run.status === "interrupting" ? "Stopping startup" : "Starting agent")
-                    : <>{run.status === "interrupting" ? "Stopping agent" : "Running"} · <ElapsedTime startedAt={run.startedAt} /> elapsed</>}
+                  <span className="quiet">{runStatusLabel(run)}{run.status === "running" ? <> · <ElapsedTime startedAt={run.startedAt} /> elapsed</> : null}
                   </span>
                 </a>
               </li>

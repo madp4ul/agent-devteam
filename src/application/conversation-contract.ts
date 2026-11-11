@@ -29,6 +29,8 @@ export interface AgentConversationView {
   /** Present on bounded browser queries. Legacy browser fixtures may omit it. */
   page?: ConversationHistoryPage;
   runtimeRecovery?: RuntimeWaitingView;
+  activeRun?: import("./automation-contract.ts").ActiveRunView;
+  automation?: import("./automation-contract.ts").AutomationView;
   workspacePreparation?: import("./automation-contract.ts").WorkspacePreparationView;
   liveStatus?: "starting" | "running" | "queued" | null;
   id: string;
@@ -83,6 +85,7 @@ export type AgentConversationQueryResult =
   | { available: false; reason: "not-found" | "invalid-page" };
 
 export interface AgentConversationIndexEntry {
+  activeRun?: import("./automation-contract.ts").ActiveRunView;
   id: string;
   owningAgent: AgentConversationView["owningAgent"];
   label: string;

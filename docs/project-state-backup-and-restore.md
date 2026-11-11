@@ -20,6 +20,48 @@ does not authorize deleting those separate worktrees. Move or remove them
 explicitly before retrying archival. Startup never prunes stale registrations
 automatically.
 
+## Stopping a host with unconfirmed agent termination
+
+1. Pause automation. Pausing prevents new dispatch but lets current work finish;
+   it does not itself interrupt a model run. For a budget retry activation, use
+   **Stop retries**. Ordinary **Interrupt** instead suspends the task for later
+   continuation. Either button order joins the same shutdown operation.
+2. Read **Run cleanup** in task activity or its conversation. **Verifying agent
+   shutdown** is process cleanup, not model execution. **Termination verification
+   blocked** retains workspace ownership and shows the diagnostic. Use **Retry
+   termination verification** when offered; it retries inspection/termination of
+   the owned attempt, not the model call. Reload does not cancel a requested stop.
+3. Ctrl+C (or SIGTERM) pauses dispatch. If verification is blocked, the terminal
+   reports the affected tasks and leaves the host/UI available for recovery.
+   Once verification succeeds, request shutdown again. Do not infer that a past
+   retry eligibility time means a retry is running while automation is paused.
+4. If automatic verification is unavailable, keep automation paused. Record the
+   task, attempt, native thread IDs and diagnostics. Preserve the coordination
+   database using SQLite's online backup facility and verify its integrity and
+   foreign keys; copying only the live `.sqlite3` file can omit committed WAL data.
+   Preserve the corresponding Codex session files under the configured Codex home
+   (`sessions` and `archived_sessions`, when present). Native transcripts are
+   separate from the framework database. This targeted incident capture is not a
+   complete project-state backup while processes can still modify worktrees.
+5. Establish process ownership externally before a forced stop: inspect the
+   owned worker/descendants with PID **and creation time**. A vanished worker PID
+   or taskkill error is not proof that all its children exited. Do not terminate
+   all Node/Codex processes by name or reuse an old PID without identity checks.
+   If ownership cannot be reconstructed, a controlled OS restart after saving
+   other work is the conservative way to eliminate surviving local processes;
+   first retain the incident evidence above. There is no safe force-unlock button.
+6. After the host and owned processes are stopped, take the complete recovery-unit
+   backup described below. Start the framework normally and leave it paused.
+   Verify retained conversation history, native thread IDs and workspaces before
+   explicitly continuing. Completed persisted messages are not erased by host
+   restart. Output not yet delivered/persisted can be missing, and an in-memory
+   pending stop is not replayed across host restart; inspect the recovered task.
+
+Windows snapshot inspection cannot reconstruct a descendant whose intermediate
+parent was born and exited entirely between observations. See
+[ADR 0043](adr/0043-supervise-codex-execution-outside-its-event-stream.md) for the
+containment limits; do not treat a timeout as proof of exit.
+
 ## Schema lifecycle
 
 Released coordination databases identify their schema through the ordered

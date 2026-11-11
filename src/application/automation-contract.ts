@@ -52,6 +52,8 @@ export type AutomationView =
   | { state: "blocked"; attemptsMayStart: false };
 
 export interface ActiveRunView {
+  activationId?: string;
+  conversationId?: string | null;
   attemptId: string;
   taskId: string;
   taskTitle: string;
@@ -60,7 +62,10 @@ export interface ActiveRunView {
   columnId: string;
   columnName: string;
   agentId: string;
-  status: "starting" | "running" | "interrupting";
+  status: "starting" | "running" | "interrupting" | "cleaning-up" | "termination-blocked";
+  termination?: { diagnostic: string; retryAvailable: boolean };
+  interruptionRequested?: boolean;
+  stopRequested?: boolean;
   executionStarted?: boolean;
   startedAt: string;
 }
@@ -127,6 +132,11 @@ export interface InterruptTaskCommand {
 export type InterruptTaskResult =
   | { accepted: true; state: "interrupting" | "interrupted"; confirmed: Promise<void> }
   | { accepted: false; reason: "not-found" | "not-running" | "already-interrupting" };
+
+export type TerminationRetryResult = { accepted: true } | { accepted: false; reason: "not-recoverable" };
+export type ShutdownReadiness = { ready: true } | { ready: false; blockedRuns: ActiveRunView[] };
+export interface StopActivationCommand extends InterruptTaskCommand { activationId: string }
+export type StopActivationResult = { accepted: true; state: "stopping" | "stopped" } | { accepted: false; reason: "not-stoppable" };
 
 export interface ContinueInterruptedTaskCommand {
   taskId: string;

@@ -57,6 +57,8 @@ test("browser route catalog accounts for the complete pre-dispatcher API invento
     "POST /api/tasks/:taskId/interrupt",
     "POST /api/tasks/:taskId/move",
     "POST /api/tasks/:taskId/relationships",
+    "POST /api/tasks/:taskId/retry-termination",
+    "POST /api/tasks/:taskId/stop-activation",
     "POST /api/tasks/:taskId/unarchive",
     "POST /api/tasks/:taskId/workspace/files/open",
     "POST /api/tasks/:taskId/workspace/open",

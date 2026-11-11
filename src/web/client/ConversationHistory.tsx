@@ -8,6 +8,7 @@ import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
 import { MarkdownContent } from "./MarkdownContent.tsx";
 import { ResumeInstructions } from "./ResumeInstructions.tsx";
 import { WorkspacePreparation } from "./WorkspacePreparation.tsx";
+import { runStatusLabel } from "./RunCleanup.tsx";
 import { RelativeTime } from "./RelativeTime.tsx";
 import { conversationAttachmentUrl } from "./api.ts";
 import { formatFileSize } from "./file-size.ts";
@@ -213,7 +214,7 @@ export function ConversationHistory({
         })()
       )}
       </div>)}
-      {conversation.workspacePreparation !== undefined ? <WorkspacePreparation preparation={conversation.workspacePreparation} /> : conversation.liveStatus === "starting" ? <p className="conversation-live-state" role="status">Starting agent…</p> : active || queued ? (
+      {conversation.activeRun !== undefined && conversation.activeRun.status !== "running" ? <p className="conversation-live-state" role="status">{runStatusLabel(conversation.activeRun)}</p> : conversation.workspacePreparation !== undefined ? <WorkspacePreparation preparation={conversation.workspacePreparation} /> : conversation.liveStatus === "starting" ? <p className="conversation-live-state" role="status">Starting agent…</p> : active || queued ? (
         <p className="conversation-live-state" role="status" aria-label={queued ? "Follow-up queued" : "Agent working"}>
           {queued
             ? active

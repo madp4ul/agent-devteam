@@ -250,6 +250,7 @@ export class CoordinationApplication {
           taskProjections,
           activationScheduling,
           activeAttempts,
+          activationResolutions: persistence.activationResolutions,
           conversationContextDelivery,
           conversationAttachments,
           startup,
@@ -301,6 +302,7 @@ export class CoordinationApplication {
             taskProjections,
             activationScheduling,
             activeAttempts,
+            activationResolutions: persistence.activationResolutions,
             conversationContextDelivery,
             conversationAttachments,
             startup,
@@ -347,6 +349,7 @@ export class CoordinationApplication {
         taskProjections,
         activationScheduling,
         activeAttempts,
+        activationResolutions: persistence.activationResolutions,
         conversationContextDelivery,
         conversationAttachments,
         startup,
@@ -396,6 +399,7 @@ export class CoordinationApplication {
         taskProjections,
         activationScheduling,
         activeAttempts,
+        activationResolutions: persistence.activationResolutions,
         conversationContextDelivery,
         conversationAttachments,
         startup,
@@ -486,6 +490,30 @@ export class CoordinationApplication {
 
   pauseAutomation(): PauseAutomationResult {
     return this.#automation.pause();
+  }
+
+  prepareShutdown(): Promise<import("./automation-contract.ts").ShutdownReadiness> {
+    return this.#automation.prepareShutdown();
+  }
+
+  retryTaskTermination(taskId: string, attemptId: string): import("./automation-contract.ts").TerminationRetryResult {
+    return this.#automation.retryTermination(taskId, attemptId);
+  }
+
+  stopActivation(command: import("./automation-contract.ts").StopActivationCommand): import("./automation-contract.ts").StopActivationResult {
+    const task = this.queryTask(command.taskId);
+    const activation = task.available ? task.task.activations.find((item) => item.id === command.activationId) : undefined;
+    if (!activation) return { accepted: false, reason: "not-stoppable" };
+    if (activation.status === "dismissed" || activation.status === "completed") return { accepted: true, state: "stopped" };
+    if (activation.status === "running") {
+      const interruption = this.#automation.interruptTask(command.taskId, command.actor, `stop:${command.idempotencyKey}`, command.activationId, true);
+      if (!interruption.accepted) return { accepted: false, reason: "not-stoppable" };
+      // Final dismissal belongs to settlement, not to this request's lifetime.
+      void interruption.confirmed.catch(() => {});
+      return { accepted: true, state: "stopping" };
+    }
+    const dismissed = this.dismissActivation({ activationId: command.activationId, actor: command.actor, idempotencyKey: `stop-activation:${command.idempotencyKey}` });
+    return dismissed.accepted ? { accepted: true, state: "stopped" } : { accepted: false, reason: "not-stoppable" };
   }
 
   interruptTask(command: InterruptTaskCommand): InterruptTaskResult {
@@ -850,6 +878,9 @@ export class CoordinationApplication {
     const conversation = await this.#persistence.conversationProjections.readConversation(taskId, conversationId, query);
     if (conversation === "invalid-page") return { available: false, reason: "invalid-page" };
     if (conversation === undefined) return { available: false, reason: "not-found" };
+    const currentRun = this.queryActiveRuns().find((run) => run.taskId === taskId && run.conversationId === conversationId);
+    if (currentRun !== undefined) conversation.activeRun = currentRun;
+    conversation.automation = this.queryAutomation();
     const preparation = this.queryWorkspacePreparations().find((candidate) => candidate.conversationId === conversationId);
     if (preparation !== undefined) {
       conversation.workspacePreparation = preparation;
@@ -879,6 +910,8 @@ export class CoordinationApplication {
     }
     const activeRuns = this.queryActiveRuns();
     for (const conversation of conversations) {
+      const active = activeRuns.find((run) => run.conversationId === conversation.id);
+      if (active !== undefined) conversation.activeRun = active;
       if (conversation.status === "running" && conversationIsStarting(activeRuns, taskId, conversation.owningAgent.id)) conversation.status = "starting";
     }
     for (const preparation of this.queryWorkspacePreparations()) {

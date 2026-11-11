@@ -2,7 +2,7 @@
 
 **Type:** task
 
-**Status:** open
+**Status:** resolved
 
 **Blocked by:** 109
 
@@ -41,3 +41,42 @@ pause/stop context needed to interpret them.
 2026-11-11: Follow-up from the user's original button-order, reload and retry-time
 reports, re-read through Codex thread inspection. These UX/command issues were
 not changed by issue 108; implementation is still open.
+
+
+## Answer
+
+Implemented 2026-11-11. Changes are unstaged for user review; no live host was
+restarted or modified, and no new scratch effort or operational evidence dumps
+were added.
+
+Stop retries is an activation-scoped host command. Both button orders and
+repeated requests join interruption; safe settlement performs final dismissal
+without a browser request remaining open. Current stop intent is projected across
+reload, activity, conversation, timeline, cards and top-bar counts. Retry times
+are earliest eligibility, with paused/pausing/cleanup context. Ordinary Interrupt
+still suspends for continuation. Pending intent survives browser reload, not host
+restart; existing paused startup recovery remains authoritative after a crash.
+
+Review found and fixed an idempotency edge case: a rejected stale Stop request
+must not poison dismissal of a later attempt of the same activation. Each accepted
+stop now retains its own dismissal identity, with a regression test.
+
+Validation:
+- Typecheck and production build pass.
+- Focused application/runtime/route suite: 25 pass, including real disposable
+  Windows workers, injected taskkill/inspection failures, HTTP stop orders,
+  multiple occupied tasks, shutdown readiness, and preserved transcripts/thread IDs.
+- Browser: 41 of 44 broader checks passed initially; the three failures were
+  corrected wording/startup-display regressions. Final targeted recheck: 9 pass,
+  including all three and six runtime-waiting cases, dark/light contrast,
+  top-bar counts, reload and conversation recovery.
+- Full Node suite: 515 pass, 6 skipped, 2 fail. The known self-mention expectation
+  in agent-conversation.test.ts:154 remains unrelated to these changes. The
+  nested workspace-cleanup test failed under suite load; both before/after
+  removal variants passed a focused rerun. Full suite ran before the final
+  rejected-stop regression; the final focused suite includes it.
+- Independent Standards and Spec reviews: no remaining actionable findings after
+  the idempotency correction was re-reviewed.
+
+Snapshot-based process ancestry limits remain documented in ADR 0043. Automatic
+verification cannot safely reconstruct missing identities; there is no force-unlock.

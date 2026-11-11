@@ -5,6 +5,7 @@ import type { TaskOverviewView } from "../../application/browser-transport-contr
 import type { BrowserBoardState } from "./api.ts";
 import { WorkspacePreparation } from "./WorkspacePreparation.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
+import { runStatusLabel } from "./RunCleanup.tsx";
 import { taskCardSignals } from "./task-card-signals.ts";
 
 export function TaskCard({
@@ -88,8 +89,8 @@ export function TaskCard({
         {!signals.active ? null : (
           <span className="signal running">
             <span className="activity-spinner" aria-hidden="true" />
-            {activeRun?.executionStarted === false || activeRun?.status === "starting" ? "Starting agent" : "Active"} · {task.run.activeAgentId}
-            {activeRun === undefined || activeRun.status === "starting" || activeRun.executionStarted === false ? null : <> · <ElapsedTime startedAt={activeRun.startedAt} /></>}
+            {activeRun === undefined ? "Active" : runStatusLabel(activeRun)} · {task.run.activeAgentId}
+            {activeRun?.status !== "running" || activeRun.executionStarted === false ? null : <> · <ElapsedTime startedAt={activeRun.startedAt} /></>}
           </span>
         )}
       </div>

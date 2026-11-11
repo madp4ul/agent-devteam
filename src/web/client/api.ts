@@ -299,6 +299,18 @@ export async function interruptTask(taskId: string, idempotencyKey: string, acti
   });
 }
 
+export async function stopActivation(taskId: string, activationId: string, idempotencyKey: string): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/stop-activation`, {
+    method: "POST", body: JSON.stringify({ activationId, idempotencyKey }),
+  });
+}
+
+export async function retryTaskTermination(taskId: string, attemptId: string): Promise<void> {
+  await request(`/api/tasks/${encodeURIComponent(taskId)}/retry-termination`, {
+    method: "POST", body: JSON.stringify({ attemptId }),
+  });
+}
+
 export async function continueInterruptedTask(
   taskId: string,
   message: string,

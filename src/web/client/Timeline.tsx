@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { runStatusLabel } from "./RunCleanup.tsx";
 
 import type {
   ActivationView,
@@ -382,7 +383,8 @@ function AttemptCard({
   const agentName = nameForAgent(activation.targetAgentId, context.agents);
   const run = context.activeRun?.attemptId === attempt.id ? context.activeRun : undefined;
   const starting = attempt.completedAt === null && (run?.executionStarted === false || run?.status === "starting");
-  const status = starting ? { label: run?.status === "interrupting" ? "Stopping startup" : "Starting agent", className: "starting" } : attemptStatus(attempt);
+  const status = run !== undefined && run.status !== "running" ? { label: runStatusLabel(run), className: "starting" }
+    : starting ? { label: "Starting agent", className: "starting" } : attemptStatus(attempt);
   const executionStartedAt = run?.startedAt ?? attempt.startedAt;
   const outcomeTextId = `outcome-${attempt.id}`;
   return (
@@ -394,7 +396,7 @@ function AttemptCard({
           <span className="attempt-timing">
             <span className="attempt-status">{status.label}</span>
             {" · "}<span className="attempt-number">Attempt {record.number}</span>{" · "}
-            {starting ? null : attempt.completedAt === null ? (
+            {starting || (run !== undefined && run.status !== "running") ? null : attempt.completedAt === null ? (
               <><ElapsedTime startedAt={executionStartedAt} completedAt={attempt.completedAt} /> elapsed</>
             ) : (
               <><RelativeTime value={attempt.completedAt} />{" · "}<ElapsedTime startedAt={attempt.startedAt} completedAt={attempt.completedAt} /></>

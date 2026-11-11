@@ -1,4 +1,5 @@
 import { RuntimeWaitingSummary } from "./RuntimeWaitingSummary.tsx";
+import { RunCleanup, runStatusLabel } from "./RunCleanup.tsx";
 import { useState, type ReactNode } from "react";
 
 import type {
@@ -61,30 +62,31 @@ export function AgentActivityPanel({
       aria-labelledby="agent-activity-heading"
     >
       <h2 id="agent-activity-heading">Agent activity</h2>
-      {state.activations.map((activation) => activation.recovery?.state === "waiting" ? <RuntimeWaitingSummary key={activation.id} taskId={state.taskId} recovery={activation.recovery} onChanged={onChanged} /> : null)}
+      <RunCleanup run={state.activeRun ?? undefined} onChanged={onChanged} />
+      {state.activations.map((activation) => activation.recovery?.state === "waiting" ? <RuntimeWaitingSummary key={activation.id} taskId={state.taskId} recovery={activation.recovery} activeRun={state.activeRun ?? undefined} automation={state.automation} onChanged={onChanged} /> : null)}
 
       {state.workspacePreparation !== undefined ? <WorkspacePreparation preparation={state.workspacePreparation} /> : state.activeRun !== null ? (
-        <div className="activity-current running">
+        <div className={`activity-current ${state.activeRun.status === "running" ? "running" : "waiting"}`}>
           <div>
             <span className="agent-inspectable-content-heading">
               <strong>{agentName(state.activeRun.agentId)}</strong>
               <AgentInspectableMarker />
             </span>
-            <span>{state.activeRun.executionStarted === false || state.activeRun.status === "starting" ? (state.activeRun.status === "interrupting" ? "Stopping startup…" : "Starting agent…") : <>Running · <ElapsedTime startedAt={state.activeRun.startedAt} /></>}</span>
+            <span>{runStatusLabel(state.activeRun)}{state.activeRun.status === "starting" || (state.activeRun.status === "interrupting" && state.activeRun.executionStarted === false) ? "…" : null}{state.activeRun.status === "running" ? <> · <ElapsedTime startedAt={state.activeRun.startedAt} /></> : null}</span>
           </div>
           <button
-            disabled={state.activeRun.status === "interrupting"}
+            disabled={state.activeRun.status === "interrupting" || state.activeRun.interruptionRequested || state.activeRun.stopRequested}
             onClick={() => {
               onFeedback({ role: "status", text: `Interrupting ${state.taskId}…` });
               void interruptTask(state.taskId, crypto.randomUUID())
                 .then(async () => {
                   await onChanged();
-                  onFeedback({ role: "status", text: `Interrupted ${state.taskId}. Automation is suspended.` });
+                  onFeedback({ role: "status", text: `Interruption requested for ${state.taskId}. Waiting for safe shutdown.` });
                 })
                 .catch((error) => onFeedback({ role: "alert", text: errorMessage(error) }));
             }}
           >
-            {state.activeRun.status === "interrupting" ? (
+            {state.activeRun.status === "interrupting" || state.activeRun.interruptionRequested ? (
               <><span className="activity-spinner" aria-hidden="true" /> Interrupting…</>
             ) : "Interrupt current attempt"}
           </button>
@@ -198,7 +200,7 @@ function waitingReasonsFor(state: AgentActivityState): Array<{ text: string; ins
   const current = state.activations.find((activation) => activation.status !== "completed" && activation.status !== "dismissed");
   if (state.inspection.automationSuspended) reasons.push({ text: "Task automation is suspended", inspectable: true });
   if (current?.status === "queued" && current.recovery?.state === "scheduled" && Date.parse(current.recovery.dueAt) > Date.now()) {
-    reasons.push({ text: `Retry scheduled for ${new Date(current.recovery.dueAt).toLocaleString()}`, inspectable: false });
+    reasons.push({ text: `Earliest retry eligibility: ${new Date(current.recovery.dueAt).toLocaleString()} (not a scheduled start)`, inspectable: false });
   }
   const recovery = current?.recovery;
   if (recovery?.state === "awaiting-retry") reasons.push({ text: "Failed activation needs retry or dismissal", inspectable: false });

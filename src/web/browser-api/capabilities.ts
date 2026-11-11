@@ -36,6 +36,8 @@ export type BrowserCoordinationCapabilities = Pick<CoordinationApplication,
   | "queryTaskTimeline"
   | "queryTaskMovementMap"
   | "interruptTask"
+  | "stopActivation"
+  | "retryTaskTermination"
   | "continueInterruptedTask"
   | "editTask"
   | "moveTask"

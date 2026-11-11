@@ -25,6 +25,7 @@ import type { Actor } from "../task-contract.ts";
 import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-workspace.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
 import type { ActiveAttemptModule } from "./active-attempt-module.ts";
+import type { ActivationResolutionModule } from "./activation-resolution-module.ts";
 import type {
   ActivationSchedulingModule,
   ClaimedActivation,
@@ -48,6 +49,7 @@ export interface AutomationCoordinatorOptions {
   taskProjections: TaskProjectionStore;
   activationScheduling: ActivationSchedulingModule;
   activeAttempts: ActiveAttemptModule;
+  activationResolutions: ActivationResolutionModule;
   conversationContextDelivery: ConversationContextDeliveryModule;
   conversationAttachments: ConversationAttachmentStore;
   startup: StartupView;
@@ -61,9 +63,14 @@ export interface AutomationCoordinatorOptions {
 
 interface ActiveRunControl {
   attemptId: string;
+  conversationId: string | null;
   activationId: string;
   controller: AbortController;
-  state: "starting" | "running" | "interrupting";
+  state: ActiveRunView["status"];
+  termination?: ActiveRunView["termination"];
+  retryTermination?: () => void;
+  stopRequested?: boolean;
+  stopIdempotencyKey?: string;
   executionStartedAt?: string;
   interruptedBy?: Actor & { kind: "user" };
   interruptIdempotencyKey?: string;
@@ -79,6 +86,7 @@ export class AutomationCoordinator {
   readonly #taskProjections: TaskProjectionStore;
   readonly #activationScheduling: ActivationSchedulingModule;
   readonly #activeAttempts: ActiveAttemptModule;
+  readonly #activationResolutions: ActivationResolutionModule;
   readonly #conversationContextDelivery: ConversationContextDeliveryModule;
   readonly #conversationAttachments: ConversationAttachmentStore;
   readonly #startup: StartupView;
@@ -102,8 +110,10 @@ export class AutomationCoordinator {
   #closed = false;
   readonly #activeRuns = new Map<string, ActiveRunControl>();
   readonly #preparations = new Map<string, WorkspacePreparationView>();
+  readonly #shutdownObservers = new Set<() => void>();
 
   constructor(options: AutomationCoordinatorOptions) {
+    this.#activationResolutions = options.activationResolutions;
     this.#processStore = options.processStore;
     this.#taskProjections = options.taskProjections;
     this.#activationScheduling = options.activationScheduling;
@@ -144,9 +154,14 @@ export class AutomationCoordinator {
   queryActiveRuns(): ActiveRunView[] {
     return this.#activeAttempts.readActiveRuns().filter((run) => this.#activeRuns.has(run.taskId)).map((run) => ({
       ...run,
+      activationId: this.#activeRuns.get(run.taskId)!.activationId,
+      conversationId: this.#activeRuns.get(run.taskId)!.conversationId,
       status: this.#activeRuns.get(run.taskId)?.state ?? "running",
       startedAt: this.#activeRuns.get(run.taskId)?.executionStartedAt ?? run.startedAt,
       executionStarted: this.#activeRuns.get(run.taskId)?.executionStartedAt !== undefined,
+      ...(this.#activeRuns.get(run.taskId)?.termination === undefined ? {} : { termination: this.#activeRuns.get(run.taskId)!.termination! }),
+      interruptionRequested: this.#activeRuns.get(run.taskId)?.interruptedBy !== undefined,
+      stopRequested: this.#activeRuns.get(run.taskId)?.stopRequested === true,
     }));
   }
 
@@ -218,6 +233,30 @@ export class AutomationCoordinator {
     await this.#automationWork;
   }
 
+  async prepareShutdown(): Promise<import("../automation-contract.ts").ShutdownReadiness> {
+    this.pause();
+    while (true) {
+      const blockedRuns = this.queryActiveRuns().filter((run) => run.status === "termination-blocked");
+      if (blockedRuns.length > 0) return { ready: false, blockedRuns };
+      const changed = Promise.withResolvers<void>();
+      this.#shutdownObservers.add(changed.resolve);
+      try {
+        if (await Promise.race([this.#automationWork.then(() => true), changed.promise.then(() => false)])) return { ready: true };
+      } finally { this.#shutdownObservers.delete(changed.resolve); }
+    }
+  }
+
+  retryTermination(taskId: string, attemptId: string): import("../automation-contract.ts").TerminationRetryResult {
+    const active = this.#activeRuns.get(taskId);
+    if (!active || active.attemptId !== attemptId || !active.retryTermination || active.termination?.retryAvailable === false) return { accepted: false, reason: "not-recoverable" };
+    if (active.state === "termination-blocked") {
+      active.state = "cleaning-up";
+      delete active.termination;
+      active.retryTermination();
+    }
+    return { accepted: true };
+  }
+
   pause(): PauseAutomationResult {
     this.#processStore.pauseAutomation();
     this.#automation = this.#activeRuns.size === 0 && this.#preparations.size === 0
@@ -234,13 +273,18 @@ export class AutomationCoordinator {
     actor: Actor & { kind: "user" },
     idempotencyKey: string,
     activationId?: string,
+    stopRequested = false,
   ): InterruptTaskResult {
     const active = this.#activeRuns.get(taskId);
     if (active === undefined || (activationId !== undefined && active.activationId !== activationId)) return { accepted: false, reason: "not-running" };
-    if (active.state === "interrupting") {
-      return { accepted: false, reason: "already-interrupting" };
+    if (stopRequested) {
+      active.stopRequested = true;
+      active.stopIdempotencyKey ??= `stop-activation:${idempotencyKey}`;
     }
-    active.state = "interrupting";
+    if (active.interruptedBy !== undefined) {
+      return { accepted: true, state: "interrupting", confirmed: active.confirmed };
+    }
+    if (active.state !== "cleaning-up" && active.state !== "termination-blocked") active.state = "interrupting";
     active.interruptedBy = actor;
     active.interruptIdempotencyKey = idempotencyKey;
     active.controller.abort();
@@ -411,6 +455,7 @@ export class AutomationCoordinator {
     });
     const activeRun: ActiveRunControl = {
       attemptId: attempt.id,
+      conversationId: claim.activation.conversationId,
       activationId: claim.activation.id,
       controller,
       state: "starting",
@@ -478,6 +523,13 @@ export class AutomationCoordinator {
           },
         },
         {
+          terminationChanged: (state, retry) => {
+            activeRun.retryTermination = retry;
+            activeRun.state = state.state === "blocked" ? "termination-blocked" : "cleaning-up";
+            if (state.state === "blocked") activeRun.termination = { diagnostic: state.diagnostic, retryAvailable: state.retryAvailable };
+            else delete activeRun.termination;
+            for (const observer of this.#shutdownObservers) observer();
+          },
           transcriptItemUpdated: (ordinal, item) => this.#activeAttempts.recordTranscriptItem(attempt.id, ordinal, item),
           reviewerPolicyConfigured: (configuration) => {
             this.#activeAttempts.recordReviewerPolicyConfigured(attempt.id, configuration);
@@ -508,7 +560,7 @@ export class AutomationCoordinator {
           };
         }
         if (this.#closed) {
-          if (activeRun.state === "interrupting") {
+          if (activeRun.interruptedBy !== undefined) {
             throw new Error("Application closed before interruption could be durably confirmed");
           }
           activeRun.confirm();
@@ -523,7 +575,7 @@ export class AutomationCoordinator {
         const contextWindowUsage = this.#transcriptAccess?.readContextWindowUsage === undefined
           ? undefined
           : await this.#transcriptAccess.readContextWindowUsage(attempt.id) ?? undefined;
-        if (activeRun.state === "interrupting") {
+        if (activeRun.interruptedBy !== undefined) {
           if (
             activeRun.interruptedBy === undefined ||
             activeRun.interruptIdempotencyKey === undefined
@@ -557,10 +609,17 @@ export class AutomationCoordinator {
               : { resumedThreadId: resumeThreadId }),
           });
         }
+        if (activeRun.stopRequested && activeRun.interruptedBy !== undefined) {
+          const dismissed = this.#activationResolutions.dismissActivation({
+            activationId: claim.activation.id, actor: activeRun.interruptedBy,
+            idempotencyKey: activeRun.stopIdempotencyKey!,
+          });
+          if (!dismissed.accepted) throw new Error(`Interrupted activation could not be stopped: ${dismissed.reason}`);
+        }
         this.#transcriptAccess?.release?.(attempt.id);
         activeRun.confirm();
       } catch (error) {
-        if (activeRun.state === "interrupting") activeRun.fail(error);
+        if (activeRun.interruptedBy !== undefined) activeRun.fail(error);
         else activeRun.confirm();
         throw error;
       } finally {
