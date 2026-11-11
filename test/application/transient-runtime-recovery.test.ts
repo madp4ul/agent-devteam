@@ -104,7 +104,9 @@ test("reset deadlines, changed classification, pause/resume and dismissal retain
   const { app, runtime, clock, taskId, waiting, fail } = await setup(t);
   await fail({ status: "failed", summary: "Usage limit reached", failure: { code: "usage_limit_reached", retryAt: "2027-01-01T13:00:00Z" } });
   assert.equal(waiting().dueAt, "2027-01-01T13:00:00.000Z");
+  assert.deepEqual(app.queryActiveRuns(), [], "budget waiting must not be displayed as an active run");
   app.pauseAutomation(); await app.waitForAutomationIdle();
+  assert.equal(app.queryAutomation().state, "paused", "budget waiting must not hold Pause in its draining state");
   clock.advanceTo("2027-01-01T13:00:00Z"); assert.equal(runtime.requests.length, 1);
   await app.resumeAutomation(); await runtime.waitForRequest(2);
   await fail({ status: "failed", summary: "Service unavailable", failure: { statusCode: 503, retryAt: "2027-01-01T13:30:00Z" } });

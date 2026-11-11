@@ -24,6 +24,18 @@ without choosing the implementation yet.
 
 ## Decisions so far
 
+- [109 - Expose and recover unconfirmed runtime termination](./issues/109-expose-and-recover-unconfirmed-runtime-termination.md)
+  - **Open:** Follow-up to 108 for visible cleanup state, retryable termination
+    verification and supported safe shutdown without losing conversation continuity.
+- [110 - Unify Stop retries, interruption and retry status](./issues/110-unify-stop-retries-interruption-and-retry-status.md)
+  - **Open, blocked by 109:** Preserve stop intent across reload, coordinate both
+    stop controls and explain retry eligibility while automation is paused.
+
+- [108 - Settle budget retries after Windows termination errors](./issues/108-settle-budget-retries-after-windows-termination-errors.md)
+  - **Resolved:** Verify process liveness after taskkill
+    errors so stopped budget probes release execution ownership, while surviving
+    descendants retain it. Preserve existing pause and conversation semantics.
+
 - [107 - Reject agent self-mentions in comments](./issues/107-reject-agent-self-mentions-in-comments.md)
   - **Resolved:** Comment mutations atomically reject task-local self-mentions;
     cross-task consultation, literal examples and corrected retries remain supported.

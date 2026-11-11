@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn, execFile, fork } from "node:child_process";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -202,6 +204,190 @@ setInterval(() => {}, 1000);
   })();
   assert.equal(await bounded(consuming.then(() => "settled", () => "settled")), "still blocked");
   assert.match(String(diagnostics[0]?.[0]), /task remains occupied/);
+});
+
+for (const scenario of ["budget rejection", "interruption", "PID reuse", "inspection failure"] as const) test(`${scenario}: verify owned process exit after taskkill error`, { skip: process.platform !== "win32" }, async (t) => {
+  const directory = await fixture(t, `
+emit({ type: 'thread.started', thread_id: 'budget-thread' });
+emit({ type: 'error', message: 'You have hit your usage limit' });
+setInterval(() => {}, 1000);
+`);
+  const original = childProcess.execFile;
+  let injected = false;
+  let initialSnapshot: string | undefined;
+  const diagnostics: unknown[][] = [];
+  t.mock.method(console, "error", (...args: unknown[]) => diagnostics.push(args));
+  t.mock.method(childProcess, "execFile", (...args: any[]) => {
+    if (args[0] === "taskkill.exe") {
+      const callback = args.pop();
+      args.push((error: Error | null, stdout: string, stderr: string) => {
+        injected = true;
+        callback(error ?? Object.assign(new Error("A descendant has no running instance"), { code: 255 }), stdout, stderr);
+      });
+    }
+    if (args[0] === "powershell.exe") {
+      const callback = args.pop();
+      args.push((error: Error | null, stdout: string, stderr: string) => {
+        if (injected && scenario === "inspection failure") return callback(new Error("Process inspection unavailable"), "", "");
+        if (injected && scenario === "PID reuse") {
+          stdout = JSON.stringify(JSON.parse(initialSnapshot!).map((row: Record<string, unknown>) => ({ ...row, created: "2099-01-01T00:00:00.0000000Z" })));
+        }
+        initialSnapshot ??= stdout;
+        callback(error, stdout, stderr);
+      });
+    }
+    return Reflect.apply(original, childProcess, args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const runtime = createRuntime({
+    mcpServer: { command: "unused", args: () => [] },
+    createClient: () => createIsolatedCodexClient({ codexPathOverride: process.execPath }),
+  });
+  const runRequest = request("budget-termination", "T-0001");
+  runRequest.workspace.path = directory;
+  const controller = new AbortController();
+  const outcome = await bounded(runtime.run(runRequest, {
+    started() { if (scenario === "interruption") controller.abort(); },
+  }, controller.signal).catch(() => ({ status: "interrupted" })));
+  assert.ok(injected);
+  if (scenario === "inspection failure") {
+    assert.equal(outcome, "still blocked");
+    assert.match(String(diagnostics[0]?.[0]), /task remains occupied/);
+    return;
+  }
+  assert.notEqual(outcome, "still blocked", "budget rejection must settle after the owned processes are gone");
+  if (scenario !== "interruption") assert.equal(typeof outcome === "string" ? outcome : outcome.status, "failed");
+});
+
+test("successful tree termination does not require process inspection availability", { skip: process.platform !== "win32" }, async (t) => {
+  const directory = await fixture(t, `emit({ type: 'thread.started', thread_id: String(process.ppid) }); setInterval(() => {}, 1000);`);
+  const original = childProcess.execFile;
+  t.mock.method(childProcess, "execFile", (...args: any[]) => {
+    if (args[0] === "powershell.exe") return args.at(-1)(new Error("Process inspection unavailable"), "", "");
+    return Reflect.apply(original, childProcess, args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const controller = new AbortController();
+  let workerPid: number | undefined;
+  const runtime = createRuntime({ mcpServer: { command: "unused", args: () => [] },
+    createClient: () => createIsolatedCodexClient({ codexPathOverride: process.execPath }) });
+  const runRequest = request("no-inspection", "T-0001"); runRequest.workspace.path = directory;
+  try {
+    const settled = await bounded(runtime.run(runRequest, { started(id) { workerPid = Number(id); controller.abort(); } }, controller.signal).then(() => "settled", () => "settled"));
+    assert.equal(settled, "settled");
+  } finally {
+    if (workerPid !== undefined) await new Promise<void>((resolve) => original("taskkill.exe", ["/PID", String(workerPid), "/T", "/F"], { windowsHide: true, timeout: 5000 }, () => resolve()));
+  }
+});
+
+test("failed tree termination cannot release ownership while a captured descendant survives", { skip: process.platform !== "win32" }, async (t) => {
+  const directory = await fixture(t, `
+const { spawn } = require('node:child_process');
+const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' });
+emit({ type: 'thread.started', thread_id: JSON.stringify([process.pid, child.pid]) });
+emit({ type: 'error', message: 'You have hit your usage limit' });
+setInterval(() => {}, 1000);
+`);
+  const original = childProcess.execFile;
+  t.mock.method(childProcess, "execFile", (...args: any[]) => {
+    if (args[0] !== "taskkill.exe") return Reflect.apply(original, childProcess, args);
+    process.kill(Number(args[1][1])); // Reproduce partial success: supervisor gone, native child survives.
+    args.at(-1)(Object.assign(new Error("Native child could not be terminated"), { code: 255 }), "", "");
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const diagnostics: unknown[][] = [];
+  t.mock.method(console, "error", (...args: unknown[]) => diagnostics.push(args));
+  let nativePid: number | undefined;
+  let programPid: number | undefined;
+  const runtime = createRuntime({
+    mcpServer: { command: "unused", args: () => [] },
+    createClient: () => createIsolatedCodexClient({ codexPathOverride: process.execPath }),
+  });
+  const runRequest = request("surviving-native", "T-0001");
+  runRequest.workspace.path = directory;
+  const running = runtime.run(runRequest, { started(id) { [nativePid, programPid] = JSON.parse(id!); } });
+  try {
+    const outcome = await bounded(running);
+    assert.equal(outcome, "still blocked");
+    assert.doesNotThrow(() => process.kill(programPid!, 0));
+    assert.match(String(diagnostics[0]?.[0]), /waiting for owned processes/);
+  } finally {
+    for (const pid of [nativePid, programPid]) if (pid !== undefined) {
+      await new Promise<void>((resolve) => original("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, timeout: 5000 }, () => resolve()));
+    }
+  }
+  assert.notEqual(await bounded(running), "still blocked", "later confirmed exit must release the pending termination");
+});
+
+for (const reusedParent of [false, true]) test(`termination verification follows a descendant spawned after the initial snapshot${reusedParent ? " with a reused parent PID" : ""}`, { skip: process.platform !== "win32" }, async (t) => {
+  const directory = await fixture(t, `
+const fs = require('node:fs');
+const { spawn } = require('node:child_process');
+emit({ type: 'thread.started', thread_id: String(process.pid) });
+emit({ type: 'error', message: 'You have hit your usage limit' });
+const timer = setInterval(() => {
+  if (!fs.existsSync('spawn-child')) return;
+  clearInterval(timer);
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' });
+  fs.writeFileSync('child-pid', String(child.pid));
+  setInterval(() => {}, 1000);
+}, 10);
+`);
+  const original = childProcess.execFile;
+  let nativePid: number | undefined;
+  let programPid: number | undefined;
+  let captured = false;
+  t.mock.method(childProcess, "execFile", (...args: any[]) => {
+    if (args[0] === "taskkill.exe") {
+      process.kill(nativePid!);
+      process.kill(Number(args[1][1]));
+      return args.at(-1)(new Error("Partial termination"), "", "");
+    }
+    if (args[0] === "powershell.exe" && captured && reusedParent) {
+      const callback = args.pop();
+      args.push((error: Error | null, stdout: string, stderr: string) => {
+        const rows = JSON.parse(stdout);
+        rows.push({ pid: nativePid, parent: 0, created: "2099-01-01T00:00:00.0000000Z" });
+        callback(error, JSON.stringify(rows), stderr);
+      });
+    }
+    if (args[0] === "powershell.exe" && !captured) {
+      captured = true;
+      const callback = args.pop();
+      args.push((error: Error | null, stdout: string, stderr: string) => {
+        void (async () => {
+          await writeFile(join(directory, "spawn-child"), "go");
+          for (let i = 0; i < 100; i++) {
+            const value = await readFile(join(directory, "child-pid"), "utf8").catch(() => "");
+            if (value) { programPid = Number(value); break; }
+            await new Promise<void>((resolve) => setTimeout(resolve, 10));
+          }
+          callback(error, stdout, stderr);
+        })();
+      });
+    }
+    return Reflect.apply(original, childProcess, args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.mock.method(console, "error", () => {});
+  const runtime = createRuntime({ mcpServer: { command: "unused", args: () => [] },
+    createClient: () => createIsolatedCodexClient({ codexPathOverride: process.execPath }) });
+  const runRequest = request("late-child", "T-0001"); runRequest.workspace.path = directory;
+  const running = runtime.run(runRequest, { started(id) { nativePid = Number(id); } });
+  try {
+    assert.equal(await bounded(running), "still blocked");
+    assert.ok(programPid);
+    assert.doesNotThrow(() => process.kill(programPid!, 0));
+  } finally {
+    for (const pid of [nativePid, programPid]) if (pid !== undefined) {
+      await new Promise<void>((resolve) => original("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, timeout: 5000 }, () => resolve()));
+    }
+  }
+  assert.notEqual(await bounded(running), "still blocked");
 });
 
 async function fixture(t: TestContext, body: string): Promise<string> {

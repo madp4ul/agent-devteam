@@ -2,6 +2,7 @@ import { execFile, fork, type ChildProcess } from "node:child_process";
 import type { CodexOptions, Input, ThreadEvent } from "@openai/codex-sdk";
 import type { CodexClientLike, CodexThreadLike, CodexThreadOptionsLike } from "./codex-agent-runtime.ts";
 import type { CodexWorkerRequest } from "./codex-worker.ts";
+import { captureWindowsProcessTree, windowsProcessTreeHasExited } from "./windows-process-tree.ts";
 
 type WorkerMessage = { kind: "event"; event: ThreadEvent }
   | { kind: "end" }
@@ -85,12 +86,28 @@ async function stopOwnedProcessTree(child: ChildProcess, exit: Promise<void>, ex
   try {
     if (process.platform === "win32") {
       if (exited()) throw new Error("Codex worker exited unexpectedly; descendant termination is unconfirmed");
+      // Inspection supplies fallback evidence; successful taskkill remains
+      // sufficient even if CIM/PowerShell is unavailable on this machine.
+      const owned = await captureWindowsProcessTree(child.pid).catch(() => undefined);
+      if (exited()) throw new Error("Codex worker exited during process-tree inspection; descendant termination is unconfirmed");
       // Keep the supervisor alive until taskkill captures the whole owned tree,
       // including detached descendants. Never kill by executable name.
-      await new Promise<void>((resolve, reject) => {
-        execFile("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"],
-          { windowsHide: true, timeout: 5000 }, (error) => error ? reject(error) : resolve());
-      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          execFile("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"],
+            { windowsHide: true, timeout: 5000 }, (error) => error ? reject(error) : resolve());
+        });
+      } catch (error) {
+        // taskkill may report failure for a descendant that exited concurrently,
+        // even though it stopped the owned tree. Its exit code is not liveness.
+        if (owned === undefined) throw error;
+        if (!await windowsProcessTreeHasExited(owned)) {
+          console.error("Codex termination command failed; waiting for owned processes to exit.", error);
+          while (!await windowsProcessTreeHasExited(owned)) {
+            await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+          }
+        }
+      }
     } else {
       // A group may outlive its leader. ESRCH confirms that no group remains.
       try { process.kill(-child.pid, "SIGKILL"); }

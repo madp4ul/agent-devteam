@@ -39,6 +39,36 @@ logs a host diagnostic and leaves runtime settlement pending: elapsed time is
 not proof that workspace execution stopped. Existing interruption confirmation,
 task suspension, queue order and continuation remain application-owned.
 
+## Windows termination error verification (2026-11-11)
+
+Budget-rejected retries exposed a difference between taskkill's exit status and
+process liveness: error 255 can report an already-exited descendant even after
+the supervisor is gone. Permanently awaiting that error strands active-run
+ownership, Pause, interruption and Stop retries together.
+
+Before invoking taskkill, capture the worker and discoverable descendants using
+Windows process IDs, parent IDs and creation timestamps. On command failure,
+inspect processes again, following parent links through retained identities to
+discover children born after capture and retaining them for subsequent checks.
+Do not follow the tree of a PID that now belongs to a different creation time.
+If every observed owned identity is absent, await supervisor
+exit and settle normally; a reused PID is not the original process. A surviving
+identity remains occupied and is inspected again until it exits, rather than
+being trapped in a permanently pending promise. Failed inspection or unexpected
+supervisor loss remains unconfirmed. Successful taskkill still permits settlement
+when inspection is unavailable; inspection is fallback evidence for command errors.
+Do not interpret localized error text or accept worker exit alone as proof.
+This preserves the existing tree-ownership limits for orphaned or externally
+brokered programs; it is not a Windows job-object containment boundary. An
+intermediate process born and gone entirely between inspections cannot provide
+ancestry for an orphan it leaves behind. Such unobservable lineage remains
+outside this snapshot-based verification, just as detached programs orphaned
+before taskkill cannot be recovered from the supervisor's current tree.
+
+Regression tests inject error 255 after real tree termination for budget failure
+and interruption, and separately kill only the supervisor to prove a surviving
+native child still prevents settlement.
+
 ## Consequences and limits
 
 - A blocked native output stream no longer prevents ordinary user cancellation.

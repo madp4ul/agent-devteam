@@ -363,7 +363,14 @@ delivery. Runtime projection and lifecycle persistence remain in the host.
 Cancellation terminates that worker's Windows process tree (or POSIX process
 group) independently of a blocked SDK iterator, and confirms termination before
 settlement releases task ownership. A terminal release handshake keeps the
-worker addressable through completion races. A termination failure logs a host
+worker addressable through completion races. Windows termination captures the
+owned tree's process identities before killing it. If taskkill reports an error,
+a fresh process inspection follows retained parent identities to discover later
+descendants and confirms the observed owned identities have all exited; an
+already-exited descendant therefore does not strand budget recovery or Pause.
+Surviving captured processes keep ownership while periodic inspection watches
+for their exit. Successful tree termination does not depend on inspection access.
+An unconfirmed termination failure logs a host
 diagnostic and retains ownership; it never turns a timeout into successful
 interruption. Existing task suspension and continuation semantics are unchanged.
 See [ADR 0043](adr/0043-supervise-codex-execution-outside-its-event-stream.md).
