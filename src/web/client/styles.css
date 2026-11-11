@@ -1044,7 +1044,8 @@ html[data-theme] .comment-icon-button:hover:not(:disabled), html[data-theme] .co
 .archive-failures { overflow-wrap: anywhere; }
 
 /* Shared access is project-wide, outside the workflow columns. */
-.resource-overview { display: grid; grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr); margin: 1.75rem .2rem 0; border: 1px solid var(--border); border-top: 2px solid var(--border-control); border-radius: .85rem; background: var(--surface-subtle); }
+.resource-overview { position: relative; display: grid; grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr); margin: 1.75rem .2rem 0; border: 1px solid var(--border); border-top: 2px solid var(--border-control); border-radius: .85rem; background: var(--surface-subtle); }
+.resource-overview::before { content: ""; position: absolute; top: -.95rem; left: 0; right: 0; border-top: 1px solid var(--border-control); pointer-events: none; }
 .resource-overview > .column-header { min-height: 0; padding: .7rem; border-right: 1px solid var(--border); }
 .resource-overview h2 { font-size: 1rem; letter-spacing: -.01em; }
 .resource-overview-content { min-width: 0; }

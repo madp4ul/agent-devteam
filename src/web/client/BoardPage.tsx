@@ -475,7 +475,7 @@ export function BoardPage({
         {state.boards.map((board) => (
           <section key={board.id} aria-labelledby={`board-${board.id}`}>
             <div className="board-heading">
-              <div><p className="eyebrow">Board</p><div className="board-title">
+              <div><div className="board-title">
                 <h2 id={`board-${board.id}`}>{board.name}</h2>
                 <button className="board-disclosure" aria-label={`${expandedBoards.includes(board.id) ? "Collapse" : "Expand"} ${board.name}`}
                   aria-expanded={expandedBoards.includes(board.id)} aria-controls={`board-columns-${board.id}`}

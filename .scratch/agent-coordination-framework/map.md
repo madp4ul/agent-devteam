@@ -24,6 +24,20 @@ without choosing the implementation yet.
 
 ## Decisions so far
 
+- [113 - Provide viewport-fixed interactive operation feedback](./issues/113-provide-viewport-fixed-interactive-operation-feedback.md)
+  - **Open:** Keep attributed, actionable operation feedback visible at any scroll
+    position on board and task pages, including embedded per-task archive results.
+- [114 - Make archival progress visible and multi-column requests responsive](./issues/114-make-archival-progress-visible-and-multi-column-requests-responsive.md)
+  - **Open, blocked by 113:** Acknowledge each archive click, show live progress,
+    and handle multiple boards' requests without losing responsiveness or results.
+
+- [111 - Investigate conversation durability after unexpected host exit](./issues/111-investigate-conversation-durability-after-unexpected-host-exit.md)
+  - **Open, research:** Establish native versus framework persistence gaps after
+    console closure and recommend recovery and durability improvements.
+- [112 - Fix blocked and unresponsive task archival](./issues/112-fix-blocked-and-unresponsive-task-archival.md)
+  - **Open:** Diagnose slow bulk archive and Git stdout buffer overflow; provide
+    a usable, explicitly confirmed discard path for owned nested worktrees.
+
 - [109 - Expose and recover unconfirmed runtime termination](./issues/109-expose-and-recover-unconfirmed-runtime-termination.md)
   - **Resolved:** Visible cleanup state, retryable termination
     verification and supported safe shutdown without losing conversation continuity.
