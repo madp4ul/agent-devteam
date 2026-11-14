@@ -54,7 +54,7 @@ export function registerArchiveWorkspaceRoutes(
     response.setHeader("cache-control", "private, no-cache");
     response.setHeader("etag", version);
     if (request.headers["if-none-match"] === version) { response.writeHead(304); response.end(); return; }
-    sendJson(response, 200, application.queryArchivalOperations(url.searchParams.get("taskId") ?? undefined));
+    sendJson(response, 200, application.queryArchivalOperations(url.searchParams.get("taskId") ?? undefined, url.searchParams.get("active") === "1"));
   });
   dispatcher.register("GET", "/api/archive/operations/:operationId", "browser/archive-workspace", ({ response, params }) => {
     const operation = application.queryArchivalOperation(params.operationId);

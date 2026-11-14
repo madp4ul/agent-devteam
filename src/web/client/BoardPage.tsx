@@ -1,3 +1,4 @@
+import { LoadingToolbar } from "./LoadingToolbar.tsx";
 import { ResourceRow } from "./Resources.tsx";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -17,7 +18,7 @@ import { BoardColumn } from "./BoardColumn.tsx";
 import { AutomationControls } from "./AutomationControls.tsx";
 import { errorMessage } from "./feedback.ts";
 import { OperationFeedback, useOperationFeedback } from "./OperationFeedback.tsx";
-import { archivalRequestIdentity, forgetArchivalRequest, submitArchival, useArchivalFeedback, useArchivalOperations, waitForArchival } from "./archival-operations.tsx";
+import { archivalRequestIdentity, forgetArchivalRequest, submitArchival, useArchivalOperations, waitForArchival } from "./archival-operations.tsx";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { Loading } from "./Loading.tsx";
 import { usePageTitle } from "./page-title.ts";
@@ -83,7 +84,6 @@ export function BoardPage({
   const operationFeedback = useOperationFeedback("Boards");
   const { setFeedback, publish } = operationFeedback;
   const archivalOperations = useArchivalOperations();
-  const archivalFeedback = useArchivalFeedback(archivalOperations);
   const [pendingArchives, setPendingArchives] = useState<string[]>([]);
   const archiveRequests = useRef(new Map<string, string>());
   const pendingArchiveRequests = useRef(new Set<string>());
@@ -315,7 +315,7 @@ export function BoardPage({
     [move, state],
   );
 
-  if (state === undefined) return <><Loading /><OperationFeedback {...operationFeedback} /></>;
+  if (state === undefined) return <div className="app-shell"><LoadingToolbar notifications={notifications} onFeedback={setFeedback} loadProjectState={false} /><Loading /><OperationFeedback {...operationFeedback} /></div>;
   if (state.startup.mode === "configuration-error") {
     return (
       <main className="configuration-error">
@@ -492,8 +492,7 @@ export function BoardPage({
             {showArchived ? ` · ${archivedTasks.length}` : null}
           </button>
         </div>
-        <OperationFeedback items={[...operationFeedback.items.filter((item) => !archivalOperations.some((operation) => operation.id === item.id)), ...archivalFeedback.items]}
-          dismiss={(id) => { operationFeedback.dismiss(id); archivalFeedback.dismiss(id); }} />
+        <OperationFeedback {...operationFeedback} />
         {state.boards.map((board) => (
           <section key={board.id} aria-labelledby={`board-${board.id}`}>
             <div className="board-heading">
@@ -577,10 +576,9 @@ export function BoardPage({
           initial={creation}
           columns={state.boards.find((board) => board.id === creation.boardId)?.columns ?? []}
           onClose={() => setCreation(undefined)}
-          onCreated={async (task, column) => {
+          onCreated={async () => {
             await refresh();
             setCreation(undefined);
-            setFeedback({ role: "status", text: `Created ${task.id} in ${column.name}.` });
           }}
         />
       )}

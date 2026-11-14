@@ -46,6 +46,24 @@ export async function fulfillTaskScenario(route: Route, response: APIResponse, d
 
 export { expect };
 
+/** Exercise retained archival menus while delaying operation outcomes independently. */
+export async function mockArchivalMenuOperations(page: Page, read: () => Array<{ id: string; state: string; updatedAt?: string; tasks: Array<{ state: string; taskId?: string; title?: string; failure?: unknown }> }>): Promise<void> {
+  const active = () => read().filter((operation) => operation.state === "queued" || operation.state === "running");
+  await page.route("**/api/archive/operations?*", (route) => route.fulfill({ json: active() }));
+  const entries = () => read().flatMap((operation) => operation.tasks.map((task, index) => ({
+    ...task, id: JSON.stringify([operation.id, task.taskId ?? index]), operationId: operation.id,
+    taskId: task.taskId ?? `T-${index}`, title: task.title ?? `Task ${index}`, updatedAt: operation.updatedAt ?? "2026-11-14T12:00:00Z",
+  })));
+  await page.route("**/api/activity-menu/archivals*", (route) => route.fulfill({ json: { entries: entries(), cursor: null } }));
+  await page.route("**/api/activity-menu/overview", async (route) => {
+    const response = await route.fetch(); const overview = await response.json();
+    overview.revision += JSON.stringify(read());
+    overview.archives = { active: active().reduce((count, operation) => count + operation.tasks.filter((task) => task.state === "queued" || task.state === "running").length, 0),
+      history: entries().filter((entry) => entry.state !== "queued" && entry.state !== "running").length };
+    await route.fulfill({ json: overview });
+  });
+}
+
 type BrowserFixtures = {
   browserScenario: void;
   desktopNotificationConsent: "declined" | "unset";

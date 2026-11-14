@@ -1,3 +1,4 @@
+import { OperationFeedback, useOperationFeedback } from "./OperationFeedback.tsx";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { ResourceClaimView, ResourceView } from "../../application/resource-contract.ts";
 import type { Navigate, NavigationState } from "./navigation.ts";
@@ -63,7 +64,8 @@ export function ResourcePage({ resourceId, navigate, notifications }: {
 }): ReactNode {
   const [resource, setResource] = useState<ResourceView>();
   const [board, setBoard] = useState<BrowserBoardState>();
-  const [feedback, setFeedback] = useState<Feedback>();
+  const feedback = useOperationFeedback(resourceId);
+  const { setFeedback } = feedback;
   const refreshControls = useLatestRefresh(readBoard, setBoard);
   const reportControlsError = (error: unknown): void => setFeedback({ role: "alert", text: errorMessage(error) });
   useEffect(() => { void refreshControls().catch(reportControlsError); }, [refreshControls]);
@@ -72,12 +74,12 @@ export function ResourcePage({ resourceId, navigate, notifications }: {
   const [editing, setEditing] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [archiveKey] = useState(() => crypto.randomUUID());
-  const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
   const [pending, setPending] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const refresh = useLatestRefresh(() => readResource(resourceId), setResource);
-  useEffect(() => { void refresh().catch(error => setError(String(error))); }, [refresh]);
-  usePolling(refresh, 5000, error => setError(String(error)));
+  const refresh = useLatestRefresh(() => readResource(resourceId), (next) => { setResource(next); setLoadFailed(false); });
+  useEffect(() => { void refresh().catch(error => { setLoadFailed(true); reportControlsError(error); }); }, [refresh]);
+  usePolling(refresh, 5000, error => { setLoadFailed(true); reportControlsError(error); });
   usePageTitle(resource ? `${resource.title} (${resource.id})` : "Shared resource");
   const back = (event: MouseEvent<HTMLAnchorElement>): void => {
     if (!isPlainClick(event)) return;
@@ -92,16 +94,15 @@ export function ResourcePage({ resourceId, navigate, notifications }: {
         <a href="/" className="back-link" onClick={back}>Back to board</a>
         {resource && <TaskHeaderTitle key={resource.id} title={resource.title} headingRef={headingRef} />}
       </div>
-      {board && <AutomationControls automation={board.automation} activeRuns={board.activeRuns}
-        workspacePreparations={board.workspacePreparations} notifications={notifications}
+      <AutomationControls automation={board?.automation ?? { state: "blocked", attemptsMayStart: false }} activeRuns={board?.activeRuns ?? []}
+        workspacePreparations={board?.workspacePreparations ?? []} notifications={notifications}
         canResume={(processImpact?.staleActivations.length ?? 0) === 0 &&
           (processImpact?.unavailableResumeAssignments.length ?? 0) === 0 &&
           (processImpact?.unavailableResourceAssignments?.length ?? 0) === 0}
-        onChanged={refreshControls} onFeedback={setFeedback} />}
+        onChanged={refreshControls} onFeedback={setFeedback} />
     </header>
     <main className="task-detail resource-detail">
-      {feedback && <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>}
-      {error && <p className="feedback alert" role="alert">{error}</p>}
+      <OperationFeedback {...feedback} />
       {resource ? <>
         <section className="task-overview">
           <div className="task-hero"><div className="task-heading">
@@ -117,8 +118,8 @@ export function ResourcePage({ resourceId, navigate, notifications }: {
                 <button className="secondary" onClick={() => setEditing(true)}>Edit resource</button>
                 <details className="more-actions"><summary>More actions</summary>
                   <button className="secondary" disabled={pending} onClick={() => {
-                    setPending(true); setError("");
-                    void archiveResource(resource, archiveKey).then(setResource).catch(error => setError(String(error))).finally(() => setPending(false));
+                    setPending(true);
+                    void archiveResource(resource, archiveKey).then(setResource).catch(reportControlsError).finally(() => setPending(false));
                   }}>{pending ? "Archiving…" : "Archive resource"}</button>
                 </details>
               </div>}
@@ -142,7 +143,7 @@ export function ResourcePage({ resourceId, navigate, notifications }: {
           </section>
         </div>
         {editing && <ResourceEditor resource={resource} onClose={() => setEditing(false)} onSaved={saved => { setResource(saved); setEditing(false); }} />}
-      </> : !error && <p>Loading resource…</p>}
+      </> : !loadFailed && <p>Loading resource…</p>}
     </main>
   </div>;
 }

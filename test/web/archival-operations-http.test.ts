@@ -103,7 +103,7 @@ test("HTTP queues distinct Completion columns during Git inspection and reconcil
     const dismiss = await fetch(`${server.baseUrl}/api/archive/operations/${second.id}/dismiss`, { method: "POST" });
     assert.equal(dismiss.status, 200);
     const visible = await (await fetch(`${server.baseUrl}/api/archive/operations`)).json() as ArchivalOperation[];
-    assert.deepEqual(visible.filter((operation) => !operation.feedbackDismissed).map(({ id }) => id), [first.id, "reviewed-scope"]);
+    assert.deepEqual(new Set(visible.filter((operation) => !operation.feedbackDismissed).map(({ id }) => id)), new Set([first.id, second.id, "reviewed-scope"]));
     assert.equal(visible.find(({ id }) => id === second.id)?.state, "queued");
     const listUrl = `${server.baseUrl}/api/archive/operations`;
     const listResponse = await fetch(listUrl);
@@ -154,8 +154,8 @@ test("restart interrupts unfinished archival operations without replaying deleti
     state: "running", updatedAt: new Date().toISOString(), tasks: [{ taskId: task.task.id, title: task.task.title, state: "running" }] };
   database.prepare("INSERT INTO archival_operations(id, request_hash, target_key, target_json, label, state, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
     .run(operation.id, "fixture-hash", `task:${task.task.id}`, JSON.stringify(operation.target), operation.label, operation.state, operation.updatedAt);
-  database.prepare("INSERT INTO archival_operation_tasks VALUES (?, ?, ?, ?, ?, NULL)")
-    .run(operation.id, 0, task.task.id, task.task.title, "running");
+  database.prepare("INSERT INTO archival_operation_tasks (operation_id, position, task_id, title, state, failure_json, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?)")
+    .run(operation.id, 0, task.task.id, task.task.title, "running", operation.updatedAt);
   database.close();
 
   const restarted = await CoordinationApplication.start(options);
@@ -163,6 +163,7 @@ test("restart interrupts unfinished archival operations without replaying deleti
     const recovered = restarted.queryArchivalOperation(operation.id);
     assert.equal(recovered?.state, "interrupted");
     assert.equal(recovered.tasks[0]?.failure?.reason, "interrupted");
+    assert.equal(restarted.queryArchivalMenu().entries[0]?.state, "interrupted");
     const detail = restarted.queryTaskInspectionForUser(task.task.id);
     assert.ok(detail.available);
     assert.notEqual(detail.task.archived, true);

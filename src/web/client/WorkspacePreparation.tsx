@@ -1,11 +1,11 @@
 import type { WorkspacePreparationView } from "../../application/automation-contract.ts";
 import { ElapsedTime } from "./ElapsedTime.tsx";
 
-export function WorkspacePreparation({ preparation }: { preparation: WorkspacePreparationView }) {
+export function WorkspacePreparation({ preparation, showAgent = true }: { preparation: WorkspacePreparationView; showAgent?: boolean }) {
   const label = preparation.stage === "creating" ? "Creating workspace" : "Verifying workspace";
   const progress = preparation.progress;
   return <div className="workspace-preparation">
-    <span role="status">{label} · {preparation.agentId}</span>
+    <span role="status">{label}{showAgent ? ` · ${preparation.agentId}` : ""}</span>
     <span className="quiet"><ElapsedTime startedAt={preparation.startedAt} /> elapsed</span>
     <span>{progress?.stage ?? label}{progress?.total === undefined ? null :
       ` · ${progress.completed} / ${progress.total}${progress.percent === undefined ? "" : ` (${progress.percent}%)`}`}</span>

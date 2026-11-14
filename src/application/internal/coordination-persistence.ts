@@ -10,6 +10,7 @@ import { ActiveAttemptModule } from "./active-attempt-module.ts";
 import { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import { TaskArchiveStore } from "./task-archive-store.ts";
 import { ArchivalOperationStore } from "./archival-operation-store.ts";
+import { ActivityMenuStore } from "./activity-menu-store.ts";
 import { NotificationStore } from "./notification-store.ts";
 import { ActivityJournal } from "./activity-journal.ts";
 import { AttentionRecorder } from "./attention-recorder.ts";
@@ -39,6 +40,7 @@ export interface CoordinationPersistence {
   activeAttempts: ActiveAttemptModule;
   taskArchive: TaskArchiveStore;
   archivalOperations: ArchivalOperationStore;
+  activityMenus: ActivityMenuStore;
   notifications: NotificationStore;
   close(): void;
 }
@@ -96,6 +98,8 @@ function composeCoordinationPersistence(
   now: () => Date = () => new Date(),
 ): CoordinationPersistence {
   const conversationAttachments = new ConversationAttachmentStore(database, path);
+  const activityMenus = new ActivityMenuStore(database);
+  activityMenus.recoverPreparations(now().toISOString());
   const taskProjections = new TaskProjectionStore(database);
   const idempotentCommands = new IdempotentCommandExecutor(database);
   const notifications = new NotificationStore(database);
@@ -172,6 +176,7 @@ function composeCoordinationPersistence(
       conversationProjections,
     ),
     archivalOperations: new ArchivalOperationStore(database),
+    activityMenus,
     notifications,
     close: () => {
       conversationAttachments.close();

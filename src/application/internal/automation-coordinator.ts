@@ -26,6 +26,7 @@ import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-works
 import type { ProcessStateStore } from "./process-state-store.ts";
 import type { ActiveAttemptModule } from "./active-attempt-module.ts";
 import { TranscriptWriteBatch } from "./transcript-write-batch.ts";
+import type { ActivityMenuStore } from "./activity-menu-store.ts";
 import type { ActivationResolutionModule } from "./activation-resolution-module.ts";
 import type {
   ActivationSchedulingModule,
@@ -46,6 +47,7 @@ export interface AutomationProcessContext {
 }
 
 export interface AutomationCoordinatorOptions {
+  activityMenus?: ActivityMenuStore;
   processStore: ProcessStateStore;
   taskProjections: TaskProjectionStore;
   activationScheduling: ActivationSchedulingModule;
@@ -83,6 +85,7 @@ interface ActiveRunControl {
 class WorkspacePreparationFailure extends Error {}
 
 export class AutomationCoordinator {
+  readonly #activityMenus: ActivityMenuStore | undefined;
   readonly #processStore: ProcessStateStore;
   readonly #taskProjections: TaskProjectionStore;
   readonly #activationScheduling: ActivationSchedulingModule;
@@ -115,6 +118,7 @@ export class AutomationCoordinator {
   readonly #shutdownObservers = new Set<() => void>();
 
   constructor(options: AutomationCoordinatorOptions) {
+    this.#activityMenus = options.activityMenus;
     this.#activationResolutions = options.activationResolutions;
     this.#processStore = options.processStore;
     this.#taskProjections = options.taskProjections;
@@ -413,7 +417,11 @@ export class AutomationCoordinator {
     const precedingAttempt = claim.activation.attempts.at(-1);
     const resumeThreadId = precedingAttempt?.threadId ?? claim.resumeThreadId;
     let workspace;
+    const preparationId = randomUUID();
+    this.#activityMenus?.startPreparation({ id: preparationId, taskId: claim.task.id,
+      taskTitle: claim.task.title, agentId: claim.agent.id, startedAt: this.#clock.now().toISOString() });
     this.#preparations.set(claim.task.id, {
+      taskTitle: claim.task.title,
       taskId: claim.task.id, activationId: claim.activation.id, agentId: claim.agent.id, conversationId: claim.activation.conversationId,
       stage: claim.workspace === undefined ? "creating" : "verifying", startedAt: this.#clock.now().toISOString(),
     });
@@ -427,8 +435,10 @@ export class AutomationCoordinator {
           if (!this.#closed && preparation !== undefined) preparation.progress = { ...progress };
         },
       );
+      if (!this.#closed) this.#activityMenus?.finishPreparation(preparationId, "prepared", "Workspace ready.", this.#clock.now().toISOString());
     } catch (error) {
       if (this.#closed) return { completion: Promise.resolve() };
+      this.#activityMenus?.finishPreparation(preparationId, "failed", completeDiagnostic(error), this.#clock.now().toISOString());
       const failure = this.#activationScheduling.failUnstartedClaim(
         claim,
         error instanceof GitTaskWorkspaceError ? error.boundary : "workspace-preparation",

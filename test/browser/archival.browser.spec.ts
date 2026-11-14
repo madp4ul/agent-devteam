@@ -1,3 +1,4 @@
+import { mockArchivalMenuOperations } from "./browser-fixture.ts";
 import { expect, test } from "./browser-fixture.ts";
 import { cleanWorkspaceGitScenario } from "./browser-fixture.ts";
 
@@ -18,7 +19,7 @@ for (const theme of ["dark", "light"] as const) test(`queued archival stays acti
     board.boards.push(copy);
     await route.fulfill({ response, json: board });
   });
-  const operations = new Map<string, { id: string; target: { kind: string; boardId: string }; label: string; state: string; updatedAt: string; tasks: object[] }>();
+  const operations = new Map<string, { id: string; target: { kind: string; boardId: string }; label: string; state: string; updatedAt: string; tasks: Array<{ taskId: string; title: string; state: string }> }>();
   const firstReceived = Promise.withResolvers<void>();
   const releaseFirst = Promise.withResolvers<void>();
   let posts = 0;
@@ -36,7 +37,7 @@ for (const theme of ["dark", "light"] as const) test(`queued archival stays acti
       await route.abort();
     } else await route.fulfill({ status: 202, json: { accepted: true, operation } });
   });
-  await page.route("**/api/archive/operations", (route) => route.fulfill({ json: [...operations.values()] }));
+  await mockArchivalMenuOperations(page, () => [...operations.values()]);
   await page.route("**/api/archive/operations/*", (route) => {
     const operation = operations.get(new URL(route.request().url()).pathname.split("/").at(-1)!);
     return route.fulfill({ status: operation ? 200 : 404, json: operation ?? { reason: "not-found" } });
@@ -55,21 +56,22 @@ for (const theme of ["dark", "light"] as const) test(`queued archival stays acti
     await expect(firstArchive).toBeDisabled();
     await expect(delivery.getByText("Archiving…", { exact: true })).toBeVisible();
     await second.getByRole("button", { name: "Archive completed tasks" }).click();
-    const feedback = page.getByRole("region", { name: "Operation feedback" });
-    await expect(feedback).toContainText("Queued · 0 of 1 processed");
-    await expect(feedback).toContainText("Archiving · 0 of 1 processed");
+    const feedback = page.getByRole("region", { name: "Archival operations" });
+    await page.getByText("2 archiving", { exact: true }).click();
+    await expect(feedback.getByText("Queued", { exact: true })).toHaveCount(1);
+    await expect(feedback.getByText("Archiving", { exact: true })).toHaveCount(1);
     await expect(feedback).toBeInViewport();
     releaseFirst.resolve();
     await page.reload();
-    await expect(feedback).toContainText("Archive · Product delivery · Completion");
-    await expect(feedback).toContainText("Archive · Second board · Completion");
+    await page.getByText("2 archiving", { exact: true }).click();
+    await expect(feedback.getByRole("link")).toHaveCount(2);
     expect(posts).toBe(2);
     for (const operation of operations.values()) {
       operation.state = "completed";
       operation.updatedAt = new Date().toISOString();
       operation.tasks = [{ taskId: created.task.id, title: created.task.title, state: "archived" }];
     }
-    await expect(feedback.getByText("Archived 1 of 1 completed task(s).", { exact: true })).toHaveCount(2);
+    await expect(feedback.getByText("Archived", { exact: true })).toHaveCount(2);
   } finally { releaseFirst.resolve(); }
 });
 
@@ -131,8 +133,10 @@ test("archived tasks toggle into their retained board location and can be unarch
     expect(Math.abs(archiveBounds.x - completionTitleBounds.x)).toBeLessThanOrEqual(4);
   }
   await archiveCompleted.click();
-  await expect(page.getByRole("region", { name: "Operation feedback" })).toContainText("Archived 1 of 1 completed task");
-  await expect(page.getByRole("link", { name: /Archive this completed browser task/ })).toHaveCount(0);
+  await page.getByText("0 archiving", { exact: true }).click();
+  await expect(page.getByRole("region", { name: "Archival operations" })).toContainText("Archived");
+  await expect(completion.getByRole("link", { name: /Archive this completed browser task/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
   const archivedToggle = page.getByRole("button", { name: "Show archived tasks" });
   await expect(archivedToggle).toHaveAttribute("aria-pressed", "false");

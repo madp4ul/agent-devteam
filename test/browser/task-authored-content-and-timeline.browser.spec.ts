@@ -215,12 +215,13 @@ test("task Markdown local-file links share the owning workspace while web links 
   );
 
   await local.click();
-  await expect(comment.getByRole("status")).toHaveText("Opened the local note.");
-  await expect(comment.getByRole("status")).toHaveCSS("color", "rgb(23, 78, 58)");
+  await expect(comment.locator(".local-file-feedback")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status").filter({ hasText: "Opened the local note." })).toHaveText("Opened the local note.");
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status").filter({ hasText: "Opened the local note." })).toHaveCSS("color", "rgb(23, 78, 58)");
   expect(openedReferences).toEqual(["docs/review%20notes.md#L14"]);
 
   await comment.getByRole("link", { name: "a native absolute path" }).click();
-  await expect(comment.getByRole("status").filter({ hasText: "Opened a native absolute path." })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status").filter({ hasText: "Opened a native absolute path." })).toBeVisible();
   expect(openedReferences).toEqual([
     "docs/review%20notes.md#L14",
     "C:/task-workspaces/T-0001/docs/review.md:22",
@@ -228,10 +229,10 @@ test("task Markdown local-file links share the owning workspace while web links 
 
   await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
   await comment.getByRole("link", { name: "removed file" }).click();
-  await expect(comment.getByRole("alert")).toHaveText(
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("alert")).toHaveText(
     "The linked file no longer exists in this task workspace.",
   );
-  await expect(comment.getByRole("alert")).toHaveCSS("color", "rgb(255, 173, 156)");
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("alert")).toHaveCSS("color", "rgb(255, 173, 156)");
   expect(openedReferences).toEqual([
     "docs/review%20notes.md#L14",
     "C:/task-workspaces/T-0001/docs/review.md:22",
@@ -461,7 +462,7 @@ test("details keep contextual controls, one timeline, and readable transcript ev
   await page.goto("/tasks/T-0001");
   const topbar = page.locator(".detail-topbar");
   await expect(topbar.getByRole("button", { name: /Pause|Resume/ })).toBeVisible();
-  await expect(topbar.getByText(/Current runs · \d+/)).toBeVisible();
+  await expect(topbar.getByText(/\d+ running/)).toBeVisible();
   const description = page.getByRole("region", { name: "Description" });
   await expect(description.getByRole("button", { name: "Edit task" })).toBeVisible();
   await expect(description.getByText("More actions", { exact: true })).toBeVisible();

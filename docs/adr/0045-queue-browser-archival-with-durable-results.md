@@ -2,6 +2,11 @@
 
 Status: accepted
 
+Presentation and dismissal were revised by [ADR 0048](0048-retain-lifecycle-results-in-shared-toolbar-menus.md):
+archival results now live in a shared toolbar menu; only finished operations can
+be dismissed. The queue, acknowledgement and deletion-authorization rules below
+remain unchanged.
+
 The browser opts into a queued archival command. Its HTTP 202 acknowledges a
 durable operation identity and a snapshot of the requested task or Completion
 column. The existing synchronous command remains available to established

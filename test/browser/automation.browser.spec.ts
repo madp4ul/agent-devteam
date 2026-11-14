@@ -1153,7 +1153,7 @@ test("top-bar automation action transitions and Current runs navigation stay com
   await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
   const topbar = page.locator(".topbar");
   const segments = topbar.locator(".topbar-control");
-  await expect(segments).toHaveCount(3);
+  await expect(segments).toHaveCount(4);
   await expect(segments.first()).toHaveCSS("border-radius", "0px");
   const segmentLayout = await topbar.evaluate((element) => {
     const bar = element.getBoundingClientRect();
@@ -1170,7 +1170,7 @@ test("top-bar automation action transitions and Current runs navigation stay com
   expect(segmentLayout.tops.every((top) => Math.abs(top - segmentLayout.barTop) < 1)).toBe(true);
   expect(segmentLayout.bottoms.every((bottom) => segmentLayout.barBottom - bottom < 4)).toBe(true);
   expect(segmentLayout.gaps.every((gap) => Math.abs(gap) < 1)).toBe(true);
-  await page.getByText("Current runs · 1").click();
+  await page.getByText("1 running").click();
   const runLink = page.getByRole("link", { name: /implementer.*T-0002/ });
   await expect(runLink).toHaveAttribute("target", "_blank");
   const popupPromise = page.waitForEvent("popup");

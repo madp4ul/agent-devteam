@@ -35,7 +35,7 @@ for (const theme of ["dark", "light"] as const) test(`termination recovery and s
   await page.goto("/tasks/T-0001");
   const cleanup = page.getByRole("region", { name: "Run cleanup" });
   await expect(cleanup).toContainText("Inspection temporarily unavailable");
-  await expect(page.locator(".live-runs summary")).toContainText("Current runs · 0 · Stopping 1");
+  await expect(page.locator(".live-runs summary").filter({ hasText: "running" })).toHaveText("0 running");
   expect(await contrastRatio(cleanup.locator("strong"))).toBeGreaterThanOrEqual(4.5);
   const waiting = page.getByRole("region", { name: "Runtime recovery" });
   await waiting.getByRole("button", { name: "Stop retries", exact: true }).click();

@@ -96,3 +96,14 @@ The controlled multi-column test holds the first task at the Git cleanup entry
 point. The real large-output test separately measures a competing HTTP read while
 the preview runs. These fixtures do not measure end-to-end archival latency on
 the live project.
+
+## User review follow-up — 2026-11-14
+
+Archival progress and retained outcomes now use a separate Archiving toolbar menu,
+available throughout navigation, including during slow/unavailable task loads.
+Its count includes queued and running tasks. Finished history can be cleared;
+queued/running work cannot. Preparing and Current runs use the same interaction
+pattern with durable preparation outcomes and the latest thirty finished runs.
+The durable archival queue and all deletion-consent safeguards remain unchanged.
+See the [follow-up specification](../../operation-feedback-menus/spec.md) and
+[implemented review environment](../../../examples/software-delivery/UI-REVIEW.md).

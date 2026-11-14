@@ -1,5 +1,6 @@
 import { classifyRuntimeFailure } from "../runtime-failure.ts";
 import { RuntimeRecoveryStore } from "./runtime-recovery-store.ts";
+import { ActivityMenuStore } from "./activity-menu-store.ts";
 import type { DatabaseSync } from "node:sqlite";
 
 import type {
@@ -59,6 +60,7 @@ export class ActiveAttemptModule {
   readonly #attentionRecorder: AttentionRecorder;
   readonly #recovery: RuntimeRecoveryStore;
   readonly #attemptEvidence: AttemptEvidenceModule;
+  readonly #activityMenus: ActivityMenuStore;
 
   constructor(
     database: CoordinationDatabase,
@@ -68,6 +70,7 @@ export class ActiveAttemptModule {
     attemptEvidence: AttemptEvidenceModule,
   ) {
     this.#owner = database;
+    this.#activityMenus = new ActivityMenuStore(database);
     this.#database = database.connection;
     this.#idempotentCommands = idempotentCommands;
     this.#activityJournal = activityJournal;
@@ -140,6 +143,7 @@ export class ActiveAttemptModule {
              WHERE id = ?`,
           )
           .run(occurredAt, summary, attempt.id);
+        this.#activityMenus.recordRunWithinTransaction(attempt.id);
         this.#database
           .prepare("DELETE FROM activation_dispatch_claims WHERE attempt_id = ?")
           .run(attempt.id);
@@ -211,6 +215,7 @@ export class ActiveAttemptModule {
           serializedContextWindowUsage(input.contextWindowUsage),
           input.attemptId,
         );
+      this.#activityMenus.recordRunWithinTransaction(input.attemptId);
       this.#database
         .prepare(
           `UPDATE activations
@@ -293,9 +298,10 @@ export class ActiveAttemptModule {
       `SELECT attempt.id AS attempt_id, task.id AS task_id, task.title AS task_title,
               board.id AS board_id, board.name AS board_name,
               column.id AS column_id, column.name AS column_name,
-              activation.target_agent_id, attempt.started_at
+              activation.target_agent_id, agent.name AS agent_name, attempt.started_at
        FROM attempts attempt
        JOIN activations activation ON activation.id = attempt.activation_id
+       JOIN agents agent ON agent.id = activation.target_agent_id
        JOIN tasks task ON task.id = activation.task_id
        JOIN boards board ON board.id = task.board_id
        JOIN columns column ON column.board_id = task.board_id AND column.id = task.column_id
@@ -310,6 +316,7 @@ export class ActiveAttemptModule {
       column_id: string;
       column_name: string;
       target_agent_id: string;
+      agent_name: string;
       started_at: string;
     }>;
     return rows.map((row) => ({
@@ -321,6 +328,7 @@ export class ActiveAttemptModule {
       columnId: row.column_id,
       columnName: row.column_name,
       agentId: row.target_agent_id,
+      agentName: row.agent_name,
       status: "running",
       startedAt: row.started_at,
     }));
@@ -447,6 +455,8 @@ export class ActiveAttemptModule {
           serializedContextWindowUsage(input.contextWindowUsage),
           input.attemptId,
         );
+      // The compact menu record shares this settlement's commit and survives task archival.
+      this.#activityMenus.recordRunWithinTransaction(input.attemptId);
       if (input.outcome.status === "completed") {
         this.#database
           .prepare(

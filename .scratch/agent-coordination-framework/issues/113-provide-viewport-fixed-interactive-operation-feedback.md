@@ -72,3 +72,13 @@ keyboard dismissal, linked archival failures and both themes.
 The panel retains unresolved ordinary feedback for the current page. Archival
 progress and dismissal survive navigation and reload through the host operation
 record.
+
+## User review follow-up — 2026-11-14
+
+The user clarified that placement was the problem, rather than missing success
+banners. Ordinary feedback now floats independently with the shared SVG X control;
+comment success relies on the normal pending/cleared-composer/timeline behavior.
+Archival has moved out of floating feedback into a persistent toolbar menu.
+See the [agreed follow-up](../../operation-feedback-menus/spec.md), its
+[implementation result](../../operation-feedback-menus/issues/01-implement-feedback-and-lifecycle-menus.md),
+and [ADR 0048](../../../docs/adr/0048-retain-lifecycle-results-in-shared-toolbar-menus.md).

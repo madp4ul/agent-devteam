@@ -52,6 +52,7 @@ test("bounded workspace creation does not block ready tasks or duplicate task cl
     assert.deepEqual(preparations.map(({ taskId, stage }) => ({ taskId, stage })),
       [{ taskId: first, stage: "creating" }, { taskId: second, stage: "creating" }]);
     assert.equal(preparations[0]!.progress?.completed, 25);
+    assert.equal(preparations[0]!.taskTitle, "First slow checkout");
     const board = application.queryUserBoard();
     const card = board.boards.flatMap(({ columns }) => columns.flatMap(({ tasks }) => tasks)).find(({ id }) => id === first)!;
     assert.equal(card.run.activeAgentId, null);
@@ -264,6 +265,8 @@ for (const interruptBeforeStart of [false, true]) test(`runtime startup remains 
     application.pauseAutomation();
     finish?.({ status: "completed", summary: "Done" });
     await application.waitForAutomationIdle();
+    assert.equal(application.queryActivityMenuHistory().runs[0]?.status, interruptBeforeStart ? "interrupted" : "completed");
+    assert.equal(application.queryActivityMenuHistory().preparations[0]?.status, "prepared");
     application.close();
   }
 });

@@ -49,6 +49,30 @@ browser and host share the request and response contracts for that local
 transport, while the host maps decoding and status codes. Neither side owns
 workflow or automation policy.
 
+Board, task and resource toolbars share Preparing, Running and Archiving
+menus. They retain project-wide finished results separately from live counts;
+closing a menu never dismisses records or changes work. Migration 0019 stores
+compact preparation outcomes and the latest thirty finished run summaries.
+Run summaries commit with attempt settlement and survive task archival;
+unfinished preparations become interrupted on host startup. Dismissal applies
+only to finished identities, and retained archival operations supply their own
+history. Migration 0020 projects archival history per task, with independent
+terminal ordering, timestamps and finished-only dismissal even during an active
+batch. Menu pages contain twenty terminal task results rather than twenty batch
+operations; operation identities remain queue/retry groups. Both bulk and
+individual archival retain the same claim, inspection and cleanup flow, with
+individual review providing explicit deletion consent where required. See
+[ADR 0049](adr/0049-project-archival-menu-history-per-task.md).
+Ordinary errors use independently dismissible viewport feedback instead
+of the archival menu. The page-owned feedback queue renders message-only cards;
+success/status cards expire after five unpaused seconds, while errors persist
+until dismissed. Hover and keyboard focus pause the success timer and its draining
+edge indicator. Cards stack without an internal scroll container.
+TaskPage supplies the same feedback callback to workspace actions and task
+Markdown context, so local-file links across task content publish to that queue.
+Accepted comment posts publish success independently of subsequent refreshes.
+See [ADR 0048](adr/0048-retain-lifecycle-results-in-shared-toolbar-menus.md).
+
 Boards use a single Row presentation. Each board's expanded/collapsed choice
 belongs to this browser, defaults to collapsed, and persists by board identity.
 Collapsed visibility derives from the authoritative overview's activity,
@@ -611,6 +635,7 @@ See [ADR 0032](adr/0032-preserve-archival-remainders-and-block-nested-worktree-r
 | Active project reviewer allowance guidance | Launching user and host instance | In-memory launch configuration; historical copies only in attempt evidence |
 | Boards, tasks, activity, activations, run history, notification policy, and eligible notification occurrences | Coordination framework | SQLite in the bound project state root |
 | Conversation attachment originals | Coordination framework | Framework-owned content store in the bound project state root |
+| Preparation results, recent run summaries, and archival menu history/dismissal | Coordination framework | SQLite in the bound project state root |
 | Task implementation work | Process and agents | One Git worktree per task in the same state root |
 | Appearance, board expansion, notification consent, and operating-system permission | Browser and operating system | Browser-local storage and browser permission state |
 

@@ -252,6 +252,7 @@ export class CoordinationApplication {
         persistence,
         startup,
         new AutomationCoordinator({
+          activityMenus: persistence.activityMenus,
           processStore: process,
           taskProjections,
           activationScheduling,
@@ -304,6 +305,7 @@ export class CoordinationApplication {
           persistence,
           startup,
           new AutomationCoordinator({
+            activityMenus: persistence.activityMenus,
             processStore: process,
             taskProjections,
             activationScheduling,
@@ -351,6 +353,7 @@ export class CoordinationApplication {
       persistence,
       startup,
       new AutomationCoordinator({
+        activityMenus: persistence.activityMenus,
         processStore: process,
         taskProjections,
         activationScheduling,
@@ -401,6 +404,7 @@ export class CoordinationApplication {
       persistence,
       startup,
       new AutomationCoordinator({
+        activityMenus: persistence.activityMenus,
         processStore: process,
         taskProjections,
         activationScheduling,
@@ -1217,7 +1221,24 @@ export class CoordinationApplication {
     return this.#archivalOperations.start(target, command);
   }
 
-  queryArchivalOperations(taskId?: string) { return this.#persistence.archivalOperations.list(false, taskId); }
+  queryActivityMenuHistory(before?: number) { return this.#persistence.activityMenus.read(before); }
+
+  queryArchivalMenu(before?: number) { return this.#persistence.archivalOperations.menu(before); }
+
+  queryActivityMenuOverview() {
+    const preparations = this.#persistence.activityMenus.summary();
+    return { revision: `${preparations.revision}:${this.#persistence.archivalOperations.version()}`,
+      preparations: { active: preparations.active, history: preparations.history }, archives: this.#persistence.archivalOperations.summary() };
+  }
+
+  clearActivityMenuHistory(kind: "preparation" | "run" | "archival"): void {
+    if (kind === "archival") this.#persistence.archivalOperations.clearFinished();
+    else this.#persistence.activityMenus.clearFinished(kind);
+  }
+
+  dismissActivityMenuHistory(ids: readonly string[]): void { this.#persistence.activityMenus.dismiss(ids); }
+
+  queryArchivalOperations(taskId?: string, activeOnly = false) { return this.#persistence.archivalOperations.list(activeOnly, taskId); }
 
   archivalOperationsVersion(): string { return this.#persistence.archivalOperations.version(); }
 

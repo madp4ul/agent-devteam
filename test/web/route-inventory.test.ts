@@ -12,6 +12,9 @@ test("browser route catalog accounts for the complete pre-dispatcher API invento
   assert.deepEqual(routeKeys(routes), [
     "DELETE /api/tasks/:taskId/conversations/:conversationId/uploads/:uploadId",
     "DELETE /api/tasks/:taskId/relationships/:relationshipId",
+    "GET /api/activity-menu/archivals",
+    "GET /api/activity-menu/history",
+    "GET /api/activity-menu/overview",
     "GET /api/archive",
     "GET /api/archive/operations",
     "GET /api/archive/operations/:operationId",
@@ -35,6 +38,7 @@ test("browser route catalog accounts for the complete pre-dispatcher API invento
     "PATCH /api/tasks/:taskId/relationships/:relationshipId/resume-agent",
     "POST /api/activations/:activationId/dismiss",
     "POST /api/activations/:activationId/dismiss-stale",
+    "POST /api/activity-menu/history/dismiss",
     "POST /api/archive/completed",
     "POST /api/archive/operations/:operationId/dismiss",
     "POST /api/attention/:attentionReasonId/continue",

@@ -2,7 +2,7 @@ import { fulfillTaskScenario } from "./browser-fixture.ts";
 import { expect, test } from "./browser-fixture.ts";
 
 for (const theme of ["dark", "light"] as const) {
-  test(`a posted comment is confirmed despite a delayed or failed task refresh in ${theme} mode`, async ({ page }) => {
+  test(`a posted comment clears its draft with timed floating success despite a delayed or failed task refresh in ${theme} mode`, async ({ page }) => {
     await page.addInitScript((value) => localStorage.setItem("coordination-theme", value), theme);
     const refreshStarted = Promise.withResolvers<void>();
     const releaseRefresh = Promise.withResolvers<void>();
@@ -33,13 +33,14 @@ for (const theme of ["dark", "light"] as const) {
     try {
       await composer.getByRole("button", { name: "Post", exact: true }).click();
       await refreshStarted.promise;
-      await expect(status).toHaveText("Commented on T-0001.");
-      await expect(status).toBeInViewport();
+      await expect(draft).toHaveValue("");
+      await expect(status).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status")).toHaveText("Comment posted.");
     } finally {
       releaseRefresh.resolve();
     }
     await expect(page.getByRole("alert")).toContainText("Request failed with status 503");
-    await expect(status).toBeInViewport();
+    await expect(status).toHaveCount(0);
     failRefresh = false;
     await expect(page.locator(".comment-entry").filter({ hasText: body })).toHaveCount(1);
   });
@@ -61,10 +62,11 @@ test("retrying a comment after losing its accepted response records one comment 
   const post = composer.getByRole("button", { name: "Post", exact: true });
   await draft.fill(body);
   await post.click();
-  await expect(composer.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("alert")).toBeVisible();
   await expect(draft).toHaveValue(body);
   await post.click();
-  await expect(composer.getByRole("status")).toHaveText("Commented on T-0001.");
+  await expect(draft).toHaveValue("");
+  await expect(composer.getByRole("status")).toHaveCount(0);
   expect(idempotencyKeys).toHaveLength(2);
   expect(idempotencyKeys[1]).toBe(idempotencyKeys[0]);
 

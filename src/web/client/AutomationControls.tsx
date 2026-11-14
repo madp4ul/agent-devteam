@@ -1,11 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { runStatusLabel } from "./RunCleanup.tsx";
+import { ActivityMenus } from "./ActivityMenus.tsx";
 
 import type { ActiveRunView, AutomationView, WorkspacePreparationView } from "../../application/browser-transport-contract.ts";
 import { pauseAutomation, resumeAutomation } from "./api.ts";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
-import { WorkspacePreparation } from "./WorkspacePreparation.tsx";
-import { ElapsedTime } from "./ElapsedTime.tsx";
 import { errorMessage, type Feedback } from "./feedback.ts";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 
@@ -44,37 +42,7 @@ export function AutomationControls({
           <span className="status-dot running" aria-hidden="true" /> Pause
         </button>
       ) : null}
-      <details className="live-runs">
-        <summary className="topbar-control">Current runs · {activeRuns.filter((run) => run.status === "running" && run.executionStarted !== false).length}{activeRuns.some((run) => run.status === "interrupting" || run.status === "cleaning-up" || run.status === "termination-blocked") ? ` · Stopping ${activeRuns.filter((run) => run.status === "interrupting" || run.status === "cleaning-up" || run.status === "termination-blocked").length}` : ""}{workspacePreparations.length === 0 ? "" : ` · Preparing ${workspacePreparations.length}`}</summary>
-        <div className="live-runs-popover">
-          {activeRuns.length === 0 && workspacePreparations.length === 0 ? <p>No active agents.</p> : null}
-          {activeRuns.length === 0 ? null : <section aria-label="Agent runs">
-            <h2>Agent runs · {activeRuns.length}</h2>
-            <ul>{activeRuns.map((run) => (
-              <li key={run.attemptId}>
-                <a className="live-run-link"
-                  href={`/tasks/${encodeURIComponent(run.taskId)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span className="live-run-identity">{run.agentId} · {run.taskId}</span>
-                  <span>{run.taskTitle}</span>
-                  <span className="quiet">{run.boardName} / {run.columnName}</span>
-                  <span className="quiet">{runStatusLabel(run)}{run.status === "running" ? <> · <ElapsedTime startedAt={run.startedAt} /> elapsed</> : null}
-                  </span>
-                </a>
-              </li>
-            ))}</ul>
-          </section>}
-          {workspacePreparations.length === 0 ? null : <section aria-label="Preparing workspaces">
-            <h2>Preparing workspaces · {workspacePreparations.length}</h2>
-            <ul>{workspacePreparations.map((preparation) => <li key={preparation.taskId}>
-              <a className="live-run-identity" href={`/tasks/${encodeURIComponent(preparation.taskId)}`}>{preparation.taskId}</a>
-              <WorkspacePreparation preparation={preparation} />
-            </li>)}</ul>
-          </section>}
-        </div>
-      </details>
+      <ActivityMenus activeRuns={activeRuns} workspacePreparations={workspacePreparations} onFeedback={onFeedback} />
       <button className="topbar-control settings-action"
         aria-label={notifications.deliveryMismatch ? "Settings, notifications need attention" : "Settings"}
         onClick={() => setSettingsOpen(true)}>

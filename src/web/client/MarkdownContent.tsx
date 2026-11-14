@@ -1,18 +1,21 @@
-import { createContext, Fragment, useContext, useMemo, useState, type MouseEvent, type ReactNode, type WheelEvent } from "react";
+import { createContext, Fragment, useContext, useMemo, type MouseEvent, type ReactNode, type WheelEvent } from "react";
 import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
 import { gfmTable } from "micromark-extension-gfm-table";
 import ReactMarkdown, { defaultUrlTransform, type Components, type UrlTransform } from "react-markdown";
 
 import { findParticipantMentions } from "../../application/participant-mentions.ts";
 import { ApiError, openTaskWorkspaceFile } from "./api.ts";
+import type { Feedback } from "./feedback.ts";
 
-const TaskMarkdownContext = createContext<string | undefined>(undefined);
+const TaskMarkdownContext = createContext<{ taskId: string; onFeedback(feedback: Feedback): void } | undefined>(undefined);
 
-export function TaskMarkdownProvider({ taskId, children }: {
+export function TaskMarkdownProvider({ taskId, onFeedback, children }: {
   taskId: string;
+  onFeedback(feedback: Feedback): void;
   children: ReactNode;
 }): ReactNode {
-  return <TaskMarkdownContext value={taskId}>{children}</TaskMarkdownContext>;
+  const value = useMemo(() => ({ taskId, onFeedback }), [taskId, onFeedback]);
+  return <TaskMarkdownContext value={value}>{children}</TaskMarkdownContext>;
 }
 
 export function MarkdownContent({ source, participants, className }: {
@@ -20,7 +23,7 @@ export function MarkdownContent({ source, participants, className }: {
   participants?: Map<string, string>;
   className?: string;
 }): ReactNode {
-  const taskId = useContext(TaskMarkdownContext);
+  const taskId = useContext(TaskMarkdownContext)?.taskId;
   const components = useMemo(() => markdownComponents(participants, taskId), [participants, taskId]);
   return (
     <div className={`markdown-content${className === undefined ? "" : ` ${className}`}`}>
@@ -110,23 +113,17 @@ function LocalFileLink({ taskId, reference, children }: {
   reference: string;
   children: ReactNode;
 }): ReactNode {
-  const [feedback, setFeedback] = useState<{ role: "status" | "alert"; text: string }>();
+  const context = useContext(TaskMarkdownContext)!;
   const endpoint = `/api/tasks/${encodeURIComponent(taskId)}/workspace/files/open?reference=${encodeURIComponent(reference)}`;
   const open = (event: MouseEvent<HTMLAnchorElement>): void => {
     event.preventDefault();
     const label = event.currentTarget.textContent?.trim() || "linked file";
-    setFeedback(undefined);
     void openTaskWorkspaceFile(taskId, reference)
-      .then(() => setFeedback({ role: "status", text: `Opened ${label}.` }))
-      .catch((error: unknown) => setFeedback({ role: "alert", text: fileOpenDiagnostic(error) }));
+      .then(() => context.onFeedback({ role: "status", text: `Opened ${label}.` }))
+      .catch((error: unknown) => context.onFeedback({ role: "alert", text: fileOpenDiagnostic(error) }));
   };
   return (
-    <>
-      <a href={endpoint} onClick={open}>{children}</a>
-      {feedback === undefined ? null : (
-        <small className="local-file-feedback" role={feedback.role}>{feedback.text}</small>
-      )}
-    </>
+    <a href={endpoint} onClick={open}>{children}</a>
   );
 }
 

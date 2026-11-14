@@ -25,7 +25,7 @@ for (const theme of ["dark", "light"] as const) {
     const card = page.locator('[data-task-id="T-0001"]');
     await expect(card.getByText("Creating workspace", { exact: false })).toBeVisible();
     await expect(card.getByRole("progressbar")).not.toHaveAttribute("value");
-    await expect(page.getByText("Current runs · 0")).toBeVisible();
+    await expect(page.getByText("0 running")).toBeVisible();
     completed = 50;
     await expect(card.getByRole("progressbar")).toHaveAttribute("value", "50");
     await expect(card.getByText(/50 \/ 100/)).toBeVisible();
@@ -83,7 +83,7 @@ for (const theme of ["dark", "light"] as const) test(`${theme} task and conversa
   await expect(page.locator(".attempt-entry .attempt-timing")).not.toContainText("elapsed");
   phase = "interrupting";
   await expect(activity.getByText("Stopping startup…")).toBeVisible();
-  await expect(page.getByText("Current runs · 0")).toBeVisible();
+  await expect(page.getByText("0 running")).toBeVisible();
   await expect(page.locator(".attempt-entry .attempt-status")).toHaveText("Stopping startup");
   await expect(page.locator(".attempt-entry .attempt-timing")).not.toContainText("elapsed");
   phase = "running";

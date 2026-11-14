@@ -34,14 +34,15 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
 
   await workspace.getByRole("button", { name: "Copy path" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(expectedPath);
-  await expect(workspace.getByRole("status")).toContainText("Copied task workspace path");
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status").filter({ hasText: "Copied task workspace path" })).toBeVisible();
 
+  await expect(workspace.getByRole("status")).toHaveCount(0);
   await workspace.getByRole("button", { name: "Open folder" }).click();
-  await expect(workspace.getByRole("status")).toContainText("default folder application");
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status").filter({ hasText: "default folder application" })).toBeVisible();
 
   await workspace.getByRole("button", { name: "More ways to open workspace" }).click();
   await workspace.getByRole("menuitem", { name: "Open in Visual Studio Code" }).click();
-  await expect(workspace.getByRole("status")).toContainText("Visual Studio Code");
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status").filter({ hasText: "Visual Studio Code" })).toBeVisible();
 
   await page.route("**/api/tasks/T-0001/workspace/open", (route) => route.fulfill({
     status: 503,
@@ -50,8 +51,9 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
       diagnostic: "Opening task workspaces is unavailable on this host.",
     },
   }));
+  await expect(workspace.getByRole("status")).toHaveCount(0);
   await workspace.getByRole("button", { name: "Open folder" }).click();
-  await expect(workspace.getByRole("alert")).toContainText("unavailable on this host");
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("alert").filter({ hasText: "unavailable on this host" })).toBeVisible();
 
   await page.route("**/api/tasks/T-0001/workspace/open-vscode", (route) => route.fulfill({
     status: 409,
@@ -62,7 +64,7 @@ test("task details expose lazy and provisioned task workspaces", async ({ page, 
   }));
   await workspace.getByRole("button", { name: "More ways to open workspace" }).click();
   await workspace.getByRole("menuitem", { name: "Open in Visual Studio Code" }).click();
-  await expect(workspace.getByRole("alert")).toContainText("Visual Studio Code could not be found");
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("alert").filter({ hasText: "Visual Studio Code could not be found" })).toBeVisible();
 
   await page.setViewportSize({ width: 360, height: 760 });
   const workspaceBounds = await workspace.boundingBox();
@@ -196,9 +198,10 @@ test("running workspace Git scans pause while hidden and never overlap", async (
   expect(reads).toBe(2);
   const workspace = page.getByRole("region", { name: "Workspace", exact: true });
   await workspace.getByRole("button", { name: "Copy path" }).click();
-  await expect(workspace.getByRole("status")).toContainText("Copied task workspace path");
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status").filter({ hasText: "Copied task workspace path" })).toBeVisible();
+  await expect(workspace.getByRole("status")).toHaveCount(0);
   await workspace.getByRole("button", { name: "Open folder" }).click();
-  await expect(workspace.getByRole("status")).toContainText("default folder application");
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status").filter({ hasText: "default folder application" })).toBeVisible();
   releaseSlowScan?.();
 
   await page.evaluate(() => {
@@ -239,7 +242,7 @@ test("a failed workspace Git scan retains its result and recovers automatically"
   const workspace = page.getByRole("region", { name: "Workspace", exact: true });
   await workspace.getByRole("button", { name: "More ways to open workspace" }).click();
   await workspace.getByRole("menuitem", { name: "Open in Visual Studio Code" }).click();
-  await expect(workspace.getByRole("status")).toContainText("Visual Studio Code");
+  await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status").filter({ hasText: "Visual Studio Code" })).toBeVisible();
   await page.clock.fastForward(30_000);
   await expect(summary.getByText("Git status unavailable")).toHaveCount(0);
   expect(reads).toBe(3);

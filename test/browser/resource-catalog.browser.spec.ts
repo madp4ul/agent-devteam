@@ -87,9 +87,9 @@ for (const theme of ["dark", "light"] as const) {
     await expect(ownership).toContainText("Implementation Agent");
     await expect(page).toHaveTitle("Native game (R-0001) · Agent Coordination");
     await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
-    await page.getByText("Current runs · 0", { exact: true }).click();
-    await expect(page.getByText("No active agents.", { exact: true })).toBeVisible();
-    await page.getByText("Current runs · 0", { exact: true }).click();
+    await page.getByText("0 running", { exact: true }).click();
+    await expect(page.getByText("No active runs.", { exact: true })).toBeVisible();
+    await page.getByText("0 running", { exact: true }).click();
     await page.getByRole("button", { name: /^Settings/ }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.keyboard.press("Escape");

@@ -112,8 +112,8 @@ export async function readArchivedTasks(): Promise<TaskOverviewView[]> {
   return result.tasks;
 }
 
-export function readArchivalOperations(taskId?: string): Promise<ArchivalOperation[]> {
-  return request(`/api/archive/operations${taskId === undefined ? "" : `?taskId=${encodeURIComponent(taskId)}`}`, { signal: AbortSignal.timeout(10_000) });
+export function readArchivalOperations(taskId?: string, activeOnly = false): Promise<ArchivalOperation[]> {
+  return request(`/api/archive/operations?${new URLSearchParams({ ...(taskId === undefined ? {} : { taskId }), ...(activeOnly ? { active: "1" } : {}) })}`, { signal: AbortSignal.timeout(10_000) });
 }
 
 export async function readArchivalOperation(id: string): Promise<ArchivalOperation | undefined> {
@@ -473,6 +473,26 @@ async function mutation<Request extends CreateTaskRequest | CreateChildTaskReque
 
 function serializeBrowserRequest<Request>(request: Request): string {
   return JSON.stringify(request);
+}
+
+export function readActivityMenuHistory(before?: number): Promise<import("../../application/activity-menu-contract.ts").ActivityMenuHistory> {
+  return request(`/api/activity-menu/history${before === undefined ? "" : `?before=${before}`}`);
+}
+
+export function readActivityMenuOverview(): Promise<import("../../application/activity-menu-contract.ts").ActivityMenuOverview> {
+  return request("/api/activity-menu/overview");
+}
+
+export function readArchivalMenu(before?: number): Promise<import("../../application/activity-menu-contract.ts").ArchivalMenuPage> {
+  return request(`/api/activity-menu/archivals${before === undefined ? "" : `?before=${before}`}`);
+}
+
+export function clearActivityMenuHistory(kind: "preparation" | "run" | "archival"): Promise<{ accepted: true }> {
+  return request("/api/activity-menu/history/dismiss", { method: "POST", body: JSON.stringify({ kind }) });
+}
+
+export function dismissActivityMenuHistory(ids: string[]): Promise<{ accepted: true }> {
+  return request("/api/activity-menu/history/dismiss", { method: "POST", body: JSON.stringify({ ids }) });
 }
 
 async function request<Result>(url: string, init?: RequestInit): Promise<Result> {

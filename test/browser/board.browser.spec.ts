@@ -67,7 +67,7 @@ test("creates in workflow columns, opens tasks directly, and restores a narrow b
   await page.getByLabel("Outcome-oriented title").fill("Start a deliberate implementation");
   await page.getByLabel("Complete description").fill("Keep deliberate workflow placement without allowing completed-at-creation work.");
   await page.getByRole("button", { name: "Create task", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText(/Created T-\d{4} in Implementation/);
+  await expect(page.getByRole("region", { name: "Operation feedback" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Start a deliberate implementation/ })).toBeVisible();
 
   await page.goto("/tasks/T-0001");
@@ -147,7 +147,7 @@ test("newly entered tasks are newest-first in row layout", async ({ page }) => {
     await page.getByLabel("Outcome-oriented title").fill(title);
     await page.getByLabel("Complete description").fill("Verify current-column-entry ordering.");
     await page.getByRole("button", { name: "Create task", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("Created");
+    await expect(page.getByRole("link", { name: new RegExp(title) })).toBeVisible();
   }
 
   const older = page.getByRole("link", { name: /Ordering example older/ }).locator("..");

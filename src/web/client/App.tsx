@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BoardPage } from "./BoardPage.tsx";
 import { useDesktopNotifications } from "./desktop-notifications.ts";
 import type { Navigate, NavigationState } from "./navigation.ts";
-import { TaskMarkdownProvider } from "./MarkdownContent.tsx";
 import { TaskPage } from "./TaskPage.tsx";
 import { NotificationConsentDialog } from "./SettingsDialog.tsx";
 import { useThemePreference } from "./ThemeControl.tsx";
@@ -45,10 +44,8 @@ export function App(): ReactNode {
     {resourceId !== undefined ? <ResourcePage key={`resource-${locationKey}`} resourceId={resourceId} navigate={navigate} notifications={notifications} /> : taskId === undefined ? (
       <BoardPage key={`board-${locationKey}`} navigate={navigate} notifications={notifications} />
     ) : (
-      <TaskMarkdownProvider taskId={taskId}>
-        <TaskPage key={`task-${locationKey}`} taskId={taskId}
-          navigate={navigate} notifications={notifications} />
-      </TaskMarkdownProvider>
+      <TaskPage key={`task-${locationKey}`} taskId={taskId}
+        navigate={navigate} notifications={notifications} />
     )}
     <NotificationConsentDialog notifications={notifications} />
   </>;

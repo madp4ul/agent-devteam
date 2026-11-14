@@ -17,6 +17,8 @@ import { canonicalHumanIdentityMigration } from "./0013-canonical-human-identity
 import { compactCommandResultsMigration } from "./0014-compact-command-results.ts";
 import { compactHistoricalCommandResponsesMigration } from "./0015-compact-historical-command-responses.ts";
 import { archivalOperationsMigration } from "./0018-archival-operations.ts";
+import { activityMenuHistoryMigration } from "./0019-activity-menu-history.ts";
+import { archivalTaskMenuHistoryMigration } from "./0020-archival-task-menu-history.ts";
 
 export const coordinationMigrations = [
   initialReleasedMigration,
@@ -37,4 +39,6 @@ export const coordinationMigrations = [
   resourceCatalogMigration,
   resourceClaimsMigration,
   archivalOperationsMigration,
+  activityMenuHistoryMigration,
+  archivalTaskMenuHistoryMigration,
 ] as const;

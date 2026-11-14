@@ -1,3 +1,4 @@
+import { mockArchivalMenuOperations } from "./browser-fixture.ts";
 import { expect, test } from "./browser-fixture.ts";
 
 for (const theme of ["dark", "light"] as const) test(`${theme} nested archive requires review and explicit Proceed`, async ({ page, request }) => {
@@ -79,36 +80,32 @@ test("bulk archive lists each rejected task with actionable individual links", a
     submitted = true;
     return route.fulfill({ status: 202, json: { accepted: true, operation } });
   });
-  await page.route("**/api/archive/operations", (route) => route.fulfill({ json: submitted ? [operation] : [] }));
+  await mockArchivalMenuOperations(page, () => submitted ? [operation] : []);
   await page.goto("/");
   await page.getByRole("button", { name: "Expand Product delivery" }).click();
-  const feedback = page.getByRole("region", { name: "Operation feedback" });
-  await page.addStyleTag({ content: ".app-shell { min-height: 220vh; }" });
   await page.getByRole("button", { name: "Archive completed tasks" }).click();
-  try {
-    await accepted.promise;
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    const before = await page.evaluate(() => window.scrollY);
-    expect(before).toBeGreaterThan(500);
-    release.resolve();
-    await expect(feedback).toBeInViewport();
-    expect(await page.evaluate(() => window.scrollY)).toBe(before);
-  } finally { release.resolve(); }
+  try { await accepted.promise; } finally { release.resolve(); }
+  await page.getByText("0 archiving", { exact: true }).click();
+  const feedback = page.getByRole("region", { name: "Archival operations" });
   await expect(feedback).toBeInViewport();
-  await expect(feedback.getByText("Archive · Product delivery · Completion")).toBeVisible();
-  await expect(page.getByRole("link", { name: "T-0091 — Nested evidence" })).toHaveAttribute("href", "/tasks/T-0091");
-  await expect(page.getByRole("link", { name: "T-0092 — Local edits" })).toBeVisible();
-  await expect(page.locator(".archive-failures")).toContainText("archive it individually");
-  const results = feedback.getByLabel("Recent operation results");
-  expect(await results.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
-  await feedback.getByRole("button", { name: "Minimize feedback" }).click();
-  await expect(results).toBeHidden();
-  await feedback.getByRole("button", { name: "Show feedback (1)" }).click();
-  await feedback.getByRole("button", { name: /Dismiss feedback/ }).focus();
-  await page.keyboard.press("Enter");
-  await expect(feedback).toHaveCount(0);
+  await expect(feedback.getByRole("listitem")).toHaveCount(15);
+  await expect(feedback.getByRole("link", { name: /T-0091.*Nested evidence/ })).toHaveAttribute("href", "/tasks/T-0091");
+  await expect(feedback.getByRole("link", { name: /T-0092.*Local edits/ })).toBeVisible();
+  await expect(feedback).toContainText("archive it individually");
+  expect(await feedback.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(feedback).toBeHidden();
+  await page.getByText("0 archiving", { exact: true }).click();
+  await expect(feedback).toBeVisible();
+  await page.route("**/api/activity-menu/history/dismiss", async (route) => {
+    submitted = false;
+    await route.fulfill({ json: { accepted: true } });
+  });
+  await feedback.getByRole("button", { name: "Dismiss history" }).click();
+  await expect(page.getByText("0 archiving", { exact: true })).toHaveCount(0);
   await page.reload();
-  await expect(feedback).toHaveCount(0);
+  await expect(page.getByText("0 archiving", { exact: true })).toHaveCount(0);
+
 });
 
 test("unavailable Git status blocks deletion but preserves safe external inspection", async ({ page, request }) => {

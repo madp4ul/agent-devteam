@@ -1,3 +1,4 @@
+import { LoadingToolbar } from "./LoadingToolbar.tsx";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import {
@@ -14,7 +15,8 @@ import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
 import { OperationFeedback, useOperationFeedback } from "./OperationFeedback.tsx";
-import { archivalRequestIdentity, archiveTaskWithProgress, forgetArchivalRequest, useArchivalFeedback, useArchivalOperations } from "./archival-operations.tsx";
+import { TaskMarkdownProvider } from "./MarkdownContent.tsx";
+import { ArchivalOutcomeError, archivalRequestIdentity, archiveTaskWithProgress, forgetArchivalRequest, useArchivalOperations } from "./archival-operations.tsx";
 import { Loading } from "./Loading.tsx";
 import { usePageTitle } from "./page-title.ts";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
@@ -90,7 +92,6 @@ export function TaskPage({
   const operationFeedback = useOperationFeedback(taskId);
   const { setFeedback, publish } = operationFeedback;
   const archivalOperations = useArchivalOperations(taskId);
-  const archivalFeedback = useArchivalFeedback(archivalOperations, taskId);
   const archiveRunning = archivalOperations.some((operation) => operation.tasks.some((entry) =>
     entry.taskId === taskId && (entry.state === "queued" || entry.state === "running")));
   const archiveIdentity = useRef<{ scope: string; id: string } | undefined>(undefined);
@@ -139,7 +140,8 @@ export function TaskPage({
     else navigate("/", navigation?.boardContext ? { boardContext: navigation.boardContext } : undefined);
   };
   if (detail === undefined) {
-    return loadFailure === undefined ? <Loading /> : <OperationFeedback {...operationFeedback} />;
+    return <div className="app-shell task-shell"><LoadingToolbar notifications={notifications} onFeedback={setFeedback} />
+      {loadFailure === undefined ? <Loading /> : null}<OperationFeedback {...operationFeedback} /></div>;
   }
   const { task, board, inspection } = detail;
   const inspectableTaskFields = new Set(detail.agentInspectableContent.taskFields);
@@ -217,13 +219,13 @@ export function TaskPage({
           setDiscardConfirmation(true);
           return;
         }
-        publish({ role: "alert", text: errorMessage(error), target: `Archive · ${task.id}` }, id);
+        if (!(error instanceof ArchivalOutcomeError)) publish({ role: "alert", text: errorMessage(error), target: `Archive · ${task.id}` }, id);
       })
       .finally(() => setArchivalPending(false));
   };
 
   return (
-    <div className="app-shell task-shell">
+    <TaskMarkdownProvider taskId={taskId} onFeedback={setFeedback}><div className="app-shell task-shell">
       <header className="topbar detail-topbar">
         <div className="task-header-context">
           <a href="/" className="back-link" onClick={back}>Back to board</a>
@@ -242,8 +244,7 @@ export function TaskPage({
       </header>
       <main ref={taskDetailRef} className="task-detail">
         <section className="task-overview" data-task-section="overview">
-          <OperationFeedback items={[...operationFeedback.items.filter((item) => !archivalOperations.some((operation) => operation.id === item.id)), ...archivalFeedback.items]}
-            dismiss={(id) => { operationFeedback.dismiss(id); archivalFeedback.dismiss(id); }} />
+          <OperationFeedback {...operationFeedback} />
           <div className="task-hero">
             <div className="task-heading">
               <div className="agent-inspectable-heading">
@@ -355,7 +356,9 @@ export function TaskPage({
               mostRecentTaskAgentId={mostRecentTaskAgentId}
               replyIntent={commentReplyIntent}
               composerAvailable={!task.archived}
+              onCommentError={(error) => publish({ role: "alert", text: errorMessage(error), target: `Comment on ${task.id}` })}
               onCommentAccepted={() => {
+                publish({ role: "status", text: "Comment posted.", target: `Comment on ${task.id}` });
                 void refresh().catch(() => {
                   // The comment is already saved. The task poll will retry the refresh.
                 });
@@ -391,6 +394,7 @@ export function TaskPage({
                 taskId={task.id}
                 workspace={inspection.workspace}
                 attemptRunning={detail.activeRun !== null}
+                onFeedback={setFeedback}
               />
             </div>
             <div data-task-section="relationships">
@@ -496,7 +500,7 @@ export function TaskPage({
             </div>
         </Modal>
       ) : null}
-    </div>
+    </div></TaskMarkdownProvider>
   );
 }
 

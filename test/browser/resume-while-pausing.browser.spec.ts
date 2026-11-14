@@ -28,8 +28,8 @@ for (const theme of ["dark", "light"] as const) {
     await page.keyboard.press("Enter");
     await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
     expect(resumed).toBe(1);
-    await expect(page.getByText("Current runs · 1")).toBeVisible();
-    await page.getByText("Current runs · 1").click();
+    await expect(page.getByText("1 running")).toBeVisible();
+    await page.getByText("1 running").click();
     await expect(page.getByRole("link", { name: /implementer.*T-0002/ })).toBeVisible();
   });
 }

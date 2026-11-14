@@ -13,7 +13,6 @@ import {
 } from "../../application/participant-mentions.ts";
 
 import { addTaskComment } from "./api.ts";
-import { errorMessage } from "./feedback.ts";
 import {
   captureTimelineViewportAnchor,
   restoreTimelineViewportAnchor,
@@ -32,6 +31,7 @@ export function TaskCommentComposition({
   replyIntent,
   composerAvailable,
   onCommentAccepted,
+  onCommentError,
   children,
 }: {
   taskId: string;
@@ -40,6 +40,7 @@ export function TaskCommentComposition({
   replyIntent: TaskCommentReplyIntent | undefined;
   composerAvailable: boolean;
   onCommentAccepted(): void;
+  onCommentError(error: unknown): void;
   children: ReactNode;
 }): ReactNode {
   const [draft, setDraft] = useState("");
@@ -152,6 +153,7 @@ export function TaskCommentComposition({
             flowRef={flowRef}
             onBodyChanged={setDraft}
             onCommentAccepted={onCommentAccepted}
+            onCommentError={onCommentError}
           />
         </div>
       ) : null}
@@ -170,6 +172,7 @@ function TaskCommentForm({
   flowRef,
   onBodyChanged,
   onCommentAccepted,
+  onCommentError,
 }: {
   taskId: string;
   collaborators: CollaboratorView[];
@@ -180,10 +183,9 @@ function TaskCommentForm({
   flowRef: React.RefObject<HTMLDivElement | null>;
   onBodyChanged(body: string): void;
   onCommentAccepted(): void;
+  onCommentError(error: unknown): void;
 }): ReactNode {
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
-  const [error, setError] = useState<string>();
-  const [posted, setPosted] = useState(false);
   const [pending, setPending] = useState(false);
   const [selectionStart, setSelectionStart] = useState(0);
   const [activeSuggestionId, setActiveSuggestionId] = useState<string>();
@@ -245,18 +247,15 @@ function TaskCommentForm({
       });
     };
     setPending(true);
-    setError(undefined);
-    setPosted(false);
     try {
       await addTaskComment(taskId, body, idempotencyKey);
       onBodyChanged("");
       setSelectionStart(0);
       setIdempotencyKey(crypto.randomUUID());
       setPending(false);
-      setPosted(true);
       onCommentAccepted();
     } catch (caught) {
-      setError(errorMessage(caught));
+      onCommentError(caught);
       setPending(false);
     } finally {
       restoreCompositionContext();
@@ -331,8 +330,6 @@ function TaskCommentForm({
             ))}
           </ul>
         )}
-        {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
-        {posted ? <p role="status" className="feedback status">Commented on {taskId}.</p> : null}
       </form>
     </section>
   );

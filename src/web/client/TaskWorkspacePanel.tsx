@@ -7,18 +7,19 @@ import {
   readTaskWorkspaceGitState,
 } from "./api.ts";
 import { DisclosureIcon } from "./DisclosureIcon.tsx";
-import { errorMessage } from "./feedback.ts";
+import { errorMessage, type Feedback } from "./feedback.ts";
 
 export function TaskWorkspacePanel({
   taskId,
   workspace,
   attemptRunning,
+  onFeedback,
 }: {
   taskId: string;
   workspace: TaskWorkspaceView | null;
   attemptRunning: boolean;
+  onFeedback(feedback: Feedback): void;
 }): ReactNode {
-  const [actionFeedback, setActionFeedback] = useState<{ role: "status" | "alert"; text: string }>();
   const [opening, setOpening] = useState<"folder" | "vscode">();
   const [menuOpen, setMenuOpen] = useState(false);
   const [gitState, setGitState] = useState<TaskWorkspaceGitStateView>();
@@ -88,20 +89,19 @@ export function TaskWorkspacePanel({
   const requestOpen = useCallback((target: "folder" | "vscode") => {
     setMenuOpen(false);
     setOpening(target);
-    setActionFeedback({ role: "status", text: "Sending open request…" });
     const request = target === "folder"
       ? openTaskWorkspace(taskId)
       : openTaskWorkspaceInVisualStudioCode(taskId);
     void request
-      .then(() => setActionFeedback({
+      .then(() => onFeedback({
         role: "status",
         text: target === "folder"
           ? "Open request sent to the default folder application."
           : "Open request sent to Visual Studio Code.",
       }))
-      .catch((error) => setActionFeedback({ role: "alert", text: errorMessage(error) }))
+      .catch((error) => onFeedback({ role: "alert", text: errorMessage(error) }))
       .finally(() => setOpening(undefined));
-  }, [taskId]);
+  }, [taskId, onFeedback]);
 
   return (
     <section className="detail-panel workspace-panel" aria-labelledby="workspace-heading">
@@ -114,8 +114,8 @@ export function TaskWorkspacePanel({
               className="secondary workspace-copy-button"
               onClick={() => {
                 void navigator.clipboard.writeText(workspace.path)
-                  .then(() => setActionFeedback({ role: "status", text: "Copied task workspace path." }))
-                  .catch((error) => setActionFeedback({ role: "alert", text: errorMessage(error) }));
+                  .then(() => onFeedback({ role: "status", text: "Copied task workspace path." }))
+                  .catch((error) => onFeedback({ role: "alert", text: errorMessage(error) }));
               }}
             >
               Copy path
@@ -163,11 +163,6 @@ export function TaskWorkspacePanel({
             state={gitState}
             unavailable={gitUnavailable}
           />
-          {actionFeedback === undefined ? null : (
-            <p className={`workspace-feedback ${actionFeedback.role}`} role={actionFeedback.role}>
-              {actionFeedback.text}
-            </p>
-          )}
         </>
       )}
     </section>

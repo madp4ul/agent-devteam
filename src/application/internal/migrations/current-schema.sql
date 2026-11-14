@@ -61,6 +61,21 @@ CREATE TABLE "activity_ledger" (
         details_json TEXT NOT NULL
       );
 
+-- table activity_menu_history on activity_menu_history
+CREATE TABLE activity_menu_history (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL CHECK (kind IN ('preparation', 'run')),
+      task_id TEXT NOT NULL,
+      task_title TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      status TEXT NOT NULL CHECK (status IN ('preparing', 'prepared', 'completed', 'failed', 'interrupted')),
+      summary TEXT NOT NULL,
+      dismissed INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0, 1))
+    );
+
 -- table agent_conversation_messages on agent_conversation_messages
 CREATE TABLE agent_conversation_messages (
       id TEXT PRIMARY KEY,
@@ -122,7 +137,7 @@ CREATE TABLE archival_operation_tasks (
       task_id TEXT NOT NULL,
       title TEXT NOT NULL,
       state TEXT NOT NULL CHECK (state IN ('queued', 'running', 'archived', 'failed', 'interrupted')),
-      failure_json TEXT,
+      failure_json TEXT, updated_at TEXT NOT NULL DEFAULT '', dismissed INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0, 1)), history_sequence INTEGER,
       PRIMARY KEY (operation_id, task_id)
     );
 
@@ -464,6 +479,15 @@ CREATE INDEX activations_by_task_sequence ON activations(task_id, sequence);
 -- index activity_ledger_by_task_sequence on activity_ledger
 CREATE INDEX activity_ledger_by_task_sequence ON activity_ledger(task_id, sequence);
 
+-- index activity_menu_kind_sequence on activity_menu_history
+CREATE INDEX activity_menu_kind_sequence ON activity_menu_history(kind, sequence DESC);
+
+-- index activity_menu_summary on activity_menu_history
+CREATE INDEX activity_menu_summary ON activity_menu_history(kind, dismissed, finished_at, sequence);
+
+-- index activity_menu_visible on activity_menu_history
+CREATE INDEX activity_menu_visible ON activity_menu_history(kind, sequence DESC) WHERE dismissed = 0;
+
 -- index archival_operation_task_lookup on archival_operation_tasks
 CREATE INDEX archival_operation_task_lookup ON archival_operation_tasks(task_id, operation_id);
 
@@ -476,6 +500,17 @@ CREATE UNIQUE INDEX archival_operations_active_target ON archival_operations(tar
 
 -- index archival_operations_feedback on archival_operations
 CREATE INDEX archival_operations_feedback ON archival_operations(attention, state, sequence) WHERE dismissed = 0;
+
+-- index archival_task_history_sequence on archival_operation_tasks
+CREATE UNIQUE INDEX archival_task_history_sequence ON archival_operation_tasks(history_sequence) WHERE history_sequence IS NOT NULL;
+
+-- index archival_task_menu_active on archival_operation_tasks
+CREATE INDEX archival_task_menu_active ON archival_operation_tasks(operation_id, position)
+        WHERE state IN ('queued', 'running');
+
+-- index archival_task_menu_history on archival_operation_tasks
+CREATE INDEX archival_task_menu_history ON archival_operation_tasks(history_sequence DESC)
+        WHERE dismissed = 0 AND state IN ('archived', 'failed', 'interrupted');
 
 -- index attempts_by_activation on attempts
 CREATE INDEX attempts_by_activation

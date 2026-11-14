@@ -52,6 +52,7 @@ export type AutomationView =
   | { state: "blocked"; attemptsMayStart: false };
 
 export interface ActiveRunView {
+  agentName?: string;
   activationId?: string;
   conversationId?: string | null;
   attemptId: string;
@@ -79,6 +80,7 @@ export interface WorkspaceProgressView {
 
 /** Host-owned preparation, separate from an agent execution attempt. */
 export interface WorkspacePreparationView {
+  taskTitle?: string;
   taskId: string;
   activationId: string;
   agentId: string;
