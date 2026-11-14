@@ -65,7 +65,7 @@ test("archival dismissal only removes finished operations, and retained successe
   } finally { db.close(); }
 });
 
-test("real run outcomes commit menu history, survive source archival and restart, and dismiss through HTTP", async () => {
+test("real run outcomes commit menu history, survive source archival and restart, and dismiss through HTTP", async (t) => {
   const fixture = await createActivationFixture("activity-menu-lifecycle");
   const options = { processDefinitionPath: fixture.definitionPath, databasePath: fixture.databasePath,
     runtimeDispatch: { projectRepositoryPath: fixture.repositoryPath, taskWorkspaceRoot: fixture.workspaceRoot,
@@ -75,6 +75,7 @@ test("real run outcomes commit menu history, survive source archival and restart
       } } } };
   const actor = { kind: "user", id: "user" } as const;
   let application = await CoordinationApplication.start(options);
+  t.after(() => application.close());
   const created = application.createTask({ boardId: "delivery", columnId: "implementation", title: "Archived source", description: "Menu history", actor, idempotencyKey: "menu-source" });
   assert.ok(created.accepted);
   await application.resumeAutomation();
@@ -83,7 +84,7 @@ test("real run outcomes commit menu history, survive source archival and restart
   assert.equal(application.queryActivityMenuHistory().runs[0]?.summary, "Menu lifecycle proof");
   assert.equal(application.queryActivityMenuHistory().preparations[0]?.status, "prepared");
   const archived = await application.archiveTask({ taskId: created.task.id, actor, idempotencyKey: "archive-source" });
-  assert.ok(archived.accepted);
+  assert.ok(archived.accepted, JSON.stringify(archived));
   assert.equal(application.queryActivityMenuHistory().runs[0]?.taskTitle, "Archived source");
   application.close();
   application = await CoordinationApplication.start(options);

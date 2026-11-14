@@ -13,7 +13,9 @@ different cache location.
 
 A release is built from an existing stable version tag, such as `v0.1.0`, and
 records its complete commit SHA. Uncommitted changes are excluded. The maintainer
-owns commits, pushes and tags; the agent does not create them automatically.
+owns commits, pushes and tags; an agent may perform those steps when explicitly
+asked to create a release. Inspect the working tree and index first, preserve
+unrelated work, and use the reviewed committed revision.
 The tag must match the committed package version. For local builds, the executing
 release tooling must also match the selected tag; use that tag's checkout or its
 CI workflow rather than mixing newer dirty build tooling with an older version.
@@ -22,12 +24,18 @@ After reviewing and committing the release tooling and source, the maintainer
 pushes the commit and version tag to GitHub. The release workflow runs on version
 tag pushes; it can also be run manually for an existing tag. Use a new version
 tag for each release. Do not move tags or replace an already-published package.
+An agent handling publication follows the workflow through its final result and
+verifies the published tag, ZIP and checksum assets. A failed or canceled tag is
+not silently moved; commit corrections under a new package version and tag.
 
 The workflow:
 
 1. Checks out the selected tagged commit on Windows and installs the locked
    dependencies with the repository's pinned pnpm version.
-2. Typechecks and runs the normal non-browser suite without real-model opt-ins.
+2. Typechecks and runs the normal non-browser suite without real-model opt-ins,
+   with two concurrent test files and a five-minute test timeout. TAP output
+   includes assertion diagnostics as tests finish; the check step also has a
+   fifteen-minute limit and the build job has a thirty-minute limit.
 3. Builds the complete installation from the committed tree and verifies it
    against disposable project state.
 4. Packs a platform-specific ZIP and checksum, preserving hidden package files
@@ -40,6 +48,15 @@ contents-write permission, verifies that the remote tag exists and does not
 silently create a tag from a branch. External actions are pinned to full commits.
 Repository **release immutability** is recommended for future releases; this
 implementation does not enable that setting or claim it is already enabled.
+
+Before creating test fixtures or building the package, the workflow resolves
+Windows' temporary directory to its canonical path and exports it as `TEMP` and
+`TMP`. Hosted runners can supply an 8.3 alias such as `RUNNER~1`, while Git records
+the full account directory. Mixing those spellings makes valid test worktrees
+fail registration checks. Canonicalizing the fixture root avoids that mismatch
+without weakening production ownership or archival guards. If checks stop
+advancing, inspect failed assertions and job logs rather than treating an
+in-progress job as evidence that every test is still passing.
 
 Publication and hosted cleanup run in one repository-wide queued critical
 section. After a successful publication, cleanup keeps **five published stable
@@ -69,8 +86,8 @@ uploaded automatically. The legacy `release:local` command now aliases this
 committed artifact build and also requires a tag; it no longer means publishing
 an uncommitted checkout as the current application.
 
-Until the user commits/pushes this tooling and a version tag, no new hosted
-release can be produced by this workflow. Failed tests block publication. The
+Publication requires committed/pushed tooling and a version tag. Failed tests
+block publication. The
 superseded conversation-history assertion is aligned with issue 107's intentional
 self-mention rejection; the behavioral gate is not skipped or waived.
 

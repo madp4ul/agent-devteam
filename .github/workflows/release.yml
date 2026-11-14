@@ -23,6 +23,7 @@ env:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30
     outputs:
       commit: ${{ steps.package.outputs.commit }}
       artifact_id: ${{ steps.transfer.outputs.artifact-id }}
@@ -43,6 +44,11 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
+      - name: Canonicalize the Windows temporary directory
+        shell: pwsh
+        run: |
+          node --input-type=module -e "import { appendFileSync, realpathSync } from 'node:fs'; import { tmpdir } from 'node:os'; const path = realpathSync.native(tmpdir()); appendFileSync(process.env.GITHUB_ENV, 'TEMP=' + path + '\nTMP=' + path + '\n');"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install the locked dependency graph
         shell: pwsh
         run: |
@@ -51,6 +57,7 @@ jobs:
           pnpm install --frozen-lockfile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Check types and behavior
+        timeout-minutes: 15
         shell: pwsh
         env:
           COORDINATION_RUN_CODEX_INTEGRATION: ''
@@ -58,7 +65,7 @@ jobs:
         run: |
           pnpm typecheck
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm test
+          node --experimental-strip-types --test --test-concurrency=2 --test-timeout=300000 --test-reporter=tap "test/**/*.test.ts"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build and verify the committed application package
         id: package
