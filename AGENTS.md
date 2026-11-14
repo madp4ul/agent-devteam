@@ -7,7 +7,7 @@
 Issues and specifications are stored as local Markdown under `.scratch/`. See
 `docs/agents/issue-tracker.md`.
 
-Closed efforts are retained under `.scratch/archive/`. Their specs, research,
+Closed efforts are retained under `.scratch/_archive/`. Their specs, research,
 tickets, and decisions may still contain relevant context; search the archive
 when investigating related work. Archiving is manual and requires a user request.
 Before creating a new effort, check for related active and archived work; capture

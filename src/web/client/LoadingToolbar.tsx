@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FrameworkVersion } from "./FrameworkVersion.tsx";
 import { AutomationControls } from "./AutomationControls.tsx";
 import { readBoard, type BrowserBoardState } from "./api.ts";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
@@ -15,7 +16,7 @@ export function LoadingToolbar({ notifications, onFeedback, loadProjectState = t
   useEffect(() => { if (loadProjectState) void refresh().catch(() => {}); }, [refresh, loadProjectState]);
   usePolling(refresh, loadProjectState ? 1000 : undefined, () => {});
   return <header className="topbar detail-topbar">
-    <div className="task-header-context"><a href="/" className="back-link">Back to board</a></div>
+    <div className="task-header-context"><a href="/" className="back-link">Back to board</a><FrameworkVersion /></div>
     <AutomationControls automation={board?.automation ?? { state: "blocked", attemptsMayStart: false }}
       activeRuns={board?.activeRuns ?? []} workspacePreparations={board?.workspacePreparations ?? []}
       canResume={board?.startup.mode === "paused" &&

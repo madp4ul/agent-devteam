@@ -66,7 +66,7 @@ The review server on port 3010 is stopped, and its generated environment and
 assets have been removed. Reusable source remains in the repository:
 
 1. Run `node --experimental-strip-types examples/software-delivery/ui-review.mjs`.
-2. Run `node .scratch/archive/operation-feedback-menus/seed-success-review.mjs`.
+2. Run `node .scratch/_archive/operation-feedback-menus/seed-success-review.mjs`.
 3. Use the task links printed by the seed; IDs can change after a fresh setup.
 
 On the main review task, **Edit task → Save task** shows success even without a

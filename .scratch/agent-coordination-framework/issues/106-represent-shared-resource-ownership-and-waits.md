@@ -14,7 +14,7 @@
 
 The original discussion draft below is retained as historical context. Grilling
 on 2026-11-10 resolved the design and authorized implementation through the
-[shared-resources specification](../../archive/shared-resources/spec.md). Do not change
+[shared-resources specification](../../_archive/shared-resources/spec.md). Do not change
 the running Idle Game process as part of this issue.
 
 ## Problem
@@ -148,10 +148,10 @@ Reject cycles across task relationships and resource queue ordering with actiona
 coordination guidance. Resource overview/detail and task sidebar expose the model.
 
 The decision is resolved; delivery is tracked separately in
-[01 — catalog](../../archive/shared-resources/issues/01-resource-catalog.md),
-[02 — claim lifecycle](../../archive/shared-resources/issues/02-claim-and-wake-lifecycle.md), and
-[03 — combined cycles](../../archive/shared-resources/issues/03-combined-wait-cycles.md).
-See the [specification](../../archive/shared-resources/spec.md) for the complete approved
+[01 — catalog](../../_archive/shared-resources/issues/01-resource-catalog.md),
+[02 — claim lifecycle](../../_archive/shared-resources/issues/02-claim-and-wake-lifecycle.md), and
+[03 — combined cycles](../../_archive/shared-resources/issues/03-combined-wait-cycles.md).
+See the [specification](../../_archive/shared-resources/spec.md) for the complete approved
 behavior and [ADR 0044](../../../docs/adr/0044-coordinate-shared-resources-through-task-owned-claims.md)
 for durable design reasoning.
 

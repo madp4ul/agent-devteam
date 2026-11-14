@@ -3,8 +3,8 @@
 Status: accepted
 
 Accepted on 2026-10-03. Implemented on 2026-10-04. Delivery is recorded in
-[stall recovery delivery](../../.scratch/archive/stall-recovery/map.md). Its
-[specification](../../.scratch/archive/stall-recovery/spec.md) contains the exact contract.
+[stall recovery delivery](../../.scratch/_archive/stall-recovery/map.md). Its
+[specification](../../.scratch/_archive/stall-recovery/spec.md) contains the exact contract.
 
 ## Decision
 

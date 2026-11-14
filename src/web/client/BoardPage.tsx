@@ -1,4 +1,5 @@
 import { LoadingToolbar } from "./LoadingToolbar.tsx";
+import { FrameworkVersion } from "./FrameworkVersion.tsx";
 import { ResourceRow } from "./Resources.tsx";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -342,7 +343,7 @@ export function BoardPage({
       <header className="topbar">
         <div className="board-brand">
           <h1>{state.startup.processName}</h1>
-          <span>Coordination board</span>
+          <span>Coordination board <FrameworkVersion /></span>
         </div>
         <AutomationControls
           automation={state.automation}

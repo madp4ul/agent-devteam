@@ -17,7 +17,7 @@ Issues and specifications for this repository live as Markdown files under
 
 When a skill says "publish to the issue tracker," create the appropriate file
 under `.scratch/<effort-slug>/`. First check existing active efforts and
-`.scratch/archive/` for related work. Extend a relevant active effort rather
+`.scratch/_archive/` for related work. Extend a relevant active effort rather
 than creating a duplicate. Capture small unplanned ideas in `.scratch/BACKLOG.md`
 with a short description and a source link when available; create a dedicated
 effort when the idea needs its own specification or tickets. Historical overlap
@@ -38,10 +38,10 @@ implementation or ticket resolution.
 - Directories without tickets and standalone notes need separate manual review;
   they are not complete merely because they have no unresolved tickets.
 - Move the whole effort from `.scratch/<effort>/` to
-  `.scratch/archive/<effort>/`, preserving its specs, research, evidence, and
+  `.scratch/_archive/<effort>/`, preserving its specs, research, evidence, and
   ticket history. Do not rewrite historical statuses to manufacture closure.
 - Update affected links, including relative links from moved documents, and
-  add the effort to `.scratch/archive/README.md`. Keep historical Git-report
+  add the effort to `.scratch/_archive/README.md`. Keep historical Git-report
   paths and identities unchanged: they describe paths at the recorded commit.
 - Leave all moves and edits unstaged for user review, following Git ownership.
 

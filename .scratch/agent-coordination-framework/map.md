@@ -54,7 +54,7 @@ without choosing the implementation yet.
 - [106 - Represent shared resource ownership and waits](./issues/106-represent-shared-resource-ownership-and-waits.md)
   - **Design resolved:** Project-local resources with task-owned FIFO claims,
     durable grant activations, explicit completion rules and combined cycle checks.
-    [Specification and delivery tickets](../archive/shared-resources/spec.md) track implementation.
+    [Specification and delivery tickets](../_archive/shared-resources/spec.md) track implementation.
 
 - [105 - Interrupt agents waiting on programs](./issues/105-interrupt-agents-waiting-on-programs.md)
   - **Resolved:** Reproduced and fixed detached-child output retaining SDK iteration.

@@ -1,4 +1,5 @@
 import { OperationFeedback, useOperationFeedback } from "./OperationFeedback.tsx";
+import { FrameworkVersion } from "./FrameworkVersion.tsx";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { ResourceClaimView, ResourceView } from "../../application/resource-contract.ts";
 import type { Navigate, NavigationState } from "./navigation.ts";
@@ -92,6 +93,7 @@ export function ResourcePage({ resourceId, navigate, notifications }: {
     <header className="topbar detail-topbar">
       <div className="task-header-context">
         <a href="/" className="back-link" onClick={back}>Back to board</a>
+        <FrameworkVersion />
         {resource && <TaskHeaderTitle key={resource.id} title={resource.title} headingRef={headingRef} />}
       </div>
       <AutomationControls automation={board?.automation ?? { state: "blocked", attemptsMayStart: false }} activeRuns={board?.activeRuns ?? []}

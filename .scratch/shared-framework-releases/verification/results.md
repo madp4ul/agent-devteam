@@ -91,4 +91,4 @@ diff remains byte-for-byte unchanged, SHA-256
 
 ## Follow-up: stale test gate resolved
 
-The user identified issue 107 as the newer intentional rejection contract. The obsolete self-activation assertion is now aligned while supported own-note history and continuation remain covered. Full normal suite: 557 tests, 550 passed, 7 skipped, zero failures. See [current verification](../../archive/release-retention/verification/results.md). The former issue 04 publication blocker is resolved; first hosted publication still awaits user-owned commit/push/tag.
+The user identified issue 107 as the newer intentional rejection contract. The obsolete self-activation assertion is now aligned while supported own-note history and continuation remain covered. Full normal suite: 557 tests, 550 passed, 7 skipped, zero failures. See [current verification](../../_archive/release-retention/verification/results.md). The former issue 04 publication blocker is resolved; first hosted publication still awaits user-owned commit/push/tag.

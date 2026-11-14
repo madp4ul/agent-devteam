@@ -66,10 +66,10 @@ tags, navigation, authoritative recording and policy contracts are unchanged.
 No architecture, persistence, process-definition, or runtime changes are needed.
 
 Validation used `COORDINATION_BROWSER_TEST_ASSET_DIRECTORY` pointing at
-`.scratch/archive/notification-delivery-loop/browser-assets`, built with:
+`.scratch/_archive/notification-delivery-loop/browser-assets`, built with:
 
 ```text
-node node_modules/vite/bin/vite.js build --outDir ../.scratch/archive/notification-delivery-loop/browser-assets
+node node_modules/vite/bin/vite.js build --outDir ../.scratch/_archive/notification-delivery-loop/browser-assets
 ```
 
 - Original regression plus existing notification/Settings browser coverage:

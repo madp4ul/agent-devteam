@@ -66,4 +66,4 @@ Validation:
 
 ## Integrated verification
 
-The final normal suite passed: 557 tests, 550 passed, 7 skipped, zero failures. Standards/Spec reviews have no remaining findings. [Retention verification](../../archive/release-retention/verification/results.md) records the originating-ticket alignment and successful full gate. Runtime behavior was unchanged.
+The final normal suite passed: 557 tests, 550 passed, 7 skipped, zero failures. Standards/Spec reviews have no remaining findings. [Retention verification](../../_archive/release-retention/verification/results.md) records the originating-ticket alignment and successful full gate. Runtime behavior was unchanged.

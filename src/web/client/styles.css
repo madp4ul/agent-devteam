@@ -186,7 +186,7 @@ p { line-height: 1.55; }
 .topbar { display: flex; align-items: stretch; justify-content: space-between; gap: 1.25rem; min-height: 4rem; padding: 0 clamp(1rem, 4vw, 4rem); color: #f5f4ec; background: #121916; border-bottom: 3px solid var(--mint); }
 .board-brand { display: flex; min-width: 0; align-items: baseline; align-self: center; gap: .65rem; padding: .7rem 0; }
 .board-brand h1 { overflow: hidden; font-size: 1.05rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
-.board-brand span { color: #aab5af; font-size: .75rem; white-space: nowrap; }
+.board-brand span, .framework-version { color: #aab5af; font-size: .75rem; white-space: nowrap; }
 .eyebrow { margin: 0 0 .45rem; color: #76817c; font-size: .7rem; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
 .topbar .eyebrow { color: var(--mint); }
 .automation-control { display: flex; align-items: stretch; align-self: stretch; justify-content: flex-end; white-space: nowrap; }

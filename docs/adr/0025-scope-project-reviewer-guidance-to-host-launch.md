@@ -3,7 +3,7 @@
 Status: accepted
 
 Implemented on 2026-10-05 for
-[ticket 02](../../.scratch/archive/computer-use-and-project-allowances/issues/02-launch-time-project-allowances.md).
+[ticket 02](../../.scratch/_archive/computer-use-and-project-allowances/issues/02-launch-time-project-allowances.md).
 
 ## Decision
 

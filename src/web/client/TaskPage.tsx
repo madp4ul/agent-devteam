@@ -1,4 +1,5 @@
 import { LoadingToolbar } from "./LoadingToolbar.tsx";
+import { FrameworkVersion } from "./FrameworkVersion.tsx";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import {
@@ -229,6 +230,7 @@ export function TaskPage({
       <header className="topbar detail-topbar">
         <div className="task-header-context">
           <a href="/" className="back-link" onClick={back}>Back to board</a>
+          <FrameworkVersion />
           <TaskHeaderTitle title={task.title} headingRef={taskHeadingRef} />
         </div>
         <AutomationControls

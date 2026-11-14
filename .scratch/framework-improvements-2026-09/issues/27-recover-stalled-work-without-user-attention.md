@@ -3,7 +3,7 @@
 **Type:** grilling
 **Status:** resolved
 **Blocked by:** None.
-**Next step:** Implement the [stall recovery delivery tickets](../../archive/stall-recovery/map.md); design is resolved, delivery remains open.
+**Next step:** Implement the [stall recovery delivery tickets](../../_archive/stall-recovery/map.md); design is resolved, delivery remains open.
 
 ## Problem and requested direction
 
@@ -56,7 +56,7 @@ when implementing the specification linked below.
 
 ## Answer
 
-Design resolved in [spec.md](../../archive/stall-recovery/spec.md) and
+Design resolved in [spec.md](../../_archive/stall-recovery/spec.md) and
 [ADR 0023](../../../docs/adr/0023-recover-tasks-without-continuation-paths.md).
 Recovery fills a structurally missing continuation path on watched tasks,
 immediately after agent settlement or eligible changes, subject to existing
@@ -68,9 +68,9 @@ relationships, even satisfied ones.
 
 Follow-through published before resolving this design:
 
-- [01 — Reject circular task relationships](../../archive/stall-recovery/issues/01-reject-circular-task-relationships.md).
-- [02 — Deliver bounded stall recovery](../../archive/stall-recovery/issues/02-deliver-bounded-stall-recovery.md), blocked by 01.
-- [03 — Verify lifecycle and reconcile docs](../../archive/stall-recovery/issues/03-verify-recovery-lifecycle-and-reconcile-docs.md), blocked by 01 and 02.
+- [01 — Reject circular task relationships](../../_archive/stall-recovery/issues/01-reject-circular-task-relationships.md).
+- [02 — Deliver bounded stall recovery](../../_archive/stall-recovery/issues/02-deliver-bounded-stall-recovery.md), blocked by 01.
+- [03 — Verify lifecycle and reconcile docs](../../_archive/stall-recovery/issues/03-verify-recovery-lifecycle-and-reconcile-docs.md), blocked by 01 and 02.
 
 Product implementation has not begun. Intake 12's wider user instruction audit
 remains separate from this session's reviewed recovery wording.
