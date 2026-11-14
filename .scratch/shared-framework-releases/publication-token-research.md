@@ -56,3 +56,14 @@ installed verification, GITHUB_TOKEN draft creation/upload/publication, hosted
 retention, temporary-artifact cleanup, and normal launcher discovery of the
 published release. Merely publishing with maintainer credentials does not prove
 that workflow. Keep the already published v0.1.2 release unchanged.
+
+## Live regular-flow result
+
+The correction was exercised by the ordinary v0.1.3 tag push, not a manually
+published substitute. [Run 43632212204](https://github.com/madp4ul/agent-devteam/actions/runs/43632212204)
+completed build, publish (including retention) and transfer cleanup successfully
+using the workflow token. GitHub's artifact API then returned zero artifacts for
+the run. The existing bootstrap consumed the public release and its installed
+provenance matched the tag. This establishes a working normal release flow with
+the documented permission boundary; it does not claim the earlier server error
+provided a more granular explanation than its recorded 403.

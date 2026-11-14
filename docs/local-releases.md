@@ -70,6 +70,13 @@ one-off release does not establish that this regular flow works. The first
 v0.1.2 release used maintainer publication before this correction; retain that as
 historical evidence rather than the normal operating procedure.
 
+The regular flow was proven with the ordinary `v0.1.3` tag push:
+[build, publication, retention and transfer cleanup all passed](https://github.com/madp4ul/agent-devteam/actions/runs/43632212204).
+The public ZIP/checksum matched GitHub's digest, and the installed bootstrap
+downloaded that release and validated the real Autonomous V2 process. See
+[the resolved publication ticket](../.scratch/shared-framework-releases/issues/07-investigate-hosted-publication-token.md)
+for exact commit, digest and cleanup evidence.
+
 Before creating test fixtures or building the package, the workflow resolves
 Windows' temporary directory to its canonical path and exports it as `TEMP` and
 `TMP`. Hosted runners can supply an 8.3 alias such as `RUNNER~1`, while Git records

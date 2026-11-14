@@ -1,7 +1,7 @@
 # Investigate hosted release-creation token permissions
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: none
 Release blocking: yes for declaring the regular pipeline complete; v0.1.2 remains usable.
 
@@ -45,3 +45,25 @@ under ADR 0053. Use v0.1.3 to prove the ordinary tag-push workflow.
   an existing running host or its process definition.
 - Guide and tracker record actual workflow evidence; no manual upload substitutes
   for the end-to-end proof.
+
+## Answer and regular-flow proof
+
+The ordinary annotated-tag push for v0.1.3 at
+`2364e0a1b7ff3ca27ee73c5c2945c8ce1af0c80e` triggered
+https://github.com/madp4ul/agent-devteam/actions/runs/43632212204 (`event: push`).
+All three jobs completed successfully: build, publish and cleanup-transfer.
+Hosted retention's own step succeeded, and the run's artifact API reported
+`total_count: 0` after cleanup. No maintainer credential was used to create,
+upload or publish this release; publication used the workflow's token.
+
+https://github.com/madp4ul/agent-devteam/releases/tag/v0.1.3 is the designated
+latest stable release. Its 219,498,903-byte ZIP has SHA-256
+`a39920766f916c5ce39b2929353761d69a61c114d6072e04ad0989f32ffc2aa6`,
+matching GitHub's asset digest and the published checksum sidecar.
+
+The existing self-contained local bootstrap downloaded and selected v0.1.3.
+Its installed metadata matches the exact tagged commit, and its CLI validated
+the real Autonomous V2 process definition. The existing game batch file still
+uses this same bootstrap through its process launcher. No live host was started
+or restarted. This proves the regular publication and consumer flow rather than
+only the one-off maintainer publication of v0.1.2.
