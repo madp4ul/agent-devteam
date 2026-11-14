@@ -105,7 +105,9 @@ jobs:
           $tagCommit = gh api "repos/$env:GH_REPO/commits/$env:RELEASE_TAG" --jq .sha
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($tagCommit -ne $env:RELEASE_COMMIT) { throw 'The remote tag moved after the verified build; publication is blocked.' }
-          gh release create $env:RELEASE_TAG $archive $checksum --verify-tag --target $env:RELEASE_COMMIT --draft --title $env:RELEASE_TAG --notes "Windows x64 application built from committed revision $env:RELEASE_COMMIT. Requires installed Node.js 24 or later and Git."
+          # The existing tag and SHA check above fix provenance. Passing --target
+          # unnecessarily requests workflow-write authorization for older commits.
+          gh release create $env:RELEASE_TAG $archive $checksum --verify-tag --draft --title $env:RELEASE_TAG --notes "Windows x64 application built from committed revision $env:RELEASE_COMMIT. Requires installed Node.js 24 or later and Git."
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           gh release edit $env:RELEASE_TAG --draft=false --latest
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

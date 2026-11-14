@@ -53,16 +53,22 @@ silently create a tag from a branch. External actions are pinned to full commits
 Repository **release immutability** is recommended for future releases; this
 implementation does not enable that setting or claim it is already enabled.
 
-If hosted publication is denied by the workflow token after package verification,
-the releasing agent may use the maintainer's existing authorized GitHub CLI/API
-authentication to publish a locally built, verified ZIP for the same tag. This
-requires no new application version and no repeated hosted tests. Recheck the
-remote tag's complete commit and the ZIP checksum, create a draft, upload the ZIP
-and checksum, verify the server's uploaded digest, then publish as latest. Apply
-the same five-release retention policy with `scripts/prune-github-releases.mjs`
-and remove that run's temporary transfer artifact when possible. Keep credentials
-out of files and logs. Record the fallback; do not describe a failed workflow as
-successful. Installed consumers use the same verified release either way.
+Publication uses the workflow's `GITHUB_TOKEN` with `contents: write`; no personal
+token or manually uploaded package is required for the regular flow. Verify the
+existing remote tag against the built commit and pass `--verify-tag`, but **omit
+`--target`** from release creation. GitHub checks workflow-write authorization for
+an explicitly supplied older target even when that target is unused because the
+tag already exists; `GITHUB_TOKEN` cannot receive that extra permission. Omitting
+the redundant target preserves the existing-tag provenance checks. See the
+[official release API authorization contract](https://docs.github.com/en/rest/releases/releases#create-a-release)
+and [publication research](../.scratch/shared-framework-releases/publication-token-research.md).
+
+To prove a pipeline correction, publish a new version through the normal commit,
+tag-push and workflow sequence, then verify the published assets, designated
+latest release, retention and temporary-artifact cleanup. A manually published
+one-off release does not establish that this regular flow works. The first
+v0.1.2 release used maintainer publication before this correction; retain that as
+historical evidence rather than the normal operating procedure.
 
 Before creating test fixtures or building the package, the workflow resolves
 Windows' temporary directory to its canonical path and exports it as `TEMP` and
