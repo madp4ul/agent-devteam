@@ -105,5 +105,5 @@ Its count includes queued and running tasks. Finished history can be cleared;
 queued/running work cannot. Preparing and Current runs use the same interaction
 pattern with durable preparation outcomes and the latest thirty finished runs.
 The durable archival queue and all deletion-consent safeguards remain unchanged.
-See the [follow-up specification](../../operation-feedback-menus/spec.md) and
+See the [follow-up specification](../../archive/operation-feedback-menus/spec.md) and
 [implemented review environment](../../../examples/software-delivery/UI-REVIEW.md).

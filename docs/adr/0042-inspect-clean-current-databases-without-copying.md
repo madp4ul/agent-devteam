@@ -105,7 +105,7 @@ unchanged copied path (selected with an empty cold journal) took 1,059 and
 inspection bytes copied. Runs alternated copied/direct/direct/copied on this
 host; cache, storage and database contents affect timings. This is not a fixed
 speedup promise. The reproducible script is
-[benchmark.mjs](../../.scratch/database-startup-fast-path/benchmark.mjs), which
+[benchmark.mjs](../../.scratch/archive/database-startup-fast-path/benchmark.mjs), which
 creates and removes its own temporary fixture and accepts no retained path.
 
 ## Primary references

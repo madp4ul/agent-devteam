@@ -232,6 +232,6 @@ future size optimization; it is not part of the retention change.
 See the [release decision](adr/0051-distribute-tagged-releases-through-github.md)
 and [retention decision](adr/0052-bound-hosted-and-installed-release-retention.md)
 for reasoning. The [distribution research](../.scratch/shared-framework-releases/research.md)
-and [retention/dependency research](../.scratch/release-retention/research.md)
+and [retention/dependency research](../.scratch/archive/release-retention/research.md)
 provide supporting primary sources. Earlier local-only specifications are
 historical; this guide and the superseding ADRs describe the current policy.

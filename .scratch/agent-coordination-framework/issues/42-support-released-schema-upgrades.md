@@ -38,9 +38,9 @@ migration paths between disposable pre-release schemas.
 
 ## Answer
 
-Delivered through the [Released Schema Migrations specification](../../released-schema-migrations/spec.md),
-[ticket 01 — Establish the Released Migration Baseline](../../released-schema-migrations/issues/01-establish-released-migration-baseline.md),
-and [ticket 02 — Upgrade Released Databases Safely](../../released-schema-migrations/issues/02-upgrade-released-databases-safely.md).
+Delivered through the [Released Schema Migrations specification](../../archive/released-schema-migrations/spec.md),
+[ticket 01 — Establish the Released Migration Baseline](../../archive/released-schema-migrations/issues/01-establish-released-migration-baseline.md),
+and [ticket 02 — Upgrade Released Databases Safely](../../archive/released-schema-migrations/issues/02-upgrade-released-databases-safely.md).
 
 Released databases now have one immutable exact-prefix migration authority,
 indefinite forward support, verified SQLite online recovery backups that include

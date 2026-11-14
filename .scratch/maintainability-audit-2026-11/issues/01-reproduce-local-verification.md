@@ -32,6 +32,14 @@ explicitly resumes this effort after the idle game run.
   of expanding this ticket into unrelated product fixes.
 - [ ] Verify the resulting workflow and documentation without modifying live
   coordination state, authored processes or real Codex execution settings.
+- [ ] Follow the release guide and ADR 0053: behavioral tests and typechecking
+  remain local development checks, not added release-CI gates. Include relevant
+  installed-application regression coverage without claiming packaging success
+  proves behavioral correctness.
+- [ ] Reuse applicable canonical temporary-path handling and existing schema
+  snapshot line-ending protections introduced by the release work. Distinguish
+  path length from canonical spelling; preserve workspace identity checks and
+  avoid creating competing environment-setup mechanisms.
 
 ## Scope
 

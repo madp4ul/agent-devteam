@@ -14,11 +14,11 @@ import { GitTaskWorkspaceManager } from "../../src/application/internal/git-task
 // Same process and product UI as the supplied example. Only model execution is
 // scripted. All project files, Git worktrees, SQLite and assets are disposable.
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const environment = join(root, ".scratch/operation-feedback-menus/environment");
+const environment = join(root, ".scratch/archive/operation-feedback-menus/environment");
 const project = join(environment, "project");
 const databasePath = join(environment, "coordination.sqlite3");
 const workspaceRoot = join(environment, "task-worktrees");
-const assets = join(root, ".scratch/operation-feedback-menus/assets");
+const assets = join(root, ".scratch/archive/operation-feedback-menus/assets");
 const git = async (...args) => promisify(execFile)("git", ["-C", project, ...args]);
 const actor = { kind: "user", id: "ui-review" };
 await mkdir(environment, { recursive: true });

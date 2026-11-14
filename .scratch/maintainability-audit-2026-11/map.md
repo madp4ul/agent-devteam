@@ -47,8 +47,38 @@ leave changes unstaged for user review. Update the architecture map and record
 durable ADR reasoning when the implemented seam or authoritative flow changes.
 No framework or persistence-tooling replacement is part of these issues.
 
+## Release and archive reconciliation
+
+Reviewed against source revision `18bad16` on 2026-11-14. The shared release
+pipeline does not invalidate the ten issues or their dependency edges.
+
+- Local development still owns typechecking and behavioral tests. Issue 01
+  must follow the release guide and ADR 0053; it must not add those checks back
+  to release CI. Existing canonical temporary-path handling and schema snapshot
+  line-ending protection should be reused where applicable.
+- Refactoring must preserve one concrete immutable installation for the host,
+  browser assets, schema resources and later worker/MCP processes. A development
+  checkout change must not become a runtime fallback or mix versions in a host.
+  Installation caches and their separate usage database retain their existing
+  managed lifecycle and ownership protections.
+- Runtime and contract changes need appropriate local installed-application
+  regression coverage using disposable project state and a separate snapshot
+  root where needed. Avoid rebuilding packages for documentation-only changes
+  or replacing focused behavioral checks with a successful packaging result.
+- Any eventual publication follows the managed, committed-version release
+  workflow. These issues do not authorize committing, tagging, publishing,
+  restarting a live project, modifying installed versions or pruning caches.
+- The user reports a policy being introduced to archive efforts only when all
+  their issues are resolved. This effort has ten open issues and remains active
+  and deferred. Leave archive policy and relocation work to its owning agent;
+  reread the tracker guidance before future delivery and final archival.
+
+Operating authority: [release guide](../../docs/local-releases.md) and
+[local verification decision](../../docs/adr/0053-check-behavior-locally-and-publish-packages-in-ci.md).
+The original assessment remains a historical record of the inspected baseline.
+
 ## Delivery state
 
 Assessment complete; follow-up issues created. Implementation has not started.
-The staged assessment remains unchanged. The issues and this plan are an
-unstaged planning addition.
+The original assessment remains unchanged. Release reconciliation changes only
+planning documents and acceptance criteria; the implementation hold remains.

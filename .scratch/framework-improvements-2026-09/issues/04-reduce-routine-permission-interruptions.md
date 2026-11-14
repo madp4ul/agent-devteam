@@ -122,7 +122,7 @@ superseded; delivery stays in this ticket and the current intake.
   or active configuration change was made. The selected additive approach needs
   a compatible runtime; replacement policy is not an equivalent fallback.
   [Findings](../research/routine-permission-interruptions.md) and
-  [follow-up research/design tickets](../../agent-reviewer-allowances/map.md)
+  [follow-up research/design tickets](../../archive/agent-reviewer-allowances/map.md)
   retain the recommendation and open decisions. Incident diagnosis remains open.
 - 2026-10-04: User selected further research into an explicit allowance list
   alongside each agent definition, supplied as native extra reviewer policy.

@@ -67,8 +67,8 @@ interface.
   grant does not override a denial about private editor contents or another
   proposed action.
 
-[Investigation evidence](../.scratch/computer-use-and-project-allowances/evidence/01-incident-findings.md)
+[Investigation evidence](../.scratch/archive/computer-use-and-project-allowances/evidence/01-incident-findings.md)
 records the exact trace locations and limits. The bounded
-[SDK probe](../.scratch/computer-use-and-project-allowances/evidence/probe-sdk-computer-use.mjs)
+[SDK probe](../.scratch/archive/computer-use-and-project-allowances/evidence/probe-sdk-computer-use.mjs)
 can test activation of an already running Calculator, or Paint with `--paint`.
 It loads normal native configuration and restricts its agent to that activation.

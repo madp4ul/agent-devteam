@@ -101,8 +101,8 @@ Task position spacing may already be fixed, while Add Comment should dock before
 any scroll event. Compare description lengths and expansion state in both.
 Issue 26 covers retained resume evidence in both timeline and conversation views.
 
-Issue 27's design is resolved in the [stall recovery specification](../stall-recovery/spec.md)
-and [three delivery tickets](../stall-recovery/map.md). Its implementation must
+Issue 27's design is resolved in the [stall recovery specification](../archive/stall-recovery/spec.md)
+and [three delivery tickets](../archive/stall-recovery/map.md). Its implementation must
 preserve the authoritative activation/attention lifecycle; targeted recovery
 wording is user-reviewed, while issue 12's wider instruction audit stays separate.
 Issue 28 remains open design work and revisits the original Git workspace lifecycle
@@ -135,8 +135,8 @@ and browser coverage of icon/button geometric centering.
   recovery. Three recovery activations per episode, continuation-based resets,
   dispatch recheck, and 60-second grace after attention acknowledgment/dismissal
   bound waste while preserving user intervention. Reject cycles across all
-  retained relationship types, including satisfied edges. [Specification](../stall-recovery/spec.md),
-  [delivery tickets](../stall-recovery/map.md), and
+  retained relationship types, including satisfied edges. [Specification](../archive/stall-recovery/spec.md),
+  [delivery tickets](../archive/stall-recovery/map.md), and
   [ADR 0023](../../docs/adr/0023-recover-tasks-without-continuation-paths.md)
   record agreed design; implementation remains open.
 

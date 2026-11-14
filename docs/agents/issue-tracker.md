@@ -16,10 +16,43 @@ Issues and specifications for this repository live as Markdown files under
 ## Publishing and fetching
 
 When a skill says "publish to the issue tracker," create the appropriate file
-under `.scratch/<effort-slug>/`.
+under `.scratch/<effort-slug>/`. First check existing active efforts and
+`.scratch/archive/` for related work. Extend a relevant active effort rather
+than creating a duplicate. Capture small unplanned ideas in `.scratch/BACKLOG.md`
+with a short description and a source link when available; create a dedicated
+effort when the idea needs its own specification or tickets. Historical overlap
+alone does not require reopening an archived effort: link it as context for new
+work.
 
 When a skill needs a ticket, read the referenced Markdown file. The user may
 identify it by path or ticket number.
+
+## Manual archival and historical context
+
+Archiving happens only when the user requests it, never automatically during
+implementation or ticket resolution.
+
+- An effort is eligible when it has at least one ticket and every issue under
+  its `issues/` directory is explicitly `resolved` (or the legacy equivalent
+  `done`). Open, claimed, missing, or ambiguous statuses prevent archival.
+- Directories without tickets and standalone notes need separate manual review;
+  they are not complete merely because they have no unresolved tickets.
+- Move the whole effort from `.scratch/<effort>/` to
+  `.scratch/archive/<effort>/`, preserving its specs, research, evidence, and
+  ticket history. Do not rewrite historical statuses to manufacture closure.
+- Update affected links, including relative links from moved documents, and
+  add the effort to `.scratch/archive/README.md`. Keep historical Git-report
+  paths and identities unchanged: they describe paths at the recorded commit.
+- Leave all moves and edits unstaged for user review, following Git ownership.
+
+The archive is searchable planning history, not disposable material. Read its
+specifications, research, and resolved tickets when they explain related work.
+Exclude archived efforts from the active work queue. Current implementation,
+`docs/architecture.md`, `CONTEXT.md`, and applicable ADRs determine the current
+system; an old spec may describe behavior that has since changed. Archived
+efforts may retain parent statuses such as `ready-for-agent` or `awaiting user
+review`; this archival pass uses ticket completion, not a new claim about those
+historical review states.
 
 ## Wayfinding operations
 

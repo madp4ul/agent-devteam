@@ -27,5 +27,9 @@ explicitly resumes this effort after the idle game run.
 - [ ] Run complete typechecking and the affected activity/context, recovery,
   migration, runtime and browser regression checks. Report baseline failures
   explicitly rather than relaxing checks to finish the migration.
+- [ ] Include applicable local installed-application checks to catch missing
+  modules/resources after contract extraction. Preserve the release guide's
+  separation of local behavioral verification and tagged package publication;
+  do not add hosted behavioral-test gates or publish as part of this ticket.
 - [ ] Update architecture guidance and durable reasoning for the resulting
   contract seam; remove obsolete migration guidance and leave changes unstaged.

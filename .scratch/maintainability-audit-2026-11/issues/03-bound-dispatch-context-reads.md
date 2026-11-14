@@ -30,5 +30,9 @@ explicitly resumes this effort after the idle game run.
   composition and dispatch. Compact counts may still aggregate retained facts.
 - [ ] Run relevant application/context, scheduling, runtime prompt and scoped
   context checks; keep supported fixtures and consumers green together.
+- [ ] Preserve installed-host dispatch: workers, MCP tools and runtime resources
+  resolve from the same selected installation as the host. Exercise relevant
+  installed-application coverage against disposable state without falling back
+  to development source or changing an active installation or project.
 - [ ] Update the architecture map and durable design reasoning for the chosen
   seam. No schema or transport change is required merely to narrow reads.

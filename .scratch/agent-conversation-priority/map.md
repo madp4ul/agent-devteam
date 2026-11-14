@@ -103,4 +103,4 @@ At the end of inspection T-0052 was idle and framework automation was pausing. N
 
 ## Preventive implementation follow-up
 
-The user requested one preventive layer rather than a stack of defenses. [Explicit runtime permissions ticket 01](../agent-runtime-permissions/issues/01-select-explicit-workspace-permissions.md) records the concrete implementation: explicitly select workspace-write on every agent start/resume, including old read-only conversations and replacement paths. It is independent of conversation-priority research. Normal protected-Git escalation remains distinct and is not claimed to be fixed by selecting workspace-write.
+The user requested one preventive layer rather than a stack of defenses. [Explicit runtime permissions ticket 01](../archive/agent-runtime-permissions/issues/01-select-explicit-workspace-permissions.md) records the concrete implementation: explicitly select workspace-write on every agent start/resume, including old read-only conversations and replacement paths. It is independent of conversation-priority research. Normal protected-Git escalation remains distinct and is not claimed to be fixed by selecting workspace-write.

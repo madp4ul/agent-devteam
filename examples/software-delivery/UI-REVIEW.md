@@ -14,7 +14,7 @@ the real browser, application, SQLite and Git paths. Agent execution is scripted
 clearly identified in task descriptions and outcomes, and incurs no model usage.
 It does not launch the normal example against the framework checkout. Its project,
 worktrees, database and browser build live in the ignored
-`.scratch/operation-feedback-menus/environment/` and `assets/` directories.
+`.scratch/archive/operation-feedback-menus/environment/` and `assets/` directories.
 The regular `dist/web` build and existing running projects are untouched.
 
 The first launch creates two clean Completion workspaces, one dirty Completion
@@ -62,14 +62,14 @@ the review host does not artificially delay production archival code.
 
 ## Review existing success messages
 
-The [success-message inventory](../../.scratch/operation-feedback-menus/success-feedback-inventory.md)
+The [success-message inventory](../../.scratch/archive/operation-feedback-menus/success-feedback-inventory.md)
 lists every remaining floating success family and distinguishes progress messages
 and local confirmations. The inventory records the final approved notification policy.
 
 With the review host running, prepare the passive examples once:
 
 ```powershell
-node .scratch/operation-feedback-menus/seed-success-review.mjs
+node .scratch/archive/operation-feedback-menus/seed-success-review.mjs
 ```
 
 The seed verifies the isolated project and preserves existing examples on rerun.
