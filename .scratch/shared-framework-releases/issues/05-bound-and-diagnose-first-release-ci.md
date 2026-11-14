@@ -38,7 +38,8 @@ must have bounded execution and useful failure diagnostics.
   suite to end; test execution and the check/build steps have explicit limits.
 - The lifecycle test always closes its application and reports archival rejection
   details rather than only `false`.
-- Normal tests and publication succeed before declaring the release complete.
+- Relevant local validation and package publication succeed before declaring the
+  release complete. Hosted behavioral tests are not a release gate (ADR 0053).
 - Temporary diagnostic branch/instrumentation is removed after diagnosis.
 
 ## Changes
@@ -67,3 +68,20 @@ registry entry, SQL definition, runtime schema guard or test assertion was relax
 
 The corrected candidate is `v0.1.2`; canceled/failed `v0.1.0` and `v0.1.1` tags
 remain intact and have no published release objects.
+
+## User refinement: local tests, hosted packaging
+
+The user explicitly asked to stop repeating the local suite in release CI and
+prioritize the isolated published runtime. ADR 0053 supersedes the hosted-test
+gate described above. The workflow now builds/verifies/publishes only. Existing
+local verification includes the full normal suite (550 passed, 7 skipped), local
+typechecking, the unchanged schema assertion after LF checkout, and a successful
+exact-tag v0.1.2 application ZIP build (219,498,915 bytes).
+
+The hosted v0.1.2 test run also exposed runner-sensitive process-inspection and
+archive-command timeouts, and the 1,000-retry stress test exceeded five minutes.
+Its overall test step reached its fifteen-minute cap. These are not claimed as
+passing or fixed; investigate separately if hosted behavioral CI is desired.
+No application source changed after the verified v0.1.2 build. Dispatch the
+current-main packaging workflow for that same unpublished tag; do not retag or
+require another test run before publishing it.

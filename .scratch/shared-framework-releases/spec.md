@@ -57,10 +57,12 @@ shared release location. Running hosts and project state remain untouched.
 - Use distinct artifact build and hosted publication responsibilities. A tag
   push, or manual run for an existing tag, drives a Windows CI build; GitHub CLI
   publication verifies that the remote tag exists. Do not create tags implicitly.
-- Run typechecking and the complete normal suite before publication. Keep build
+- Run typechecking and the applicable behavioral tests locally during development;
+  publication CI builds and verifies the package without repeating that suite
+  (user refinement, ADR 0053). Keep build
   permissions read-only, grant publication-only contents write, pin action SHAs,
   and disable persistent checkout credentials. Do not waive the existing unrelated
-  conversation-history failure to get a release through CI.
+  conversation-history rejection contract during local verification.
 - Upload the verified ZIP and checksum into a draft, then publish as latest.
   Recommend repository release immutability, but do not change repository settings
   or claim that the setting is enabled without evidence.
@@ -121,7 +123,7 @@ dirty-source behavior of the first delivery, while preserving its isolation and
 diagnostic guarantees. [Primary-source research](research.md) supports the change.
 Read-only GitHub API inspection confirmed a public repository and no existing
 releases/tags among the returned entries. Actual publication must wait for the
-user's committed/pushed version tag and successful CI checks.
+user's committed/pushed version tag and successful package verification/publication.
 
 Delivery: [01](issues/01-committed-release-artifact.md) ->
 [02](issues/02-download-at-startup.md) -> [03](issues/03-transition-launchers.md).

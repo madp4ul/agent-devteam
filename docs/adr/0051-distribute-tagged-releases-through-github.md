@@ -2,6 +2,8 @@
 
 Status: accepted; supersedes ADR 0050's local-only publication and dirty-source
 release model, retaining its fixed-per-host installation and state guarantees.
+Release validation policy is refined by ADR 0053: local behavioral checks and
+hosted package verification/publication.
 
 The user clarified that a release is a shared versioned artifact associated with
 the source repository. A local snapshot containing uncommitted work provides

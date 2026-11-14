@@ -43,6 +43,11 @@ verifies the application before a separate publishing job attaches all assets to
 a draft and publishes it as latest. Source, release tooling and workflow belong
 in Git; generated installations and archives do not. Development snapshots remain
 a separate disposable verification mechanism.
+Behavioral tests and typechecking run locally during development. Release CI
+installs locked dependencies, builds/verifies the tagged installation and
+publishes its ZIP/checksum; it does not repeat development tests. A workflow-only
+correction can dispatch current-main orchestration for an existing unpublished
+tag without changing the packaged commit. See [ADR 0053](adr/0053-check-behavior-locally-and-publish-packages-in-ci.md).
 
 Publication and hosted retention are serialized repository-wide. After a complete
 publication, retention keeps five eligible stable framework release objects,

@@ -56,17 +56,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm install --frozen-lockfile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Check types and behavior
-        timeout-minutes: 15
-        shell: pwsh
-        env:
-          COORDINATION_RUN_CODEX_INTEGRATION: ''
-          COORDINATION_RUN_CODEX_CAPABILITY_PROBE: ''
-        run: |
-          pnpm typecheck
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --experimental-strip-types --test --test-concurrency=2 --test-timeout=300000 --test-reporter=tap "test/**/*.test.ts"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build and verify the committed application package
         id: package
         shell: pwsh

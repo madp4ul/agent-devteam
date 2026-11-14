@@ -25,22 +25,26 @@ pushes the commit and version tag to GitHub. The release workflow runs on versio
 tag pushes; it can also be run manually for an existing tag. Use a new version
 tag for each release. Do not move tags or replace an already-published package.
 An agent handling publication follows the workflow through its final result and
-verifies the published tag, ZIP and checksum assets. A failed or canceled tag is
-not silently moved; commit corrections under a new package version and tag.
+verifies the published tag, ZIP and checksum assets. Never move an existing tag.
+Application changes require a new package version and tag. A workflow-only fix
+may retry an unpublished tag by manually dispatching the current `main` workflow
+with that existing tag; it still packages exactly the tagged source.
+
+Typechecking and behavioral tests are a **local development responsibility**.
+Use the applicable local verification and record its result before publication;
+the release workflow does not repeat the test suite or typechecking. Existing
+successful validation remains applicable when only release orchestration or
+documentation changed. Do not claim hosted tests passed when they were not run.
 
 The workflow:
 
 1. Checks out the selected tagged commit on Windows and installs the locked
    dependencies with the repository's pinned pnpm version.
-2. Typechecks and runs the normal non-browser suite without real-model opt-ins,
-   with two concurrent test files and a five-minute test timeout. TAP output
-   includes assertion diagnostics as tests finish; the check step also has a
-   fifteen-minute limit and the build job has a thirty-minute limit.
-3. Builds the complete installation from the committed tree and verifies it
+2. Builds the complete installation from the committed tree and verifies it
    against disposable project state.
-4. Packs a platform-specific ZIP and checksum, preserving hidden package files
+3. Packs a platform-specific ZIP and checksum, preserving hidden package files
    and readable source.
-5. Transfers only verified output to the publication job, which attaches assets
+4. Transfers only verified output to the publication job, which attaches assets
    to a draft GitHub Release and then publishes the completed release as latest.
 
 The build job has read-only repository access. The publishing job alone receives
@@ -90,10 +94,11 @@ uploaded automatically. The legacy `release:local` command now aliases this
 committed artifact build and also requires a tag; it no longer means publishing
 an uncommitted checkout as the current application.
 
-Publication requires committed/pushed tooling and a version tag. Failed tests
-block publication. The
-superseded conversation-history assertion is aligned with issue 107's intentional
-self-mention rejection; the behavioral gate is not skipped or waived.
+Publication requires committed/pushed tooling and a version tag. Package-build,
+installed-application verification, provenance and checksum failures still block
+publication. Hosted-runner test timing and process-inspection differences are
+separate development follow-ups; they are not a hosted release gate. See
+[ADR 0053](adr/0053-check-behavior-locally-and-publish-packages-in-ci.md).
 
 ## Install the launcher once
 

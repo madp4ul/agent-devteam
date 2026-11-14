@@ -33,6 +33,8 @@ read `docs/local-releases.md`. It is the current operating policy; ADRs 0051 and
 earlier local-only design. Keep that guide and the implemented workflow/cache
 behavior consistent. Use the managed lifecycle rather than bypassing its
 in-use and uncertain-ownership protections with manual deletion.
+Typechecking and behavioral tests are checked locally; release CI builds,
+verifies and publishes packages without repeating that suite (ADR 0053).
 
 ### Browser UI controls
 
