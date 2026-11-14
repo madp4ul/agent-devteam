@@ -14,6 +14,14 @@ The planned production distribution is a self-contained host-native
 application; users will not need the TypeScript development toolchain. See
 [ADR 0002](docs/adr/0002-self-contained-host-native-distribution.md).
 
+Shared application packages are attached to GitHub Releases and built from
+committed version tags. Install the bootstrap once with `pnpm release:install`;
+project startup then downloads and verifies latest into a local cache. Running
+hosts retain their installed version until restarted. See
+[release operations](docs/local-releases.md) for publication, idle-game startup,
+migration behavior and diagnosis. Windows x64 currently uses installed Node.js,
+Git and Windows PowerShell.
+
 On Windows, the preferred source launcher for the supplied example is:
 
 ```powershell

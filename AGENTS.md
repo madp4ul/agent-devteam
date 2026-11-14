@@ -25,6 +25,15 @@ When creating or revising process definitions and agent role instructions, read
 `docs/process-authoring.md` for authoring principles and
 `docs/process-definition-reference.md` for configuration contracts.
 
+### Releases and installed versions
+
+Before changing release builds, publication, launcher startup or cache cleanup,
+read `docs/local-releases.md`. It is the current operating policy; ADRs 0051 and
+0052 record the shared-release and retention decisions that supersede the
+earlier local-only design. Keep that guide and the implemented workflow/cache
+behavior consistent. Use the managed lifecycle rather than bypassing its
+in-use and uncertain-ownership protections with manual deletion.
+
 ### Browser UI controls
 
 Icon-only buttons must render a shared, geometrically centered SVG component;

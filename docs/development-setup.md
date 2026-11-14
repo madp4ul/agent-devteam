@@ -5,6 +5,13 @@ planned end-user distribution is a self-contained host-native application, so
 this toolchain is a development requirement rather than the intended product
 installation experience.
 
+For ongoing project work alongside framework development, use the
+[shared release workflow](local-releases.md). Version-tagged commits produce
+downloadable GitHub Release assets. `pnpm release:install` sets up a bootstrap
+that checks, downloads and verifies latest at project startup; running hosts
+keep their original installation until restarted. The source commands below
+remain the development workflow.
+
 ## Install the prerequisites on Windows
 
 1. Install **Node.js 24 LTS** from the

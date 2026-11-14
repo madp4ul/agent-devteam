@@ -10,6 +10,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit",
     "build": "vite build",
+    "release:build": "node scripts/build-release-artifact.mjs",
+    "release:install": "node scripts/install-release-launcher.mjs",
+    "release:local": "node scripts/build-release-artifact.mjs",
+    "snapshot:local": "node scripts/publish-local-release.mjs",
     "generate:schema-snapshot": "node --experimental-strip-types scripts/generate-coordination-schema-snapshot.ts",
     "test": "node --experimental-strip-types --test --test-reporter=spec \"test/**/*.test.ts\"",
     "test:application": "node --experimental-strip-types --test --test-reporter=spec test/application/coordination-application.test.ts",

@@ -35,6 +35,56 @@ Codex remains the agent runtime. The framework supplies task and process
 context, an isolated Git workspace, and scoped coordination tools, but it does
 not reimplement models, sessions, authentication, or general coding tools.
 
+### Shared releases, installation and startup selection
+
+Shared releases are complete native-platform application ZIPs built from existing
+committed version tags and attached to GitHub Releases. Read-only CI builds and
+verifies the application before a separate publishing job attaches all assets to
+a draft and publishes it as latest. Source, release tooling and workflow belong
+in Git; generated installations and archives do not. Development snapshots remain
+a separate disposable verification mechanism.
+
+Publication and hosted retention are serialized repository-wide. After a complete
+publication, retention keeps five eligible stable framework release objects,
+protecting just-published and designated-latest identities and preserving source
+tags, drafts, prereleases and unrelated releases. Candidate identity/latest are
+rechecked before deletion; cleanup failures do not undo publication.
+
+A self-contained local bootstrap checks GitHub latest once at project startup,
+verifies the matching asset's digest and committed provenance, extracts safely
+into staging and atomically installs into a cache outside the development
+checkout. The existing sibling deployment folder serves as that cache. Bootstrap
+configuration records the source repository without persisting credentials.
+
+The returned concrete installation supplies readable host source, browser assets,
+schema/runtime resources, workers, MCP adapter and copied dependencies. Installed
+Node.js runs this interim distribution; the longer-term self-contained product
+distribution remains the intent of ADR 0002. Installation metadata identifies the
+version, full source revision and captured source/dependency graph for diagnosis.
+
+Project launchers retain that one installation for validation and host startup.
+Browser files and later worker/MCP processes derive from it, so a newer published
+release cannot mix code versions inside a running host. Existing installations
+remain unchanged. A separate deployment-cache SQLite database serializes final
+install/select/pin/prune and retains process-lifetime usage evidence. Cleanup
+removes managed unused versions while preserving the selection, active leases,
+lingering worker paths and uncertain legacy ownership. Normal steady state is
+one installed version after old users exit; unknown evidence suppresses deletion.
+This bookkeeping does not access project coordination state.
+Normal stop/restart checks and adopts latest;
+publication neither restarts hosts nor interrupts agents. Unavailable discovery
+warns and may use the last validated cache; corrupt artifacts fail closed.
+
+Release selection does not own project state, process definitions, credentials
+or runtime permissions. The usual bound-state guard, compatibility checks,
+verified migration backup, transactional upgrades and paused startup still run.
+Failed startup reports the selected release and existing configuration errors;
+there is no silent downgrade, source fallback or automatic state restoration.
+See [ADR 0050](adr/0050-select-immutable-local-releases-at-host-startup.md), its
+[publication refinement](adr/0051-distribute-tagged-releases-through-github.md)
+and [retention decision](adr/0052-bound-hosted-and-installed-release-retention.md),
+plus [release operations](local-releases.md).
+
 ## Major parts
 
 ### Host and user interface

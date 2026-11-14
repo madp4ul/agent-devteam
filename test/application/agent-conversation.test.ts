@@ -118,7 +118,7 @@ test("a source delivered earlier remains exact outside its queued activation's b
   await application.waitForAutomationIdle();
 });
 
-test("a self-authored activation source stays available through retained conversation history", async (t) => {
+test("rejected self-mentions permit corrected progress notes without breaking conversation continuity", async (t) => {
   const fixture = await createHandoffFixture();
   const runtime = new ControlledAgentRuntime();
   const application = await CoordinationApplication.start({
@@ -134,8 +134,8 @@ test("a self-authored activation source stays available through retained convers
   const created = application.createTask({
     boardId: "delivery",
     columnId: "implementation",
-    title: "Retain a self-authored activation source",
-    description: "Keep exact source provenance without repeating retained text.",
+    title: "Reject self-activation while retaining progress notes",
+    description: "Preserve supported comment history and conversation continuity.",
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "create-self-authored-source-task",
   });
@@ -144,23 +144,39 @@ test("a self-authored activation source stays available through retained convers
 
   await application.resumeAutomation();
   const initial = await runtime.waitForRequest(1);
-  const source = application.addTaskComment({
+  const before = readTask(application, created.task.id);
+  const command = {
     taskId: created.task.id,
     body: "@implementer revisit this after the current activation.",
-    actor: { kind: "agent", id: initial.agent.id },
+    actor: { kind: "agent" as const, id: initial.agent.id },
     attemptId: initial.attemptId,
     idempotencyKey: "self-authored-source-comment",
+  };
+  const rejected = application.addTaskComment(command);
+  assert.equal(rejected.accepted, false);
+  assert.equal("reason" in rejected && rejected.reason, "self-mention");
+  assert.deepEqual(readTask(application, created.task.id), before);
+
+  const corrected = application.addTaskComment({ ...command, body: "Progress note already retained by this conversation." });
+  assert.equal(corrected.accepted, true);
+  if (!corrected.accepted) return;
+  assert.equal(readTask(application, created.task.id).activations.length, before.activations.length);
+  const requested = application.addTaskComment({
+    taskId: created.task.id,
+    body: "@implementer please continue after the current activation.",
+    actor: { kind: "user", id: "paul" },
+    idempotencyKey: "user-requests-supported-continuation",
   });
-  assert.equal(source.accepted, true);
-  if (!source.accepted) return;
+  assert.equal(requested.accepted, true);
+  if (!requested.accepted) return;
   runtime.complete({ status: "completed", summary: "Initial activation complete.", threadId: "self-source-thread" });
 
   const resumed = await runtime.waitForRequest(2);
   assert.equal(resumed.resumeThreadId, "self-source-thread");
-  assert.equal(resumed.activationContext.sourceDelivery, "activation-only");
-  assert.deepEqual(resumed.activationContext.comments, []);
-  assert.equal("body" in resumed.sourceEvent ? resumed.sourceEvent.body : undefined, source.comment.body);
-  assert.ok(resumed.task.comments.some(({ id }) => id === source.comment.id));
+  assert.deepEqual(resumed.activationContext.comments.map(({ body }) => body), [requested.comment.body]);
+  assert.equal("body" in resumed.sourceEvent ? resumed.sourceEvent.body : undefined, requested.comment.body);
+  assert.ok(resumed.task.comments.some(({ id }) => id === corrected.comment.id));
+  assert.ok(!resumed.task.comments.some(({ body }) => body === command.body));
   application.pauseAutomation();
   runtime.complete({ status: "completed", summary: "Self-authored source handled.", threadId: "self-source-thread" });
   await application.waitForAutomationIdle();

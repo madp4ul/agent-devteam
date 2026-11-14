@@ -1,0 +1,154 @@
+name: Publish framework release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing committed version tag (for example v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: framework-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      commit: ${{ steps.package.outputs.commit }}
+      artifact_id: ${{ steps.transfer.outputs.artifact-id }}
+    steps:
+      - name: Validate requested version
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
+            throw 'An existing stable version tag vX.Y.Z is required.'
+          }
+      - name: Check out the existing tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install the locked dependency graph
+        shell: pwsh
+        run: |
+          npm install --global pnpm@11.9.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check types and behavior
+        shell: pwsh
+        env:
+          COORDINATION_RUN_CODEX_INTEGRATION: ''
+          COORDINATION_RUN_CODEX_CAPABILITY_PROBE: ''
+        run: |
+          pnpm typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build and verify the committed application package
+        id: package
+        shell: pwsh
+        run: |
+          $result = node scripts/build-release-artifact.mjs --tag $env:RELEASE_TAG --out dist/releases
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $package = ($result | Select-Object -Last 1) | ConvertFrom-Json
+          "commit=$($package.commit)" >> $env:GITHUB_OUTPUT
+          Copy-Item -LiteralPath scripts/prune-github-releases.mjs -Destination dist/releases/prune-github-releases.mjs
+      - name: Retain the verified package
+        id: transfer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: framework-release
+          path: dist/releases/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: windows-latest
+    concurrency:
+      group: framework-release-publication-${{ github.repository }}
+      queue: max
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Obtain the verified package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: framework-release
+          path: release-assets
+      - name: Attach assets to a draft and publish it
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          $archive = "release-assets/agent-coordination-framework-$env:RELEASE_TAG-win32-x64.zip"
+          $checksum = "$archive.sha256"
+          if (-not (Test-Path -LiteralPath $archive) -or -not (Test-Path -LiteralPath $checksum)) { throw 'Verified release assets are missing.' }
+          $expectedDigest = ((Get-Content -LiteralPath $checksum -Raw) -split '\s+')[0]
+          $actualDigest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+          if ($expectedDigest -notmatch '^[a-fA-F0-9]{64}$' -or $expectedDigest -ine $actualDigest) { throw 'Transferred release package failed SHA-256 verification.' }
+          $tagCommit = gh api "repos/$env:GH_REPO/commits/$env:RELEASE_TAG" --jq .sha
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($tagCommit -ne $env:RELEASE_COMMIT) { throw 'The remote tag moved after the verified build; publication is blocked.' }
+          gh release create $env:RELEASE_TAG $archive $checksum --verify-tag --target $env:RELEASE_COMMIT --draft --title $env:RELEASE_TAG --notes "Windows x64 application built from committed revision $env:RELEASE_COMMIT. Requires installed Node.js 24 or later and Git."
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release edit $env:RELEASE_TAG --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain five published framework versions
+        id: retention
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          node release-assets/prune-github-releases.mjs --repository $env:GH_REPO --published-tag $env:RELEASE_TAG --keep 5
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Report incomplete retention cleanup
+        if: ${{ steps.retention.outcome == 'failure' }}
+        shell: pwsh
+        run: |
+          Write-Output '::warning::Release publication succeeded, but old-release cleanup did not finish. Inspect the retention step before the next publication.'
+
+  cleanup-transfer:
+    needs: [build, publish]
+    if: ${{ needs.publish.result == 'success' && needs.build.outputs.artifact_id != '' }}
+    runs-on: windows-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Remove this run's temporary transfer package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TRANSFER_ARTIFACT: ${{ needs.build.outputs.artifact_id }}
+        run: |
+          if ($env:TRANSFER_ARTIFACT -notmatch '^[1-9]\d*$') {
+            Write-Output '::warning::Temporary build artifact identity is invalid; the artifact will expire after one day.'
+            exit 0
+          }
+          gh api --method DELETE "repos/$env:GH_REPO/actions/artifacts/$env:TRANSFER_ARTIFACT"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output '::warning::Temporary artifact cleanup failed; publication remains valid and the artifact will expire after one day.'
+            exit 0
+          }
