@@ -1,5 +1,8 @@
 # Feedback and lifecycle menu review
 
+The completed review instance has been shut down and its generated data/assets
+removed. These instructions recreate an isolated instance when needed.
+
 From the repository root, run:
 
 ```powershell
@@ -61,8 +64,7 @@ the review host does not artificially delay production archival code.
 
 The [success-message inventory](../../.scratch/operation-feedback-menus/success-feedback-inventory.md)
 lists every remaining floating success family and distinguishes progress messages
-and local confirmations. Notification policy is unchanged; keep/remove decisions
-are open for review.
+and local confirmations. The inventory records the final approved notification policy.
 
 With the review host running, prepare the passive examples once:
 
@@ -72,14 +74,13 @@ node .scratch/operation-feedback-menus/seed-success-review.mjs
 
 The seed verifies the isolated project and preserves existing examples on rerun.
 Its task links are printed and saved in the ignored `environment/success-review.json`.
-For the current review, open [T-0011](http://127.0.0.1:3010/tasks/T-0011), click
-**Edit task → Save task**, and see the floating success message. No text change
-is required. Close it with X before repeating. The inventory links additional
-relationship and unarchive examples that do not activate agents.
+Use the printed main review task link and click **Edit task → Save task** to see
+floating success. No text change is required. Close with X or wait for expiry
+before repeating. The inventory describes relationship and unarchive examples.
 
-Success cards now disappear after five seconds; hover or keyboard focus pauses
-the draining left edge. Errors remain until closed. To compare both, open
-[T-0012](http://127.0.0.1:3010/tasks/T-0012) and try adding T-0011 as a dependency
-with Architecture Designer as resume agent. This circular relationship is safely
-rejected and shows a real error. Cancel the dialog, then Edit task → Save task
-to display a success alongside it. The inventory contains the full steps.
+Success cards disappear after five unpaused seconds. Hover or keyboard focus
+pauses the draining left edge; errors remain until closed. For a safe error,
+open the dependency target and try adding the main review task as its dependency,
+with Architecture Designer as resume agent. The circular relationship is rejected.
+Cancel the dialog and save an edit to display success alongside that error.
+Task IDs are assigned afresh after teardown; use seed output rather than old URLs.

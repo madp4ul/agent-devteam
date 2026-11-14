@@ -1,17 +1,18 @@
 # Framework and idle game: code growth and change stability
 
-Local committed snapshots, generated on 2026-10-27. No network fetch was performed.
+Local committed snapshots: framework through 2026-11-14; idle game through
+2026-10-27. Each project's endpoint is listed below. No network fetch was performed.
 Working-tree and staged changes are excluded. These are delivered mainline changes,
 not a measure of all editing effort or a rating of architectural quality.
 
 | Endpoint metric | Agent Coordination Framework | Idle game |
 | --- | ---: | ---: |
-| Commit | `62eaa7e7` | `907b8aa0` |
-| Date | 2026-10-25 | 2026-10-27 |
-| First-parent snapshots | 218 | 687 |
-| Completed-work proxy | 165 resolved implementation tickets | 152 delivery merges |
-| Production nonblank lines | 27,616 | 29,715 |
-| Test/support nonblank lines | 35,512 | 29,464 |
+| Commit | `d084317d` | `907b8aa0` |
+| Date | 2026-11-14 | 2026-10-27 |
+| First-parent snapshots | 235 | 687 |
+| Completed-work proxy | 187 resolved implementation tickets | 152 delivery merges |
+| Production nonblank lines | 31,002 | 29,715 |
+| Test/support nonblank lines | 40,348 | 29,464 |
 
 ## Change volume over the course of each project
 
@@ -42,7 +43,8 @@ This is a volume measure, not a count of unique original lines or proof of quali
 | Framework | 100–120 | 20 | 378.7 | 175.6 | 0.702% |
 | Framework | 120–141 | 21 | 270.3 | 276.0 | 0.300% |
 | Framework | 141–161 | 20 | 219.1 | 233.9 | 0.155% |
-| Framework | 161–165 | 4 | 30.2 | 78.8 | 0.015% |
+| Framework | 161–181 | 20 | 226.6 | 242.3 | 0.136% |
+| Framework | 181–187 | 6 | 164.0 | 185.5 | 0.130% |
 | Idle game | 0–20 | 20 | 1,074.7 | 654.7 | 4.373% |
 | Idle game | 20–40 | 20 | 329.8 | 270.0 | 0.486% |
 | Idle game | 40–60 | 20 | 201.8 | 251.1 | 0.342% |
@@ -86,9 +88,8 @@ metric alone; large individual changes still deserve inspection in the interval 
   A single resolution commit can cover several tickets, and bookkeeping delays
   mean intervals cannot be assigned precisely to individual tickets.
 - The idle game uses `integration/T-0002-idle-game`, fixed at
-  `907b8aa07f1fc65c1cc1c8dd7b1e38b912604559`. Its checked-out `main` stops on October 12 and
-  local `origin/main` on October 17; neither represents the recent integration work.
-  Only commits reachable from the chosen snapshot are included.
+  `907b8aa07f1fc65c1cc1c8dd7b1e38b912604559` (2026-10-27). Only commits reachable from
+  the chosen snapshot are included; the endpoint does not imply current branch state.
 - Idle completion proxies are first-parent merges, excluding explicit merges into
   feature/task/docs branches (synchronization) and publication feedback merges.
   The [included merges](project-growth/idle-game/merges.json) and
@@ -131,7 +132,7 @@ metric alone; large individual changes still deserve inspection in the interval 
 From the framework repository, without staging or checking out historical trees:
 
 ```powershell
-python docs/project-growth/generate.py --ref 62eaa7e7da8bc35fa62362acea07554ba0d6e70e
+python docs/project-growth/generate.py --ref d084317d2405b26e3be77423068fe51db993601e
 python docs/project-growth/compare_idle.py --repo ../idle-games --ref 907b8aa07f1fc65c1cc1c8dd7b1e38b912604559
 ```
 

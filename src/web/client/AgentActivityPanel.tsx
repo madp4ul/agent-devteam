@@ -1,6 +1,6 @@
 import { RuntimeWaitingSummary } from "./RuntimeWaitingSummary.tsx";
 import { RunCleanup, runStatusLabel } from "./RunCleanup.tsx";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type {
   ActiveRunView,
@@ -10,7 +10,7 @@ import type {
   CollaboratorView,
   UserTaskInspectionView,
 } from "../../application/browser-transport-contract.ts";
-import { dismissActivation, interruptTask } from "./api.ts";
+import { ApiError, dismissActivation, interruptTask } from "./api.ts";
 import { AgentInspectableMarker } from "./AgentInspectableMarker.tsx";
 import { WorkspacePreparation } from "./WorkspacePreparation.tsx";
 import { ElapsedTime } from "./ElapsedTime.tsx";
@@ -40,6 +40,17 @@ export function AgentActivityPanel({
   const [waitingReasonsExpanded, setWaitingReasonsExpanded] = useState(false);
   const [dismissal, setDismissal] = useState<ActivationView | null>(null);
   const [dismissalPending, setDismissalPending] = useState(false);
+  const [interruptionAttempt, setInterruptionAttempt] = useState<string>();
+  useEffect(() => {
+    if (interruptionAttempt === undefined) return;
+    const attempt = state.activations.flatMap((activation) => activation.attempts)
+      .find((entry) => entry.id === interruptionAttempt);
+    if (attempt === undefined || attempt.status === "running") return;
+    setInterruptionAttempt(undefined);
+    if (attempt.status === "interrupted") {
+      onFeedback({ role: "status", text: `Interrupted ${state.taskId}.` });
+    }
+  }, [interruptionAttempt, state.activations, state.taskId, onFeedback]);
   const names = new Map(state.collaborators.map((agent) => [agent.id, agent.name]));
   const agentName = (id: string): string => names.get(id) ?? id;
   const queued = state.activations.filter((activation) => activation.status === "queued");
@@ -77,13 +88,16 @@ export function AgentActivityPanel({
           <button
             disabled={state.activeRun.status === "interrupting" || state.activeRun.interruptionRequested || state.activeRun.stopRequested}
             onClick={() => {
-              onFeedback({ role: "status", text: `Interrupting ${state.taskId}…` });
+              setInterruptionAttempt(state.activeRun!.attemptId);
               void interruptTask(state.taskId, crypto.randomUUID())
-                .then(async () => {
-                  await onChanged();
-                  onFeedback({ role: "status", text: `Interruption requested for ${state.taskId}. Waiting for safe shutdown.` });
-                })
-                .catch((error) => onFeedback({ role: "alert", text: errorMessage(error) }));
+                .then(() => {
+                  // An accepted interruption keeps tracking through a transient refresh failure.
+                  void onChanged().catch((error) => onFeedback({ role: "alert", text: errorMessage(error) }));
+                }, (error) => {
+                  // A lost response does not establish whether the host accepted the request.
+                  if (error instanceof ApiError && error.status >= 400 && error.status < 500) setInterruptionAttempt(undefined);
+                  onFeedback({ role: "alert", text: errorMessage(error) });
+                });
             }}
           >
             {state.activeRun.status === "interrupting" || state.activeRun.interruptionRequested ? (

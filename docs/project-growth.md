@@ -1,7 +1,7 @@
 # Project growth snapshot
 
-Committed history through `62eaa7e7da8bc35fa62362acea07554ba0d6e70e` (2026-10-25). This report samples all
-218 commits on the first-parent history of that commit. Working-tree and
+Committed history through `d084317d2405b26e3be77423068fe51db993601e` (2026-11-14). This report samples all
+235 commits on the first-parent history of that commit. Working-tree and
 staged changes are excluded. Charts are local SVGs embedded in Markdown; no
 server, external libraries, or network connection is needed.
 
@@ -22,19 +22,19 @@ lists every marked commit.
 
 | Metric at endpoint | Count |
 | --- | ---: |
-| Resolved implementation tickets, cumulative | 165 |
-| All resolved tickets, cumulative (including decisions/research) | 193 |
-| Tickets currently marked resolved at endpoint | 193 |
-| Production source lines | 27,616 |
-| Test and test-support source lines | 35,512 |
-| Production source files | 161 |
-| Test and test-support source files | 117 |
+| Resolved implementation tickets, cumulative | 187 |
+| All resolved tickets, cumulative (including decisions/research) | 220 |
+| Tickets currently marked resolved at endpoint | 220 |
+| Production source lines | 31,002 |
+| Test and test-support source lines | 40,348 |
+| Production source files | 201 |
+| Test and test-support source files | 146 |
 | Prototype source lines (excluded from main charts) | 2,289 |
-| Generated schema snapshot lines (excluded) | 673 |
+| Generated schema snapshot lines (excluded) | 769 |
 
-At this endpoint, the project retains 167.4
-production lines and 215.2 test lines per
-resolved implementation ticket. Tests contain 1.29 times
+At this endpoint, the project retains 165.8
+production lines and 215.8 test lines per
+resolved implementation ticket. Tests contain 1.30 times
 as many source lines as production; this ratio measures size, not test quality.
 The broad intervals below make it possible to compare early build-out with
 later development without assuming equal feature size.
@@ -101,7 +101,8 @@ Broader intervals reduce the noise of individual tickets:
 | 100–120 | 20 | 77.8 | 166.8 |
 | 120–141 | 21 | 129.5 | 209.1 |
 | 141–161 | 20 | 138.5 | 207.2 |
-| 161–165 | 4 | 21.8 | 78.8 |
+| 161–181 | 20 | 148.3 | 215.8 |
+| 181–187 | 6 | 84.3 | 139.2 |
 
 Linear code-size growth would look roughly straight in the first chart and
 roughly flat in net growth per ticket. Sustained exponential growth would need

@@ -75,7 +75,8 @@ def comparison(framework, idle, snapshot):
             start = w['tickets']
     report = f'''# Framework and idle game: code growth and change stability
 
-Local committed snapshots, generated on 2026-10-27. No network fetch was performed.
+Local committed snapshots: framework through {end['date']}; idle game through
+{snapshot['date']}. Each project's endpoint is listed below. No network fetch was performed.
 Working-tree and staged changes are excluded. These are delivered mainline changes,
 not a measure of all editing effort or a rating of architectural quality.
 
@@ -145,9 +146,8 @@ metric alone; large individual changes still deserve inspection in the interval 
   A single resolution commit can cover several tickets, and bookkeeping delays
   mean intervals cannot be assigned precisely to individual tickets.
 - The idle game uses `integration/T-0002-idle-game`, fixed at
-  `{snapshot['commit']}`. Its checked-out `main` stops on October 12 and
-  local `origin/main` on October 17; neither represents the recent integration work.
-  Only commits reachable from the chosen snapshot are included.
+  `{snapshot['commit']}` ({snapshot['date']}). Only commits reachable from
+  the chosen snapshot are included; the endpoint does not imply current branch state.
 - Idle completion proxies are first-parent merges, excluding explicit merges into
   feature/task/docs branches (synchronization) and publication feedback merges.
   The [included merges](project-growth/idle-game/merges.json) and

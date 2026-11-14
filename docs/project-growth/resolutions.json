@@ -1542,5 +1542,221 @@
     "identity": ".scratch/computer-use-unsupported/issues/01-clarify-framework-limitation.md",
     "implementation": true,
     "type": "task"
+  },
+  {
+    "commit": "3b5e50e1459794d328b1772d8f74b98782b41e8e",
+    "date": "2026-11-01",
+    "path": ".scratch/heavy-usage/issues/06-expire-archived-task-command-response-caches.md",
+    "identity": ".scratch/heavy-usage/issues/06-expire-archived-task-command-response-caches.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b05c33a7adbbc88e7d14abf829a33500a06572f1",
+    "date": "2026-11-08",
+    "path": ".scratch/agent-coordination-framework/issues/101-separate-dependencies-from-execution-blockers.md",
+    "identity": ".scratch/agent-coordination-framework/issues/101-separate-dependencies-from-execution-blockers.md",
+    "implementation": false,
+    "type": "task (bug)"
+  },
+  {
+    "commit": "b05c33a7adbbc88e7d14abf829a33500a06572f1",
+    "date": "2026-11-08",
+    "path": ".scratch/agent-coordination-framework/issues/102-collapse-boards-to-interesting-columns.md",
+    "identity": ".scratch/agent-coordination-framework/issues/102-collapse-boards-to-interesting-columns.md",
+    "implementation": false,
+    "type": "task (feature)"
+  },
+  {
+    "commit": "b05c33a7adbbc88e7d14abf829a33500a06572f1",
+    "date": "2026-11-08",
+    "path": ".scratch/database-startup-fast-path/issues/01-safe-clean-startup.md",
+    "identity": ".scratch/database-startup-fast-path/issues/01-safe-clean-startup.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b05c33a7adbbc88e7d14abf829a33500a06572f1",
+    "date": "2026-11-08",
+    "path": ".scratch/framework-improvements-2026-09/issues/29-confirm-nested-worktree-archival-and-list-bulk-failures.md",
+    "identity": ".scratch/framework-improvements-2026-09/issues/29-confirm-nested-worktree-archival-and-list-bulk-failures.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b05c33a7adbbc88e7d14abf829a33500a06572f1",
+    "date": "2026-11-08",
+    "path": ".scratch/heavy-usage/issues/11-dispatch-independently-of-workspace-preparation.md",
+    "identity": ".scratch/heavy-usage/issues/11-dispatch-independently-of-workspace-preparation.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b05c33a7adbbc88e7d14abf829a33500a06572f1",
+    "date": "2026-11-08",
+    "path": ".scratch/heavy-usage/issues/12-show-workspace-preparation-progress.md",
+    "identity": ".scratch/heavy-usage/issues/12-show-workspace-preparation-progress.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "b05c33a7adbbc88e7d14abf829a33500a06572f1",
+    "date": "2026-11-08",
+    "path": ".scratch/heavy-usage/issues/13-resume-automation-while-pausing.md",
+    "identity": ".scratch/heavy-usage/issues/13-resume-automation-while-pausing.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "aa910798acb6fd9953169c90696c8d8b973f7e87",
+    "date": "2026-11-08",
+    "path": ".scratch/agent-coordination-framework/issues/103-unify-toolbar-execution-tooltip.md",
+    "identity": ".scratch/agent-coordination-framework/issues/103-unify-toolbar-execution-tooltip.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "aa910798acb6fd9953169c90696c8d8b973f7e87",
+    "date": "2026-11-08",
+    "path": ".scratch/agent-coordination-framework/issues/104-restore-simple-resume-button-presentation.md",
+    "identity": ".scratch/agent-coordination-framework/issues/104-restore-simple-resume-button-presentation.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "aa910798acb6fd9953169c90696c8d8b973f7e87",
+    "date": "2026-11-08",
+    "path": ".scratch/database-startup-fast-path/issues/02-investigate-259-second-integrity-check.md",
+    "identity": ".scratch/database-startup-fast-path/issues/02-investigate-259-second-integrity-check.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "169894c40a7a58dc751c3bf9ca5aac9a6124dc1d",
+    "date": "2026-11-08",
+    "path": ".scratch/agent-coordination-framework/issues/105-interrupt-agents-waiting-on-programs.md",
+    "identity": ".scratch/agent-coordination-framework/issues/105-interrupt-agents-waiting-on-programs.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "f39d0af6d1e9f4654678089113f312535c104baa",
+    "date": "2026-11-10",
+    "path": ".scratch/agent-coordination-framework/issues/107-reject-agent-self-mentions-in-comments.md",
+    "identity": ".scratch/agent-coordination-framework/issues/107-reject-agent-self-mentions-in-comments.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "7dc47fa74590bf5053c7b5fe006336f3f217b6ae",
+    "date": "2026-11-10",
+    "path": ".scratch/agent-coordination-framework/issues/106-represent-shared-resource-ownership-and-waits.md",
+    "identity": ".scratch/agent-coordination-framework/issues/106-represent-shared-resource-ownership-and-waits.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "895b9b820f84dfd1d007d5ecd783ab8ac4aa3c93",
+    "date": "2026-11-11",
+    "path": ".scratch/agent-coordination-framework/issues/108-settle-budget-retries-after-windows-termination-errors.md",
+    "identity": ".scratch/agent-coordination-framework/issues/108-settle-budget-retries-after-windows-termination-errors.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "25b3fac30c7dba8fb304ada8202d9749b8d3cb11",
+    "date": "2026-11-11",
+    "path": ".scratch/agent-coordination-framework/issues/109-expose-and-recover-unconfirmed-runtime-termination.md",
+    "identity": ".scratch/agent-coordination-framework/issues/109-expose-and-recover-unconfirmed-runtime-termination.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "25b3fac30c7dba8fb304ada8202d9749b8d3cb11",
+    "date": "2026-11-11",
+    "path": ".scratch/agent-coordination-framework/issues/110-unify-stop-retries-interruption-and-retry-status.md",
+    "identity": ".scratch/agent-coordination-framework/issues/110-unify-stop-retries-interruption-and-retry-status.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "62ad247940954881fb690eef28b4801074151911",
+    "date": "2026-11-14",
+    "path": ".scratch/agent-coordination-framework/issues/112-fix-blocked-and-unresponsive-task-archival.md",
+    "identity": ".scratch/agent-coordination-framework/issues/112-fix-blocked-and-unresponsive-task-archival.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "62ad247940954881fb690eef28b4801074151911",
+    "date": "2026-11-14",
+    "path": ".scratch/agent-coordination-framework/issues/113-provide-viewport-fixed-interactive-operation-feedback.md",
+    "identity": ".scratch/agent-coordination-framework/issues/113-provide-viewport-fixed-interactive-operation-feedback.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "62ad247940954881fb690eef28b4801074151911",
+    "date": "2026-11-14",
+    "path": ".scratch/agent-coordination-framework/issues/114-make-archival-progress-visible-and-multi-column-requests-responsive.md",
+    "identity": ".scratch/agent-coordination-framework/issues/114-make-archival-progress-visible-and-multi-column-requests-responsive.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "45bcdf0e16ab903cd0e5998fae15f5566bd28dc4",
+    "date": "2026-11-14",
+    "path": ".scratch/agent-runtime-permissions/issues/01-select-explicit-workspace-permissions.md",
+    "identity": ".scratch/agent-runtime-permissions/issues/01-select-explicit-workspace-permissions.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "45bcdf0e16ab903cd0e5998fae15f5566bd28dc4",
+    "date": "2026-11-14",
+    "path": ".scratch/notification-delivery-loop/issues/01-prevent-repeated-desktop-delivery.md",
+    "identity": ".scratch/notification-delivery-loop/issues/01-prevent-repeated-desktop-delivery.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "d084317d2405b26e3be77423068fe51db993601e",
+    "date": "2026-11-14",
+    "path": ".scratch/operation-feedback-menus/issues/01-implement-feedback-and-lifecycle-menus.md",
+    "identity": ".scratch/operation-feedback-menus/issues/01-implement-feedback-and-lifecycle-menus.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "d084317d2405b26e3be77423068fe51db993601e",
+    "date": "2026-11-14",
+    "path": ".scratch/operation-feedback-menus/issues/02-show-individual-archivals-and-run-status-chips.md",
+    "identity": ".scratch/operation-feedback-menus/issues/02-show-individual-archivals-and-run-status-chips.md",
+    "implementation": true,
+    "type": "task"
+  },
+  {
+    "commit": "d084317d2405b26e3be77423068fe51db993601e",
+    "date": "2026-11-14",
+    "path": ".scratch/operation-feedback-menus/issues/03-inventory-remaining-success-feedback.md",
+    "identity": ".scratch/operation-feedback-menus/issues/03-inventory-remaining-success-feedback.md",
+    "implementation": false,
+    "type": "research"
+  },
+  {
+    "commit": "d084317d2405b26e3be77423068fe51db993601e",
+    "date": "2026-11-14",
+    "path": ".scratch/operation-feedback-menus/issues/04-simplify-and-time-success-feedback.md",
+    "identity": ".scratch/operation-feedback-menus/issues/04-simplify-and-time-success-feedback.md",
+    "implementation": true,
+    "type": "feature"
+  },
+  {
+    "commit": "d084317d2405b26e3be77423068fe51db993601e",
+    "date": "2026-11-14",
+    "path": ".scratch/operation-feedback-menus/issues/05-float-workspace-feedback-and-compact-cards.md",
+    "identity": ".scratch/operation-feedback-menus/issues/05-float-workspace-feedback-and-compact-cards.md",
+    "implementation": true,
+    "type": "feature"
   }
 ]

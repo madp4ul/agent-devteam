@@ -62,3 +62,7 @@
 [1013/205639.645:ERROR:gpu\command_buffer\service\shared_image\shared_image_manager.cc:395] SharedImageManager::ProduceMemory: Trying to Produce a Memory representation from a non-existent mailbox.
 [1013/205639.645:ERROR:gpu\command_buffer\service\shared_image\shared_image_manager.cc:395] SharedImageManager::ProduceMemory: Trying to Produce a Memory representation from a non-existent mailbox.
 [1013/205639.645:ERROR:gpu\command_buffer\service\shared_image\shared_image_manager.cc:395] SharedImageManager::ProduceMemory: Trying to Produce a Memory representation from a non-existent mailbox.
+[1114/155653.879:WARNING:net\dns\dns_config_service_win.cc:609] Failed to read DnsConfig.
+[1114/155653.892:ERROR:ui\gl\angle_platform_impl.cc:47] vulkan_icd.cpp:158 (angle::vk::ScopedVkLoaderEnvironment::ScopedVkLoaderEnvironment): Error setting CWD for Vulkan layers init.
+[1114/155654.050:WARNING:ui\gl\angle_platform_impl.cc:52] vulkan_icd.cpp:388 (angle::vk::ChoosePhysicalDevice): Preferred device ICD not found. Using default physicalDevice instead.
+[1114/155659.281:WARNING:net\extras\sqlite\sqlite_persistent_store_backend_base.cc:181] Failed to post task from operator()@net\extras\sqlite\sqlite_persistent_shared_dictionary_store.cc:259 to client_task_runner_.

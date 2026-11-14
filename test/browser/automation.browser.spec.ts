@@ -16,6 +16,13 @@ import {
   test,
 } from "./browser-fixture.ts";
 
+const testServerOptions = {
+  host: "127.0.0.1", port: 0,
+  ...(process.env.COORDINATION_BROWSER_TEST_ASSET_DIRECTORY === undefined ? {} : {
+    assetDirectory: process.env.COORDINATION_BROWSER_TEST_ASSET_DIRECTORY,
+  }),
+};
+
 test("process changes expose startup impact and explicit stale-work recovery", async ({ page }) => {
   let staleActivations = [
     {
@@ -151,7 +158,7 @@ test("actual definition removal, user remapping, and identity restoration stay r
 
   await writeProcessEvolutionDefinition(definitionPath, { includeImplementation: false });
   const removed = await CoordinationApplication.start({ processDefinitionPath: definitionPath, databasePath });
-  const removedServer = await startWebServer(removed, { host: "127.0.0.1", port: 0 });
+  const removedServer = await startWebServer(removed, testServerOptions);
   await page.goto(removedServer.baseUrl);
   const impact = page.locator(".process-impact");
   await expect(impact).toContainText(`${created.task.id} · Recover changed process state`);
@@ -163,13 +170,15 @@ test("actual definition removal, user remapping, and identity restoration stay r
   await expect(page.locator(".process-impact")).toHaveCount(0);
   await page.reload();
   await expect(page.locator(".process-impact")).toHaveCount(0);
+  await page.goto("about:blank");
   await removedServer.close();
   removed.close();
 
   const restartedRemoved = await CoordinationApplication.start({ processDefinitionPath: definitionPath, databasePath });
-  const restartedRemovedServer = await startWebServer(restartedRemoved, { host: "127.0.0.1", port: 0 });
+  const restartedRemovedServer = await startWebServer(restartedRemoved, testServerOptions);
   await page.goto(restartedRemovedServer.baseUrl);
   await expect(page.locator(".process-impact")).toHaveCount(0);
+  await page.goto("about:blank");
   await restartedRemovedServer.close();
   restartedRemoved.close();
 
@@ -179,25 +188,31 @@ test("actual definition removal, user remapping, and identity restoration stay r
     implementationName: "Restored Implementation",
   });
   const restored = await CoordinationApplication.start({ processDefinitionPath: definitionPath, databasePath });
-  const restoredServer = await startWebServer(restored, { host: "127.0.0.1", port: 0 });
+  const restoredServer = await startWebServer(restored, testServerOptions);
   await page.goto(restoredServer.baseUrl);
   await expect(page.getByRole("heading", { name: "Renamed Delivery" })).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(created.task.id) })).toBeVisible();
   await expect(page.locator(".process-impact")).toHaveCount(0);
+  await page.goto("about:blank");
   await restoredServer.close();
   restored.close();
 });
 
 
 
-test("task interruption waits for confirmation and offers contextual continuation", async ({ page }) => {
+for (const failure of ["none", "refresh", "response"] as const) test(`task interruption waits for confirmation and offers contextual continuation (${failure})`, async ({ page }) => {
+  const refreshFails = failure === "refresh";
   let interruptionState: "running" | "interrupting" | "interrupted" = "running";
+  const finishInterruption = Promise.withResolvers<void>();
+  let failNextInterruptRefresh = false;
   let continuedMessage: string | undefined;
   await page.route("**/api/tasks/T-0002/interrupt", async (route) => {
     interruptionState = "interrupting";
-    await new Promise<void>((resolve) => setTimeout(resolve, 1_300));
+    failNextInterruptRefresh = refreshFails;
+    if (failure === "response") await route.abort();
+    else await route.fulfill({ status: 202, json: { accepted: true, state: "interrupting" } });
+    await finishInterruption.promise;
     interruptionState = "interrupted";
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accepted: true }) });
   });
   await page.route("**/api/tasks/T-0002/continue", async (route) => {
     continuedMessage = (route.request().postDataJSON() as { message: string }).message;
@@ -233,6 +248,10 @@ test("task interruption waits for confirmation and offers contextual continuatio
     await route.fulfill({ response, json: body });
   });
   await page.route("**/api/tasks/T-0002", async (route) => {
+    if (failNextInterruptRefresh) {
+      failNextInterruptRefresh = false;
+      return route.fulfill({ status: 503, json: { reason: "Temporary interruption refresh failure" } });
+    }
     const response = await route.fetch();
     const body = await response.json();
     body.inspection.run = interruptionState === "interrupted"
@@ -329,9 +348,17 @@ test("task interruption waits for confirmation and offers contextual continuatio
     "activity-spinner-spin",
   );
   await interruptClick;
+  try {
+    if (refreshFails) await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("alert").filter({ hasText: "Temporary interruption refresh failure" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Operation feedback" }).getByRole("status")).toHaveCount(0);
+  } finally {
+    finishInterruption.resolve();
+  }
   const interruptedCurrent = page.locator(".activity-current.interrupted");
   await expect(interruptedCurrent).toContainText("consulting-agent");
   await expect(interruptedCurrent).toContainText("Interrupted · awaiting your decision");
+  const interruptionFeedback = page.getByRole("region", { name: "Operation feedback" }).getByRole("status");
+  await expect(interruptionFeedback).toHaveText(["Interrupted T-0002."]);
   await expect(page.getByRole("region", { name: "Agent activity" }))
     .not.toContainText("Continuation message (optional)");
   await expect(page.getByRole("region", { name: "Needs attention" })
@@ -575,7 +602,7 @@ boards:
   });
   expect(created.accepted).toBe(true);
   if (!created.accepted) return;
-  const server = await startWebServer(application, { host: "127.0.0.1", port: 0 });
+  const server = await startWebServer(application, testServerOptions);
   try {
     await page.goto(`${server.baseUrl}/tasks/${created.task.id}`);
     await page.getByRole("button", { name: "Dismiss activation for Implementation Agent" }).click();
@@ -585,6 +612,7 @@ boards:
     await expect(page.getByRole("region", { name: "Task timeline" }))
       .toContainText("Activation dismissed");
   } finally {
+    await page.goto("about:blank");
     await server.close();
     application.close();
   }
@@ -1171,7 +1199,7 @@ test("top-bar automation action transitions and Current runs navigation stay com
   expect(segmentLayout.bottoms.every((bottom) => segmentLayout.barBottom - bottom < 4)).toBe(true);
   expect(segmentLayout.gaps.every((gap) => Math.abs(gap) < 1)).toBe(true);
   await page.getByText("1 running").click();
-  const runLink = page.getByRole("link", { name: /implementer.*T-0002/ });
+  const runLink = page.getByRole("link", { name: /T-0002.*implementer/ });
   await expect(runLink).toHaveAttribute("target", "_blank");
   const popupPromise = page.waitForEvent("popup");
   await runLink.click();

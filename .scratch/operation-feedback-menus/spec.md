@@ -17,7 +17,8 @@ surface. Success/status feedback expires after five seconds of unpaused time;
 its left edge drains from top to bottom. Hover or keyboard focus within the card
 pauses both countdown and indicator. Error/alert feedback persists until closed.
 Cards stack naturally down the viewport without a separate scrolling list.
-Keep the current success producers while the user reviews the inventory.
+Retain the approved success producers. Interruption produces one success notice
+only after the requested attempt is confirmed interrupted, with no progress overlays.
 
 All page toolbars share three lifecycle menus in this order: Preparing, Running,
 Archiving. Labels use count-first wording without dot separators. Run

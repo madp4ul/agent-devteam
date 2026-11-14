@@ -1,14 +1,11 @@
 # Remaining success feedback inventory
 
-Audited 2026-11-14. Success families S01–S15 are approved to **keep** with timed dismissal.
+Audited 2026-11-14. Success families S01–S16 are approved to **keep** with timed dismissal.
 
-This inventory covers the floating **Operation feedback** surface. There are
-**15 completed-command success families**, plus **two interruption progress
-messages** using the same green surface. Relationship removal has four wording
-variants, grouped under one family below. No notification triggers were changed
-by this audit. Following the presentation review, success/status cards now expire
-after five seconds, paused by hover or keyboard focus. Errors remain until
-dismissed. The later review decisions below retain those success producers.
+This inventory covers the floating **Operation feedback** surface. The final
+policy retains **16 success families**. Success expires after five seconds of
+unpaused time; hover or keyboard focus pauses it. Errors remain until closed.
+Relationship removal has four wording variants grouped into one family.
 
 ## Floating success messages
 
@@ -29,21 +26,18 @@ dismissed. The later review decisions below retain those success producers.
 | S13 | Task workspace → Open folder | `Open request sent to the default folder application.` | The host receives the open request. | Keep |
 | S14 | Task workspace → Open in Visual Studio Code | `Open request sent to Visual Studio Code.` | The host receives the open request. | Keep |
 | S15 | Markdown local-file link | `Opened LABEL.` | The host receives the file-open request. | Keep |
+| S16 | Task details → Interrupt current attempt → matching attempt is confirmed interrupted | `Interrupted T-….` | The run stops and interruption recovery controls appear. Request acceptance alone produces no notice. | Keep |
 
 S09/S10 are specific to the task-detail attention panel's completion callback.
 Equivalent recovery controls reached elsewhere do not all publish these messages.
 
-## Green progress messages
+## Removed interruption progress messages
 
-| ID | Trigger | Message | Meaning | Decision |
-| --- | --- | --- | --- | --- |
-| P01 | Task details → Agent activity → Interrupt current attempt, immediately before its request | `Interrupting TASK-ID…` | Local acknowledgement that interruption was requested; the command may still fail. | Remove |
-| P02 | The same interruption request returns and task state refreshes | `Interruption requested for T-…. Waiting for safe shutdown.` | The interruption command was accepted; this does not itself establish that shutdown finished. | Replace with one actual-completion notice |
-
-One click can produce **both** P01 and P02 as separate feedback items. The run
-controls also display their own interrupting state. Review decision: neither progress stage should spawn feedback. Show only one
-notice when interruption actually succeeds; do not mistake request acceptance
-for completed shutdown. This behavior change is recorded for the next pass.
+The former `Interrupting TASK-ID…` and `Interruption requested… Waiting for safe
+shutdown.` overlays are removed. Pending state stays on the interruption button.
+Only confirmation from the requested attempt's terminal interrupted state produces
+S16. Tracking survives an accepted request followed by a failed refresh, so a later
+ordinary task poll can still publish that confirmation.
 
 ## Local confirmations using other surfaces
 
@@ -66,45 +60,32 @@ addressed, resource create/edit/archive, comment pin/unpin, conversation follow-
 and conversation retirement also have no floating success producer in the current
 client. Their controls/content/state changes provide their ordinary feedback.
 
-## Try the real controls in the example
+## Recreate the review examples
 
-The passive examples are in the isolated software-delivery instance on port 3010:
+The review server on port 3010 is stopped, and its generated environment and
+assets have been removed. Reusable source remains in the repository:
 
-- [Main review task — T-0011](http://127.0.0.1:3010/tasks/T-0011): S01, S02, S04–S07.
-- [Dependency target — T-0012](http://127.0.0.1:3010/tasks/T-0012): reverse dependency-removal variant of S06.
-- [Child example — T-0013](http://127.0.0.1:3010/tasks/T-0013): parent-removal variant of S06.
-- [Archived companion — T-0014](http://127.0.0.1:3010/tasks/T-0014): S03 via Unarchive task.
+1. Run `node --experimental-strip-types examples/software-delivery/ui-review.mjs`.
+2. Run `node .scratch/operation-feedback-menus/seed-success-review.mjs`.
+3. Use the task links printed by the seed; IDs can change after a fresh setup.
 
-For the simplest example, open T-0011, click **Edit task**, and click **Save task**.
-Saving without changing any text also produces the notification; this was verified
-in the browser. The existing floating `Updated T-0011.`
-message appears. Close it with X, then repeat. Identical messages are suppressed
-while an existing copy is still visible, so dismiss or let it expire between trials.
+On the main review task, **Edit task → Save task** shows success even without a
+text change. Close it or allow expiry before repeating identical feedback. The
+Column selector can safely move between Backlog and Awaiting User Approval,
+which have no watching agents. The dependency, child and archived companion
+provide relationship-removal and unarchive examples.
 
-For a real, repeatable **error** on T-0012, open **Relationships → More relationship
-types → Dependency**, select **Review success messages (T-0011)**, choose
-**Architecture Designer**, and click **Create dependency**. The existing reverse
-dependency makes this circular, so the command is rejected without adding a
-relationship. Cancel the dialog, then **Edit task → Save task** to see success and
-error together. The green card expires; the red card stays until X. This example
-was exercised in the browser with the revised presentation.
+For a repeatable error, open the dependency target and try adding the main review
+task as its dependency with Architecture Designer as resume agent. The existing
+reverse dependency makes this circular, so it is rejected without creating the
+relationship. Cancel that dialog, then Edit task → Save task to compare success
+and error. This path was exercised in the browser before teardown.
 
-For S02, use the **Column** selector to move between **Backlog** and **Awaiting
-User Approval**. Both have no watching agent. Avoid the Next shortcut for this
-particular trial because the next column after Backlog is watched.
-
-T-0011 starts with a dependency and a child relationship. You can change their
-resume agents, remove them, add the dependency again by selecting T-0012, or
-create another child in Backlog. Keep these examples in unwatched columns while
-reviewing success notices. S08–S10 and P01/P02 need queued/interrupted agent work;
-they are source-traced here and are not seeded by this passive example.
-
-Creation of these examples invokes only the local application API. It does not
-generate UI notifications itself, resume automation, or activate a model.
-The repeatable seed is [seed-success-review.mjs](seed-success-review.mjs); it
-verifies the isolated project's workspace path and preserves existing review
-tasks when rerun. Its generated task-ID manifest lives in the ignored
-`environment/success-review.json`.
+The [seed](seed-success-review.mjs) verifies an existing isolated workspace before
+writing, creates passive examples without model activation, and preserves existing
+examples on rerun. Its generated manifest is `environment/success-review.json`.
+Queued and interrupted execution notices require the scripted run controls in the
+[review guide](../../examples/software-delivery/UI-REVIEW.md).
 
 ## Source audit
 
@@ -114,36 +95,18 @@ Progress/inline status producers were classified separately.
 
 | IDs | Source |
 | --- | --- |
-| S01 / S03 | [TaskPage.tsx](../../src/web/client/TaskPage.tsx), lines 451 / 294 |
-| S02 | [task-movement.ts](../../src/web/client/task-movement.ts), line 32; shared by BoardPage and TaskPage |
-| S04–S07 | [TaskRelationshipsPanel.tsx](../../src/web/client/TaskRelationshipsPanel.tsx), lines 68, 87, 103, 266; removal labels at line 499 |
-| S08 / P01 / P02 | [AgentActivityPanel.tsx](../../src/web/client/AgentActivityPanel.tsx), lines 180 / 80 / 84 |
-| S09–S10 | [TaskAttentionPanel.tsx](../../src/web/client/TaskAttentionPanel.tsx), line 51; interruption callbacks in [AttentionReasonAction.tsx](../../src/web/client/AttentionReasonAction.tsx) |
-| Queue presentation and duplicate suppression | [OperationFeedback.tsx](../../src/web/client/OperationFeedback.tsx), lines 13–50 |
+| S01 / S03 / S11 | [TaskPage.tsx](../../src/web/client/TaskPage.tsx) |
+| S02 | [task-movement.ts](../../src/web/client/task-movement.ts), shared by BoardPage and TaskPage |
+| S04–S07 | [TaskRelationshipsPanel.tsx](../../src/web/client/TaskRelationshipsPanel.tsx) |
+| S08 / S16 | [AgentActivityPanel.tsx](../../src/web/client/AgentActivityPanel.tsx) |
+| S09–S10 | [TaskAttentionPanel.tsx](../../src/web/client/TaskAttentionPanel.tsx) and [AttentionReasonAction.tsx](../../src/web/client/AttentionReasonAction.tsx) |
+| S12–S14 | [TaskWorkspacePanel.tsx](../../src/web/client/TaskWorkspacePanel.tsx) |
+| S15 | [MarkdownContent.tsx](../../src/web/client/MarkdownContent.tsx) |
+| Queue, timing and duplicate suppression | [OperationFeedback.tsx](../../src/web/client/OperationFeedback.tsx) |
 
-All 10 families above are source-verified. The live example provides actual
-existing product controls; runtime validation is recorded in the implementation
-ticket after exercising its edit/save path. The user subsequently approved retaining S01–S10 with timed dismissal.
-Interruption and local-confirmation changes below are recorded for the next pass.
-
-## Recorded review decisions
-
-The user approved retaining S01–S10 with five-second dismissal. A subsequent
-review adds comment success (S11) and moves workspace/file confirmations into the
-floating surface (S12–S15). Top-level task creation remains without a success notice.
-
-Decisions and implementation status:
-
-- Interruption: remove both progress overlays and show a single confirmation only
-  when interruption actually succeeds. This remains a follow-up.
-- Workspace Copy path, Open folder and Open in Visual Studio Code: move their
-  confirmations to the shared floating feedback surface. Implemented, including errors;
-  pending open requests use the button state instead of a progress message.
-- Markdown local-file links: use shared floating feedback instead of adjacent
-  Opened text. Implemented for success and failure.
-- Copy Markdown and conversation attachment confirmations: retain their existing
-  local presentation.
-
-The workspace, local-file and comment changes are now implemented. Copy Markdown
-and conversation attachment indicators retain their existing local presentation.
-Interruption-progress consolidation remains separate from this presentation pass.
+All families are source-verified. Browser coverage additionally exercises comment,
+workspace and local-file feedback routing, timed dismissal, hover/focus pause,
+persistent errors, and interruption confirmation with a failed refresh. Both
+appearance themes cover the card and countdown presentation. Copy Markdown and
+attachment confirmations retain their existing local surfaces. All notification
+policy decisions from the review are implemented.
