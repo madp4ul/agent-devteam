@@ -79,3 +79,21 @@ must remain observable and actionable while that blocker exists.
 - Archived task and conversation metadata follow the retention policy in
   [27](27-archive-tasks-without-losing-work.md). Detailed transcript content
   remains subject to explicit archival cleanup.
+
+## Interrupted-removal follow-up — 2026-11-14
+
+Restart during T-0025 removal left its directory and Git registration but removed
+its `.git` pointer and 20,795 tracked files. Recovery incorrectly classified the
+directory/registration pair as intact and released the claim. Retries then
+returned `workspace-cleanup-failed` because Git reported “not a git repository”.
+
+The retained registration, common directory, HEAD and index were verified
+against the exact idle task path before exclusively recreating its `.git`
+pointer. No checkout/reset or further archival was performed. Git can inspect
+the partial tree again, and the HEAD remains reachable from
+`refs/remotes/origin/preservation/T-0054/T-0025`. A new archive attempt must
+handle the now-visible dirty state through ordinary user confirmation.
+
+Recovery now requires a regular Git pointer and successful worktree verification
+before returning intact. Startup consistency also detects a missing pointer.
+A disposable regression reproduces the former false-intact result.

@@ -280,7 +280,13 @@ records whole-record and checkpoint-boundary behavior. Browser inspection retain
 its complete user timeline; agent metadata listings have bounded pages.
 
 Persistence remains on the built-in synchronous `node:sqlite` driver with
-project-owned SQL. [ADR 0017](adr/0017-reconsider-drizzle-when-native-node-sqlite-and-strict-types-are-stable.md)
+project-owned SQL. Verified file-backed connections use WAL with FULL
+synchronization during execution. Clean close attempts to restore rollback
+journaling for the existing startup fast path; a busy connection or abnormal
+exit retains WAL for the established recovery path. Individual synchronous
+commits and checkpoints can still delay HTTP on a congested disk. See
+[ADR 0047](adr/0047-use-durable-wal-during-host-execution.md).
+[ADR 0017](adr/0017-reconsider-drizzle-when-native-node-sqlite-and-strict-types-are-stable.md)
 defines the observable native-adapter and strict-type conditions that trigger a
 fresh Drizzle proof, and the application-owned transaction and migration-safety
 properties that proof must preserve before adoption.
@@ -457,7 +463,12 @@ See [ADR 0024](adr/0024-treat-reviewer-allowances-as-an-optional-runtime-add-on.
 See [ADR 0025](adr/0025-scope-project-reviewer-guidance-to-host-launch.md) for launch ownership and evidence.
 
 For each run, the Codex adapter starts or resumes a thread in the task's Git
-workspace. A per-attempt MCP adapter lets that agent inspect relevant project
+workspace and explicitly selects workspace-write, including retries and replacement
+threads. Saved read-only selection and desktop sandbox defaults therefore do not
+determine framework execution. On-request approval with native Auto-review and
+managed restrictions remain authoritative; protected Git metadata still requires
+scoped escalation. See [ADR 0048](adr/0048-select-workspace-write-for-framework-agent-runs.md).
+A per-attempt MCP adapter lets that agent inspect relevant project
 coordination state. Task content, movement, comments, and outgoing relationship
 mutations accept `current` or a concrete mapped mutable project task ID;
 independent creation instead requires an explicit board and column. The adapter
@@ -582,8 +593,10 @@ precedes operation reconciliation, and unfinished deletion authorization is not
 replayed. See [ADR 0045](adr/0045-queue-browser-archival-with-durable-results.md).
 
 Git can unregister a worktree before failing to delete all its files. The
-existing durable archival claim owns recovery across that boundary. A correctly
-located remainder with no Git pointer or nested registration is preserved under
+existing durable archival claim owns recovery across that boundary. A registered
+directory with a missing Git pointer is inconsistent and retains its interrupted
+claim for inspection. A correctly located remainder with no Git pointer or
+nested registration is preserved under
 `archival-remainders/` in the bound state root, with a sibling JSON recording its
 task and original path, before archival completes. Failed preservation or
 uncertain identity retains the claim and blocks inconsistent startup; it does

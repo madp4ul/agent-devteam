@@ -115,7 +115,7 @@ test("a later-satisfied mention can complete inertly without duplicate coordinat
   ]);
 });
 
-test("each activation receives automatic approval review and exact Git trust without overriding other capabilities", async () => {
+test("each activation receives workspace-write, automatic approval review and exact Git trust", async () => {
   const clients: FakeCodexClient[] = [];
   const runtime = createRuntime({
     mcpServer: {
@@ -147,12 +147,14 @@ test("each activation receives automatic approval review and exact Git trust wit
   assert.equal(clients.length, 2);
   assert.deepEqual(clients[0]?.threadOptions, {
     workingDirectory: "C:\\tasks\\worktree",
+    sandboxMode: "workspace-write",
   });
   assert.deepEqual(clients[1]?.threadOptions, {
     workingDirectory: "C:\\tasks\\worktree two [review]",
+    sandboxMode: "workspace-write",
   });
   for (const client of clients) {
-    assert.equal("sandboxMode" in client.threadOptions, false);
+    assert.equal(client.threadOptions.sandboxMode, "workspace-write");
     assert.equal("approvalPolicy" in client.threadOptions, false);
   }
   assert.deepEqual(clients[0]?.options.config, {
@@ -208,17 +210,53 @@ test("each activation receives automatic approval review and exact Git trust wit
   assert.match(prompt, /"kind": "user"/);
 });
 
+test("retries explicitly select workspace-write while retaining the existing conversation", async () => {
+  const selections: CodexThreadOptionsLike[] = [];
+  const runtime = createRuntime({
+    mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
+    createClient: () => ({
+      startThread: () => { throw new Error("a usable saved conversation must be retained"); },
+      resumeThread: (threadId, options) => {
+        assert.equal(threadId, "saved-read-only-thread");
+        selections.push(options);
+        return { runStreamed: async () => ({ events: events(
+          { type: "thread.started", thread_id: threadId },
+          { type: "turn.completed" },
+        ) }) };
+      },
+    }),
+  });
+  for (const number of [2, 3]) {
+    const retry = request(`activation-policy-retry-${number}`, "T-0052");
+    retry.resumeThreadId = "saved-read-only-thread";
+    retry.attempt = {
+      number,
+      precedingOutcome: { status: "failed", summary: "Previous write was denied." },
+      thread: "resumed",
+      continuationMessage: null,
+    };
+    assert.deepEqual(await runtime.run(retry, { started() {} }), {
+      status: "completed", summary: "", threadId: "saved-read-only-thread",
+    });
+  }
+  assert.deepEqual(selections, [2, 3].map(() => ({
+    workingDirectory: "C:\\tasks\\worktree", sandboxMode: "workspace-write",
+  })));
+});
+
 test("an unusable interrupted thread falls back to a fresh thread with honest context", async () => {
   let prompt = "";
   let freshStarts = 0;
   const runtime = createRuntime({
     mcpServer: { command: "node", args: () => ["coordination-mcp.ts"] },
     createClient: () => ({
-      resumeThread: (threadId) => {
+      resumeThread: (threadId, options) => {
         assert.equal(threadId, "thread-before-restart");
+        assert.equal(options.sandboxMode, "workspace-write");
         throw new Error("persisted thread is unavailable");
       },
-      startThread: () => {
+      startThread: (options) => {
+        assert.equal(options.sandboxMode, "workspace-write");
         freshStarts += 1;
         return {
           runStreamed: async (value) => {
@@ -713,10 +751,11 @@ test("explicit agent execution profiles become SDK thread options", async () => 
 
   assert.deepEqual(clients[0]?.threadOptions, {
     workingDirectory: "C:\\tasks\\worktree",
+    sandboxMode: "workspace-write",
     model: "gpt-5.6-sol",
     modelReasoningEffort: "medium",
   });
-  assert.equal("sandboxMode" in (clients[0]?.threadOptions ?? {}), false);
+  assert.equal(clients[0]?.threadOptions.sandboxMode, "workspace-write");
   assert.equal("approvalPolicy" in (clients[0]?.threadOptions ?? {}), false);
 });
 

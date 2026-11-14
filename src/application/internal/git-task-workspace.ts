@@ -70,6 +70,15 @@ export async function validateTaskWorkspaceConsistency(
         "Restore the project state and the repository's external Git worktree metadata together.",
       ));
     }
+    if (!(await hasWorktreeGitPointer(record.workspace.path))) {
+      diagnostics.push(workspaceDiagnostic(
+        root,
+        record.taskId,
+        record.workspace.path,
+        "Every recorded task workspace must retain its Git pointer",
+        "Inspect the retained registration and partial archival state before repairing the workspace metadata.",
+      ));
+    }
   }
   for (const path of directories) {
     if (!recordByPath.has(normalizedPath(path))) {
@@ -450,7 +459,10 @@ export class GitTaskWorkspaceManager {
     const directoryExists = directory !== undefined;
     const registrations = await readRegisteredWorktrees(this.projectRepositoryPath, this.#runGit);
     const registered = registrations.some((path) => samePath(path, workspace.path));
-    if (directoryExists && registered) return "intact";
+    if (directoryExists && registered) {
+      if (!(await hasWorktreeGitPointer(workspace.path))) return "inconsistent";
+      return this.verify(taskId, workspace).then(() => "intact" as const, () => "inconsistent" as const);
+    }
     if (registrations.some((path) => isWithin(workspace.path, path))) return "inconsistent";
     if (!directoryExists && !registered) return "removed";
     if (directoryExists && !registered) {
@@ -497,6 +509,12 @@ async function readRegisteredWorktrees(projectRepositoryPath: string, runGitComm
     "-C", projectRepositoryPath, "worktree", "list", "--porcelain",
   ]);
   return [...output.matchAll(/^worktree (.+)$/gm)].map((match) => resolve(match[1] ?? ""));
+}
+
+async function hasWorktreeGitPointer(path: string): Promise<boolean> {
+  const pointer = await lstat(join(path, ".git"))
+    .catch((error: NodeJS.ErrnoException) => error.code === "ENOENT" || error.code === "ENOTDIR" ? undefined : Promise.reject(error));
+  return pointer !== undefined && pointer.isFile() && !pointer.isSymbolicLink();
 }
 
 function workspaceDiagnostic(

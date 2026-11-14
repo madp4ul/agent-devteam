@@ -58,54 +58,57 @@ export function useDesktopNotifications(navigate: Navigate): DesktopNotification
   const consentPromptOpen = policy?.enabled === true && browserState === "eligible" && consent === null;
   const canDeliver = browserState === "granted";
 
-  const observe = useCallback(async (): Promise<void> => {
-    const batch = await readNotificationOccurrences(cursor.current);
-    cursor.current = batch.cursor;
-    const currentPermission = available ? Notification.permission : "unsupported";
-    if (currentPermission !== permission) setPermission(currentPermission);
-    if (currentPermission !== "granted") return;
-    for (const occurrence of batch.occurrences) {
-      try {
-        const reason = occurrence.type === "column-entry"
-          ? `entered ${occurrence.destination?.columnName ?? "a workflow column"}`
-          : occurrence.type === "user-mention"
-            ? "mentioned you"
-            : occurrence.type === "stall-recovery-exhausted" ? "automatic stall recovery needs attention" : "agent run failed";
-        const notification = new Notification(
-          `${occurrence.task.boardName} · ${occurrence.task.id}`,
-          { body: `${occurrence.task.title} · ${reason}`, tag: occurrence.id },
-        );
-        notification.onclick = () => {
-          window.focus();
-          const attention = occurrence.attentionReasonId === undefined
-            ? ""
-            : `?attention=${encodeURIComponent(occurrence.attentionReasonId)}`;
-          navigate(`/tasks/${encodeURIComponent(occurrence.task.id)}${attention}`);
-          notification.close();
-        };
-      } catch {
-        // Delivery is best-effort and each occurrence is attempted only once by this tab.
-      }
-    }
-  }, [available, navigate, permission]);
-
   useEffect(() => {
     let disposed = false;
+    let timeout: number | undefined;
+    const observe = async (): Promise<void> => {
+      const batch = await readNotificationOccurrences(cursor.current);
+      if (disposed) return;
+      cursor.current = batch.cursor;
+      const currentPermission = available ? Notification.permission : "unsupported";
+      setPermission(currentPermission);
+      if (currentPermission !== "granted") return;
+      for (const occurrence of batch.occurrences) {
+        try {
+          const reason = occurrence.type === "column-entry"
+            ? `entered ${occurrence.destination?.columnName ?? "a workflow column"}`
+            : occurrence.type === "user-mention"
+              ? "mentioned you"
+              : occurrence.type === "stall-recovery-exhausted" ? "automatic stall recovery needs attention" : "agent run failed";
+          const notification = new Notification(
+            `${occurrence.task.boardName} · ${occurrence.task.id}`,
+            { body: `${occurrence.task.title} · ${reason}`, tag: occurrence.id },
+          );
+          notification.onclick = () => {
+            window.focus();
+            const attention = occurrence.attentionReasonId === undefined
+              ? ""
+              : `?attention=${encodeURIComponent(occurrence.attentionReasonId)}`;
+            navigate(`/tasks/${encodeURIComponent(occurrence.task.id)}${attention}`);
+            notification.close();
+          };
+        } catch {
+          // Delivery is best-effort and each occurrence is attempted only once by this tab.
+        }
+      }
+    };
     const poll = async (): Promise<void> => {
       if (disposed) return;
       try {
         await observe();
       } catch {
         // Polling cannot alter authoritative occurrence or attention state.
+      } finally {
+        // Schedule only after settlement so slow reads cannot replay the same cursor.
+        if (!disposed) timeout = window.setTimeout(() => void poll(), 1_500);
       }
     };
     void poll();
-    const interval = window.setInterval(() => void poll(), 1_500);
     return () => {
       disposed = true;
-      window.clearInterval(interval);
+      window.clearTimeout(timeout);
     };
-  }, [observe]);
+  }, [available, navigate]);
 
   const allow = useCallback(async (): Promise<void> => {
     if (!available) return;

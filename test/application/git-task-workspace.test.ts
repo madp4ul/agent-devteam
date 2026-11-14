@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rename, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -148,6 +148,16 @@ test("archival recovery rejects redirected paths and remnants with a Git pointer
   await writeFile(join(workspace.path, ".git"), "unexpected Git identity\n");
   assert.equal(await manager.inspectInterruptedArchival("T-0008", workspace), "inconsistent");
   assert.equal(await readFile(join(workspace.path, ".git"), "utf8"), "unexpected Git identity\n");
+});
+
+test("interrupted archival with a surviving registration and missing Git pointer is inconsistent", async () => {
+  const fixture = await createFixture("missing-archival-pointer");
+  const workspace = await provisionDurableWorkspace(fixture, "T-0025");
+  await unlink(join(workspace.path, ".git"));
+  const manager = new GitTaskWorkspaceManager(fixture.repository, fixture.workspaceRoot);
+  assert.equal(await manager.inspectInterruptedArchival("T-0025", workspace), "inconsistent");
+  const diagnostics = await validateTaskWorkspaceConsistency(fixture.repository, fixture.workspaceRoot, [{ taskId: "T-0025", workspace }]);
+  assert.ok(diagnostics.some((entry) => entry.rule.includes("Git pointer")));
 });
 
 test("startup preserves agent-created evidence worktrees nested inside a recorded task workspace", async () => {

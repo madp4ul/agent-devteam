@@ -59,9 +59,16 @@ export class CoordinationDatabaseStartupError extends Error {
 
 export class CoordinationDatabase {
   readonly connection: DatabaseSync;
+  readonly #fileBacked: boolean;
 
-  private constructor(connection: DatabaseSync) {
+  private constructor(connection: DatabaseSync, fileBacked = false) {
     this.connection = connection;
+    this.#fileBacked = fileBacked;
+    if (fileBacked) {
+      connection.exec("PRAGMA synchronous = FULL");
+      const mode = connection.prepare("PRAGMA journal_mode = WAL").get() as { journal_mode: string };
+      if (mode.journal_mode !== "wal") throw new Error("Could not enable durable WAL for the coordination database.");
+    }
   }
 
   static async open(path: string, startupProgress?: StartupProgressObserver): Promise<CoordinationDatabase> {
@@ -108,7 +115,7 @@ export class CoordinationDatabase {
           progress,
         );
         if (direct !== undefined) connection.exec("COMMIT");
-        return new CoordinationDatabase(connection);
+        return new CoordinationDatabase(connection, path !== ":memory:");
       }
 
       if (existed) {
@@ -148,7 +155,7 @@ export class CoordinationDatabase {
         recoveryBackupPath,
         progress,
       );
-      return new CoordinationDatabase(connection);
+      return new CoordinationDatabase(connection, path !== ":memory:");
     } catch (error) {
       if (direct !== undefined && connection.isTransaction) connection.exec("ROLLBACK");
       connection.close();
@@ -196,7 +203,16 @@ export class CoordinationDatabase {
   }
 
   close(): void {
-    this.connection.close();
+    try {
+      if (this.#fileBacked && !this.connection.isTransaction) {
+        // Keep clean startup eligible for locked inspection without copying.
+        // A concurrent reader/writer can keep WAL alive; preserve its recovery
+        // files and let the existing WAL startup path inspect them next time.
+        this.connection.exec("PRAGMA busy_timeout = 0");
+        try { this.connection.exec("PRAGMA journal_mode = DELETE"); }
+        catch (error) { if (!isSqliteBusy(error)) throw error; }
+      }
+    } finally { this.connection.close(); }
   }
 }
 

@@ -7,6 +7,15 @@ common directory contains the matching worktree registrations. Back up or
 restore only while the coordination application and all task agents are
 stopped.
 
+During execution the coordination database uses WAL with FULL synchronization.
+Committed data can reside in its `-wal` file. Clean shutdown normally checkpoints
+and restores rollback journaling; an abrupt exit or another open connection can
+leave WAL recovery files. Include every SQLite sidecar in an offline backup.
+Use SQLite's online backup facility for an incident database capture while the
+host is running.
+After an offline `VACUUM`, checkpoint WAL or close the database before measuring
+the compacted main-file size.
+
 The root can also contain `archival-remainders/`. These are files preserved when
 Git unregistered a task workspace but failed to finish deleting its contents.
 Each retained directory has a sibling JSON identifying the task, original path,

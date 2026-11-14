@@ -77,8 +77,8 @@ primary-repository worktree registration. Trust ends with each Git or Codex
 process; the application does not change global or repository Git
 configuration. This fixes Git ownership inspection only. Writes to
 linked-worktree metadata remain subject to the process's ordinary filesystem
-permissions, and agent writes remain subject to the user's ordinary Codex
-sandbox. Framework-launched runs request scoped escalation with
+permissions. Framework-launched runs explicitly select the workspace-write
+sandbox on both fresh and resumed threads, and request scoped escalation with
 `approval_policy = "on-request"`; the separate `auto_review` reviewer may allow
 or deny each request under the effective managed policy.
 
@@ -139,6 +139,19 @@ then requires the SDK agent to inspect status, create a branch, edit and verify
 a file, stage, commit, and finish clean. It asserts that branch, stage, and
 commit first encounter protected Git metadata and then succeed through scoped
 Auto-reviewed retries.
+
+To verify that framework resume overrides a conversation's saved read-only
+selection while retaining its thread and allowing ordinary workspace writes:
+
+```powershell
+$env:COORDINATION_RUN_CODEX_INTEGRATION = "1"
+node --experimental-strip-types --test --test-reporter=spec test/integration/real-codex-workspace-permissions.test.ts
+Remove-Item Env:COORDINATION_RUN_CODEX_INTEGRATION
+```
+
+This opt-in proof uses two real model turns in a disposable repository. Protected
+Git metadata still requires scoped escalation; workspace-write does not remove
+that boundary.
 
 ## Changing the coordination schema
 

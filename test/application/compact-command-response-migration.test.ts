@@ -196,6 +196,7 @@ test("isolated snapshot conversion frees reusable pages and explicit compaction 
     assert.ok(Number(upgraded.connection.prepare("PRAGMA freelist_count").get()!.freelist_count) > 0);
     assert.deepEqual(authoritativeFacts(upgraded.connection), facts);
     upgraded.connection.exec("VACUUM");
+    upgraded.connection.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     assert.deepEqual(authoritativeFacts(upgraded.connection), facts);
     assert.ok((await stat(fixture.path)).size < beforeFile / 2);
     assert.equal(upgraded.connection.prepare("PRAGMA integrity_check").get()!.integrity_check, "ok");

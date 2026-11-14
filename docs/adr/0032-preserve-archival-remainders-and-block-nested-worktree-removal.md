@@ -31,6 +31,9 @@ paths before the rename. No leftover file is deleted by recovery.
 
 The task's existing durable archival claim remains the authority for restart
 recovery. Cancel it only when the failed removal left the workspace intact.
+An existing directory and surviving registration alone do not prove that.
+The worktree must retain a regular `.git` pointer and pass Git verification.
+Startup consistency also rejects a recorded workspace with a missing pointer.
 If preservation fails or inspection cannot prove the outcome, retain the claim;
 startup can finish preservation later or remain blocked by consistency checks.
 Successful preservation leaves the active path and registration absent, allowing

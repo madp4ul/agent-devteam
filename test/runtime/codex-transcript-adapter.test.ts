@@ -1235,6 +1235,7 @@ test("continued attempts sharing one Codex thread retain isolated transcripts", 
   }]);
   assert.deepEqual(resumedThreadOptions, {
     workingDirectory: "C:\\tasks\\resumed workspace (2)",
+    sandboxMode: "workspace-write",
   });
   assert.deepEqual(resumedClientOptions?.config?.shell_environment_policy, {
     set: {

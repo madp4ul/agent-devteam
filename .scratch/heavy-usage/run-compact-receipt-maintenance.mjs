@@ -67,6 +67,7 @@ try {
   console.log('MIGRATION_VERIFIED', 'RESPONSE_BYTES', preview.expectedPayload, 'FREE_PAGES', db.prepare('PRAGMA freelist_count').get().freelist_count);
   console.log('COMPACTING_DATABASE');
   db.exec('VACUUM');
+  assert.equal(db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get().busy, 0, 'Compaction checkpoint is blocked');
   console.log('VERIFYING_COMPACTED_DATABASE');
   assert.deepEqual(db.prepare('PRAGMA integrity_check').all().map((row) => row.integrity_check), ['ok']);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);

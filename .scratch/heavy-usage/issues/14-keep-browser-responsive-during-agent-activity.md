@@ -97,6 +97,35 @@ runtime loaded from HEAD.
 
 ## Acceptance criteria
 
+### Live follow-up — 2026-11-14
+
+The user reported a task taking about 20 seconds to open and a user-mention
+resolution taking about five seconds while seven agents and two preparations
+were active. Read-only localhost sampling reproduced delays across the host,
+including 5.6 seconds for an unknown route and 4.1 seconds for an empty archival
+operation list. The same task also returned in 26–40 ms between stalls.
+Windows reported 37 queued I/O requests on D:, shared by the live database and
+the worktree checkouts.
+
+Alternating disposable 12-transaction probes on D: took 8.3/14.0 seconds with
+DELETE journaling and 2.7/3.2 seconds with WAL, both at FULL synchronization.
+Verified file-backed host connections now enable WAL after the existing startup
+gate and attempt to restore DELETE on clean close. Crash recovery and retained
+reader tests cover the new lifecycle. See
+[ADR 0047](../../../docs/adr/0047-use-durable-wal-during-host-execution.md).
+The source change applies on the next host launch. The live project database,
+agent workers and browser assets were left intact. An individual synchronous
+commit or checkpoint can still stall under severe disk contention, and the
+reported 20-second delay has not been replayed after a live host restart.
+
+Validation for this follow-up passed typechecking, 37 focused lifecycle,
+migration, startup and concurrency tests, the added retained-reader case, and
+independent Standards/Spec reviews. The full run recorded 524 passes and six
+skips. It reported the known self-authored activation-source failure and an
+offline compaction size assertion. The compaction fixture and retained
+maintenance helper now checkpoint WAL before measuring main-file size; all
+four compaction tests pass after that correction.
+
 - [ ] Build a repeatable load case with simultaneous active attempts and paced
       event delivery that reflects the worker acknowledgement flow. Record
       attempt count, event rate and payload sizes, task/history size, and an idle

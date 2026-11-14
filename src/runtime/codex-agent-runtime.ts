@@ -129,6 +129,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
         const client = (this.#options.createClient ?? createIsolatedCodexClient)(clientOptions);
         const threadOptions: CodexThreadOptionsLike = {
           workingDirectory: request.workspace.path,
+          sandboxMode: "workspace-write",
           ...(request.agent.model === undefined ? {} : { model: request.agent.model }),
           ...(request.agent.reasoningEffort === undefined
             ? {}
