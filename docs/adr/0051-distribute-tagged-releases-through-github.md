@@ -32,4 +32,6 @@ maintainer later changes which version is designated latest.
 
 The user owns committing, pushing and tagging the implementation. CI verifies an
 existing remote tag and receives contents-write permission only in publication.
-Uncommitted tooling and failed tests must not be presented as a published release.
+Uncommitted tooling must not be presented as a committed release. Record local
+validation accurately; ADR 0053 makes hosted behavioral tests a separate concern
+rather than a publication gate.

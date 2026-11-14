@@ -1,7 +1,7 @@
 # Bound and diagnose first-release CI checks
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: none
 
 ## Problem
@@ -85,3 +85,24 @@ passing or fixed; investigate separately if hosted behavioral CI is desired.
 No application source changed after the verified v0.1.2 build. Dispatch the
 current-main packaging workflow for that same unpublished tag; do not retag or
 require another test run before publishing it.
+
+## Answer
+
+Published https://github.com/madp4ul/agent-devteam/releases/tag/v0.1.2 from commit
+`b12ced79d4d2ee1545959f786f9b1281281e5deb`. ZIP size: 219,498,915 bytes;
+SHA-256: `c334bd61292cf65239121824a16db8cae14e56bf08bee4d0d57809b4308e8b96`.
+
+The packaging-only workflow's build and installed verification passed. Its
+publishing job received HTTP 403 from the workflow token; the releasing agent
+used existing maintainer authentication to upload the independently verified
+local exact-tag ZIP and checksum to a draft, checked the server digest and
+published it as latest. Retention completed successfully with one release and
+no deletions. That workflow is not reported as green.
+
+The installed self-contained launcher then downloaded the public release and
+selected `agent-devteam-releases/releases/v0.1.2`. The installed CLI validated
+the actual Autonomous V2 process definition. Its existing batch file still
+invokes the process launcher, which resolves that installed release once. No
+real project host was started or restarted. The temporary diagnostic branch and
+its local instrumentation/logs were removed. Remaining hosted test variability
+is tracked in issue 06; publication-token follow-up is tracked in issue 07.

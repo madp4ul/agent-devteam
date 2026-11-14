@@ -53,6 +53,17 @@ silently create a tag from a branch. External actions are pinned to full commits
 Repository **release immutability** is recommended for future releases; this
 implementation does not enable that setting or claim it is already enabled.
 
+If hosted publication is denied by the workflow token after package verification,
+the releasing agent may use the maintainer's existing authorized GitHub CLI/API
+authentication to publish a locally built, verified ZIP for the same tag. This
+requires no new application version and no repeated hosted tests. Recheck the
+remote tag's complete commit and the ZIP checksum, create a draft, upload the ZIP
+and checksum, verify the server's uploaded digest, then publish as latest. Apply
+the same five-release retention policy with `scripts/prune-github-releases.mjs`
+and remove that run's temporary transfer artifact when possible. Keep credentials
+out of files and logs. Record the fallback; do not describe a failed workflow as
+successful. Installed consumers use the same verified release either way.
+
 Before creating test fixtures or building the package, the workflow resolves
 Windows' temporary directory to its canonical path and exports it as `TEMP` and
 `TMP`. Hosted runners can supply an 8.3 alias such as `RUNNER~1`, while Git records
