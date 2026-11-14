@@ -57,6 +57,10 @@ fail registration checks. Canonicalizing the fixture root avoids that mismatch
 without weakening production ownership or archival guards. If checks stop
 advancing, inspect failed assertions and job logs rather than treating an
 in-progress job as evidence that every test is still passing.
+The generated `current-schema.sql` review snapshot is explicitly checked out
+with LF endings through `.gitattributes`, so Windows conversion cannot change
+the bytes compared by the released-schema migration test. Do not waive schema
+comparison failures or regenerate a different schema merely to pass CI.
 
 Publication and hosted cleanup run in one repository-wide queued critical
 section. After a successful publication, cleanup keeps **five published stable

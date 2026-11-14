@@ -1,0 +1,2 @@
+# Generated review evidence is compared byte-for-byte with canonical SQL output.
+/src/application/internal/migrations/current-schema.sql text eol=lf

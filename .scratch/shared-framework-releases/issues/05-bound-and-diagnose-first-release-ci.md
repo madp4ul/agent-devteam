@@ -48,3 +48,22 @@ five-minute test timeouts and TAP reporting. Its check step is limited to fiftee
 minutes and build job to thirty minutes. The lifecycle test registers cleanup
 before assertions and includes the complete archival result in failures.
 The operating guide documents these safeguards and agent-assisted publication.
+
+## Second gate: generated snapshot line endings
+
+Both the corrected `v0.1.1` run and the diagnostic suite completed with 557 tests:
+549 passed, 1 failed, 7 skipped, none canceled. The sole failure was `fresh startup
+applies the released migration registry and matches the current schema snapshot`.
+The generated schema was LF while Git's Windows checkout converted the reviewed
+snapshot to CRLF. This was a byte-format failure, not a different schema or a
+failed database migration.
+
+Changing only the local snapshot to CRLF reproduced that exact assertion failure
+in about half a second; the original file was restored immediately. A targeted
+`.gitattributes` rule now keeps only this generated SQL snapshot as LF. A real
+`git -c core.autocrlf=true checkout-index` into disposable scratch space preserved
+LF with that rule, and the original migration test passed unchanged. No migration
+registry entry, SQL definition, runtime schema guard or test assertion was relaxed.
+
+The corrected candidate is `v0.1.2`; canceled/failed `v0.1.0` and `v0.1.1` tags
+remain intact and have no published release objects.
