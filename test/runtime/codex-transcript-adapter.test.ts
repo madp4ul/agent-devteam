@@ -33,12 +33,16 @@ function createRuntime(options: CodexAgentRuntimeOptions) {
         ? client.startThread({})
         : client.resumeThread?.(request.resumeThreadId, {}) ?? client.startThread({});
       const streamed = await thread.runStreamed("");
+      const transcript: AttemptTranscriptItem[] = [];
       const projected = await projectCodexTurn(streamed.events, {
         attemptId: request.attemptId,
         taskId: request.task.id,
       }, {
         started: (threadId) => lifecycle.started(threadId),
-        publish: (transcript) => transcripts.set(request.attemptId, [...structuredClone(transcript)]),
+        itemUpdated: (ordinal, item) => {
+          transcript[ordinal] = item;
+          transcripts.set(request.attemptId, transcript);
+        },
       });
       transcripts.set(request.attemptId, [...structuredClone(projected.transcript)]);
       return {
@@ -1060,6 +1064,91 @@ test("a completed agent message is inspectable before the Codex turn finishes", 
   }]);
   releaseTurn();
   await outcome;
+});
+
+test("live runtime transcript reads stay detached as streamed items change", async () => {
+  const itemStarted = Promise.withResolvers<void>();
+  const itemMayFinish = Promise.withResolvers<void>();
+  const runtime = createCodexRuntime({
+    mcpServer: { command: "node", args: () => [] },
+    createClient: () => ({
+      startThread: () => ({
+        runStreamed: async () => ({
+          events: (async function* () {
+            yield { type: "thread.started", thread_id: "thread-live-snapshot" } as const;
+            yield {
+              type: "item.started",
+              item: { id: "command", type: "command_execution", command: "git status", status: "in_progress", aggregated_output: "" },
+            } as const;
+            itemStarted.resolve();
+            await itemMayFinish.promise;
+            yield {
+              type: "item.completed",
+              item: { id: "command", type: "command_execution", command: "git status", status: "completed", aggregated_output: "Clean", exit_code: 0 },
+            } as const;
+            yield {
+              type: "turn.completed",
+              usage: { input_tokens: 0, cached_input_tokens: 0, cache_write_input_tokens: 0, output_tokens: 0, reasoning_output_tokens: 0 },
+            } as const;
+          })(),
+        }),
+      }),
+    }),
+  });
+  const run = request("live-snapshot", "T-0001");
+  const updates: Array<{ ordinal: number; item: AttemptTranscriptItem }> = [];
+  const outcome = runtime.run(run, {
+    started() {},
+    async persistTranscriptItem(ordinal, item) { updates.push({ ordinal, item }); },
+  });
+  let live;
+  try {
+    await itemStarted.promise;
+    live = await runtime.read(run.attemptId);
+    assert.equal(live?.[0]?.kind, "command");
+    assert.equal(live[0].status, "running");
+    const update = updates[0]?.item;
+    assert.equal(update?.kind, "command");
+    update.output = "Consumer mutation";
+    assert.deepEqual(await runtime.read(run.attemptId), live);
+  } finally {
+    itemMayFinish.resolve();
+  }
+  assert.equal((await outcome).status, "completed");
+  assert.equal(live[0].status, "running");
+  assert.deepEqual(updates.map(({ ordinal }) => ordinal), [0, 0]);
+  assert.deepEqual(await runtime.read(run.attemptId), [
+    { id: "command", kind: "command", command: "git status", status: "completed", output: "Clean" },
+  ]);
+});
+
+test("the Codex stream waits for durable transcript acknowledgement before advancing", async () => {
+  const writing = Promise.withResolvers<void>();
+  const committed = Promise.withResolvers<void>();
+  let advanced = false;
+  const runtime = createCodexRuntime({
+    mcpServer: { command: "node", args: () => [] },
+    createClient: () => ({ startThread: () => ({ runStreamed: async () => ({
+      events: (async function* (): AsyncGenerator<CodexEventLike> {
+        yield { type: "thread.started", thread_id: "thread-acknowledged" };
+        yield { type: "item.completed", item: { id: "message", type: "agent_message", text: "Durable first." } };
+        advanced = true;
+        yield { type: "turn.completed" };
+      })(),
+    }) }) }),
+  });
+  const run = request("durable-ack", "T-0001");
+  const outcome = runtime.run(run, {
+    started() {},
+    async persistTranscriptItem() { writing.resolve(); await committed.promise; },
+  });
+  try {
+    await writing.promise;
+    assert.equal(advanced, false);
+    assert.equal(await runtime.read(run.attemptId), null);
+  } finally { committed.resolve(); }
+  assert.equal((await outcome).status, "completed");
+  assert.equal(advanced, true);
 });
 
 test("continued attempts sharing one Codex thread retain isolated transcripts", async () => {

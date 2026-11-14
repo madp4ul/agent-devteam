@@ -107,11 +107,15 @@ export class TaskArchiveStore {
   }
 
   completedTaskIds(boardId: string): string[] {
-    return (this.#database.prepare(
-      `SELECT id FROM tasks
+    return this.completedTasks(boardId).map(({ id }) => id);
+  }
+
+  completedTasks(boardId: string): Array<{ id: string; title: string }> {
+    return this.#database.prepare(
+      `SELECT id, title FROM tasks
        WHERE board_id = ? AND column_id = 'completion' AND archived_at IS NULL
        ORDER BY sequence`,
-    ).all(boardId) as Array<{ id: string }>).map(({ id }) => id);
+    ).all(boardId) as Array<{ id: string; title: string }>;
   }
 
   taskTitle(taskId: string): string | undefined {
@@ -169,6 +173,10 @@ export class TaskArchiveStore {
       scope: [boardId],
       idempotencyKey,
     });
+  }
+
+  readArchiveCommand(taskId: string, idempotencyKey: string): ArchiveTaskResult | undefined {
+    return this.#idempotentCommands.replay({ kind: "archive-task", scope: [taskId], idempotencyKey });
   }
 
   rememberBulkCommand(boardId: string, idempotencyKey: string, result: unknown): void {

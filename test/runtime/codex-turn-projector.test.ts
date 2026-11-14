@@ -23,7 +23,7 @@ test("preserves structured transient failure codes and reset deadlines from runt
     { type: "turn.failed", error: { message: "Budget rejected", code: "usage_limit_reached", data: { reset_at: 1798808400 } } },
     { type: "error", message: "Service unavailable", error: { code: "service_unavailable", statusCode: 503, retry_at: "2027-01-01T13:00:00Z" } },
   ]) {
-    const result = await projectCodexTurn(events({ type: "thread.started", thread_id: "thread-retry" }, envelope), { taskId: "T-0001", attemptId: "retry" }, { started() {}, publish() {} });
+    const result = await projectCodexTurn(events({ type: "thread.started", thread_id: "thread-retry" }, envelope), { taskId: "T-0001", attemptId: "retry" }, { started() {} });
     assert.equal(result.terminal.kind, "failed");
     if (result.terminal.kind !== "failed") throw new Error("Expected failure");
     assert.equal(result.terminal.failure?.retryAt, "2027-01-01T13:00:00.000Z");
@@ -33,7 +33,7 @@ test("preserves structured transient failure codes and reset deadlines from runt
 
 test("projects every SDK item variant in first-seen order and keeps the latest completed message", async () => {
   const started: string[] = [];
-  const published: AttemptTranscriptItem[][] = [];
+  const published: AttemptTranscriptItem[] = [];
   const result = await projectCodexTurn(events(
     { type: "thread.started", thread_id: "thread-items" },
     { type: "turn.started" },
@@ -71,7 +71,7 @@ test("projects every SDK item variant in first-seen order and keeps the latest c
     { type: "turn.completed", usage },
   ), { attemptId: "attempt-items", taskId: "T-0094" }, {
     started: (threadId) => started.push(threadId),
-    publish: (transcript) => published.push([...transcript]),
+    itemUpdated: (_ordinal, item) => { published.push(item); },
   });
 
   assert.deepEqual(started, ["thread-items"]);
@@ -104,8 +104,8 @@ test("projects every SDK item variant in first-seen order and keeps the latest c
   assert.ok(published.length >= 10);
 });
 
-test("replaces stable live rows in place and publishes defensive snapshots", async () => {
-  const snapshots: AttemptTranscriptItem[][] = [];
+test("replaces stable live rows in place and publishes defensive item copies", async () => {
+  const updates: Array<{ ordinal: number; item: AttemptTranscriptItem }> = [];
   const result = await projectCodexTurn(events(
     { type: "thread.started", thread_id: "thread-live" },
     {
@@ -123,10 +123,9 @@ test("replaces stable live rows in place and publishes defensive snapshots", asy
     { type: "turn.completed", usage },
   ), { attemptId: "attempt-live", taskId: "T-0094" }, {
     started() {},
-    publish: (transcript) => {
-      const captured = transcript as AttemptTranscriptItem[];
-      snapshots.push(captured);
-      if (snapshots.length === 1) captured.push({ kind: "diagnostic", text: "mutated observer copy" });
+    itemUpdated: (ordinal, item) => {
+      updates.push({ ordinal, item });
+      if (item.kind === "command" && item.status === "completed") item.command = "mutated observer copy";
     },
   });
 
@@ -134,7 +133,7 @@ test("replaces stable live rows in place and publishes defensive snapshots", asy
   assert.deepEqual(result.transcript[0], {
     id: "command", kind: "command", command: "pnpm test", status: "completed", output: "passed",
   });
-  assert.equal(snapshots[1]?.length, 1);
+  assert.deepEqual(updates.map(({ ordinal }) => ordinal), [0, 0, 0]);
 });
 
 test("a surviving required coordination failure outranks permission reporting and completion", async () => {
@@ -156,7 +155,7 @@ test("a surviving required coordination failure outranks permission reporting an
       },
     },
     { type: "turn.completed", usage },
-  ), { attemptId: "attempt-precedence", taskId: "T-0094" }, { started() {}, publish() {} });
+  ), { attemptId: "attempt-precedence", taskId: "T-0094" }, { started() {} });
 
   assert.deepEqual(result.terminal, {
     kind: "failed",
@@ -173,7 +172,7 @@ test("declared failure events and iterator failures retain bounded inspectable e
     const projected = await projectCodexTurn(events(
       { type: "thread.started", thread_id: "thread-failure" },
       failureEvent,
-    ), { attemptId: "attempt-failure", taskId: "T-0094" }, { started() {}, publish() {} });
+    ), { attemptId: "attempt-failure", taskId: "T-0094" }, { started() {} });
     assert.equal(projected.terminal.kind, "failed");
     assert.match(projected.terminal.summary, /^Codex could not complete the activation:/u);
     assert.equal(projected.transcript.at(-1)?.kind, "diagnostic");
@@ -186,7 +185,7 @@ test("declared failure events and iterator failures retain bounded inspectable e
   const interruptedResult = await projectCodexTurn(
     interrupted(),
     { attemptId: "attempt-interrupted", taskId: "T-0094" },
-    { started() {}, publish() {} },
+    { started() {} },
   );
   assert.equal(interruptedResult.terminal.summary, "Codex could not complete the activation: connection dropped");
 
@@ -197,7 +196,7 @@ test("declared failure events and iterator failures retain bounded inspectable e
     projectCodexTurn(
       preIdentityFailure(),
       { attemptId: "attempt-no-identity", taskId: "T-0094" },
-      { started() {}, publish() {} },
+      { started() {} },
     ),
     /spawn failed before identity/u,
   );
@@ -207,14 +206,14 @@ test("malformed usage stays unavailable and unsupported or conflicting envelopes
   const malformedUsage = await projectCodexTurn(events(
     { type: "thread.started", thread_id: "thread-usage" },
     { type: "turn.completed", usage: { ...usage, output_tokens: -1 } },
-  ), { attemptId: "attempt-usage", taskId: "T-0094" }, { started() {}, publish() {} });
+  ), { attemptId: "attempt-usage", taskId: "T-0094" }, { started() {} });
   assert.equal(malformedUsage.usage, undefined);
   assert.equal(malformedUsage.terminal.kind, "completed");
 
   const unknown = await projectCodexTurn(events(
     { type: "thread.started", thread_id: "thread-unknown" },
     { type: `future.${"sensitive".repeat(30)}`, secret: "must not enter diagnostics" },
-  ), { attemptId: "attempt-unknown", taskId: "T-0094" }, { started() {}, publish() {} });
+  ), { attemptId: "attempt-unknown", taskId: "T-0094" }, { started() {} });
   assert.equal(unknown.terminal.kind, "failed");
   assert.doesNotMatch(unknown.terminal.summary, /must not enter diagnostics/u);
   assert.ok(unknown.terminal.summary.length < 200);
@@ -222,7 +221,7 @@ test("malformed usage stays unavailable and unsupported or conflicting envelopes
   const conflicting = await projectCodexTurn(events(
     { type: "thread.started", thread_id: "thread-first" },
     { type: "thread.started", thread_id: "thread-second" },
-  ), { attemptId: "attempt-conflict", taskId: "T-0094" }, { started() {}, publish() {} });
+  ), { attemptId: "attempt-conflict", taskId: "T-0094" }, { started() {} });
   assert.equal(conflicting.threadId, "thread-first");
   assert.match(conflicting.terminal.summary, /conflicting thread identities/u);
 });
@@ -232,7 +231,7 @@ test("fresh projections isolate attempts that share one thread identity", async 
     { type: "thread.started", thread_id: "shared-thread" },
     { type: "item.completed", item: { id: "message", type: "agent_message", text } },
     { type: "turn.completed", usage },
-  ), { attemptId, taskId: "T-0094" }, { started() {}, publish() {} });
+  ), { attemptId, taskId: "T-0094" }, { started() {} });
 
   const first = await run("attempt-one", "First attempt.");
   const second = await run("attempt-two", "Second attempt.");
@@ -252,7 +251,7 @@ test("reconnect diagnostics do not terminate a turn that subsequently recovers",
     consumedCompletion = true;
     yield { type: "turn.completed", usage };
   }
-  const result = await projectCodexTurn(recovering(), { taskId: "T-0156", attemptId: "reconnect" }, { started() {}, publish() {} });
+  const result = await projectCodexTurn(recovering(), { taskId: "T-0156", attemptId: "reconnect" }, { started() {} });
   assert.equal(result.terminal.kind, "completed");
   assert.equal(result.terminal.summary, "Recovered.");
   assert.equal(consumedCompletion, true);
@@ -264,7 +263,7 @@ test("replays native Codex reconnect exhaustion, HTTPS fallback and successful c
   const { readFile } = await import("node:fs/promises");
   const replay = await readFile(new URL("./fixtures/codex-reconnect-recovery.jsonl", import.meta.url), "utf8");
   const result = await projectCodexTurn(events(...replay.trim().split(/\r?\n/u).map((line) => JSON.parse(line))),
-    { taskId: "T-0156", attemptId: "native-replay" }, { started() {}, publish() {} });
+    { taskId: "T-0156", attemptId: "native-replay" }, { started() {} });
   assert.equal(result.terminal.kind, "completed");
   assert.equal(result.terminal.summary, "DIAGNOSTIC_OK");
   assert.equal(result.transcript.filter((item) => item.kind === "diagnostic").length, 5);
@@ -276,7 +275,7 @@ test("reconnect progress cannot hide terminal failure or incomplete streams", as
   const failure = { type: "turn.failed", error: { message: "Reconnect attempts exhausted", code: "reconnect_exhausted" } };
   for (const tail of [[], [failure], [{ type: "error", message: "Unexpected fatal protocol error" }]]) {
     const result = await projectCodexTurn(events({ type: "thread.started", thread_id: "thread-failed-reconnect" }, reconnect, ...tail),
-      { taskId: "T-0156", attemptId: "reconnect-failure" }, { started() {}, publish() {} });
+      { taskId: "T-0156", attemptId: "reconnect-failure" }, { started() {} });
     assert.equal(result.terminal.kind, "failed");
     assert.deepEqual(result.transcript[0], { kind: "diagnostic", text: reconnect.message });
     if (tail.length === 0) assert.match(result.terminal.summary, /ended before turn.completed/u);

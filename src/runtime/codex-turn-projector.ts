@@ -11,8 +11,7 @@ import { coordinationTranscriptItem } from "./coordination-tool-transcript.ts";
 type AttemptScope = Readonly<{ attemptId: string; taskId: string }>;
 type ProjectionPorts = Readonly<{
   started(threadId: string): void;
-  publish(transcript: readonly AttemptTranscriptItem[]): void;
-  itemUpdated?(ordinal: number, item: AttemptTranscriptItem): void;
+  itemUpdated?(ordinal: number, item: AttemptTranscriptItem): void | Promise<void>;
 }>;
 
 export interface CodexTurnProjection {
@@ -43,17 +42,16 @@ export async function projectCodexTurn(
   let permissionBlockSummary: string | undefined;
 
   const snapshot = (): readonly AttemptTranscriptItem[] => structuredClone(transcript);
-  const publish = (ordinal = transcript.length - 1): void => {
-    if (ordinal >= 0) ports.itemUpdated?.(ordinal, structuredClone(transcript[ordinal]!));
-    if (threadId !== undefined) ports.publish(snapshot());
+  const publish = async (ordinal = transcript.length - 1): Promise<void> => {
+    if (ordinal >= 0) await ports.itemUpdated?.(ordinal, structuredClone(transcript[ordinal]!));
   };
-  const failed = (
+  const failed = async (
     diagnostic: string,
     outcomeSummary = `Codex could not complete the activation: ${diagnostic}`,
     evidence?: unknown,
-  ): CodexTurnProjection => {
+  ): Promise<CodexTurnProjection> => {
     transcript.push({ kind: "diagnostic", text: diagnostic });
-    publish();
+    await publish();
     return projection(threadId, snapshot(), usage, { kind: "failed", summary: outcomeSummary, ...(runtimeFailureEvidence(evidence) === undefined ? {} : { failure: runtimeFailureEvidence(evidence)! }) });
   };
 
@@ -87,7 +85,7 @@ export async function projectCodexTurn(
           }
           const item = event.item as ItemRecord;
           const ordinal = upsertTranscriptItem(transcript, itemIndexes, item, event.type, scope);
-          publish(ordinal);
+          await publish(ordinal);
           const coordinationCall = coordinationToolCall(item);
           if (coordinationCall?.status === "failed") {
             failedCoordinationTools.set(coordinationCall.name, coordinationCall.diagnostic);
@@ -124,7 +122,7 @@ export async function projectCodexTurn(
           // kills the SDK's child process before native recovery can finish.
           if (/^Reconnecting\.\.\. [1-9]\d*\/[1-9]\d* \(.+\)$/u.test(event.message)) {
             transcript.push({ kind: "diagnostic", text: event.message });
-            publish();
+            await publish();
             break;
           }
           return failed(event.message, undefined, event);
@@ -145,7 +143,7 @@ export async function projectCodexTurn(
   }
   if (!turnCompleted) {
     transcript.push({ kind: "diagnostic", text: "The Codex stream ended before turn.completed." });
-    publish();
+    await publish();
     return projection(threadId, snapshot(), usage, {
       kind: "failed",
       summary: "Codex could not complete the activation: the stream ended before turn.completed",
@@ -156,7 +154,7 @@ export async function projectCodexTurn(
       .map(([name, cause]) => `Required coordination tool ${name} failed: ${cause}`)
       .join("; ");
     transcript.push({ kind: "diagnostic", text: diagnostic });
-    publish();
+    await publish();
     return projection(threadId, snapshot(), usage, { kind: "failed", summary: diagnostic });
   }
   if (permissionBlockSummary !== undefined) {

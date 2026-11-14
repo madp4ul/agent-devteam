@@ -1,8 +1,8 @@
 import { workspaceGitSummary } from "./workspace-git-summary.ts";
-import { runGit, runGitForExitCode, gitSafeDirectoryEnvironment } from "./git-command.ts";
+import { readGitRecords, runGit, runGitForExitCode, gitSafeDirectoryEnvironment } from "./git-command.ts";
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { lstat, mkdir, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
 
 import type { WorkspaceProgressView } from "../automation-contract.ts";
 import { GitProgressReader } from "./git-progress.ts";
@@ -14,7 +14,7 @@ import type {
   WorkspaceCleanupFailure,
 } from "../task-contract.ts";
 import { normalizedPath, samePath } from "./path-identity.ts";
-import { GitArchivalReview } from "./git-archival-review.ts";
+import { GitArchivalReview, within as isWithin } from "./git-archival-review.ts";
 
 export async function validateTaskWorkspaceConsistency(
   projectRepositoryPath: string,
@@ -303,16 +303,33 @@ export class GitTaskWorkspaceManager {
       if (registrations.some((path) => isWithin(workspace.path, path))) {
         return { removed: false, reason: "workspace-nested-worktrees" };
       }
-      const environment = gitSafeDirectoryEnvironment(workspace.path);
-      const status = await this.#runGit(
-        ["-C", workspace.path, "status", "--porcelain", "--untracked-files=all"],
-        environment,
-      );
-      if (status.trim().length > 0 && !discardChanges) {
-        return { removed: false, reason: "workspace-dirty" };
+      const environment = { ...gitSafeDirectoryEnvironment(workspace.path), GIT_OPTIONAL_LOCKS: "0" };
+      const directory = await lstat(workspace.path);
+      const root = await realpath(this.taskWorkspaceRoot);
+      if (!directory.isDirectory() || directory.isSymbolicLink() ||
+        !samePath(await realpath(workspace.path), join(root, taskId))) {
+        return { removed: false, reason: "workspace-registration-invalid" };
+      }
+      const [common, repositoryCommon, top] = await Promise.all([
+        this.#runGit(["-C", workspace.path, "rev-parse", "--path-format=absolute", "--git-common-dir"], environment),
+        this.#runGit(["-C", this.projectRepositoryPath, "rev-parse", "--path-format=absolute", "--git-common-dir"]),
+        this.#runGit(["-C", workspace.path, "rev-parse", "--show-toplevel"], environment),
+      ]);
+      if (!samePath(common.trim(), repositoryCommon.trim()) || !samePath(top.trim(), workspace.path)) {
+        return { removed: false, reason: "workspace-registration-invalid" };
+      }
+      if (discardChanges) {
+        const review = await new GitArchivalReview(this.projectRepositoryPath, this.#runGit).inspect(workspace.path);
+        if (!review.preview.token) return { removed: false, reason: "workspace-preview-unavailable" };
+      }
+      if (!discardChanges) {
+        let dirty = false;
+        await readGitRecords(["-C", workspace.path, "status", "--porcelain", "--untracked-files=normal"], environment,
+          "line", () => { dirty = true; });
+        if (dirty) return { removed: false, reason: "workspace-dirty" };
       }
       const refs = await this.#runGit(
-        ["-C", workspace.path, "for-each-ref", "--format=%(refname)", "--contains", "HEAD"],
+        ["-C", workspace.path, "for-each-ref", "--count=1", "--format=%(refname)", "--contains", "HEAD"],
         environment,
       );
       if (refs.trim().length === 0) return { removed: false, reason: "workspace-commit-not-durable" };
@@ -474,10 +491,6 @@ async function atBoundary<T>(
   }
 }
 
-function isWithin(root: string, candidate: string): boolean {
-  const path = relative(root, candidate);
-  return path !== "" && !path.startsWith("..") && !isAbsolute(path);
-}
 
 async function readRegisteredWorktrees(projectRepositoryPath: string, runGitCommand = runGit): Promise<string[]> {
   const output = await runGitCommand([

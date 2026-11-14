@@ -45,6 +45,12 @@ interface InterruptAttempt extends AttemptSettlementEvidence {
   idempotencyKey: string;
 }
 
+interface TranscriptWrite {
+  attemptId: string;
+  ordinal: number;
+  item: AttemptTranscriptItem;
+}
+
 export class ActiveAttemptModule {
   readonly #owner: CoordinationDatabase;
   readonly #database: DatabaseSync;
@@ -71,21 +77,28 @@ export class ActiveAttemptModule {
   }
 
   recordTranscriptItem(attemptId: string, ordinal: number, item: AttemptTranscriptItem): void {
-    if (!Number.isSafeInteger(ordinal) || ordinal < 0) throw new Error("Invalid transcript ordinal");
+    this.recordTranscriptItems([{ attemptId, ordinal, item }]);
+  }
+
+  recordTranscriptItems(writes: readonly TranscriptWrite[]): void {
     this.#owner.transaction(() => {
-      if (!meaningfulTranscriptItem(item)) {
-        const probe = this.#database.prepare("SELECT provisional_probe FROM attempts WHERE id = ?").get(attemptId) as { provisional_probe: number } | undefined;
-        if (probe?.provisional_probe === 1) return;
-      }
-      this.#activityJournal.promoteProbe(attemptId, new Date().toISOString());
-      this.#database.prepare(`INSERT INTO conversation_history_items(id, conversation_id, position, kind, activation_id, attempt_id, item_json)
+      const probeStatus = this.#database.prepare("SELECT provisional_probe FROM attempts WHERE id = ?");
+      const insert = this.#database.prepare(`INSERT INTO conversation_history_items(id, conversation_id, position, kind, activation_id, attempt_id, item_json)
         SELECT 'item:' || attempt.id || ':' || printf('%d', ?), positions.conversation_id,
           positions.position || '|' || printf('%020d', attempt.rowid) || '|2|' || printf('%020d', ?),
           'item', attempt.activation_id, attempt.id, ?
         FROM attempts attempt JOIN conversation_history_activation_positions positions ON positions.id = attempt.activation_id
         WHERE attempt.id = ? AND attempt.status = 'running' AND positions.conversation_id IS NOT NULL
-        ON CONFLICT(id) DO UPDATE SET item_json = excluded.item_json`)
-        .run(ordinal, ordinal, JSON.stringify(item), attemptId);
+        ON CONFLICT(id) DO UPDATE SET item_json = excluded.item_json`);
+      for (const { attemptId, ordinal, item } of writes) {
+        if (!Number.isSafeInteger(ordinal) || ordinal < 0) throw new Error("Invalid transcript ordinal");
+        if (!meaningfulTranscriptItem(item)) {
+          const probe = probeStatus.get(attemptId) as { provisional_probe: number } | undefined;
+          if (probe?.provisional_probe === 1) continue;
+        }
+        this.#activityJournal.promoteProbe(attemptId, new Date().toISOString());
+        insert.run(ordinal, ordinal, JSON.stringify(item), attemptId);
+      }
     });
   }
 

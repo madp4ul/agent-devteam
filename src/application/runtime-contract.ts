@@ -392,6 +392,8 @@ export interface AgentRunLifecycle {
   started(threadId?: string): void;
   terminationChanged?(state: RuntimeTerminationState, retry: () => void): void;
   transcriptItemUpdated?(ordinal: number, item: AttemptTranscriptItem): void;
+  /** Streaming runtimes await durable acknowledgement before requesting the next event. */
+  persistTranscriptItem?(ordinal: number, item: AttemptTranscriptItem): Promise<void>;
   reviewerPolicyConfigured?(configuration: ReviewerPolicyConfiguration): void;
 }
 

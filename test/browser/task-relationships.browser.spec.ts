@@ -336,7 +336,9 @@ test("task relationships are discoverable, searchable, and recoverable", async (
   await childDialog.getByText("Advanced", { exact: true }).click();
   await childDialog.getByLabel("Starting Git ref (optional)").fill("main");
   await childDialog.getByRole("button", { name: "Create child task", exact: true }).click();
-  await expect(page.locator(".feedback.status")).toContainText(/Created child T-\d{4}/);
+  const feedback = page.getByRole("region", { name: "Operation feedback" });
+  await expect(feedback.getByText(/Created child T-\d{4}/)).toBeInViewport();
+  await expect(feedback.getByText(/Added dependency on/)).toBeVisible();
   await expect(relationships.getByRole("heading", { name: "Child tasks" })).toBeVisible();
   await expect(taskTimeline.getByText("Child task added", { exact: true })).toBeVisible();
   await expect(taskTimeline.getByText("Investigate a focused child outcome was added as a child task.", { exact: true })).toBeVisible();

@@ -464,7 +464,7 @@ test("relocate-state rewrites historical attempt paths after workspace archival"
     actor: { kind: "user", id: "paul" },
     idempotencyKey: "archive-before-relocation",
   });
-  assert.equal(archived.accepted, true);
+    assert.equal(archived.accepted, true, JSON.stringify(archived));
   application.close();
 
   const destination = join(fixture.directory, "relocated-archived-history");

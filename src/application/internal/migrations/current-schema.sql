@@ -108,6 +108,38 @@ CREATE TABLE agents (
       applied INTEGER NOT NULL CHECK (applied IN (0, 1))
     , allowances_json TEXT NOT NULL DEFAULT '[]');
 
+-- table archival_operation_requests on archival_operation_requests
+CREATE TABLE archival_operation_requests (
+      id TEXT PRIMARY KEY,
+      request_hash TEXT NOT NULL,
+      operation_id TEXT NOT NULL REFERENCES archival_operations(id)
+    );
+
+-- table archival_operation_tasks on archival_operation_tasks
+CREATE TABLE archival_operation_tasks (
+      operation_id TEXT NOT NULL REFERENCES archival_operations(id),
+      position INTEGER NOT NULL,
+      task_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('queued', 'running', 'archived', 'failed', 'interrupted')),
+      failure_json TEXT,
+      PRIMARY KEY (operation_id, task_id)
+    );
+
+-- table archival_operations on archival_operations
+CREATE TABLE archival_operations (
+      sequence INTEGER PRIMARY KEY,
+      id TEXT NOT NULL UNIQUE,
+      request_hash TEXT NOT NULL,
+      target_key TEXT NOT NULL,
+      target_json TEXT NOT NULL,
+      label TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('queued', 'running', 'completed', 'interrupted')),
+      attention INTEGER NOT NULL DEFAULT 0 CHECK (attention IN (0, 1)),
+      dismissed INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0, 1)),
+      updated_at TEXT NOT NULL
+    );
+
 -- table attempt_transcripts on attempt_transcripts
 CREATE TABLE attempt_transcripts (
       attempt_id TEXT PRIMARY KEY REFERENCES attempts(id) ON DELETE CASCADE,
@@ -431,6 +463,19 @@ CREATE INDEX activations_by_task_sequence ON activations(task_id, sequence);
 
 -- index activity_ledger_by_task_sequence on activity_ledger
 CREATE INDEX activity_ledger_by_task_sequence ON activity_ledger(task_id, sequence);
+
+-- index archival_operation_task_lookup on archival_operation_tasks
+CREATE INDEX archival_operation_task_lookup ON archival_operation_tasks(task_id, operation_id);
+
+-- index archival_operation_task_position on archival_operation_tasks
+CREATE INDEX archival_operation_task_position ON archival_operation_tasks(operation_id, position);
+
+-- index archival_operations_active_target on archival_operations
+CREATE UNIQUE INDEX archival_operations_active_target ON archival_operations(target_key)
+      WHERE state IN ('queued', 'running');
+
+-- index archival_operations_feedback on archival_operations
+CREATE INDEX archival_operations_feedback ON archival_operations(attention, state, sequence) WHERE dismissed = 0;
 
 -- index attempts_by_activation on attempts
 CREATE INDEX attempts_by_activation

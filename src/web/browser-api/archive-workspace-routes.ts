@@ -17,6 +17,11 @@ import { resolveWorkspaceFileReference, type WorkspaceFileTarget } from "../work
 type ArchiveWorkspaceCapabilities = Pick<BrowserCoordinationCapabilities,
   | "queryArchivedTaskOverviews"
   | "archiveCompletedTasks"
+  | "startArchivalOperation"
+  | "queryArchivalOperations"
+  | "archivalOperationsVersion"
+  | "queryArchivalOperation"
+  | "dismissArchivalOperation"
   | "archiveTask"
   | "unarchiveTask"
   | "queryTaskInspectionForUser"
@@ -44,24 +49,51 @@ export function registerArchiveWorkspaceRoutes(
     const result = application.queryArchivedTaskOverviews();
     sendJson(response, result.available ? 200 : 409, result);
   });
+  dispatcher.register("GET", "/api/archive/operations", "browser/archive-workspace", ({ request, response, url }) => {
+    const version = application.archivalOperationsVersion();
+    response.setHeader("cache-control", "private, no-cache");
+    response.setHeader("etag", version);
+    if (request.headers["if-none-match"] === version) { response.writeHead(304); response.end(); return; }
+    sendJson(response, 200, application.queryArchivalOperations(url.searchParams.get("taskId") ?? undefined));
+  });
+  dispatcher.register("GET", "/api/archive/operations/:operationId", "browser/archive-workspace", ({ response, params }) => {
+    const operation = application.queryArchivalOperation(params.operationId);
+    sendJson(response, operation ? 200 : 404, operation ?? { reason: "not-found" });
+  });
+  dispatcher.register("POST", "/api/archive/operations/:operationId/dismiss", "browser/archive-workspace", ({ response, params }) => {
+    application.dismissArchivalOperation(params.operationId);
+    sendJson(response, 200, { accepted: true });
+  });
   dispatcher.register("POST", "/api/archive/completed", "browser/archive-workspace", async ({ request, response }) => {
     const body = await readJsonBody<ArchiveCompletedTasksRequest>(request);
-    const result = await application.archiveCompletedTasks({
+    const command = {
       boardId: stringField(body, "boardId"),
       actor: userActor,
       idempotencyKey: stringField(body, "idempotencyKey"),
-    });
+    };
+    if (body.background === true) {
+      const result = application.startArchivalOperation({ kind: "completion", boardId: command.boardId }, command);
+      sendJson(response, result.accepted ? 202 : result.reason === "not-found" ? 404 : 409, result);
+      return;
+    }
+    const result = await application.archiveCompletedTasks(command);
     sendJson(response, result.accepted ? 200 : 409, result);
   });
   dispatcher.register("POST", "/api/tasks/:taskId/archive", "browser/archive-workspace", async ({ request, response, params }) => {
     const body = await readJsonBody<ArchiveTaskRequest>(request);
-    const result = await application.archiveTask({
+    const command = {
       taskId: params.taskId,
-      ...(body.discardWorkspaceChanges === true ? { discardWorkspaceChanges: true } : {}),
+      ...(body.discardWorkspaceChanges === true ? { discardWorkspaceChanges: true as const } : {}),
       ...(typeof body.archivalPreviewToken === "string" ? { archivalPreviewToken: body.archivalPreviewToken } : {}),
       actor: userActor,
       idempotencyKey: stringField(body, "idempotencyKey"),
-    });
+    };
+    if (body.background === true) {
+      const result = application.startArchivalOperation({ kind: "task", taskId: command.taskId }, command);
+      sendJson(response, result.accepted ? 202 : result.reason === "not-found" ? 404 : 409, result);
+      return;
+    }
+    const result = await application.archiveTask(command);
     sendJson(response, result.accepted ? 200 : result.reason === "not-found" ? 404 : 409, result);
   });
   dispatcher.register("GET", "/api/tasks/:taskId/archive/preview", "browser/archive-workspace", async ({ response, params }) => {

@@ -15,15 +15,16 @@ for (const theme of ["dark", "light"] as const) test(`${theme} nested archive re
       await route.fulfill({ status: 409, json: { accepted: false, reason: "workspace-preview-changed", removedWorktrees: ["previous-child"] } });
       return;
     }
-    await route.fulfill({ status: body.archivalPreviewToken ? 200 : 409,
-      json: body.archivalPreviewToken ? { accepted: true } : { accepted: false, reason: "workspace-nested-worktrees" } });
+    await route.fulfill({ status: body.archivalPreviewToken ? 202 : 409,
+      json: body.archivalPreviewToken ? { accepted: true, operation: { id: body.idempotencyKey, state: "completed",
+        tasks: [{ taskId, state: "archived" }] } } : { accepted: false, reason: "workspace-nested-worktrees" } });
   });
   await page.route(`**/api/tasks/${taskId}/archive/open`, async (route) => {
     opens.push(route.request().postDataJSON());
     await route.fulfill({ status: 409, json: { reason: "workspace-open-failed", diagnostic: "Editor executable is unavailable." } });
   });
   await page.route(`**/api/tasks/${taskId}/archive/preview`, (route) => route.fulfill({ json: { available: true, preview: {
-    token: "reviewed-scope", worktrees: [{ path: "C:/work/tasks/T-0001", parent: true, canOpen: true, durableHead: true, ignoredFiles: 0, upstream: { kind: "none" } },
+    token: "reviewed-scope", worktrees: [{ path: "C:/work/tasks/T-0001", parent: true, canOpen: true, durableHead: false, ignoredFiles: 0, upstream: { kind: "none" } },
       { path: "C:/work/tasks/T-0001/evidence/long-nested-checkout", parent: false, canOpen: true, durableHead: false, ignoredFiles: 3, upstream: { kind: "none" },
         state: { head: { kind: "detached", shortHash: "abc1234" }, history: { kind: "no-task-baseline" },
           changes: { additions: 1, deletions: 0, stagedFiles: 1, unstagedFiles: 2, untrackedFiles: 1 } } }],
@@ -62,17 +63,52 @@ test("bulk archive lists each rejected task with actionable individual links", a
     title: "Completed bulk task", description: "Bulk failure feedback", idempotencyKey: "bulk-feedback" } })).json();
   await request.post(`/api/tasks/${created.task.id}/move`, { data: { destinationColumnId: "completion",
     expectedRevision: created.task.revision, idempotencyKey: "bulk-complete" } });
-  await page.route("**/api/archive/completed", (route) => route.fulfill({ json: { accepted: true,
-    archivedTaskIds: ["T-0090"], rejected: [
-      { taskId: "T-0091", title: "Nested evidence", reason: "workspace-nested-worktrees" },
-      { taskId: "T-0092", title: "Local edits", reason: "workspace-dirty" },
-    ] } }));
+  const operation = { id: "bulk-feedback", target: { kind: "completion", boardId: "delivery" }, label: "Product delivery · Completion", state: "completed",
+    updatedAt: new Date().toISOString(), tasks: [
+      { taskId: "T-0090", title: "Archived", state: "archived" },
+      { taskId: "T-0091", title: "Nested evidence", state: "failed", failure: { reason: "workspace-nested-worktrees" } },
+      { taskId: "T-0092", title: "Local edits", state: "failed", failure: { reason: "workspace-dirty" } },
+      ...Array.from({ length: 12 }, (_, index) => ({ taskId: `T-01${index}`, title: "Long task failure detail", state: "failed", failure: { reason: "workspace-dirty" } })),
+    ] };
+  let submitted = false;
+  const accepted = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  await page.route("**/api/archive/completed", async (route) => {
+    accepted.resolve();
+    await release.promise;
+    submitted = true;
+    return route.fulfill({ status: 202, json: { accepted: true, operation } });
+  });
+  await page.route("**/api/archive/operations", (route) => route.fulfill({ json: submitted ? [operation] : [] }));
   await page.goto("/");
   await page.getByRole("button", { name: "Expand Product delivery" }).click();
+  const feedback = page.getByRole("region", { name: "Operation feedback" });
+  await page.addStyleTag({ content: ".app-shell { min-height: 220vh; }" });
   await page.getByRole("button", { name: "Archive completed tasks" }).click();
+  try {
+    await accepted.promise;
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const before = await page.evaluate(() => window.scrollY);
+    expect(before).toBeGreaterThan(500);
+    release.resolve();
+    await expect(feedback).toBeInViewport();
+    expect(await page.evaluate(() => window.scrollY)).toBe(before);
+  } finally { release.resolve(); }
+  await expect(feedback).toBeInViewport();
+  await expect(feedback.getByText("Archive · Product delivery · Completion")).toBeVisible();
   await expect(page.getByRole("link", { name: "T-0091 — Nested evidence" })).toHaveAttribute("href", "/tasks/T-0091");
   await expect(page.getByRole("link", { name: "T-0092 — Local edits" })).toBeVisible();
   await expect(page.locator(".archive-failures")).toContainText("archive it individually");
+  const results = feedback.getByLabel("Recent operation results");
+  expect(await results.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await feedback.getByRole("button", { name: "Minimize feedback" }).click();
+  await expect(results).toBeHidden();
+  await feedback.getByRole("button", { name: "Show feedback (1)" }).click();
+  await feedback.getByRole("button", { name: /Dismiss feedback/ }).focus();
+  await page.keyboard.press("Enter");
+  await expect(feedback).toHaveCount(0);
+  await page.reload();
+  await expect(feedback).toHaveCount(0);
 });
 
 test("unavailable Git status blocks deletion but preserves safe external inspection", async ({ page, request }) => {

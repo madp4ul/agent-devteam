@@ -5,7 +5,6 @@ import {
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
 import {
-  archiveCompletedTasks,
   ApiError,
   dismissStaleActivation,
   readBoard,
@@ -17,6 +16,8 @@ import type { TaskOverviewView } from "../../application/browser-transport-contr
 import { BoardColumn } from "./BoardColumn.tsx";
 import { AutomationControls } from "./AutomationControls.tsx";
 import { errorMessage } from "./feedback.ts";
+import { OperationFeedback, useOperationFeedback } from "./OperationFeedback.tsx";
+import { archivalRequestIdentity, forgetArchivalRequest, submitArchival, useArchivalFeedback, useArchivalOperations, waitForArchival } from "./archival-operations.tsx";
 import { AttentionReasonResolution } from "./AttentionReasonAction.tsx";
 import { Loading } from "./Loading.tsx";
 import { usePageTitle } from "./page-title.ts";
@@ -70,7 +71,6 @@ export function BoardPage({
     pendingInitialContext.current?.showArchived === true,
   );
   const [archivedTasks, setArchivedTasks] = useState<TaskOverviewView[]>([]);
-  const [archiveFailures, setArchiveFailures] = useState<Array<{ taskId: string; title?: string; reason: string }>>([]);
   const [archivesSettled, setArchivesSettled] = useState(false);
   const [resourcesSettled, setResourcesSettled] = useState(false);
   const resourcesLoaded = useCallback(() => setResourcesSettled(true), []);
@@ -80,9 +80,18 @@ export function BoardPage({
   const scrollElements = useRef(new Map<string, HTMLElement>());
   const refresh = useLatestRefresh(readBoard, setState);
   const processImpact = state?.startup.mode === "paused" ? state.startup.processImpact : undefined;
-  const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
+  const operationFeedback = useOperationFeedback("Boards");
+  const { setFeedback, publish } = operationFeedback;
+  const archivalOperations = useArchivalOperations();
+  const archivalFeedback = useArchivalFeedback(archivalOperations);
+  const [pendingArchives, setPendingArchives] = useState<string[]>([]);
+  const archiveRequests = useRef(new Map<string, string>());
+  const pendingArchiveRequests = useRef(new Set<string>());
+  const archiveProgress = archivalOperations.map((operation) => `${operation.id}:${operation.tasks.filter((task) => task.state === "archived").length}`).join("|");
+  const lastArchiveProgress = useRef("");
+  const { pendingTaskId, move } = useTaskMovement(refresh, setFeedback);
   usePageTitle(state === undefined
-    ? (feedback?.role === "alert" ? "Unable to load boards" : "Loading boards")
+    ? (operationFeedback.items.length > 0 ? "Unable to load boards" : "Loading boards")
     : state.startup.mode === "configuration-error"
       ? "Configuration error"
       : `Boards · ${state.startup.processName}`);
@@ -103,6 +112,12 @@ export function BoardPage({
       }
     }
   }, [setFeedback]);
+  useEffect(() => {
+    if (lastArchiveProgress.current === archiveProgress) return;
+    lastArchiveProgress.current = archiveProgress;
+    void refresh().catch(() => {});
+    if (showArchivedRef.current) void loadArchivedTasks();
+  }, [archiveProgress, loadArchivedTasks, refresh]);
   const captureScrollPositions = useCallback(() => {
     for (const [key, element] of scrollElements.current) {
       scrollPositions.current.set(key, element.scrollLeft);
@@ -238,19 +253,33 @@ export function BoardPage({
     });
   }, []);
 
-  const archiveCompletedForBoard = useCallback((boardId: string) => {
-    void archiveCompletedTasks(boardId, crypto.randomUUID())
-      .then(async (result) => {
-        setArchiveFailures(result.rejected);
-        await refresh();
-        if (showArchivedRef.current) await loadArchivedTasks();
-        setFeedback({
-          role: result.rejected.length === 0 ? "status" : "alert",
-          text: `Archived ${result.archivedTaskIds.length} completed task(s).${result.rejected.length === 0 ? "" : ` ${result.rejected.length} could not be archived.`}`,
-        });
+  const archiveCompletedForBoard = useCallback((boardId: string, boardName: string) => {
+    if (pendingArchiveRequests.current.has(boardId)) return;
+    const target = `${boardName} · Completion`;
+    const scope = `completion:${boardId}`;
+    const id = archiveRequests.current.get(boardId) ?? archivalRequestIdentity(scope);
+    archiveRequests.current.set(boardId, id);
+    pendingArchiveRequests.current.add(boardId);
+    setPendingArchives((current) => [...current, boardId]);
+    void submitArchival({ kind: "completion", boardId }, id).then(waitForArchival)
+      .then(() => {
+        archiveRequests.current.delete(boardId);
+        forgetArchivalRequest(scope);
+        void refresh().catch(() => {});
+        if (showArchivedRef.current) void loadArchivedTasks();
       })
-      .catch((error) => setFeedback({ role: "alert", text: errorMessage(error) }));
-  }, [loadArchivedTasks, refresh, setFeedback]);
+      .catch((error) => {
+        if (error instanceof ApiError && error.status < 500) {
+          archiveRequests.current.delete(boardId);
+          forgetArchivalRequest(scope);
+        }
+        publish({ role: "alert", text: errorMessage(error), target }, id);
+      })
+      .finally(() => {
+        pendingArchiveRequests.current.delete(boardId);
+        setPendingArchives((current) => current.filter((entry) => entry !== boardId));
+      });
+  }, [loadArchivedTasks, publish, refresh]);
 
   useEffect(
     () =>
@@ -286,7 +315,7 @@ export function BoardPage({
     [move, state],
   );
 
-  if (state === undefined) return <Loading />;
+  if (state === undefined) return <><Loading /><OperationFeedback {...operationFeedback} /></>;
   if (state.startup.mode === "configuration-error") {
     return (
       <main className="configuration-error">
@@ -463,15 +492,8 @@ export function BoardPage({
             {showArchived ? ` · ${archivedTasks.length}` : null}
           </button>
         </div>
-        {feedback === undefined ? null : (
-          <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>
-        )}
-        {archiveFailures.length === 0 ? null : <ul className="archive-failures" aria-label="Tasks not archived">
-          {archiveFailures.map((failure) => <li key={failure.taskId}>
-            <a href={`/tasks/${encodeURIComponent(failure.taskId)}`}>{failure.taskId}{failure.title ? ` — ${failure.title}` : ""}</a>
-            {`: ${errorMessage(new ApiError(409, { reason: failure.reason }))}`}
-          </li>)}
-        </ul>}
+        <OperationFeedback items={[...operationFeedback.items.filter((item) => !archivalOperations.some((operation) => operation.id === item.id)), ...archivalFeedback.items]}
+          dismiss={(id) => { operationFeedback.dismiss(id); archivalFeedback.dismiss(id); }} />
         {state.boards.map((board) => (
           <section key={board.id} aria-labelledby={`board-${board.id}`}>
             <div className="board-heading">
@@ -530,7 +552,10 @@ export function BoardPage({
                   )}
                   onOpen={(taskId) => openTask(taskId, board.id)}
                   onCreate={() => setCreation({ boardId: board.id, columnId: column.id })}
-                  onArchiveCompleted={() => archiveCompletedForBoard(board.id)}
+                  onArchiveCompleted={() => archiveCompletedForBoard(board.id, board.name)}
+                  archivalPending={pendingArchives.includes(board.id) || archivalOperations.some((operation) =>
+                    operation.target.kind === "completion" && operation.target.boardId === board.id &&
+                    (operation.state === "queued" || operation.state === "running"))}
                 />
               ))}
             </div>

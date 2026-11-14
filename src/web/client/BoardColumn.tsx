@@ -19,6 +19,7 @@ export function BoardColumn({
   onOpen,
   onCreate,
   onArchiveCompleted,
+  archivalPending,
 }: {
   boardId: string;
   column: BrowserColumnView;
@@ -32,6 +33,7 @@ export function BoardColumn({
   onOpen(taskId: string): void;
   onCreate(): void;
   onArchiveCompleted(): void;
+  archivalPending: boolean;
 }): ReactNode {
   const elementRef = useRef<HTMLElement>(null);
   const [over, setOver] = useState(false);
@@ -82,13 +84,17 @@ export function BoardColumn({
             </button>
           ) : null}
         </div>
-        {column.id === "completion" && column.tasks.length > 0 ? (
+        {column.id === "completion" && (column.tasks.length > 0 || archivalPending) ? (
+          <div className="column-archive-action">
           <button
             className="archive-completed"
             aria-label="Archive completed tasks"
             title="Archive completed tasks"
+            disabled={archivalPending}
             onClick={onArchiveCompleted}
           >Archive</button>
+          {archivalPending ? <span role="status">Archiving…</span> : null}
+          </div>
         ) : null}
       </header>
       <ol

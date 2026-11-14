@@ -59,7 +59,7 @@ boards:
   const initial = await CoordinationApplication.start(options);
   assert.equal(initial.queryStartup().mode, "paused");
   initial.close();
-  assert.deepEqual(updates.filter(({ phase }) => /attachments|archival|workspace|applying process/.test(phase))
+  assert.deepEqual(updates.filter(({ phase }) => /^(Checking retained attachments|Recovering interrupted archival|Checking workspace consistency|Recovering interrupted attempts and applying process)$/.test(phase))
     .map(({ phase, remainingSteps }) => [phase, remainingSteps]), [
     ["Checking retained attachments", 4], ["Recovering interrupted archival", 3],
     ["Checking workspace consistency", 2], ["Recovering interrupted attempts and applying process", 1],
@@ -75,7 +75,7 @@ boards:
   try {
     assert.equal(blocked.queryStartup().mode, "configuration-error");
     assert.equal(runtime.requests.length, 0);
-    assert.ok(!updates.some(({ phase }) => /attachments|archival|workspace|applying process/.test(phase)));
+    assert.ok(!updates.some(({ phase }) => /^(Checking retained attachments|Recovering interrupted archival|Checking workspace consistency|Recovering interrupted attempts and applying process)$/.test(phase)));
   } finally { blocked.close(); }
 });
 

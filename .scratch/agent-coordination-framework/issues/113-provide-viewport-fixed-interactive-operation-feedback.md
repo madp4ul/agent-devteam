@@ -2,7 +2,7 @@
 
 **Type:** task
 
-**Status:** open
+**Status:** resolved
 
 **Blocked by:** None — can start immediately.
 
@@ -61,3 +61,14 @@ fixes inspection/discard blockers independently.
 2026-11-12: User explicitly requested floating, always-in-viewport feedback that
 supports interactive content, rather than static short red/green text. Feedback
 must make the originating click identifiable even when several actions occur.
+
+## Implementation evidence — 2026-11-13
+
+Board and task detail share viewport-fixed feedback with targets, timestamps,
+embedded archival results, links, and dismissal. The scrollable list can be
+minimized. Browser coverage exercises multiple results, deep scroll, overflow,
+keyboard dismissal, linked archival failures and both themes.
+
+The panel retains unresolved ordinary feedback for the current page. Archival
+progress and dismissal survive navigation and reload through the host operation
+record.

@@ -14,12 +14,13 @@ const run = promisify(execFile);
 test("archival refuses redirected nested registrations and unregistered Git metadata", async () => {
   const fixture = await createFixture("nested-path-identity");
   const workspace = await provisionDurableWorkspace(fixture, "T-0210");
-  const nested = join(workspace.path, "nested");
+  const nested = join(workspace.path, "..evidence");
   await git(fixture.repository, "worktree", "add", "--detach", nested, fixture.commit);
   await writeFile(join(nested, "keep.txt"), "outside evidence");
   const manager = new GitTaskWorkspaceManager(fixture.repository, fixture.workspaceRoot);
   const before = await manager.inspectArchival("T-0210", workspace);
-  assert.ok(before.token);
+  assert.ok(before.token, JSON.stringify(before.worktrees));
+  assert.deepEqual(await manager.removeForArchival("T-0210", workspace, true), { removed: false, reason: "workspace-nested-worktrees" });
   const outside = join(dirname(fixture.repository), "outside-checkout");
   await rename(nested, outside);
   await symlink(outside, nested, "junction");
@@ -35,6 +36,8 @@ test("archival refuses redirected nested registrations and unregistered Git meta
   const unknown = await manager.inspectArchival("T-0211", another);
   assert.equal(unknown.token, null);
   assert.match(unknown.worktrees[0]?.diagnostic ?? "", /Unregistered nested Git metadata/);
+  assert.deepEqual(await manager.removeForArchival("T-0211", another, true), { removed: false, reason: "workspace-preview-unavailable" });
+  assert.equal(await readFile(join(another.path, "embedded", ".git", "HEAD"), "utf8"), "unregistered metadata");
 });
 
 for (const failure of ["before", "after"] as const) test(`reviewed nested cleanup reports failure ${failure} removal and safely retries remaining scope`, async () => {
@@ -53,7 +56,7 @@ for (const failure of ["before", "after"] as const) test(`reviewed nested cleanu
     return output;
   });
   const preview = await manager.inspectArchival("T-0209", workspace);
-  assert.ok(preview.token);
+  assert.ok(preview.token, JSON.stringify(preview.worktrees));
   const result = await manager.removeForArchival("T-0209", workspace, true, preview.token);
   assert.equal(result.removed, false);
   if (result.removed) return;
@@ -63,7 +66,7 @@ for (const failure of ["before", "after"] as const) test(`reviewed nested cleanu
   if (failure === "before") assert.equal((await stat(short)).isDirectory(), true);
   fail = false;
   const refreshed = await manager.inspectArchival("T-0209", workspace);
-  assert.ok(refreshed.token);
+  assert.ok(refreshed.token, JSON.stringify(refreshed.worktrees));
   assert.equal(refreshed.worktrees.length, failure === "before" ? 2 : 1);
   assert.deepEqual(await manager.removeForArchival("T-0209", workspace, true, refreshed.token), { removed: true });
 });

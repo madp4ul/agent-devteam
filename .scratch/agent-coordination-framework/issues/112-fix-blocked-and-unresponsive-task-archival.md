@@ -2,7 +2,7 @@
 
 **Type:** task
 
-**Status:** open
+**Status:** resolved
 
 **Blocked by:** None — can start immediately.
 
@@ -66,3 +66,16 @@ owns shared feedback presentation and
 owns progress, attribution, refresh and responsiveness for archival requests.
 Neither new ticket requires resolving the Git inspection failure first: failures
 must remain observable and actionable while that blocker exists.
+
+## Implementation evidence — 2026-11-13
+
+- A disposable nested worktree reproduced the Git status overflow through HTTP.
+  Git emitted roughly 1.13 MB in 53 ms. Streaming status, diff, index, refs, and
+  ignored paths makes the preview available and preserves scope fingerprints.
+- Reviewed discard allows an unreferenced parent or nested HEAD after showing
+  that loss explicitly. Ordinary and bulk archival still require a named ref.
+  Redirected and unregistered Git metadata block deletion. Partial cleanup
+  reports the affected path and Git/filesystem state and supports a fresh review.
+- Archived task and conversation metadata follow the retention policy in
+  [27](27-archive-tasks-without-losing-work.md). Detailed transcript content
+  remains subject to explicit archival cleanup.

@@ -1,4 +1,38 @@
 import { execFile, spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+
+export async function readGitRecords(
+  arguments_: string[], environment: NodeJS.ProcessEnv, separator: "line" | "nul", consume: (record: string) => void,
+): Promise<void> {
+  const child = spawn("git", arguments_, { env: environment, windowsHide: true });
+  let diagnostic = "";
+  child.stderr.setEncoding("utf8").on("data", (chunk: string) => { diagnostic = (diagnostic + chunk).slice(-16384); });
+  const completion = new Promise<void>((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code, signal) => code === 0 ? resolve() : reject(new Error(
+      `Git ${arguments_[2]} failed (${code ?? signal}): ${diagnostic.trim()}`,
+    )));
+  });
+  const read = async (): Promise<void> => {
+    if (separator === "line") {
+      for await (const line of createInterface({ input: child.stdout, crlfDelay: Infinity })) consume(line);
+      return;
+    }
+    let remainder = "";
+    for await (const chunk of child.stdout.setEncoding("utf8")) {
+      const records = (remainder + chunk).split("\0");
+      remainder = records.pop()!;
+      for (const record of records) consume(record);
+    }
+    if (remainder !== "") throw new Error(`Git ${arguments_[2]} produced an incomplete record.`);
+  };
+  try {
+    await Promise.all([completion, read()]);
+  } catch (error) {
+    child.kill();
+    throw error;
+  }
+}
 
 export function runGit(arguments_: string[], environment?: NodeJS.ProcessEnv, onStderr?: (chunk: string) => void): Promise<string> {
   if (onStderr !== undefined) return new Promise((resolve, reject) => {

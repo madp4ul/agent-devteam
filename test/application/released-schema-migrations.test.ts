@@ -96,6 +96,7 @@ const productionMigrationIds = [
   "0015_compact_historical_command_responses",
   "0016_resource_catalog",
   "0017_resource_claims",
+  "0018_archival_operations",
 ];
 
 test("migration 0012 preserves released history, journal sequence and all derived index triggers", async () => {

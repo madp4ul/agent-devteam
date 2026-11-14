@@ -66,7 +66,7 @@ export interface CodexAgentRuntimeOptions {
 
 export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess {
   readonly #options: CodexAgentRuntimeOptions;
-  readonly #transcripts = new Map<string, AttemptTranscriptItem[]>();
+  readonly #transcripts = new Map<string, readonly AttemptTranscriptItem[]>();
   readonly #usage = new Map<string, AttemptTokenUsage>();
   readonly #contextWindowUsage = new Map<string, AttemptContextWindowUsage>();
   readonly #sessionEvidenceReader: CodexSessionEvidenceReader;
@@ -175,19 +175,26 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           );
         }
         let threadIdentityEstablished = false;
-        const project = (events: AsyncIterable<ThreadEvent>) => projectCodexTurn(observeEvents(events, () => {
-          observableEventReceived = true;
-        }), {
-          attemptId: request.attemptId,
-          taskId: request.task.id,
-        }, {
-          started: (threadId) => {
-            threadIdentityEstablished = true;
-            lifecycle.started(threadId);
-          },
-          publish: (transcript) => this.#remember(request.attemptId, transcript),
-          itemUpdated: (ordinal, item) => lifecycle.transcriptItemUpdated?.(ordinal, item),
-        });
+        const project = (events: AsyncIterable<ThreadEvent>) => {
+          const transcript: AttemptTranscriptItem[] = [];
+          return projectCodexTurn(observeEvents(events, () => {
+            observableEventReceived = true;
+          }), {
+            attemptId: request.attemptId,
+            taskId: request.task.id,
+          }, {
+            started: (threadId) => {
+              threadIdentityEstablished = true;
+              lifecycle.started(threadId);
+            },
+            itemUpdated: async (ordinal, item) => {
+              if (lifecycle.persistTranscriptItem) await lifecycle.persistTranscriptItem(ordinal, structuredClone(item));
+              else lifecycle.transcriptItemUpdated?.(ordinal, structuredClone(item));
+              transcript[ordinal] = item;
+              if (threadIdentityEstablished) this.#transcripts.set(request.attemptId, transcript);
+            },
+          });
+        };
         let projected;
         try {
           projected = await project(streamed.events);
@@ -208,7 +215,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
           );
           projected = await project(streamed.events);
         }
-        this.#remember(request.attemptId, projected.transcript);
+        this.#transcripts.set(request.attemptId, projected.transcript);
         if (projected.usage !== undefined) this.#usage.set(request.attemptId, projected.usage);
         if (
           projected.threadId !== undefined &&
@@ -259,7 +266,7 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
 
   async read(attemptId: string): Promise<AttemptTranscriptItem[] | null> {
     const transcript = this.#transcripts.get(attemptId);
-    return transcript === undefined ? null : structuredClone(transcript);
+    return transcript === undefined ? null : structuredClone(transcript) as AttemptTranscriptItem[];
   }
 
   async readUsage(attemptId: string): Promise<AttemptTokenUsage | null> {
@@ -268,10 +275,6 @@ export class CodexAgentRuntime implements AgentRuntime, AttemptTranscriptAccess 
 
   async readContextWindowUsage(attemptId: string): Promise<AttemptContextWindowUsage | null> {
     return this.#contextWindowUsage.get(attemptId) ?? null;
-  }
-
-  #remember(attemptId: string, transcript: readonly AttemptTranscriptItem[]): void {
-    this.#transcripts.set(attemptId, [...structuredClone(transcript)]);
   }
 }
 

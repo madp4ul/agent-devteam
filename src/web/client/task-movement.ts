@@ -13,19 +13,15 @@ interface MoveDestination {
   name: string;
 }
 
-export function useTaskMovement(refresh: () => Promise<void>): {
-  feedback: Feedback | undefined;
-  setFeedback(feedback: Feedback | undefined): void;
+export function useTaskMovement(refresh: () => Promise<void>, setFeedback: (feedback: Feedback & { target?: string }) => void): {
   pendingTaskId: string | undefined;
   move(subject: MoveSubject, destination: MoveDestination): Promise<void>;
 } {
-  const [feedback, setFeedback] = useState<Feedback>();
   const [pendingTaskId, setPendingTaskId] = useState<string>();
 
   const move = useCallback(async (subject: MoveSubject, destination: MoveDestination) => {
     if (pendingTaskId !== undefined) return;
     setPendingTaskId(subject.id);
-    setFeedback(undefined);
     try {
       await moveTask(subject.id, {
         destinationColumnId: destination.id,
@@ -33,14 +29,14 @@ export function useTaskMovement(refresh: () => Promise<void>): {
         idempotencyKey: crypto.randomUUID(),
       });
       await refresh();
-      setFeedback({ role: "status", text: `Moved ${subject.id} to ${destination.name}.` });
+      setFeedback({ role: "status", text: `Moved ${subject.id} to ${destination.name}.`, target: subject.id });
     } catch (error) {
-      setFeedback(mutationFeedback(error));
+      setFeedback({ ...mutationFeedback(error), target: subject.id });
       await refresh();
     } finally {
       setPendingTaskId(undefined);
     }
-  }, [pendingTaskId, refresh]);
+  }, [pendingTaskId, refresh, setFeedback]);
 
-  return { feedback, setFeedback, pendingTaskId, move };
+  return { pendingTaskId, move };
 }

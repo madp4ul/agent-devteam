@@ -1,6 +1,82 @@
 import { fulfillTaskScenario } from "./browser-fixture.ts";
 import { expect, test } from "./browser-fixture.ts";
 
+for (const theme of ["dark", "light"] as const) {
+  test(`a posted comment is confirmed despite a delayed or failed task refresh in ${theme} mode`, async ({ page }) => {
+    await page.addInitScript((value) => localStorage.setItem("coordination-theme", value), theme);
+    const refreshStarted = Promise.withResolvers<void>();
+    const releaseRefresh = Promise.withResolvers<void>();
+    let commentAccepted = false;
+    let failRefresh = true;
+    await page.route("**/api/tasks/T-0001/comments", async (route) => {
+      const response = await route.fetch();
+      expect(response.status()).toBe(201);
+      commentAccepted = true;
+      await route.fulfill({ response });
+    });
+    await page.route("**/api/tasks/T-0001", async (route) => {
+      if (commentAccepted) {
+        refreshStarted.resolve();
+        await releaseRefresh.promise;
+        if (failRefresh) return route.fulfill({ status: 503, json: { error: "Task temporarily unavailable." } });
+      }
+      await route.continue();
+    });
+
+    await page.goto("/tasks/T-0001");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    const composer = page.getByRole("region", { name: "Add comment" });
+    const draft = composer.getByRole("textbox", { name: "Comment" });
+    const status = composer.getByRole("status");
+    const body = "This comment is saved before the task refresh finishes.";
+    await draft.fill(body);
+    try {
+      await composer.getByRole("button", { name: "Post", exact: true }).click();
+      await refreshStarted.promise;
+      await expect(status).toHaveText("Commented on T-0001.");
+      await expect(status).toBeInViewport();
+    } finally {
+      releaseRefresh.resolve();
+    }
+    await expect(page.getByRole("alert")).toContainText("Request failed with status 503");
+    await expect(status).toBeInViewport();
+    failRefresh = false;
+    await expect(page.locator(".comment-entry").filter({ hasText: body })).toHaveCount(1);
+  });
+}
+
+test("retrying a comment after losing its accepted response records one comment and mention activation", async ({ page }) => {
+  const idempotencyKeys: string[] = [];
+  await page.route("**/api/tasks/T-0001/comments", async (route) => {
+    idempotencyKeys.push(route.request().postDataJSON().idempotencyKey);
+    const response = await route.fetch();
+    expect(response.status()).toBe(201);
+    if (idempotencyKeys.length === 1) await route.abort();
+    else await route.fulfill({ response });
+  });
+  await page.goto("/tasks/T-0001");
+  const composer = page.getByRole("region", { name: "Add comment" });
+  const draft = composer.getByRole("textbox", { name: "Comment" });
+  const body = "@implementer Please check this once.";
+  const post = composer.getByRole("button", { name: "Post", exact: true });
+  await draft.fill(body);
+  await post.click();
+  await expect(composer.getByRole("alert")).toBeVisible();
+  await expect(draft).toHaveValue(body);
+  await post.click();
+  await expect(composer.getByRole("status")).toHaveText("Commented on T-0001.");
+  expect(idempotencyKeys).toHaveLength(2);
+  expect(idempotencyKeys[1]).toBe(idempotencyKeys[0]);
+
+  const detail = await (await page.request.get("/api/tasks/T-0001")).json();
+  const comments = detail.task.comments.filter((comment: { body: string }) => comment.body === body);
+  expect(comments).toHaveLength(1);
+  const activations = detail.task.activations.filter((activation: { reason: { sourceEventId: string } }) =>
+    activation.reason.sourceEventId === comments[0].id);
+  expect(activations).toHaveLength(1);
+  expect(activations[0].targetAgentId).toBe("implementer");
+});
+
 test("the comment composer does not cover the hit area of the first timeline relationship link", async ({ page }) => {
   const parentTitle = "Parent task with a timeline link that wraps across more than one visual line";
   await page.route("**/api/tasks/T-0001", async (route) => {

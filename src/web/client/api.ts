@@ -1,3 +1,4 @@
+import type { ArchivalOperation, ArchivalTarget, StartArchivalOperationResult } from "../../application/archival-operation-contract.ts";
 import type {
   ActivationRecoveryRequest,
   BoardMutationResult,
@@ -23,7 +24,6 @@ import type {
   ContinueAgentConversationResult,
   RetireAgentConversationResult,
   ActivationRecoveryAction,
-  ArchiveCompletedTasksResult,
   TaskWorkspaceGitStateView,
   NotificationPolicyView,
   NotificationOccurrenceBatch,
@@ -112,16 +112,25 @@ export async function readArchivedTasks(): Promise<TaskOverviewView[]> {
   return result.tasks;
 }
 
-export async function archiveTask(
-  taskId: string,
-  idempotencyKey: string,
-  discardWorkspaceChanges = false,
-  archivalPreviewToken?: string,
-): Promise<void> {
-  await request(`/api/tasks/${encodeURIComponent(taskId)}/archive`, {
-    method: "POST",
-    body: serializeBrowserRequest<ArchiveTaskRequest>({
-      idempotencyKey,
+export function readArchivalOperations(taskId?: string): Promise<ArchivalOperation[]> {
+  return request(`/api/archive/operations${taskId === undefined ? "" : `?taskId=${encodeURIComponent(taskId)}`}`, { signal: AbortSignal.timeout(10_000) });
+}
+
+export async function readArchivalOperation(id: string): Promise<ArchivalOperation | undefined> {
+  try { return await request(`/api/archive/operations/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(10_000) }); }
+  catch (error) { if (!(error instanceof ApiError) || error.status !== 404) throw error; }
+}
+
+export async function dismissArchivalOperation(id: string): Promise<void> {
+  await request(`/api/archive/operations/${encodeURIComponent(id)}/dismiss`, { method: "POST" });
+}
+
+export function startArchivalOperation(target: ArchivalTarget, idempotencyKey: string, discardWorkspaceChanges = false, archivalPreviewToken?: string): Promise<Extract<StartArchivalOperationResult, { accepted: true }>> {
+  return target.kind === "completion" ? request("/api/archive/completed", {
+    method: "POST", signal: AbortSignal.timeout(10_000),
+    body: serializeBrowserRequest<ArchiveCompletedTasksRequest>({ boardId: target.boardId, idempotencyKey, background: true }),
+  }) : request(`/api/tasks/${encodeURIComponent(target.taskId)}/archive`, {
+    method: "POST", signal: AbortSignal.timeout(10_000), body: serializeBrowserRequest<ArchiveTaskRequest>({ idempotencyKey, background: true,
       ...(discardWorkspaceChanges ? { discardWorkspaceChanges: true } : {}),
       ...(archivalPreviewToken === undefined ? {} : { archivalPreviewToken }),
     }),
@@ -141,16 +150,6 @@ export async function unarchiveTask(taskId: string, idempotencyKey: string): Pro
   await request(`/api/tasks/${encodeURIComponent(taskId)}/unarchive`, {
     method: "POST",
     body: serializeBrowserRequest<IdempotentBrowserRequest>({ idempotencyKey }),
-  });
-}
-
-export async function archiveCompletedTasks(
-  boardId: string,
-  idempotencyKey: string,
-): Promise<Extract<ArchiveCompletedTasksResult, { accepted: true }>> {
-  return request("/api/archive/completed", {
-    method: "POST",
-    body: serializeBrowserRequest<ArchiveCompletedTasksRequest>({ boardId, idempotencyKey }),
   });
 }
 

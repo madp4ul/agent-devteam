@@ -9,6 +9,7 @@ import { ProcessStateStore } from "./process-state-store.ts";
 import { ActiveAttemptModule } from "./active-attempt-module.ts";
 import { IdempotentCommandExecutor } from "./idempotent-command-executor.ts";
 import { TaskArchiveStore } from "./task-archive-store.ts";
+import { ArchivalOperationStore } from "./archival-operation-store.ts";
 import { NotificationStore } from "./notification-store.ts";
 import { ActivityJournal } from "./activity-journal.ts";
 import { AttentionRecorder } from "./attention-recorder.ts";
@@ -37,6 +38,7 @@ export interface CoordinationPersistence {
   conversationContextDelivery: ConversationContextDeliveryModule;
   activeAttempts: ActiveAttemptModule;
   taskArchive: TaskArchiveStore;
+  archivalOperations: ArchivalOperationStore;
   notifications: NotificationStore;
   close(): void;
 }
@@ -169,6 +171,7 @@ function composeCoordinationPersistence(
       conversationAttachments,
       conversationProjections,
     ),
+    archivalOperations: new ArchivalOperationStore(database),
     notifications,
     close: () => {
       conversationAttachments.close();

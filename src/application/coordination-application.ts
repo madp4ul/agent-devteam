@@ -12,6 +12,8 @@ import {
   type CoordinationDatabaseOpenOptions,
 } from "./internal/coordination-database.ts";
 import { AutomationCoordinator } from "./internal/automation-coordinator.ts";
+import { ArchivalOperations } from "./internal/archival-operations.ts";
+import type { ArchivalTarget, StartArchivalOperationResult } from "./archival-operation-contract.ts";
 import type { AutomationProcessContext } from "./internal/automation-coordinator.ts";
 import { FRAMEWORK_GUIDANCE } from "./activation-prompt.ts";
 import { loadProcessDefinition } from "./internal/process-definition.ts";
@@ -147,6 +149,8 @@ export class CoordinationApplication {
   readonly #workspaceManager: GitTaskWorkspaceManager | undefined;
   readonly #processContext: AutomationProcessContext | undefined;
   readonly #defaultStartingRef: string;
+  readonly #archivalOperations: ArchivalOperations;
+  #closing = false;
   readonly #pendingInterruptCommands = new Map<
     string,
     Extract<InterruptTaskResult, { accepted: true }>
@@ -168,6 +172,8 @@ export class CoordinationApplication {
     this.#workspaceManager = workspaceManager;
     this.#processContext = processContext;
     this.#defaultStartingRef = defaultStartingRef;
+    this.#archivalOperations = new ArchivalOperations(persistence.archivalOperations, persistence.taskArchive,
+      (command, eligibility) => this.archiveTaskWithEligibility(command, eligibility));
   }
 
   static async validateProcessDefinition(path: string): Promise<ProcessValidationResult> {
@@ -492,8 +498,10 @@ export class CoordinationApplication {
     return this.#automation.pause();
   }
 
-  prepareShutdown(): Promise<import("./automation-contract.ts").ShutdownReadiness> {
-    return this.#automation.prepareShutdown();
+  async prepareShutdown(): Promise<import("./automation-contract.ts").ShutdownReadiness> {
+    const readiness = await this.#automation.prepareShutdown();
+    if (readiness.ready) await this.#archivalOperations.stop();
+    return readiness;
   }
 
   retryTaskTermination(taskId: string, attemptId: string): import("./automation-contract.ts").TerminationRetryResult {
@@ -1204,6 +1212,19 @@ export class CoordinationApplication {
     return this.archiveTaskWithEligibility(command, "any-idle-task");
   }
 
+  startArchivalOperation(target: ArchivalTarget, command: Omit<ArchiveTaskCommand, "taskId">): StartArchivalOperationResult {
+    if (this.#startup.mode === "configuration-error") return { accepted: false, reason: "configuration-error" };
+    return this.#archivalOperations.start(target, command);
+  }
+
+  queryArchivalOperations(taskId?: string) { return this.#persistence.archivalOperations.list(false, taskId); }
+
+  archivalOperationsVersion(): string { return this.#persistence.archivalOperations.version(); }
+
+  queryArchivalOperation(id: string) { return this.#persistence.archivalOperations.read(id)?.operation; }
+
+  dismissArchivalOperation(id: string): void { this.#persistence.archivalOperations.dismiss(id); }
+
   private async archiveTaskWithEligibility(
     command: ArchiveTaskCommand,
     eligibility: "any-idle-task" | "completed-only",
@@ -1279,7 +1300,15 @@ export class CoordinationApplication {
   }
 
   close(): void {
+    if (this.#closing) return;
+    this.#closing = true;
     this.#automation.close();
+    if (this.#archivalOperations.busy) {
+      void this.#archivalOperations.stop().then(() => this.#persistence.close(), (error: unknown) => {
+        console.error("Could not stop archival safely", error);
+      });
+      return;
+    }
     this.#persistence.close();
   }
 

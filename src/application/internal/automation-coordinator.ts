@@ -25,6 +25,7 @@ import type { Actor } from "../task-contract.ts";
 import { GitTaskWorkspaceError, GitTaskWorkspaceManager } from "./git-task-workspace.ts";
 import type { ProcessStateStore } from "./process-state-store.ts";
 import type { ActiveAttemptModule } from "./active-attempt-module.ts";
+import { TranscriptWriteBatch } from "./transcript-write-batch.ts";
 import type { ActivationResolutionModule } from "./activation-resolution-module.ts";
 import type {
   ActivationSchedulingModule,
@@ -86,6 +87,7 @@ export class AutomationCoordinator {
   readonly #taskProjections: TaskProjectionStore;
   readonly #activationScheduling: ActivationSchedulingModule;
   readonly #activeAttempts: ActiveAttemptModule;
+  readonly #transcriptWrites: TranscriptWriteBatch;
   readonly #activationResolutions: ActivationResolutionModule;
   readonly #conversationContextDelivery: ConversationContextDeliveryModule;
   readonly #conversationAttachments: ConversationAttachmentStore;
@@ -118,6 +120,7 @@ export class AutomationCoordinator {
     this.#taskProjections = options.taskProjections;
     this.#activationScheduling = options.activationScheduling;
     this.#activeAttempts = options.activeAttempts;
+    this.#transcriptWrites = new TranscriptWriteBatch(options.activeAttempts);
     this.#conversationContextDelivery = options.conversationContextDelivery;
     this.#conversationAttachments = options.conversationAttachments;
     this.#startup = options.startup;
@@ -312,6 +315,7 @@ export class AutomationCoordinator {
 
   close(): void {
     this.#closed = true;
+    this.#transcriptWrites.close();
     this.#automation = { state: "paused", attemptsMayStart: false };
     this.#wakeAutomationPump?.();
     this.#wakeAutomationPump = undefined;
@@ -531,6 +535,7 @@ export class AutomationCoordinator {
             for (const observer of this.#shutdownObservers) observer();
           },
           transcriptItemUpdated: (ordinal, item) => this.#activeAttempts.recordTranscriptItem(attempt.id, ordinal, item),
+          persistTranscriptItem: (ordinal, item) => this.#transcriptWrites.enqueue(attempt.id, ordinal, item),
           reviewerPolicyConfigured: (configuration) => {
             this.#activeAttempts.recordReviewerPolicyConfigured(attempt.id, configuration);
           },

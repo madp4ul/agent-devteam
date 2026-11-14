@@ -17,8 +17,11 @@ Specification: [Heavy usage](spec.md)
 - [11 — Dispatch unrelated tasks while workspaces are preparing](issues/11-dispatch-independently-of-workspace-preparation.md): resolved; separate two-slot creation/verification lanes, truthful preparation query and preserved pause/restart ownership. Full suite 452 passed / 6 skipped; both review axes clear.
 - [12 — Show workspace creation progress instead of an agent running](issues/12-show-workspace-preparation-progress.md): resolved; real bounded Git progress, preparation/startup/execution projections and shared browser presentation. Full suite 457 passed / 6 skipped; both review axes clear.
 - [13 — Allow automation to resume while existing agents are draining](issues/13-resume-automation-while-pausing.md): resolved; enabled Resume during pausing with one wakeable pump and completion/settlement race coverage. Full suite 462 passed / 6 skipped; final focused checks and both review axes clear.
+- [14 — Keep browser reload and comment posting responsive during agent activity](issues/14-keep-browser-responsive-during-agent-activity.md): fixed delayed comment confirmation, repeated transcript copying, and measured per-item commit pressure. The original two-minute incident remains unverified.
 
 ## Current frontier
+
+- Ticket 14 remains open for evidence from the original stall or a representative live workload.
 
 - Tickets 11–13 are resolved: bounded preparation, truthful live progress and
   startup/execution reporting, and reversible draining through Resume. The user

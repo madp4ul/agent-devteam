@@ -233,6 +233,19 @@ input, textarea, select { width: 100%; border: 1px solid #cbd2cc; border-radius:
 .feedback { max-width: 58rem; margin: 0 0 1rem; border-radius: .6rem; padding: .85rem 1rem; font-weight: 600; }
 .feedback.status { background: #d9eee3; color: #174e3a; }
 .feedback.alert { background: #fbe1da; color: #8c2e1d; }
+.operation-feedback { position: fixed; z-index: 15; inset-block-start: 4.5rem; inset-inline-end: .75rem; width: min(25rem, calc(100vw - 1.5rem)); display: grid; justify-items: end; gap: .35rem; pointer-events: none; }
+.operation-feedback button, .operation-feedback-list { pointer-events: auto; }
+.operation-feedback-list { display: grid; gap: .35rem; width: 100%; max-height: min(23rem, 35dvh); overflow: auto; overscroll-behavior: contain; border-radius: .6rem; box-shadow: var(--shadow); }
+.operation-feedback-list[hidden] { display: none; }
+.operation-feedback-announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.operation-feedback-item { border: 1px solid var(--line); border-inline-start: .25rem solid var(--success-text); background: var(--surface); color: var(--text); border-radius: .6rem; padding: .65rem .75rem; overflow-wrap: anywhere; }
+.operation-feedback-item.alert { border-inline-start-color: var(--failure-text); }
+.operation-feedback-heading { display: flex; align-items: center; gap: .5rem; font-size: .82rem; }
+.operation-feedback-heading strong { flex: 1; }
+.operation-feedback-heading time { color: var(--muted); white-space: nowrap; }
+.operation-feedback-item p, .operation-feedback-item ul { margin: .4rem 0 0; }
+.operation-feedback-item .feedback { padding: 0; color: inherit; background: transparent; }
+.operation-feedback-item ul { padding-inline-start: 1.2rem; }
 .board-heading { display: flex; justify-content: space-between; margin-bottom: 1rem; }
 .board-lane { width: 100%; padding: .25rem .2rem 1.15rem; }
 .board-lane::-webkit-scrollbar { height: .8rem; }
@@ -244,6 +257,7 @@ input, textarea, select { width: 100%; border: 1px solid #cbd2cc; border-radius:
 .column-heading > div { min-width: 0; flex: 1; }
 .archive-completed { display: block; width: fit-content; margin-top: .55rem; border: 1px solid #9b8ba3; color: var(--archive); background: #f8f5f9; padding: .35rem .55rem; font-size: .7rem; }
 .archive-completed:hover:not(:disabled) { color: white; background: var(--archive); }
+.column-archive-action { display: flex; align-items: baseline; gap: .5rem; font-size: .75rem; color: var(--text); }
 .column-header p { margin: .2rem 0 0; color: var(--muted); font-size: .78rem; }
 .task-count { display: inline-grid; min-width: 1.65rem; height: 1.65rem; place-items: center; border-radius: 999px; color: #52605a; background: #d8ddd7; font-size: .75rem; font-weight: 800; }
 .task-list { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }

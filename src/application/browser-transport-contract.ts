@@ -61,11 +61,13 @@ export interface RetireAgentConversationRequest extends IdempotentBrowserRequest
 }
 
 export interface ArchiveTaskRequest extends IdempotentBrowserRequest {
+  background?: true;
   discardWorkspaceChanges?: true;
   archivalPreviewToken?: string;
 }
 
 export interface ArchiveCompletedTasksRequest extends IdempotentBrowserRequest {
+  background?: true;
   boardId: string;
 }
 

@@ -40,6 +40,11 @@ export function errorMessage(error: unknown): string {
     if (body.reason === "workspace-nested-worktrees") {
       return "This task contains nested Git worktrees. Open the task and archive it individually to inspect and confirm deletion.";
     }
+    if (body.reason === "workspace-commit-not-durable") {
+      return "No named ref contains the workspace HEAD. Open the task and review the workspace to explicitly discard those commits, or save them to a branch before retrying.";
+    }
+    if (body.reason === "interrupted") return "The host stopped before this task was archived. Inspect the current task and workspace before requesting archival again.";
+    if (body.reason === "archive-in-progress") return "Archival is already in progress for this task. Check its operation feedback before retrying.";
     if (body.reason === "workspace-removal-failed") {
       return "Git could not remove the registered task workspace, so the task was not archived. Inspect the workspace and registration before retrying.";
     }

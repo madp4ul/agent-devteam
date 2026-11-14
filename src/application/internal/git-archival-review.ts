@@ -1,10 +1,10 @@
-import { workspaceGitSummary } from "./workspace-git-summary.ts";
+import { WorkspaceGitSummaryReader } from "./workspace-git-summary.ts";
 import { createHash } from "node:crypto";
 import { lstat, open, readdir, readlink, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { ArchivalWorktreeView, TaskArchivalPreview } from "../task-contract.ts";
 import { normalizedPath, samePath } from "./path-identity.ts";
-import { gitSafeDirectoryEnvironment, runGit } from "./git-command.ts";
+import { gitSafeDirectoryEnvironment, readGitRecords, runGit } from "./git-command.ts";
 
 interface ReviewedWorktree { view: ArchivalWorktreeView; fingerprint: string }
 export interface ArchivalReview {
@@ -35,8 +35,9 @@ export class GitArchivalReview {
     const paths = await this.paths(root);
     if (!paths.some((path) => samePath(path, root))) throw new Error("The parent registration is missing.");
     const entries: ReviewedWorktree[] = [];
+    const repositoryCommon = (await this.git(["-C", this.repository, "rev-parse", "--path-format=absolute", "--git-common-dir"])).trim();
     for (const path of paths) {
-      try { entries.push(await this.inspectOne(root, path, paths)); }
+      try { entries.push(await this.inspectOne(root, path, paths, repositoryCommon)); }
       catch (error) {
         const canOpen = await this.resolvePath(root, path).then(() => true, () => false);
         entries.push({ fingerprint: "", view: { path, parent: samePath(root, path), ignoredFiles: 0,
@@ -44,44 +45,53 @@ export class GitArchivalReview {
           diagnostic: error instanceof Error ? error.message : "Git inspection unavailable" } });
       }
     }
-    const canProceed = entries.every((entry) => entry.fingerprint !== "") && entries[0]?.view.durableHead === true;
+    const canProceed = entries.every((entry) => entry.fingerprint !== "");
     return { entries, preview: {
       token: canProceed ? digest(entries.map((entry) => [normalizedPath(entry.view.path), entry.fingerprint])) : null,
       worktrees: entries.map((entry) => entry.view),
     } };
   }
 
-  async inspectOne(root: string, path: string, paths: string[]): Promise<ReviewedWorktree> {
+  async inspectOne(root: string, path: string, paths: string[], repositoryCommon?: string): Promise<ReviewedWorktree> {
     await validatePath(root, path);
-    const environment = gitSafeDirectoryEnvironment(path);
+    const environment = { ...gitSafeDirectoryEnvironment(path), GIT_OPTIONAL_LOCKS: "0" };
     const git = (...args: string[]) => this.git(["-C", path, ...args], environment);
     const common = await git("rev-parse", "--path-format=absolute", "--git-common-dir");
-    const repositoryCommon = await this.git(["-C", this.repository, "rev-parse", "--path-format=absolute", "--git-common-dir"]);
+    repositoryCommon ??= (await this.git(["-C", this.repository, "rev-parse", "--path-format=absolute", "--git-common-dir"])).trim();
     const top = await git("rev-parse", "--show-toplevel");
-    if (!samePath(common.trim(), repositoryCommon.trim()) || !samePath(top.trim(), path)) {
+    if (!samePath(common.trim(), repositoryCommon) || !samePath(top.trim(), path)) {
       throw new Error("Worktree Git identity does not match its registration.");
     }
-    const [status, diff, refs, index, ignoredOutput] = await Promise.all([
-      git("status", "--porcelain=v2", "--branch", "--untracked-files=all"),
-      git("diff", "--numstat", "HEAD", "--"),
-      git("for-each-ref", "--format=%(refname):%(objectname)", "--contains", "HEAD"),
-      git("ls-files", "--stage", "-z"),
-      git("ls-files", "--others", "--ignored", "--exclude-standard", "-z"),
+    const summary = new WorkspaceGitSummaryReader();
+    const refs = createHash("sha256");
+    const index = createHash("sha256");
+    let durableHead = false;
+    let ignoredFiles = 0;
+    const records = (args: string[], separator: "line" | "nul", consume: (record: string) => void) =>
+      readGitRecords(["-C", path, ...args], environment, separator, consume);
+    await Promise.all([
+      records(["status", "--porcelain=v2", "--branch", "--untracked-files=all"], "line", (line) => summary.status(line)),
+      records(["diff", "--numstat", "HEAD", "--"], "line", (line) => summary.numstat(line)),
+      records(["for-each-ref", "--format=%(refname):%(objectname)", "--contains", "HEAD"], "line", (line) => {
+        durableHead = true;
+        refs.update(line).update("\n");
+      }),
+      records(["ls-files", "--stage", "-z"], "nul", (record) => { index.update(record).update("\0"); }),
+      records(["ls-files", "--others", "--ignored", "--exclude-standard", "-z"], "nul", () => { ignoredFiles += 1; }),
     ]);
-    const head = /^# branch.oid (.+)$/m.exec(status)?.[1]?.trim();
-    const branch = /^# branch.head (.+)$/m.exec(status)?.[1]?.trim();
-    if (!head || !branch || head === "(initial)") throw new Error("Current HEAD is unavailable.");
-    const upstreamName = /^# branch.upstream (.+)$/m.exec(status)?.[1]?.trim();
-    const aheadBehind = /^# branch.ab \+(\d+) -(\d+)$/m.exec(status);
+    const state = summary.result();
+    const head = summary.header("oid");
+    const branch = summary.header("head");
+    const upstreamName = summary.header("upstream");
+    const aheadBehind = /^\+(\d+) -(\d+)$/u.exec(summary.header("ab") ?? "");
     const upstream: ArchivalWorktreeView["upstream"] = upstreamName === undefined ? { kind: "none" }
       : aheadBehind === null ? { kind: "unknown" }
       : { kind: "known", name: upstreamName, ahead: Number(aheadBehind[1]), behind: Number(aheadBehind[2]) };
     const upstreamCommit = upstream.kind === "known" ? (await git("rev-parse", "--verify", "@{upstream}")).trim() : null;
     const content = await contentFingerprint(path, paths.filter((other) => within(path, other)));
-    return { fingerprint: digest({ head, branch, refs, index, upstream, upstreamCommit, content }), view: {
-      path, parent: samePath(root, path), canOpen: true, ignoredFiles: ignoredOutput.split("\0").filter(Boolean).length,
-      durableHead: refs.trim().length > 0, upstream,
-      state: { ...workspaceGitSummary(status, diff), history: { kind: "no-task-baseline" } },
+    return { fingerprint: digest({ head, branch, refs: refs.digest("hex"), index: index.digest("hex"), upstream, upstreamCommit, content }), view: {
+      path, parent: samePath(root, path), canOpen: true, ignoredFiles, durableHead, upstream,
+      state: { ...state, history: { kind: "no-task-baseline" } },
     } };
   }
 }
@@ -103,7 +113,7 @@ async function contentFingerprint(root: string, nested: string[]): Promise<strin
     const entries = (await readdir(path, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
       const child = join(path, entry.name);
-      if (entry.name === ".git") {
+      if (entry.name.toLowerCase() === ".git") {
         if (samePath(path, root)) continue;
         throw new Error(`Unregistered nested Git metadata at ${child}; inspect and relocate it before deletion.`);
       }
@@ -119,7 +129,9 @@ async function contentFingerprint(root: string, nested: string[]): Promise<strin
           const opened = await file.stat();
           if (opened.ino !== before.ino || opened.dev !== before.dev) throw new Error("File identity changed during inspection.");
           hash.update(`mode:${opened.mode}`);
-          for await (const chunk of file.createReadStream({ autoClose: false })) hash.update(chunk);
+          if (opened.size > 0) {
+            for await (const chunk of file.createReadStream({ autoClose: false })) hash.update(chunk);
+          }
           const after = await file.stat();
           const retained = await lstat(child);
           if (after.mtimeMs !== opened.mtimeMs || after.size !== opened.size || retained.ino !== opened.ino || retained.isSymbolicLink()) {

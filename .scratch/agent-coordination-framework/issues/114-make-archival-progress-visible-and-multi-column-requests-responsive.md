@@ -2,7 +2,7 @@
 
 **Type:** task
 
-**Status:** open
+**Status:** resolved
 
 **Blocked by:** 113 — viewport-fixed interactive operation feedback.
 
@@ -76,3 +76,23 @@ any broader job framework needs a demonstrated requirement, not speculation.
 columns as the normal workflow, and requested visible reaction beside the clicked
 button plus ongoing progress. No implementation or deletion was requested in this
 feedback turn; this ticket captures future work.
+
+## Implementation evidence — 2026-11-13
+
+- The old browser waited for the batch and Git checks before receiving a
+  response. A disposable large preview took about 4.7 s while a competing board
+  read completed in 19 ms. The queued HTTP regression accepted the second board
+  in 7–12 ms while the first was held at the Git boundary.
+- Each browser request shows immediate pending feedback and receives an HTTP
+  202 operation identity. The host serializes cleanup, records per-task progress,
+  and continues after a blocked task. Reload and lost-response retries reconcile
+  with persisted operations. Dismissal affects presentation only.
+- Startup reconciles interrupted claims and retained task receipts without
+  replaying deletion consent. Browser and HTTP coverage exercise multiple
+  columns, reload, duplicate submissions, partial results and both themes.
+  See [ADR 0045](../../../docs/adr/0045-queue-browser-archival-with-durable-results.md).
+
+The controlled multi-column test holds the first task at the Git cleanup entry
+point. The real large-output test separately measures a competing HTTP read while
+the preview runs. These fixtures do not measure end-to-end archival latency on
+the live project.

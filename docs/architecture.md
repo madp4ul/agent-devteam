@@ -166,14 +166,20 @@ and relocation, preventing a host from opening the project during cleanup.
 Browser conversation history uses migration 0010's indexed item projection.
 Application queries select a bounded window before hydrating sources, including
 within one large attempt, and source links resolve windows directly. Codex live
-item updates enter that projection through the existing application lifecycle
-transaction; browser polling never reads complete runtime transcripts. Signed
+item updates enter that projection through the application lifecycle. The host
+collects concurrent updates in bounded transactions, and each Codex worker waits
+for durable acknowledgement before sending its next event. The runtime updates
+only the changed item in its attempt-local cache and copies the full transcript
+when requested or when a turn settles.
+Browser conversation polling never reads complete runtime transcripts. Signed
 conversation cursors retain a backward watermark, while refresh renews the
 window's live evidence. The browser retains at most 150 history elements with
 eviction spacers and durable reading/selection anchors. Conversation cost totals
 still aggregate compact pricing/usage evidence across all retained attempts,
 independently of the visible history. [ADR 0026](adr/0026-page-browser-conversations-before-hydration.md)
 records storage, ordering, cursor and window contracts.
+See [ADR 0046](adr/0046-batch-live-transcript-writes-before-acknowledging-events.md)
+for the durable acknowledgement and batching decision.
 Settled current conversations can be retired atomically with an attributable
 reason. Retired lineages remain durable and explicitly continuable, while the
 next ordinary activation creates the pair's replacement and receives that
@@ -561,10 +567,19 @@ gone. Registered nested worktrees block ordinary and bulk archival even when
 discarding ordinary workspace changes was confirmed. Individual archival can
 instead request an application-owned deletion preview covering the parent and
 every nested registration. Explicit consent carries a fingerprint of that exact
-scope and its file/index/ref evidence; the durable archival claim then owns
-revalidation and deepest-first Git cleanup. Changed or unavailable evidence
+scope and its file/index/ref evidence, including any checkout whose HEAD has no
+named ref. Git streams inspection records into counts and fingerprints. The
+durable archival claim then owns revalidation and deepest-first Git cleanup.
+Changed or unavailable evidence
 requires renewed review, and partial outcomes identify completed removals.
 See [ADR 0041](adr/0041-review-nested-worktree-archival.md).
+
+Browser archival can acknowledge a durable operation before Git inspection or
+removal completes. The application runs one queued archival task at a time and
+records each task's progress and outcome in SQLite. Browser reads and new archive
+requests remain available while Git is running. On restart, task-claim recovery
+precedes operation reconciliation, and unfinished deletion authorization is not
+replayed. See [ADR 0045](adr/0045-queue-browser-archival-with-durable-results.md).
 
 Git can unregister a worktree before failing to delete all its files. The
 existing durable archival claim owns recovery across that boundary. A correctly

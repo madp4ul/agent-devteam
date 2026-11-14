@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TaskArchivalPreview } from "../../application/browser-transport-contract.ts";
-import { archiveTask, openArchivalWorktree, readTaskArchivalPreview } from "./api.ts";
+import { ApiError, openArchivalWorktree, readTaskArchivalPreview } from "./api.ts";
+import { archivalRequestIdentity, archiveTaskWithProgress, forgetArchivalRequest } from "./archival-operations.tsx";
 import { errorMessage } from "./feedback.ts";
 import { Modal } from "./Modal.tsx";
 import { WorkspaceGitSummary } from "./TaskWorkspacePanel.tsx";
 
 export function ArchivalReviewDialog({ taskId, onClose, onArchived }: {
-  taskId: string; onClose: () => void; onArchived: () => Promise<void>;
+  taskId: string; onClose: () => void; onArchived: () => void;
 }) {
   const [preview, setPreview] = useState<TaskArchivalPreview>();
   const [message, setMessage] = useState<string>();
   const [pending, setPending] = useState(false);
+  const requestId = useRef<string | undefined>(undefined);
   useEffect(() => {
     let current = true;
     void readTaskArchivalPreview(taskId).then((value) => { if (current) setPreview(value); })
@@ -19,12 +21,17 @@ export function ArchivalReviewDialog({ taskId, onClose, onArchived }: {
   }, [taskId]);
   const proceed = async () => {
     if (!preview?.token) return;
+    const scope = `task:${taskId}:reviewed`;
     setPending(true);
     try {
-      await archiveTask(taskId, crypto.randomUUID(), true, preview.token);
-      await onArchived(); onClose();
+      await archiveTaskWithProgress(taskId, requestId.current ??= archivalRequestIdentity(scope), true, preview.token);
+      forgetArchivalRequest(scope);
+      onArchived(); onClose();
     } catch (error) {
       setMessage(errorMessage(error));
+      if (!(error instanceof ApiError) || error.status >= 500) return;
+      requestId.current = undefined;
+      forgetArchivalRequest(scope);
       setPreview(undefined);
       try { setPreview(await readTaskArchivalPreview(taskId)); }
       catch (refreshError) { setMessage(`${errorMessage(error)} ${errorMessage(refreshError)}`); }
@@ -57,7 +64,7 @@ export function ArchivalReviewDialog({ taskId, onClose, onArchived }: {
             </button>)}
           </div>
       </section>)}
-    {preview?.token === null ? <p role="alert">Deletion is unavailable until all worktrees can be inspected and the task workspace HEAD has a durable named ref.</p> : null}
+    {preview?.token === null ? <p role="alert">Review the inspection errors above. Open the affected workspace to correct them, then request a fresh preview.</p> : null}
     <div className="form-actions">
       <button className="secondary" disabled={pending} onClick={onClose}>Abort</button>
       <button className="destructive" disabled={pending || !preview?.token} onClick={() => void proceed()}>{pending ? "Archiving…" : "Proceed"}</button>

@@ -14,9 +14,9 @@ mutations during cleanup; no new database state or migration is required.
 The preview includes the task checkout and each registered descendant, with Git
 changes, ignored-file counts, named-ref reachability and local upstream divergence.
 Unpushed commits are never equated with commits since task start. Missing upstream
-or inspection data remains explicit. Parent HEAD must retain a named ref, as in
-ordinary archival. Consent can discard a nested detached HEAD without a durable
-ref only after that risk is shown. No branches are deleted and no fetch occurs.
+or inspection data remains explicit. Ordinary archival requires a named ref.
+After the preview shows the risk, explicit consent can discard an unreferenced
+HEAD in the parent or a nested checkout. No branches are deleted and no fetch occurs.
 
 The evidence token hashes canonical paths, HEAD/branch, index, containing refs,
 upstream identity/divergence and streamed file contents, including ignored and
@@ -25,7 +25,9 @@ owns a separate fingerprint. Symlinks are hashed as links, never traversed; path
 canonicalization and opened-file identity checks reject ambiguous inspection.
 Unregistered embedded Git metadata is ambiguous and blocks deletion rather than
 being omitted from the evidence. Previewing can be expensive for large workspaces, so the UI reports inspection in
-progress and hashing streams bytes instead of buffering the whole tree.
+progress and hashing streams bytes instead of buffering the whole tree. Git
+status, diff, index, containing-ref and ignored-file output are streamed into
+counts and hashes so a large checkout can still be reviewed.
 
 After consent, revalidate the complete registration set and every remaining
 fingerprint before each deepest-first Git removal. Never pass arbitrary browser

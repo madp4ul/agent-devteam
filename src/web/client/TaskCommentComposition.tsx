@@ -39,7 +39,7 @@ export function TaskCommentComposition({
   mostRecentTaskAgentId: string | undefined;
   replyIntent: TaskCommentReplyIntent | undefined;
   composerAvailable: boolean;
-  onCommentAccepted(): Promise<void>;
+  onCommentAccepted(): void;
   children: ReactNode;
 }): ReactNode {
   const [draft, setDraft] = useState("");
@@ -179,10 +179,11 @@ function TaskCommentForm({
   panelRef: React.RefObject<HTMLElement | null>;
   flowRef: React.RefObject<HTMLDivElement | null>;
   onBodyChanged(body: string): void;
-  onCommentAccepted(): Promise<void>;
+  onCommentAccepted(): void;
 }): ReactNode {
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [error, setError] = useState<string>();
+  const [posted, setPosted] = useState(false);
   const [pending, setPending] = useState(false);
   const [selectionStart, setSelectionStart] = useState(0);
   const [activeSuggestionId, setActiveSuggestionId] = useState<string>();
@@ -245,17 +246,19 @@ function TaskCommentForm({
     };
     setPending(true);
     setError(undefined);
+    setPosted(false);
     try {
       await addTaskComment(taskId, body, idempotencyKey);
       onBodyChanged("");
       setSelectionStart(0);
       setIdempotencyKey(crypto.randomUUID());
       setPending(false);
-      await onCommentAccepted();
-      restoreCompositionContext();
+      setPosted(true);
+      onCommentAccepted();
     } catch (caught) {
       setError(errorMessage(caught));
       setPending(false);
+    } finally {
       restoreCompositionContext();
     }
   };
@@ -329,6 +332,7 @@ function TaskCommentForm({
           </ul>
         )}
         {error === undefined ? null : <p role="alert" className="feedback alert">{error}</p>}
+        {posted ? <p role="status" className="feedback status">Commented on {taskId}.</p> : null}
       </form>
     </section>
   );

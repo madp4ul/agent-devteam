@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEve
 
 import {
   ApiError,
-  archiveTask,
   editTask,
   readTask,
   type BrowserTaskDetail,
@@ -14,6 +13,8 @@ import { AutomationControls } from "./AutomationControls.tsx";
 import { CloseIconButton } from "./CloseIconButton.tsx";
 import type { DesktopNotificationControl } from "./desktop-notifications.ts";
 import { errorMessage, mutationFeedback } from "./feedback.ts";
+import { OperationFeedback, useOperationFeedback } from "./OperationFeedback.tsx";
+import { archivalRequestIdentity, archiveTaskWithProgress, forgetArchivalRequest, useArchivalFeedback, useArchivalOperations } from "./archival-operations.tsx";
 import { Loading } from "./Loading.tsx";
 import { usePageTitle } from "./page-title.ts";
 import { CopyMarkdownButton } from "./CopyMarkdownButton.tsx";
@@ -86,7 +87,14 @@ export function TaskPage({
   );
   const refresh = useCallback(() => refreshLatest("interactive"), [refreshLatest]);
   const poll = useCallback(() => refreshLatest("polling"), [refreshLatest]);
-  const { feedback, setFeedback, pendingTaskId, move } = useTaskMovement(refresh);
+  const operationFeedback = useOperationFeedback(taskId);
+  const { setFeedback, publish } = operationFeedback;
+  const archivalOperations = useArchivalOperations(taskId);
+  const archivalFeedback = useArchivalFeedback(archivalOperations, taskId);
+  const archiveRunning = archivalOperations.some((operation) => operation.tasks.some((entry) =>
+    entry.taskId === taskId && (entry.state === "queued" || entry.state === "running")));
+  const archiveIdentity = useRef<{ scope: string; id: string } | undefined>(undefined);
+  const { pendingTaskId, move } = useTaskMovement(refresh, setFeedback);
   usePageTitle(detail === undefined
     ? `${loadFailure === "unavailable" ? "Task unavailable"
       : loadFailure === "error" ? "Unable to load task" : "Loading task"} (${taskId})`
@@ -131,11 +139,7 @@ export function TaskPage({
     else navigate("/", navigation?.boardContext ? { boardContext: navigation.boardContext } : undefined);
   };
   if (detail === undefined) {
-    return feedback === undefined ? (
-      <Loading />
-    ) : (
-      <main><p role="alert">{feedback.text}</p></main>
-    );
+    return loadFailure === undefined ? <Loading /> : <OperationFeedback {...operationFeedback} />;
   }
   const { task, board, inspection } = detail;
   const inspectableTaskFields = new Set(detail.agentInspectableContent.taskFields);
@@ -186,13 +190,21 @@ export function TaskPage({
 
   const performArchive = (discardWorkspaceChanges = false): void => {
     setArchivalPending(true);
-    void archiveTask(task.id, crypto.randomUUID(), discardWorkspaceChanges)
-      .then(async () => {
-        await refresh();
-        setFeedback({ role: "status", text: `Archived ${task.id}.` });
+    const scope = `task:${task.id}:${discardWorkspaceChanges ? "discard" : "ordinary"}`;
+    const id = archiveIdentity.current?.scope === scope ? archiveIdentity.current.id : archivalRequestIdentity(scope);
+    archiveIdentity.current = { scope, id };
+    void archiveTaskWithProgress(task.id, id, discardWorkspaceChanges)
+      .then(() => {
+        archiveIdentity.current = undefined;
+        forgetArchivalRequest(scope);
+        void refresh().catch(() => {});
       })
       .catch((error) => {
-        if (error instanceof ApiError && (error.body as { reason?: string }).reason === "workspace-nested-worktrees") {
+        if (error instanceof ApiError && error.status < 500) {
+          archiveIdentity.current = undefined;
+          forgetArchivalRequest(scope);
+        }
+        if (error instanceof ApiError && ["workspace-nested-worktrees", "workspace-commit-not-durable", "workspace-preview-unavailable"].includes((error.body as { reason?: string }).reason ?? "")) {
           setDiscardConfirmation(false);
           setArchivalReview(true);
           return;
@@ -205,7 +217,7 @@ export function TaskPage({
           setDiscardConfirmation(true);
           return;
         }
-        setFeedback({ role: "alert", text: errorMessage(error) });
+        publish({ role: "alert", text: errorMessage(error), target: `Archive · ${task.id}` }, id);
       })
       .finally(() => setArchivalPending(false));
   };
@@ -230,9 +242,8 @@ export function TaskPage({
       </header>
       <main ref={taskDetailRef} className="task-detail">
         <section className="task-overview" data-task-section="overview">
-          {feedback === undefined ? null : (
-            <p className={`feedback ${feedback.role}`} role={feedback.role}>{feedback.text}</p>
-          )}
+          <OperationFeedback items={[...operationFeedback.items.filter((item) => !archivalOperations.some((operation) => operation.id === item.id)), ...archivalFeedback.items]}
+            dismiss={(id) => { operationFeedback.dismiss(id); archivalFeedback.dismiss(id); }} />
           <div className="task-hero">
             <div className="task-heading">
               <div className="agent-inspectable-heading">
@@ -290,14 +301,14 @@ export function TaskPage({
                     <>
                       <button className="secondary" onClick={() => setEditing(true)}>Edit task</button>
                       {task.columnId === "completion" ? (
-                        <button disabled={archivalPending} onClick={() => performArchive()}>
-                          {archivalPending ? "Archiving…" : "Archive task"}
+                        <button disabled={archivalPending || archiveRunning} onClick={() => performArchive()}>
+                          {archivalPending || archiveRunning ? "Archiving…" : "Archive task"}
                         </button>
                       ) : (
                         <details className="more-actions">
                           <summary>More actions</summary>
-                          <button className="secondary" disabled={archivalPending} onClick={() => performArchive()}>
-                            {archivalPending ? "Archiving…" : "Archive task"}
+                          <button className="secondary" disabled={archivalPending || archiveRunning} onClick={() => performArchive()}>
+                            {archivalPending || archiveRunning ? "Archiving…" : "Archive task"}
                           </button>
                         </details>
                       )}
@@ -344,9 +355,10 @@ export function TaskPage({
               mostRecentTaskAgentId={mostRecentTaskAgentId}
               replyIntent={commentReplyIntent}
               composerAvailable={!task.archived}
-              onCommentAccepted={async () => {
-                await refresh();
-                setFeedback({ role: "status", text: `Commented on ${task.id}.` });
+              onCommentAccepted={() => {
+                void refresh().catch(() => {
+                  // The comment is already saved. The task poll will retry the refresh.
+                });
               }}
             >
               <TaskTimeline
@@ -445,7 +457,7 @@ export function TaskPage({
         />
       ) : null}
       {archivalReview ? <ArchivalReviewDialog key={task.id} taskId={task.id} onClose={() => setArchivalReview(false)}
-        onArchived={async () => { await refresh(); setFeedback({ role: "status", text: `Archived ${task.id}.` }); }} /> : null}
+        onArchived={() => { void refresh().catch(() => {}); }} /> : null}
       {discardConfirmation ? (
         <Modal
           labelledBy="discard-title"
